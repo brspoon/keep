@@ -15,7 +15,7 @@
 <a class="skip-link" href="#main-content">Skip to content</a>
 <main class="page" id="main-content" tabindex="-1">
 {% include 'shared_header.html' %}
-<div class="page-heading"><h2>Connections</h2><p class="subtitle">Connect your services and choose what appears in Keep.</p></div>
+<div class="page-heading connections-heading"><div><h2>Connections</h2><p class="subtitle">Connect your services and choose what appears in Keep.</p>{% if owner and setup_pending %}<p class="subtitle">Setup is unfinished. Save your services and collection selection, then return to verify them.</p>{% endif %}</div>{% if owner and setup_pending %}<a class="back" href="/setup">Return to Setup</a>{% endif %}</div>
 {% include 'shared_admin_tabs.html' %}
 {% if notice %}<div class="{{ 'settings-error' if error else 'notice' }}" role="{{ 'alert' if error else 'status' }}">{{ notice }}</div>{% endif %}
 {% macro field(name) %}

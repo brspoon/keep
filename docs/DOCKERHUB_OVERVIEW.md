@@ -29,15 +29,23 @@ See the [features and access guide](https://github.com/brspoon/keep/blob/main/do
 
 [Browse the preview gallery](https://github.com/brspoon/keep/blob/main/docs/PREVIEW.md) to see light and dark mode, protected titles, and library cleanup.
 
+## Before you install
+
+Keep is intended for self-hosters who already operate [Plex Media Server](https://www.plex.tv/media-server-downloads/) and [Maintainerr](https://docs.maintainerr.info/installation/). Both services must be running and reachable from Keep. They are installed separately.
+
+Install **Docker with Compose v2** using [Docker Desktop for macOS](https://docs.docker.com/desktop/setup/install/mac-install/) or [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), or [Docker Engine](https://docs.docker.com/engine/install/) with the [Compose plugin](https://docs.docker.com/compose/install/linux/) on Linux. You also need **Python 3.9 or newer** ([Linux](https://docs.python.org/3/using/unix.html), [macOS](https://www.python.org/downloads/macos/), [Windows](https://www.python.org/downloads/windows/)) and either [curl](https://curl.se/download.html) on Linux/macOS or [PowerShell 5.1 or newer](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows) on Windows. macOS includes curl; Windows PowerShell 5.1 is sufficient. Start Docker, use Linux containers on Windows, and make sure your account can run Docker.
+
+The installer checks prerequisites and stops with repair guidance if a tool is missing; it does not install those tools automatically. Python runs the installer, while Keep's application dependencies are included in this image. Radarr, Sonarr, Seerr, Tautulli, and email are optional.
+
 ## Install
 
-Keep is intended for self-hosters who already operate Plex and Maintainerr. Both services must be running and reachable from Keep. Radarr, Sonarr, Seerr, Tautulli, and email are optional.
+After preparing the prerequisites, run the [one-command Keep installer](https://github.com/brspoon/keep#install). It creates private configuration, pulls this image, and starts two required services with Docker Compose: `keep-app` runs the web app, and `keep-digest` runs the background worker. Installers are available for Linux/macOS shells and Windows PowerShell. This image supports Linux `amd64` and `arm64`.
 
-The [Keep installer](https://github.com/brspoon/keep#install) creates private configuration, pulls this image, and starts two required services with Docker Compose: `keep-app` runs the web app, and `keep-digest` runs the background worker. Installers are available for Linux/macOS shells and Windows PowerShell. Windows requires Docker Desktop running Linux containers. This image supports Linux `amd64` and `arm64`.
+Open the printed `/setup` address and enter the setup code supplied by the installer. Sign in with the Plex account that owns your server and select that server. From the setup checklist, open **Configure services and collections**, save and test Maintainerr, and save at least one collection. Select **Return to Setup** and review the checklist. **Verify services and finish setup** stays disabled until the required configuration is saved; the checklist explains anything missing. Once selected, it checks the live Plex connection and selected Maintainerr collections, plus SMTP if email is enabled, before offering **Open Keep**.
 
 Follow the [installation and configuration guide](https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md) for setup, manual Compose installation, supported image tags, and HTTPS configuration. Back up your configuration and data before upgrading.
 
-Use an explicit version tag, such as `brspoon/keep:2.21.2`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
+Use an explicit version tag, such as `brspoon/keep:2.21.3`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
 
 ## Integrations and API
 

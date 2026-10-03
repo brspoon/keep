@@ -1,7 +1,9 @@
 import re
+import tempfile
 import unittest
 from contextlib import closing
 from unittest.mock import Mock, patch
+from onboarding import Onboarding, digest
 import test_keep
 keep = test_keep.keep
 
@@ -85,6 +87,38 @@ class SharedNavigationTests(unittest.TestCase):
             self.assertIn(f'/static/service-icons/{service}.svg', page)
         page = self.client.get('/settings/activity').get_data(as_text=True)
         self.assertIn('class="activity-mobile-filter"', page)
+
+    def test_connections_setup_return_is_only_available_to_pending_owner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Onboarding(directory + '/onboarding.sqlite3')
+            store.claim(digest(store.issue()), '7')
+            with patch.object(keep, 'onboarding', store):
+                response = self.client.get('/settings/connections')
+                self.assertEqual(response.status_code, 200)
+                self.assertRegex(response.get_data(as_text=True),
+                                 r'<a\b[^>]*href="/setup"[^>]*>\s*Return to Setup\s*</a>')
+                self.assertEqual(self.client.get('/setup').status_code, 200)
+
+                with closing(keep.attribution_db()) as db, db:
+                    db.execute("""INSERT INTO user_profiles
+                        (plex_id, plex_username, auth_type, plex_checked_at)
+                        VALUES ('8', 'Plex Friend', 'plex', CURRENT_TIMESTAMP)""")
+                with self.client.session_transaction() as session:
+                    session['plex_user'] = {'id': '8', 'username': 'Friend', 'auth_type': 'plex'}
+                response = self.client.get('/settings/connections')
+                self.assertEqual(response.status_code, 403)
+                self.assertNotIn('Return to Setup', response.get_data(as_text=True))
+                viewer_page = self.client.get('/help')
+                self.assertEqual(viewer_page.status_code, 200)
+                self.assertNotIn('Return to Setup', viewer_page.get_data(as_text=True))
+
+                with self.client.session_transaction() as session:
+                    session['plex_user'] = {'id': '7', 'username': 'Owner', 'auth_type': 'plex'}
+                store.finish()
+                response = self.client.get('/settings/connections')
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn('Return to Setup', response.get_data(as_text=True))
+                self.assertEqual(self.client.get('/setup').location, '/settings/connections')
 
     def test_library_order_follows_configured_collections_and_normalizes_tv_names(self):
         libraries = [{'library_key':str(i),'service':'radarr','name':name}

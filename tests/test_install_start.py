@@ -1,11 +1,13 @@
 import json
 import errno
+import io
 import os
 import socket
 import stat
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -70,7 +72,8 @@ class InstallStartTests(unittest.TestCase):
 
     def download(self, name):
         self.downloads.append(name)
-        return {"VERSION": b"2.21.2\n", "compose.yml": b"name: keep\nservices: {}\n"}[name]
+        return {"VERSION": (install_keep.RELEASE_VERSION + "\n").encode(),
+                "compose.yml": b"name: keep\nservices: {}\n"}[name]
 
     def sleep(self, seconds):
         self.clock += seconds
@@ -99,7 +102,8 @@ class InstallStartTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((self.directory / ".env").stat().st_mode), 0o600)
         env = (self.directory / ".env").read_text()
         for line in ("KEEP_URL=http://192.168.1.10:5000", "KEEP_TRANSPORT_MODE=lan-http",
-                     "KEEP_BIND_ADDRESS=192.168.1.10", "KEEP_PORT=5000", "KEEP_IMAGE=brspoon/keep:2.21.2"):
+                     "KEEP_BIND_ADDRESS=192.168.1.10", "KEEP_PORT=5000",
+                     "KEEP_IMAGE=brspoon/keep:" + install_keep.RELEASE_VERSION):
             self.assertIn(line, env)
         compose_calls = [command for command, _, _ in self.runner.calls if command[:2] == ["docker", "compose"] and "version" not in command]
         for command in compose_calls:
@@ -223,18 +227,119 @@ class InstallStartTests(unittest.TestCase):
             if command[:3] == ["docker", "compose", "version"]:
                 return SimpleNamespace(returncode=0, stdout="1.29.2")
             return self.runner(command, **kwargs)
-        with self.assertRaisesRegex(install_keep.InstallError, "v2 or newer"):
+        with patch.object(install_keep.platform, "system", return_value="Darwin"), \
+             patch.object(install_keep.shutil, "which", return_value="/opt/homebrew/bin/brew"), \
+             self.assertRaisesRegex(install_keep.InstallError, "v2 or newer") as error:
             self.start(runner=obsolete)
+        self.assertIn("brew install --cask docker-desktop", str(error.exception))
+        self.assertIn("docker compose version", str(error.exception))
         self.assertFalse((self.directory / ".env").exists())
+        self.assertEqual(self.downloads, [])
+        self.assertFalse(self.runner.started)
+
+    def test_missing_docker_explains_windows_install_without_running_it(self):
+        with patch.object(install_keep.platform, "system", return_value="Windows"), \
+             patch.object(install_keep.shutil, "which", return_value=r"C:\Windows\winget.exe"), \
+             patch.object(install_keep.subprocess, "run", side_effect=FileNotFoundError("private path")) as run, \
+             self.assertRaisesRegex(install_keep.InstallError, "Docker is not installed") as error:
+            self.start(runner=install_keep.run_command)
+        self.assertIn("winget install --id Docker.DockerDesktop --exact", str(error.exception))
+        self.assertIn("Linux containers", str(error.exception))
+        self.assertNotIn("private path", str(error.exception))
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0], ["docker", "compose", "version", "--short"])
+        self.assertFalse((self.directory / ".env").exists())
+        self.assertEqual(self.downloads, [])
+
+    def test_missing_linux_compose_explains_repository_requirement_before_package_command(self):
+        for package_manager, command in (("apt-get", "sudo apt-get install docker-compose-plugin"),
+                                         ("dnf", "sudo dnf install docker-compose-plugin")):
+            with self.subTest(package_manager=package_manager):
+                self.runner = DockerRunner(self.directory, fail="version")
+                with patch.object(install_keep.platform, "system", return_value="Linux"), \
+                     patch.object(install_keep.shutil, "which", side_effect=lambda name: "/usr/bin/" + name if name == package_manager else None), \
+                     self.assertRaisesRegex(install_keep.InstallError, "v2 or newer") as error:
+                    self.start()
+                message = str(error.exception)
+                self.assertIn("Docker's official repository is already configured", message)
+                self.assertIn(command, message)
+                self.assertLess(message.index("official repository"), message.index(command))
+                self.assertNotIn("private value", message)
+                self.assertEqual(len(self.runner.calls), 1)
+                self.assertFalse(self.runner.started)
+                self.assertEqual(self.runner.bootstrap_calls, 0)
+                self.assertFalse((self.directory / ".env").exists())
+                self.assertEqual(self.downloads, [])
+
+    def test_unavailable_linux_daemon_has_repair_guidance_and_preserves_existing_configuration(self):
+        self.existing()
+        originals = {name: (self.directory / name).read_bytes() for name in (".env", "VERSION", "compose.yml")}
+        self.runner.fail = "info"
+        with patch.object(install_keep.platform, "system", return_value="Linux"), \
+             patch.object(install_keep.shutil, "which", return_value="/usr/bin/systemctl"), \
+             self.assertRaisesRegex(install_keep.InstallError, "cannot access its daemon") as error:
+            self.start()
+        message = str(error.exception)
+        self.assertIn("sudo systemctl start docker", message)
+        self.assertIn("docker info", message)
+        self.assertIn("https://docs.docker.com/engine/install/linux-postinstall/", message)
+        self.assertNotIn("chmod", message)
+        self.assertNotIn("usermod", message)
+        self.assertNotIn("private value", message)
+        self.assertFalse(any("up" in command or "pull" in command for command, _, _ in self.runner.calls))
+        for name, original in originals.items():
+            self.assertEqual((self.directory / name).read_bytes(), original)
+        self.assertEqual(self.downloads, [])
+        self.assertEqual(self.runner.bootstrap_calls, 0)
+
+    def test_unknown_platform_uses_official_links_without_inventing_package_commands(self):
+        with patch.object(install_keep.platform, "system", return_value="UnknownOS"), \
+             patch.object(install_keep.shutil, "which", side_effect=AssertionError("must not guess a package manager")):
+            for requirement in ("docker", "compose", "python"):
+                with self.subTest(requirement=requirement):
+                    message = install_keep.prerequisite_guidance(requirement)
+                    self.assertIn("https://", message)
+                    for command in ("apt-get", "dnf", "brew install", "winget install"):
+                        self.assertNotIn(command, message)
+
+    def test_missing_package_manager_uses_official_desktop_download_instructions(self):
+        for system, platform_path in (("Windows", "windows-install"), ("Darwin", "mac-install")):
+            with self.subTest(system=system), \
+                 patch.object(install_keep.platform, "system", return_value=system), \
+                 patch.object(install_keep.shutil, "which", return_value=None):
+                message = install_keep.prerequisite_guidance("docker")
+            self.assertIn("https://docs.docker.com/desktop/setup/install/" + platform_path + "/", message)
+            self.assertNotIn("winget install", message)
+            self.assertNotIn("brew install", message)
+
+    def test_old_python_cli_reports_repair_and_never_starts_installation(self):
+        stderr = io.StringIO()
+        with patch.object(install_keep.sys, "version_info", (3, 8)), \
+             patch.object(install_keep.platform, "system", return_value="Darwin"), \
+             patch.object(install_keep.shutil, "which", return_value="/opt/homebrew/bin/brew"), \
+             patch.object(install_keep, "start_installation") as start, \
+             patch.object(install_keep.subprocess, "run") as run, \
+             redirect_stderr(stderr), self.assertRaises(SystemExit) as error:
+            install_keep.main(["--start", "--directory", str(self.directory)])
+        self.assertEqual(error.exception.code, 2)
+        self.assertIn("Keep requires Python 3.9 or newer.", stderr.getvalue())
+        self.assertIn("brew install python3", stderr.getvalue())
+        start.assert_not_called()
+        run.assert_not_called()
+        self.assertFalse(self.directory.exists())
 
     def test_windows_container_mode_is_refused_before_files_or_secrets(self):
         def windows_mode(command, **kwargs):
             if command == ["docker", "info", "--format", "{{.OSType}}"]:
                 return SimpleNamespace(returncode=0, stdout="windows")
             return self.runner(command, **kwargs)
-        with self.assertRaisesRegex(install_keep.InstallError, "Linux containers"):
+        with self.assertRaisesRegex(install_keep.InstallError, "Linux containers") as error:
             self.start(runner=windows_mode)
+        self.assertIn("Switch to Linux containers", str(error.exception))
+        self.assertIn("docker info --format '{{.OSType}}'", str(error.exception))
         self.assertFalse((self.directory / ".env").exists())
+        self.assertEqual(self.downloads, [])
+        self.assertFalse(self.runner.started)
 
     def test_env_only_moving_tag_restore_does_not_implicitly_upgrade(self):
         self.existing(image="brspoon/keep:stable")
@@ -268,7 +373,7 @@ class InstallStartTests(unittest.TestCase):
         def failing(name):
             if name == "compose.yml":
                 raise install_keep.InstallError("download interrupted")
-            return b"2.21.2\n"
+            return (install_keep.RELEASE_VERSION + "\n").encode()
         with self.assertRaisesRegex(install_keep.InstallError, "interrupted"):
             self.start(downloader=failing)
         self.assertFalse((self.directory / "VERSION").exists())
@@ -277,7 +382,7 @@ class InstallStartTests(unittest.TestCase):
 
     def test_partially_written_bundle_is_completed_only_when_existing_file_matches(self):
         self.directory.mkdir(mode=0o700)
-        (self.directory / "VERSION").write_bytes(b"2.21.2\n")
+        (self.directory / "VERSION").write_bytes((install_keep.RELEASE_VERSION + "\n").encode())
         self.start()
         self.assertTrue((self.directory / "compose.yml").exists())
         other = self.parent / "conflict"
@@ -303,7 +408,7 @@ class InstallStartTests(unittest.TestCase):
         with self.assertRaisesRegex(install_keep.InstallError, "redirected"):
             install_keep.NoRedirects().redirect_request(None, None, 302, "redirect", {}, "https://other.example")
         self.assertEqual(install_keep.RELEASE_BASE,
-                         "https://raw.githubusercontent.com/brspoon/keep/2.21.2/")
+                         f"https://raw.githubusercontent.com/brspoon/keep/{install_keep.RELEASE_VERSION}/")
 
     def test_real_free_port_probe_rejects_an_occupied_port(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:

@@ -3,7 +3,7 @@ import socket
 import tempfile
 import unittest
 from contextlib import closing
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from connection_settings import ConnectionSettings, validate
 import test_keep
 from test_keep import keep
@@ -246,6 +246,54 @@ class EmailTransportTests(unittest.TestCase):
         context = smtp.call_args.kwargs['context']
         self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
         self.assertTrue(context.check_hostname)
+
+    def test_missing_password_handles_real_smtp_challenges_as_authentication_failures(self):
+        settings = {'EMAIL_ENABLED': 'true', 'SMTP_HOST': 'smtp.example.test',
+                    'SMTP_FROM': 'keep@example.test', 'SMTP_SENDER_NAME': 'Keep',
+                    'SMTP_PORT': '465', 'SMTP_SECURITY': 'ssl', 'SMTP_USER': 'test-user'}
+        for operation in ('probe', 'send'):
+            for mechanism in ('CRAM-MD5', 'LOGIN'):
+                with self.subTest(operation=operation, mechanism=mechanism):
+                    # Exercise stdlib authentication without opening a socket: an
+                    # absent password must produce the server's SMTP error, not
+                    # an AttributeError inside its challenge callback.
+                    smtp = keep.smtplib.SMTP()
+                    smtp.esmtp_features = {'auth': mechanism}
+                    smtp.ehlo = Mock(return_value=(250, b'OK'))
+                    smtp.docmd = Mock(side_effect=[(334, b'Y2hhbGxlbmdl'),
+                                                  (535, b'Authentication rejected')])
+                    smtp.send_message = Mock()
+                    with patch.object(keep, 'connection_value', side_effect=settings.get), \
+                         patch.object(keep.smtplib, 'SMTP_SSL') as transport, \
+                         self.assertRaises(keep.smtplib.SMTPAuthenticationError) as failure:
+                        transport.return_value.__enter__.return_value = smtp
+                        if operation == 'probe':
+                            keep.test_smtp_connection()
+                        else:
+                            keep.send_email('viewer@example.test', 'Test', '<p>Test</p>', 'Test')
+                    self.assertEqual(failure.exception.smtp_code, 535)
+                    self.assertEqual(smtp.docmd.call_count, 2)
+                    smtp.send_message.assert_not_called()
+
+    def test_smtp_without_username_does_not_require_authentication(self):
+        settings = {'EMAIL_ENABLED': 'true', 'SMTP_HOST': 'smtp.example.test',
+                    'SMTP_FROM': 'keep@example.test', 'SMTP_SENDER_NAME': 'Keep',
+                    'SMTP_PORT': '587', 'SMTP_SECURITY': 'starttls'}
+        for operation in ('probe', 'send'):
+            with self.subTest(operation=operation), \
+                 patch.object(keep, 'connection_value', side_effect=settings.get), \
+                 patch.object(keep.smtplib, 'SMTP') as transport:
+                smtp = transport.return_value.__enter__.return_value
+                smtp.send_message.return_value = {}
+                if operation == 'probe':
+                    keep.test_smtp_connection()
+                    smtp.send_message.assert_not_called()
+                    smtp.sendmail.assert_not_called()
+                else:
+                    keep.send_email('viewer@example.test', 'Test', '<p>Test</p>', 'Test')
+                    smtp.send_message.assert_called_once()
+                smtp.starttls.assert_called_once()
+                smtp.login.assert_not_called()
 
 class ConcurrentStartupTests(unittest.TestCase):
     def test_web_and_worker_can_initialize_the_same_new_database(self):

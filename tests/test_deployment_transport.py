@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
 from deployment_transport import cookie_policy, private_ipv4, validate_origin
+from connection_settings import ConnectionSettings
 from onboarding import Onboarding
 import test_keep
 from test_keep import keep
@@ -87,7 +88,8 @@ class LanHttpJourneyTests(unittest.TestCase):
     def test_first_install_cookie_survives_plex_callback_and_verified_finish(self):
         with tempfile.TemporaryDirectory() as directory:
             store = Onboarding(directory + '/onboarding.sqlite3')
-            with patch.object(keep, 'onboarding', store):
+            settings = ConnectionSettings(directory + '/onboarding.sqlite3')
+            with patch.object(keep, 'onboarding', store), patch.object(keep, 'connection_settings', settings):
                 client = keep.app.test_client()
                 code = store.issue()
                 opened = client.get('/setup', base_url=self.origin)
@@ -132,12 +134,13 @@ class LanHttpJourneyTests(unittest.TestCase):
                 client.get(returned.location, base_url=self.origin)
                 with client.session_transaction(base_url=self.origin) as session:
                     csrf = session['csrf_token']
-                with patch.object(keep, 'test_plex') as verify, patch.object(keep.connection_settings, 'save') as save:
+                with patch.object(keep, 'test_plex') as verify, patch.object(settings, 'save', wraps=settings.save) as save:
                     chosen = client.post(returned.location, base_url=self.origin,
                         data={'csrf_token': csrf, 'server': '0'})
                 self.assertEqual(chosen.location, '/setup')
                 verify.assert_called_once_with('https://plex.example.test', 'synthetic-resource-token', 'synthetic-machine')
                 self.assertTrue(save.call_args.kwargs['plex_override'])
+                settings.save({'MAINTAINERR_URL': 'http://maintainerr'})
                 with patch.object(keep, 'test_plex'), \
                      patch.object(keep, 'discover_collections', return_value={1: 'Movies'}), \
                      patch.object(keep, 'get_collections', return_value={1: 'Movies'}), \

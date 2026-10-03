@@ -5,8 +5,10 @@ import argparse
 import ipaddress
 import json
 import os
+import platform
 import re
 import secrets
+import shutil
 import stat
 import socket
 import subprocess
@@ -29,7 +31,7 @@ IMAGE_RE = re.compile(
     r"^(?:[A-Za-z0-9._-]+(?::[0-9]+)?/)?[A-Za-z0-9._/-]+"
     r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}|@sha256:[a-fA-F0-9]{64})$"
 )
-RELEASE_VERSION = "2.21.2"
+RELEASE_VERSION = "2.21.3"
 RELEASE_BASE = f"https://raw.githubusercontent.com/brspoon/keep/{RELEASE_VERSION}/"
 MANAGED_KEYS = ("KEEP_URL", "FLASK_SECRET_KEY", "KEEP_WEBHOOK_SECRET", "KEEP_IMAGE",
                 "KEEP_TRANSPORT_MODE", "KEEP_BIND_ADDRESS", "KEEP_PORT")
@@ -39,6 +41,87 @@ PRIVATE_NETWORKS = tuple(ipaddress.ip_network(network) for network in (
 
 class InstallError(Exception):
     """An unsafe or invalid local installation configuration."""
+
+
+def prerequisite_guidance(requirement):
+    """Return repair instructions without installing tools or changing host access."""
+    system = platform.system()
+    steps = []
+    if requirement == "python":
+        if system == "Windows":
+            if shutil.which("winget"):
+                steps.append("Install Python:\n  winget install --id Python.Python.3.14 --exact")
+            steps.append("Python for Windows: https://www.python.org/downloads/windows/")
+            steps.append("Reopen PowerShell and verify: py -3 --version (or python --version).")
+        elif system == "Darwin":
+            if shutil.which("brew"):
+                steps.append("Install Python with Homebrew:\n  brew install python3")
+            steps.append("Python for macOS: https://www.python.org/downloads/macos/")
+            steps.append("Reopen your terminal and verify: python3 --version.")
+        else:
+            if system == "Linux":
+                if shutil.which("apt-get"):
+                    steps.append("On Debian/Ubuntu, install the distribution's Python:\n"
+                                 "  sudo apt-get update\n  sudo apt-get install python3")
+                elif shutil.which("dnf"):
+                    steps.append("On Fedora/RHEL, install the distribution's Python:\n"
+                                 "  sudo dnf install python3")
+            steps.append("Python installation: https://www.python.org/downloads/")
+            steps.append("Verify python3 --version is at least 3.9. If your distribution provides an older "
+                         "version, use a supported Python installation before retrying.")
+    elif requirement in ("docker", "compose"):
+        if system == "Windows":
+            if shutil.which("winget"):
+                steps.append("Install Docker Desktop (includes Compose):\n"
+                             "  winget install --id Docker.DockerDesktop --exact")
+            steps.append("Docker Desktop for Windows: https://docs.docker.com/desktop/setup/install/windows-install/")
+            steps.append("Open Docker Desktop, select Linux containers, wait for the engine to start, "
+                         "then reopen PowerShell.")
+        elif system == "Darwin":
+            if shutil.which("brew"):
+                steps.append("Install Docker Desktop (includes Compose) with Homebrew:\n"
+                             "  brew install --cask docker-desktop")
+            steps.append("Docker Desktop for macOS: https://docs.docker.com/desktop/setup/install/mac-install/")
+            steps.append("Start Docker Desktop:\n  open -a Docker\nWait for the engine to start.")
+        else:
+            steps.append("Install Docker Engine using the guide for your distribution: "
+                         "https://docs.docker.com/engine/install/")
+            if requirement == "compose" and system == "Linux":
+                if shutil.which("apt-get"):
+                    steps.append("If Docker's official repository is already configured on Debian/Ubuntu:\n"
+                                 "  sudo apt-get update\n  sudo apt-get install docker-compose-plugin")
+                elif shutil.which("dnf"):
+                    steps.append("If Docker's official repository is already configured on Fedora/RHEL:\n"
+                                 "  sudo dnf install docker-compose-plugin")
+            steps.append("Compose installation: https://docs.docker.com/compose/install/")
+        steps.append("Verify: docker compose version and docker info, then rerun the Keep installation command.")
+    elif requirement == "daemon":
+        if system == "Windows":
+            steps.append("Open Docker Desktop and wait for the engine to start, then retry docker info.")
+            steps.append("Docker Desktop for Windows: https://docs.docker.com/desktop/setup/install/windows-install/")
+        elif system == "Darwin":
+            steps.append("Start Docker Desktop:\n  open -a Docker\nWait for the engine to start, then retry docker info.")
+            steps.append("Docker Desktop for macOS: https://docs.docker.com/desktop/setup/install/mac-install/")
+        else:
+            if system == "Linux" and shutil.which("systemctl"):
+                steps.append("For Docker Engine managed by systemd, start the daemon:\n"
+                             "  sudo systemctl start docker")
+            steps.append("Run docker info with the same account that will install Keep.")
+            if system == "Linux":
+                steps.append("For Linux daemon access, follow: https://docs.docker.com/engine/install/linux-postinstall/")
+            else:
+                steps.append("Docker startup instructions: https://docs.docker.com/engine/install/")
+        steps.append("Resolve daemon startup or access before rerunning the Keep installation command.")
+    elif requirement == "linux-containers":
+        steps.append("In Docker Desktop on Windows, open the Docker tray menu and select "
+                     "Switch to Linux containers. Wait for the engine to restart, then rerun Keep's installer.")
+        steps.append("Verify: docker info --format '{{.OSType}}' (it must print linux).")
+        steps.append("Docker Desktop for Windows: https://docs.docker.com/desktop/setup/install/windows-install/")
+    return "\n".join(steps)
+
+
+def prerequisite_error(message, requirement):
+    return InstallError(message + "\n" + prerequisite_guidance(requirement))
 
 
 WINDOWS_ACL_CHECK = r"""
@@ -555,15 +638,17 @@ def run_command(command, *, cwd, timeout):
         return subprocess.run(command, cwd=cwd, env=environment, check=False,
                               capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError as error:
-        raise InstallError("Docker is not installed or is not available in PATH") from error
+        raise prerequisite_error("Docker is not installed or is not available in PATH", "docker") from error
     except subprocess.TimeoutExpired as error:
         raise InstallError("a Docker operation timed out; existing settings and data were retained") from error
 
 
-def _run(runner, command, directory, message, timeout=60):
+def _run(runner, command, directory, message, timeout=60, prerequisite=None):
     result = runner(command, cwd=directory, timeout=timeout)
     if result.returncode:
         # Never echo Compose output which may include private environment values.
+        if prerequisite:
+            raise prerequisite_error(message, prerequisite)
         raise InstallError(message)
     return result.stdout.strip()
 
@@ -633,16 +718,17 @@ def start_installation(directory, *, requested_url=None, requested_image=None, b
     lock_fd = _secure_lock(directory / ".keep-start")
     try:
         compose_version = _run(runner, ["docker", "compose", "version", "--short"], directory,
-                               "Docker Compose v2 or newer is required")
+                               "Docker Compose v2 or newer is required", prerequisite="compose")
         version_match = re.match(r"^v?([0-9]+)\.", compose_version)
         if not version_match or int(version_match.group(1)) < 2:
-            raise InstallError("Docker Compose v2 or newer is required")
+            raise prerequisite_error("Docker Compose v2 or newer is required", "compose")
         _run(runner, ["docker", "info", "--format", "{{.ServerVersion}}"], directory,
-             "Docker is not running or this user cannot access its daemon")
+             "Docker is not running or this user cannot access its daemon", prerequisite="daemon")
         docker_os = _run(runner, ["docker", "info", "--format", "{{.OSType}}"], directory,
                          "could not determine Docker's container mode")
         if docker_os != "linux":
-            raise InstallError("Keep requires Linux containers; switch Docker Desktop to Linux containers")
+            raise prerequisite_error("Keep requires Linux containers; switch Docker Desktop to Linux containers",
+                                     "linux-containers")
         containers = _containers_for_project(runner, directory)
         env_exists = _check_regular(directory / ".env", missing_ok=True) is not None
         port_checked = False
@@ -761,7 +847,7 @@ def start_installation(directory, *, requested_url=None, requested_image=None, b
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     if sys.version_info < (3, 9):
-        parser.exit(2, "Keep requires Python 3.9 or newer.\n")
+        parser.exit(2, "Keep requires Python 3.9 or newer.\n" + prerequisite_guidance("python") + "\n")
     parser.add_argument("--start", action="store_true", help="install files, start both services, and print owner setup instructions")
     parser.add_argument("--directory", type=Path, default=Path.home() / "keep", help="installation directory (default: ~/keep)")
     parser.add_argument("--bind-address", help="local private IPv4 address (auto-detected for a new LAN installation)")
