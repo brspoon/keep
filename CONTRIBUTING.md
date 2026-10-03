@@ -29,7 +29,9 @@ The tests use temporary databases, synthetic data, and mocked service calls. The
 
 Explain the problem, the resulting behavior, and how you validated it. Call out migrations, configuration changes, permission changes, and any limits that operators need to know.
 
-Pull requests from forks run the Python and JavaScript tests without repository secrets. Maintainers run the native image, security, and source-distribution checks before a release. You do not need registry or publishing credentials to contribute or run the local tests.
+Every pull request runs the Python, JavaScript, and Windows installer tests. Pull requests from forks use read-only permissions and receive no repository secrets. Trusted same-repository pull requests also run both native image, security, and source-distribution checks. The required `required-checks` result verifies that all checks applicable to the pull request passed; a failed or cancelled prerequisite blocks merging.
+
+The maintainer reviews contributions before merging. You do not need registry or publishing credentials to contribute or run the local tests. Native image checks remain required before a release.
 
 By submitting a contribution, you agree that your contribution is offered under the project's [MIT license](LICENSE). Third-party code, assets, dependencies, and notices remain under their own terms; see [third-party attribution](THIRD_PARTY.md).
 

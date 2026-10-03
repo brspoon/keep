@@ -1,6 +1,33 @@
 # Keep
 
-Keep is a self-hosted companion for Plex and Maintainerr. It helps you see which titles are due to leave selected collections, protect favorites, and manage who can do so. Optional integrations add email summaries, watch history, and permission-scoped library management.
+Keep gives the people who use your Plex server a say in what stays and what goes.
+
+Disk space is limited, and automated cleanup helps keep a media library manageable. But a movie or show someone still plans to watch can be removed before they get around to it. Keep was created to make that decision more personal: a simple, interactive way to see what's leaving and give a title more time.
+
+Keep is a self-hosted companion for Plex and Maintainerr. Viewers sign in, browse titles scheduled for removal, and choose what they want to keep. A 30-day Keep buys time to watch; owners can also allow indefinite protection. Maintainerr continues to handle the cleanup rules, while Keep gives viewers an easy way to protect the titles that matter to them.
+
+When it's time to make room, **Manage Library** lets people with the owner's permission delete movies, shows, or selected seasons they no longer want. Access can be limited to specific libraries and a person's own Seerr requests. Active Keeps are checked before deletion, and every deletion requires confirmation.
+
+- **See what's leaving.** Browse selected Maintainerr collections and the time remaining before possible removal.
+- **Keep your watch plans.** Protect titles for 30 days, manage your Keeps, and see who kept each title.
+- **Make space together.** Give trusted users controlled access to library cleanup through Radarr and Sonarr.
+- **Stay informed.** Optional email summaries and watch history help people decide what to keep.
+
+## Sign-in and access
+
+Sign in with Plex using the account that owns the selected server or an account with access to that server. Having a Plex account alone does not grant access to Keep. Keep verifies server access for non-owner Plex accounts and rechecks it in the background. The owner can also disable an account in Keep.
+
+The owner can create local Keep accounts that sign in with an email address and password, without requiring a Plex account or Plex server access. These accounts give access to Keep under the owner's chosen permissions; they do not grant access to watch media in Plex. There is no public account registration.
+
+See the [features and access guide](docs/FEATURES.md) for account types, permissions, integrations, and how Keep protection and library cleanup work.
+
+## Preview
+
+**Leaving** — see what's leaving Plex and how much time remains to keep it.
+
+![Keep's Leaving page in dark mode, showing movies with removal countdowns and Keep buttons.](docs/screenshots/leaving.png)
+
+[Browse the preview gallery](docs/PREVIEW.md) to see light and dark mode, protected titles, and library cleanup.
 
 ## Before you install
 
@@ -32,6 +59,8 @@ Radarr, Sonarr, Seerr, Tautulli, and email are optional. See the [installation g
 
 ## Guides
 
+- [Features and access](docs/FEATURES.md) — understand sign-in, permissions, Keep protection, library cleanup, and integrations.
+- [Preview gallery](docs/PREVIEW.md) — explore Keep's main views and actions in light and dark mode.
 - [Documentation index](docs/README.md) — find installation, backup, migration, API, and contributor guides.
 - [Installation and configuration](docs/INSTALLATION.md)
 - [Backup and restore](docs/PORTABLE_BACKUP.md)

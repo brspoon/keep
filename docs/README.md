@@ -1,12 +1,15 @@
 # Keep documentation
 
-Use the installation guide to set up Keep. The remaining guides cover ongoing
-operation, integrations, and work on Keep itself.
+Start with the features guide to understand Keep, then use the installation
+guide to set it up. The remaining guides cover ongoing operation, integrations,
+and work on Keep itself.
 
 ## Install and operate Keep
 
 | Guide | Use it for |
 | --- | --- |
+| [Features and access](FEATURES.md) | Understand Plex and local sign-in, account permissions, Keep protection, library cleanup, and integrations |
+| [Preview gallery](PREVIEW.md) | See Keep's main views and actions in light and dark mode |
 | [Installation and configuration](INSTALLATION.md) | Linux/macOS and Windows one-command installs, local access, optional HTTPS, connections, and email |
 | [Backup and restore](PORTABLE_BACKUP.md) | Back up or restore the database and deployment files |
 | [Upgrade and migration](MIGRATION.md) | Upgrade an installation or move from a legacy layout |

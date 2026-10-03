@@ -57,12 +57,22 @@ as tested end to end from unit tests alone.
 
 ## Contributor and release checks
 
-External-fork pull requests run the Python and JavaScript suites plus a whitespace
-check in a separate job with read-only repository permissions and no registry or
-publishing credentials. This verifies contributor tests only; it does not run the
-native image, vendor-provenance, vulnerability-scan, source-acquisition, or image
-privacy gates. Those remain separate required evidence for trusted same-repository
-pull requests and release candidates. Do not expose repository secrets to fork code.
+Every pull request and main push runs the Python and JavaScript suites in the
+`contributor-tests` job. Pull requests also check the contributed diff for whitespace
+errors. This job has read-only repository permissions and no registry or publishing
+credentials. The independent Windows installer check runs for every pull request.
+
+External-fork pull requests do not run the native image, vendor-provenance,
+vulnerability-scan, source-acquisition, or image privacy gates. Trusted
+same-repository pull requests and main pushes run those checks on both architectures.
+Do not expose repository secrets to fork code.
+
+The stable `required-checks` result is the main branch's required merge check. It
+always evaluates completed prerequisites, including failures and cancellations:
+Windows and contributor tests must pass, and trusted contributions must also pass
+both native architecture gates. Fork contributions must leave the native job
+skipped. Manual release dispatches retain their separate publication prerequisites;
+they do not use this merge check.
 
 Use results for the exact source revision being reviewed. For documentation edits,
 check diffs, relative links and consistency with the implementation. Files copied

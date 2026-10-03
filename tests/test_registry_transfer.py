@@ -1,9 +1,11 @@
 import json
+import itertools
 import os
 from contextlib import chdir
 from pathlib import Path
 import sys
 import tempfile
+import textwrap
 import unittest
 import urllib.error
 from unittest.mock import patch
@@ -118,7 +120,8 @@ class RegistryTransferTests(unittest.TestCase):
         self.assertIn('KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}', workflow)
         self.assertNotIn('pull_request_target', workflow)
         contributor = workflow.split('  contributor-tests:', 1)[1].split('  image:', 1)[0]
-        self.assertIn('github.event.pull_request.head.repo.full_name != github.repository', contributor)
+        self.assertIn("if: github.event_name != 'workflow_dispatch'", contributor)
+        self.assertIn("if: github.event_name == 'pull_request'\n        run: git diff --check", contributor)
         self.assertIn('contents: read', contributor)
         for secret_reference in ('secrets:', '${{ secrets.', 'DOCKERHUB_TOKEN', 'GITHUB_TOKEN'):
             self.assertNotIn(secret_reference, contributor)
@@ -192,3 +195,29 @@ class RegistryTransferTests(unittest.TestCase):
         self.assertIn("p.name not in ('test_deploy.py', 'test_install_launcher.py')", runtime_suite)
         self.assertLess(native.index('Test installation launcher on the native host'), native.index('Test Python application and release tools'))
         self.assertLess(native.index('scripts/installer_container_trial.py'), native.index('scripts/collect_image_sources.py'))
+
+    def test_required_merge_check_rejects_failed_cancelled_or_missing_prerequisites(self):
+        workflow = Path('.github/workflows/image.yml').read_text()
+        gate = workflow.split('  required-checks:', 1)[1].split('  release-native:', 1)[0]
+        self.assertIn('needs: [installer-windows, contributor-tests, image]', gate)
+        self.assertIn("if: ${{ always() && github.event_name != 'workflow_dispatch' }}", gate)
+        self.assertIn("github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository", gate)
+        self.assertNotIn('${{ secrets.', gate)
+        self.assertNotIn('uses: actions/checkout', gate)
+        script = compile(textwrap.dedent(gate.split("          python3 - <<'PYCHECK'\n", 1)[1].split('          PYCHECK', 1)[0]), '<required-checks>', 'exec')
+        statuses = ('success', 'failure', 'cancelled', 'skipped', '')
+        for fork, installer, contributor, image in itertools.product(('true', 'false'), statuses, statuses, statuses):
+            with self.subTest(fork=fork, installer=installer, contributor=contributor, image=image):
+                with patch.dict(os.environ, {
+                    'FORK_PULL_REQUEST': fork,
+                    'INSTALLER_RESULT': installer, 'CONTRIBUTOR_RESULT': contributor,
+                    'IMAGE_RESULT': image,
+                }):
+                    try:
+                        exec(script, {})
+                    except SystemExit:
+                        passed = False
+                    else:
+                        passed = True
+                expected = installer == contributor == 'success' and image == ('skipped' if fork == 'true' else 'success')
+                self.assertEqual(passed, expected)
