@@ -45,7 +45,7 @@ jobs:
           python -B -m unittest discover -s tests -p test_install_platform.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   contributor-tests:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -68,6 +68,7 @@ jobs:
           python -B -m unittest discover -s tests
           node --test tests/test_*.cjs
       - name: Check contributed diff whitespace
+        if: github.event_name == 'pull_request'
         run: git diff --check "$PR_BASE_SHA" "$PR_HEAD_SHA"
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -81,6 +82,31 @@ jobs:
       publish_release: false
       confirmation: ''
     secrets: inherit
+  required-checks:
+    needs: [installer-windows, contributor-tests, image]
+    if: ${{ always() && github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require successful applicable checks
+        env:
+          INSTALLER_RESULT: ${{ needs.installer-windows.result }}
+          CONTRIBUTOR_RESULT: ${{ needs.contributor-tests.result }}
+          IMAGE_RESULT: ${{ needs.image.result }}
+          FORK_PULL_REQUEST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          python3 - <<'PYCHECK'
+          import os
+          for result in ('INSTALLER_RESULT', 'CONTRIBUTOR_RESULT'):
+              if os.environ.get(result) != 'success':
+                  raise SystemExit(f'{result} must succeed before merging.')
+          fork = os.environ.get('FORK_PULL_REQUEST')
+          expected_image = {'true': 'skipped', 'false': 'success'}.get(fork)
+          if expected_image is None or os.environ.get('IMAGE_RESULT') != expected_image:
+              raise SystemExit('Required native image checks did not complete as expected.')
+          PYCHECK
   release-native:
     needs: [release-needed, prepare-release]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'

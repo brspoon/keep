@@ -1,51 +1,59 @@
 # Keep
 
-**Keep — a self-hosted companion for Plex and Maintainerr**
+Keep gives the people who use your Plex server a say in what stays and what goes.
 
-Browse titles scheduled to leave selected Maintainerr collections, protect favorites with Keeps, and see who protected them. Optional integrations include Radarr, Sonarr, Seerr, Tautulli, and SMTP. Permission-scoped Library Management is a separate feature that can permanently delete authorized media; active Keeps block deletion.
+Disk space is limited, and automated cleanup helps keep a media library manageable. But a movie or show someone still plans to watch can be removed before they get around to it. Keep was created to make that decision more personal: a simple, interactive way to see what's leaving and give a title more time.
 
-## Intended audience
+Keep is a self-hosted companion for Plex and Maintainerr. Viewers sign in, browse titles scheduled for removal, and choose what they want to keep. A 30-day Keep buys time to watch; owners can also allow indefinite protection. Maintainerr continues to handle the cleanup rules, while Keep gives viewers an easy way to protect the titles that matter to them.
 
-Keep is for self-hosters who already run Plex and Maintainerr. Installation needs Docker with Compose v2 and Python 3.9 or newer. Linux/macOS also needs curl; Windows uses PowerShell 5.1 or newer and Docker Desktop running Linux containers. Plex and Maintainerr are not included. Maintainerr's API has no built-in authentication and must remain private.
+When it's time to make room, **Manage Library** lets people with the owner's permission delete movies, shows, or selected seasons they no longer want. Access can be limited to specific libraries and a person's own Seerr requests. Active Keeps are checked before deletion, and every deletion requires confirmation.
 
-## Installation
+- **See what's leaving.** Browse selected Maintainerr collections and the time remaining before possible removal.
+- **Keep your watch plans.** Protect titles for 30 days, manage your Keeps, and see who kept each title.
+- **Make space together.** Give trusted users controlled access to library cleanup through Radarr and Sonarr.
+- **Stay informed.** Optional email summaries and watch history help people decide what to keep.
 
-Run the command for your system on the Docker host.
+## Sign-in and access
 
-**Linux / macOS**
+Sign in with Plex using the account that owns the selected server or an account with access to that server. Having a Plex account alone does not grant access to Keep. Keep verifies server access for non-owner Plex accounts and rechecks it in the background. The owner can also disable an account in Keep.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.sh | sh
-```
+The owner can create local Keep accounts that sign in with an email address and password, without requiring a Plex account or Plex server access. These accounts give access to Keep under the owner's chosen permissions; they do not grant access to watch media in Plex. There is no public account registration.
 
-**Windows — PowerShell**
+See the [features and access guide](https://github.com/brspoon/keep/blob/main/docs/FEATURES.md) for account types, permissions, integrations, and how Keep protection and library cleanup work.
 
-```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.ps1 | iex
-```
+## Preview
 
-The installer downloads the release files into a `keep` folder in your home directory, generates private configuration, and starts both required containers from the same versioned image. It waits for the web app and worker to become healthy, then prints a local setup address and temporary owner setup code. Open the address on your local network, enter the code, sign in to Plex, and configure Maintainerr and collections.
+**Leaving** — see what's leaving Plex and how much time remains to keep it.
 
-Git, a domain, and a reverse proxy are not required for local installation. Use HTTPS before exposing Keep outside a trusted network. The [installation guide](https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md) covers custom ports and addresses, HTTPS, and optional integrations. Back up the shared data volume and deployment configuration before upgrading; do not run only one of the two services.
+![Keep's Leaving page in dark mode, showing movies with removal countdowns and Keep buttons.](https://raw.githubusercontent.com/brspoon/keep/main/docs/screenshots/leaving.png)
 
-## API
+[Browse the preview gallery](https://github.com/brspoon/keep/blob/main/docs/PREVIEW.md) to see light and dark mode, protected titles, and library cleanup.
 
-The Keep owner creates and manages account-bound integration keys under **Admin → API keys**, and browses endpoints under **Admin → API reference**. Both pages are owner-only. The API is served under `/api/v1`. New keys expire after 30, 90 or 365 days, or Never expire; revoked keys can be removed while activity history remains. See the [API guide](https://github.com/brspoon/keep/blob/main/docs/API.md) and [OpenAPI contract](https://github.com/brspoon/keep/blob/main/static/openapi.json). These keys authorize clients calling Keep; existing service connections retain their own settings and credentials.
+## Install
 
-## Image tags and recovery
+Keep is intended for self-hosters who already operate Plex and Maintainerr. Both services must be running and reachable from Keep. Radarr, Sonarr, Seerr, Tautulli, and email are optional.
 
-Version tags identify a specific release. `stable` points to the latest stable release and can change. Both amd64 and arm64 are included in the multi-platform image; Docker selects the matching architecture.
+The [Keep installer](https://github.com/brspoon/keep#install) creates private configuration, pulls this image, and starts two required services with Docker Compose: `keep-app` runs the web app, and `keep-digest` runs the background worker. Installers are available for Linux/macOS shells and Windows PowerShell. Windows requires Docker Desktop running Linux containers. This image supports Linux `amd64` and `arm64`.
 
-The registry retains the current stable/version/commit tags, the current commit's architecture tags, and up to two preceding versions for rollback. Only the latest stable release receives fixes. Use a version tag or digest for a planned upgrade or rollback. Matching source archives are retained separately from image cleanup in [GitHub Releases](https://github.com/brspoon/keep/releases).
+Follow the [installation and configuration guide](https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md) for setup, manual Compose installation, supported image tags, and HTTPS configuration. Back up your configuration and data before upgrading.
 
-## License and source
+Use an explicit version tag, such as `brspoon/keep:2.21.2`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
 
-Keep's own code is licensed under [MIT](https://github.com/brspoon/keep/blob/main/LICENSE). Dependencies, base-image software, and bundled assets have separate licenses and notices. See [third-party attribution](https://github.com/brspoon/keep/blob/main/THIRD_PARTY.md), [GitHub Releases](https://github.com/brspoon/keep/releases) for matching source archives and checksums, and the [source-material guide](https://github.com/brspoon/keep/blob/main/docs/SOURCE_DISTRIBUTION.md).
+## Integrations and API
 
-Keep is independent of and not endorsed by Plex, Maintainerr, Radarr, Sonarr, Seerr, or Tautulli. Product names identify compatible services.
+Maintainerr supplies Leaving collections and Keep protection. Radarr and Sonarr provide optional library cleanup, Seerr verifies request ownership for restricted deletion, and Tautulli adds watch history. The [API guide](https://github.com/brspoon/keep/blob/main/docs/API.md) describes scoped access to Leaving and Kept lists and Keep protection. The owner manages API keys; those keys do not grant administration or media-file deletion.
 
-## Support
+## Documentation and support
 
-Use [GitHub Issues](https://github.com/brspoon/keep/issues) for bugs and feature requests. See [SUPPORT.md](https://github.com/brspoon/keep/blob/main/SUPPORT.md) for supported versions and help. Report suspected vulnerabilities through [GitHub's private reporting form](https://github.com/brspoon/keep/security/advisories/new); [SECURITY.md](https://github.com/brspoon/keep/blob/main/SECURITY.md) explains what to include and what to do if the form is unavailable. Never post vulnerability details, credentials, database files, private artwork, or unredacted service responses in public issues.
+- [Source code and documentation](https://github.com/brspoon/keep)
+- [Releases and changelog](https://github.com/brspoon/keep/releases)
+- [Backup and restore](https://github.com/brspoon/keep/blob/main/docs/PORTABLE_BACKUP.md)
+- [Report a bug or request a feature](https://github.com/brspoon/keep/issues)
+- [Contributing](https://github.com/brspoon/keep/blob/main/CONTRIBUTING.md)
+- [Security policy](https://github.com/brspoon/keep/security/policy)
+
+Report suspected vulnerabilities through [GitHub's private reporting form](https://github.com/brspoon/keep/security/advisories/new). If the form is unavailable, open an issue asking the maintainer to enable private reporting without including vulnerability details, and wait for a private channel before sharing the report.
+
+Keep's own source code is licensed under [MIT](https://github.com/brspoon/keep/blob/main/LICENSE). Dependencies and bundled assets may have separate [licenses and notices](https://github.com/brspoon/keep/blob/main/THIRD_PARTY.md). Keep is independent of Plex, Maintainerr, Radarr, Sonarr, Seerr, and Tautulli; their names identify compatible services and do not imply endorsement.
 
 Plex and the Plex logo are trademarks of Plex and used under a license.
