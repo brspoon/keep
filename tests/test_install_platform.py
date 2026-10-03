@@ -138,6 +138,66 @@ if ($env:KEEP_TEST_LAUNCHER_MODE -eq 'iex') {
         self.assertNotEqual(failed.returncode, 0)
         self.assertFalse(arguments.exists())
 
+    def test_powershell_python_guidance_never_installs_or_downloads_prerequisites(self):
+        launcher = Path(__file__).resolve().parents[1] / 'install.ps1'
+        record = self.parent / 'prerequisite-execution.txt'
+        script = r"""
+$ErrorActionPreference = 'Stop'
+function Get-Command {
+    param([string]$Name, $ErrorAction)
+    if ($Name -eq 'winget' -and $env:KEEP_TEST_WINGET -eq 'yes') {
+        return [pscustomobject]@{ Source = 'winget' }
+    }
+    if ($Name -eq 'py' -and $env:KEEP_TEST_PYTHON -eq 'old') {
+        return [pscustomobject]@{ Source = 'Invoke-KeepOldPython' }
+    }
+    return $null
+}
+function Invoke-KeepOldPython {
+    Add-Content -LiteralPath $env:KEEP_TEST_EVENTS -Value 'python-version' -Encoding ASCII
+    $global:LASTEXITCODE = 1
+}
+function Invoke-WebRequest {
+    Add-Content -LiteralPath $env:KEEP_TEST_EVENTS -Value 'download' -Encoding ASCII
+    throw 'Download must not run while Python is unavailable'
+}
+function New-Item {
+    Add-Content -LiteralPath $env:KEEP_TEST_EVENTS -Value 'temporary-directory' -Encoding ASCII
+    throw 'Temporary directory must not be created while Python is unavailable'
+}
+function winget {
+    Add-Content -LiteralPath $env:KEEP_TEST_EVENTS -Value 'winget' -Encoding ASCII
+    throw 'Prerequisites must not be installed automatically'
+}
+try {
+    & $env:KEEP_TEST_LAUNCHER
+} catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
+exit 0
+"""
+        for python in ('missing', 'old'):
+            for winget in ('yes', 'no'):
+                with self.subTest(python=python, winget=winget):
+                    record.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                        env={**os.environ, 'KEEP_TEST_LAUNCHER': str(launcher),
+                             'KEEP_TEST_EVENTS': str(record), 'KEEP_TEST_PYTHON': python,
+                             'KEEP_TEST_WINGET': winget},
+                        capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn('Keep requires Python 3.9 or newer.', result.stderr)
+                    self.assertIn('Reopen PowerShell', result.stderr)
+                    if winget == 'yes':
+                        self.assertIn('winget install --id Python.Python.3.14 --exact', result.stderr)
+                    else:
+                        self.assertIn('https://www.python.org/downloads/windows/', result.stderr)
+                        self.assertNotIn('winget install', result.stderr)
+                    self.assertEqual(record.read_text().splitlines() if record.exists() else [],
+                                     ['python-version'] if python == 'old' else [])
+
 
 if __name__ == "__main__":
     unittest.main()

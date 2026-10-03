@@ -4,15 +4,15 @@
 <title>{{ 'Sign in' if mode == 'login' else 'Set up Keep' }} · Keep</title>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <script defer src="/static/keep-toast.js?v=2.4.6"></script>
-<link rel="stylesheet" href="/static/keep-connections.css?v=2.3.0">
-<link rel="stylesheet" href="/static/keep-setup.css?v=2.4.3">
+<link rel="stylesheet" href="/static/keep-connections.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-setup.css?v={{ app_version }}">
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
 </head><body class="admin-ui connections-ui onboarding-ui"><a class="skip-link" href="#main-content">Skip to content</a>
 <main class="page" id="main-content"><header class="topbar"><div class="brand"><img class="mark" src="/static/keep-icon.svg" alt="" width="52" height="52"><h1>{{ 'Sign in to Keep' if mode == 'login' else 'Set up Keep' }}</h1></div></header>
 {% if message %}<p class="settings-error" role="alert">{{ message }}</p>{% endif %}
 <section class="panel"><div class="panel-head"><div>
 {% if mode == 'bootstrap' %}
-<h2>Establish ownership</h2><p>Run <code>python -m onboarding bootstrap</code> locally inside the Keep container, then enter the private setup code below. Codes expire after ten minutes.</p>
+<h2>Establish ownership</h2><p>Enter the setup code printed by the installer. Codes expire after ten minutes; if yours expires, rerun the installation command to get a new one.</p>
 <p>Next, sign in with the Plex account that owns your media server. This account becomes Keep’s owner.</p>
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label for="bootstrap-code">Setup code</label><input id="bootstrap-code" name="bootstrap_code" type="password" autocomplete="off" required><button type="submit">Continue with Plex</button></form>
 {% elif mode == 'login' %}
@@ -24,14 +24,15 @@
 <h2>{{ 'Setup verified' if mode == 'complete' else 'Finish connecting your services' }}</h2>
 <dl class="setup-status">
 <div><dt>Owner</dt><dd><span class="setup-state ready">Established with Plex</span></dd></div>
-<div><dt>Plex</dt><dd><span class="setup-state {{ 'ready' if plex_url else 'pending' }}">{{ 'Configured' if plex_url else 'Not connected' }}</span>{% if plex_url %}<small>{{ plex_url }}</small>{% endif %}</dd></div>
+<div><dt>Plex</dt><dd><span class="setup-state {{ 'ready' if plex_configured else 'pending' }}">{{ 'Configured' if plex_configured else 'Needs configuration' if plex_url else 'Not connected' }}</span>{% if plex_url %}<small>{{ plex_url }}</small>{% endif %}</dd></div>
 <div><dt>Maintainerr</dt><dd><span class="setup-state {{ 'ready' if maintainerr_url else 'pending' }}">{{ 'Configured' if maintainerr_url else 'Not connected' }}</span>{% if maintainerr_url %}<small>{{ maintainerr_url }}</small>{% endif %}</dd></div>
 <div><dt>Collections</dt><dd><span class="setup-state {{ 'ready' if collections else 'pending' }}">{{ collections | length }} selected</span></dd></div>
 <div><dt>Email</dt><dd><span class="setup-state">{{ 'Enabled; SMTP will be verified' if email else 'Disabled (optional)' }}</span></dd></div>
 </dl>
 {% if mode == 'complete' %}<p>Plex identity and access, Maintainerr collections{{ ', and SMTP connectivity' if email else '' }} passed verification. {{ 'No email was sent.' if email else 'Email delivery remains disabled.' }}</p><a class="setup-link primary" href="/">Open Keep</a>{% else %}
-<p>Open Connections to connect Plex, configure Maintainerr, test it and select collections. Email is optional. Saved progress remains available when you return.</p><p><a class="setup-link" href="/settings/connections">Configure services and collections</a></p>
-<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Verify services and finish setup</button></form>
+<p>In Connections, connect Plex if needed, then save and test Maintainerr, select at least one collection, and save your selection. Use <strong>Return to Setup</strong> there to come back and verify your services. Saved progress remains available.</p><p>Email is optional. If you enable it, SMTP must also pass verification. Radarr, Sonarr, Seerr, and Tautulli can be configured later.</p><p><a class="setup-link" href="/settings/connections">Configure services and collections</a></p>
+{% if missing_configuration %}<section class="setup-missing" id="setup-missing" aria-labelledby="setup-missing-heading"><h3 id="setup-missing-heading">Before you can finish setup</h3><ul>{% for item in missing_configuration %}<li>{{ item }}</li>{% endfor %}</ul></section>{% endif %}
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button id="setup-finish" type="submit" {% if missing_configuration %}disabled aria-describedby="setup-missing"{% endif %}>Verify services and finish setup</button></form>
 {% endif %}
 {% endif %}
 </div></div></section></main></body></html>

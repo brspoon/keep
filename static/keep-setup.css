@@ -21,8 +21,12 @@
 .setup-state.ready { color: #a6d6b2; }
 .setup-state.pending { color:var(--accent-ink); }
 .setup-status small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.setup-missing { margin-top: 20px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.setup-missing ul { margin-bottom: 0; padding-left: 20px; font-size: 14px; }
 .onboarding-ui .setup-link { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 10px 16px; border: 1px solid var(--border-hover); border-radius: 10px; color: var(--text); background: var(--surface-2); text-decoration: none; font-size: 14px; font-weight: 600; }
 .onboarding-ui .setup-link.primary { background: var(--accent); color: #17120a; }
+.onboarding-ui .setup-link:is(:hover, :focus-visible) { background: var(--accent-soft); border-color: var(--accent); }
+.onboarding-ui .setup-link.primary:is(:hover, :focus-visible) { background: var(--accent-hover); color: var(--on-accent); }
 @media(max-width:560px) {
   .setup-status > div { grid-template-columns: 90px minmax(0,1fr); gap: 12px; }
   .onboarding-ui .setup-link { width: 100%; }

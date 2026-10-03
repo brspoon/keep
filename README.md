@@ -1,3 +1,5 @@
+![Keep logo](static/keep-icon-192.png)
+
 # Keep
 
 Keep gives the people who use your Plex server a say in what stays and what goes.
@@ -31,29 +33,39 @@ See the [features and access guide](docs/FEATURES.md) for account types, permiss
 
 ## Before you install
 
-You need Docker with Compose v2 and Python 3.9 or newer. On Linux/macOS, you also need curl. On Windows, use PowerShell 5.1 or newer and Docker Desktop running Linux containers. Your account must be able to run Docker. Plex and Maintainerr must already be running and reachable from Keep.
+Install these prerequisites on the computer where Keep will run:
+
+- **Docker with Compose v2:** [Docker Desktop for macOS](https://docs.docker.com/desktop/setup/install/mac-install/) or [Windows](https://docs.docker.com/desktop/setup/install/windows-install/), or [Docker Engine](https://docs.docker.com/engine/install/) with the [Compose plugin](https://docs.docker.com/compose/install/linux/) on Linux. Start Docker before installing Keep; Windows must use Linux containers.
+- **Python 3.9 or newer:** follow the official instructions for [Linux](https://docs.python.org/3/using/unix.html), [macOS](https://www.python.org/downloads/macos/), or [Windows](https://www.python.org/downloads/windows/). Python runs the installer; Keep itself runs inside Docker.
+- **Linux / macOS:** [curl](https://curl.se/download.html) to download the installer. macOS already includes it; see [missing prerequisite help](docs/INSTALLATION.md#missing-prerequisites) if your shell cannot find it.
+- **Windows:** [PowerShell 5.1 or newer](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows). Windows PowerShell 5.1 is sufficient; PowerShell 7 also works.
+- **Your media services:** [Plex Media Server](https://www.plex.tv/media-server-downloads/) and [Maintainerr](https://docs.maintainerr.info/installation/) must already be running and reachable from Keep. They are installed separately.
+
+Your account must be able to run Docker, and the computer needs internet access to download Keep. The installer checks prerequisites and stops with repair guidance if something is missing; it does not install those tools for you.
 
 Keep starts on your local network. You do not need Git, a domain, or a reverse proxy to install it. Use HTTPS if you later make Keep accessible outside your trusted network.
 
 ## Install
 
-Run the command for your system on the computer where Keep will live.
+After installing the prerequisites, run one command for your system on the computer where Keep will live. Then finish setup in your browser.
 
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.
 
-Open that address on your phone or computer on the same network. Enter the code, sign in to Plex, and select the server you own. In **Admin → Connections**, save and test Maintainerr and choose collections. Return to setup and select **Verify services and finish setup**.
+1. Open the printed `/setup` address on your phone or computer on the same network. Enter the code printed by the installer, sign in with the Plex account that owns your server, and select that server.
+2. On **Set up Keep**, select **Configure services and collections** to open **Admin → Connections**. Save and test Maintainerr, then choose and save at least one collection Keep should track.
+3. Select **Return to Setup** and review the checklist. **Verify services and finish setup** becomes available once the required configuration is saved; the checklist explains anything still missing. Select it to verify Plex and the selected Maintainerr collections, plus SMTP if you enabled email. Select **Open Keep** after verification succeeds.
 
 Radarr, Sonarr, Seerr, Tautulli, and email are optional. See the [installation guide](docs/INSTALLATION.md) to choose a port or address, use an HTTPS proxy, or troubleshoot setup. Keep the installation's `.env` file and data volume private, and back them up before upgrading.
 

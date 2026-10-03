@@ -1,10 +1,13 @@
 import concurrent.futures
 import json
+import re
 import sqlite3
 import tempfile
 import time
 import unittest
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
+from connection_settings import ConnectionSettings
 from onboarding import Onboarding, digest
 
 
@@ -201,6 +204,143 @@ class FirstRunJourneyTests(unittest.TestCase):
             get.return_value.json.return_value = {'authToken': 'broad-secret'}
             return self.client.get('/auth/plex/callback?state=' + state)
 
+    @contextmanager
+    def saved_setup_configuration(self, **overrides):
+        values = {
+            'PLEX_SERVER_URL': 'https://plex.example',
+            'PLEX_MACHINE_IDENTIFIER': 'machine',
+            'PLEX_ADMIN_TOKEN': 'private-plex-credential',
+            'MAINTAINERR_URL': 'http://maintainerr.test:6246',
+            'KEEP_COLLECTIONS': json.dumps({'1': 'Movies'}),
+            'EMAIL_ENABLED': 'false',
+        }
+        for name, value in overrides.items():
+            if value is None:
+                values.pop(name, None)
+            else:
+                values[name] = value
+        settings = ConnectionSettings(self.directory.name + '/readiness.sqlite3')
+        # Keep missing fields genuinely absent, without test_keep's legacy env
+        # configuration or an earlier test's saved connection falling back in.
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(keep.os.environ, {}, clear=True))
+            for name in ('PLEX_SERVER_URL', 'PLEX_MACHINE_IDENTIFIER', 'PLEX_ADMIN_TOKEN',
+                         'MAINTAINERR_URL', 'SMTP_HOST', 'SMTP_FROM'):
+                stack.enter_context(patch.object(keep, name, ''))
+            stack.enter_context(patch.object(keep, 'COLLECTIONS', {}))
+            stack.enter_context(patch.object(keep, 'connection_settings', settings))
+            # Reset saved fields so each subtest starts with its own configuration.
+            with sqlite3.connect(settings.path) as db:
+                db.execute('DELETE FROM connection_settings')
+                db.execute('DELETE FROM plex_connection_overrides')
+            settings.save(values, plex_override=True)
+            with self.client.session_transaction() as session:
+                session['csrf_token'] = 'bootstrap-csrf'
+            yield settings
+
+    def assert_setup_finish_control(self, page, *, missing=()):
+        button = re.search(r'<button\b[^>]*id="setup-finish"[^>]*>', page)
+        self.assertIsNotNone(button, 'Setup must include its finish button')
+        if missing:
+            self.assertRegex(button.group(), r'\sdisabled(?:\s|=|>)')
+            self.assertIn('aria-describedby="setup-missing"', button.group())
+            checklist = re.search(r'<section\b[^>]*id="setup-missing"[^>]*>(.*?)</section>', page, re.S)
+            self.assertIsNotNone(checklist, 'Disabled setup must explain the missing settings')
+            self.assertEqual(re.findall(r'<li>(.*?)</li>', checklist.group(1), re.S), list(missing))
+        else:
+            self.assertNotRegex(button.group(), r'\sdisabled(?:\s|=|>)')
+            self.assertNotIn('id="setup-missing"', page)
+
+    def assert_setup_appearance(self, response, theme):
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        root = re.search(r'<html\b[^>]*\bdata-theme="([^"]+)"', page)
+        self.assertIsNotNone(root, 'Setup must use the shared appearance preference')
+        self.assertEqual(root.group(1), theme)
+        self.assertIn(f'src="/static/keep-theme.js?v={keep.APP_VERSION}"', page)
+        for stylesheet in ('keep-ui.css', 'keep-theme.css', 'keep-setup.css'):
+            self.assertIn(f'href="/static/{stylesheet}?v={keep.APP_VERSION}"', page)
+
+    def assert_owner_appearance(self, theme):
+        with keep.attribution_db() as db:
+            saved = db.execute("SELECT theme_mode FROM user_profiles WHERE plex_id='12345'").fetchone()
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved[0], theme)
+
+    def test_each_required_saved_connection_controls_setup_finish(self):
+        self.callback(self.store.issue())
+        plex_missing = 'Plex: connect your owned server and save its address, server identity, and credential.'
+        for field, value, message in (
+            ('PLEX_SERVER_URL', None, plex_missing),
+            ('PLEX_MACHINE_IDENTIFIER', None, plex_missing),
+            ('PLEX_ADMIN_TOKEN', None, plex_missing),
+            ('MAINTAINERR_URL', None, 'Maintainerr: save its address.'),
+            ('KEEP_COLLECTIONS', '{}', 'Collections: select and save at least one Maintainerr collection.'),
+        ):
+            with self.subTest(field=field), self.saved_setup_configuration(**{field: value}):
+                response = self.client.get('/setup')
+                self.assertEqual(response.status_code, 200)
+                page = response.get_data(as_text=True)
+                self.assert_setup_finish_control(page, missing=[message])
+                plex_status = re.search(r'<div><dt>Plex</dt><dd>(.*?)</dd></div>', page, re.S)
+                self.assertIsNotNone(plex_status)
+                if field == 'PLEX_SERVER_URL':
+                    expected_status = '<span class="setup-state pending">Not connected</span>'
+                elif field in ('PLEX_MACHINE_IDENTIFIER', 'PLEX_ADMIN_TOKEN'):
+                    expected_status = '<span class="setup-state pending">Needs configuration</span>'
+                else:
+                    expected_status = '<span class="setup-state ready">Configured</span>'
+                self.assertIn(expected_status, plex_status.group(1))
+                self.assertTrue(self.store.pending())
+
+    def test_email_requires_host_and_sender_only_when_enabled(self):
+        self.callback(self.store.issue())
+        email_missing = 'Email: save an SMTP host and sender email address, or disable email.'
+        for enabled, host, sender, missing in (
+            ('false', None, None, []),
+            ('true', None, 'owner@example.com', [email_missing]),
+            ('true', 'smtp.example.com', None, [email_missing]),
+            ('true', 'smtp.example.com', 'owner@example.com', []),
+        ):
+            with self.subTest(enabled=enabled, host=host, sender=sender), \
+                 self.saved_setup_configuration(EMAIL_ENABLED=enabled, SMTP_HOST=host, SMTP_FROM=sender):
+                response = self.client.get('/setup')
+                self.assertEqual(response.status_code, 200)
+                self.assert_setup_finish_control(response.get_data(as_text=True), missing=missing)
+
+    def test_saved_configuration_enables_button_but_does_not_replace_live_verification(self):
+        self.callback(self.store.issue())
+        with self.saved_setup_configuration(), \
+             patch.object(keep, 'test_plex', side_effect=ValueError('private-service-error')) as plex_probe, \
+             patch.object(keep, 'discover_collections') as maintainerr_probe:
+            response = self.client.get('/setup')
+            self.assertEqual(response.status_code, 200)
+            self.assert_setup_finish_control(response.get_data(as_text=True))
+            plex_probe.assert_not_called()
+            maintainerr_probe.assert_not_called()
+            response = self.client.post('/setup', data={'csrf_token': 'bootstrap-csrf'})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn('Verification failed', response.get_data(as_text=True))
+            self.assertNotIn('private-service-error', response.get_data(as_text=True))
+            self.assertTrue(self.store.pending())
+            plex_probe.assert_called_once_with('https://plex.example', 'private-plex-credential', 'machine')
+            maintainerr_probe.assert_not_called()
+
+    def test_direct_finish_post_cannot_bypass_missing_saved_configuration(self):
+        self.callback(self.store.issue())
+        missing = 'Plex: connect your owned server and save its address, server identity, and credential.'
+        with self.saved_setup_configuration(PLEX_ADMIN_TOKEN=None), \
+             patch.object(keep, 'test_plex') as plex_probe, \
+             patch.object(keep, 'discover_collections') as maintainerr_probe, \
+             patch.object(keep, 'test_smtp_connection') as smtp_probe:
+            response = self.client.post('/setup', data={'csrf_token': 'bootstrap-csrf'})
+            self.assertEqual(response.status_code, 200)
+            self.assert_setup_finish_control(response.get_data(as_text=True), missing=[missing])
+            self.assertTrue(self.store.pending())
+            plex_probe.assert_not_called()
+            maintainerr_probe.assert_not_called()
+            smtp_probe.assert_not_called()
+
     def test_first_visitor_cannot_claim_and_no_server_does_not_consume(self):
         self.assertEqual(self.client.get('/').location, '/setup')
         self.assertEqual(self.client.post('/setup', data={'bootstrap_code': 'guess'}).status_code, 403)
@@ -209,25 +349,74 @@ class FirstRunJourneyTests(unittest.TestCase):
         self.assertTrue(self.store.valid_code(code))
         self.assertEqual(self.store.owner(), '')
 
+    def test_bootstrap_uses_code_from_installer_without_requiring_another_command(self):
+        response = self.client.get('/setup')
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn('installer', page.lower())
+        self.assertIn('Setup code', page)
+        self.assertIn('Continue with Plex', page)
+        self.assertNotIn('python -m onboarding bootstrap', page)
+
     def test_claim_selection_resume_and_verified_finish(self):
         code = self.store.issue()
+        self.assert_setup_appearance(self.client.get('/setup'), 'system')
         response = self.callback(code)
         self.assertEqual(response.location, '/settings/connections/plex/select')
+        self.assert_setup_appearance(self.client.get(response.location), 'system')
         self.assertEqual(self.store.owner(), '12345')
         self.assertFalse(self.store.valid_code(code))
         self.assertEqual(self.client.get('/').location, '/setup')
-        self.assertEqual(self.client.get('/setup').status_code, 200)
+        self.assert_setup_appearance(self.client.get('/setup'), 'system')
+        self.assert_owner_appearance('system')
         with self.client.session_transaction() as session:
             self.assertNotIn('broad-secret', str(dict(session)))
             self.assertNotIn('resource-secret', str(dict(session)))
             session['csrf_token'] = 'bootstrap-csrf'
-        with patch.object(keep, 'test_plex'), patch.object(keep, 'discover_collections', return_value={1: 'Movies'}), patch.object(keep, 'get_collections', return_value={1: 'Movies'}), patch.object(keep, 'email_enabled', return_value=False):
+        with self.saved_setup_configuration(), patch.object(keep, 'test_plex'), patch.object(keep, 'discover_collections', return_value={1: 'Movies'}):
             response = self.client.post('/setup', data={'csrf_token': 'bootstrap-csrf'})
-        self.assertEqual(response.status_code, 200)
+        self.assert_setup_appearance(response, 'system')
+        self.assert_owner_appearance('system')
         self.assertIn('Setup verified', response.get_data(as_text=True))
         self.assertFalse(self.store.pending())
         self.assertEqual(self.store.owner(), '12345')
         self.assertEqual(self.client.get('/setup').location, '/settings/connections')
+
+    def saved_appearance_survives_setup(self, theme):
+        self.callback(self.store.issue())
+        with self.saved_setup_configuration(), \
+             patch.object(keep, 'test_plex'), \
+             patch.object(keep, 'discover_collections', return_value={1: 'Movies'}):
+            response = self.client.post('/preferences', data={
+                'csrf_token': 'bootstrap-csrf', 'theme_mode': theme,
+            })
+            self.assertEqual(response.status_code, 302)
+            self.assert_owner_appearance(theme)
+
+            self.assert_setup_appearance(self.client.get('/settings/connections/plex/select'), theme)
+            response = self.client.post('/settings/connections/plex/select', data={
+                'csrf_token': 'bootstrap-csrf', 'server': '0',
+            })
+            self.assertEqual(response.location, '/setup')
+            self.assert_setup_appearance(self.client.get(response.location), theme)
+            connections = self.client.get('/settings/connections')
+            self.assertEqual(connections.status_code, 200)
+            self.assertIn(f'data-theme="{theme}"', connections.get_data(as_text=True))
+            self.assertIn('Return to Setup', connections.get_data(as_text=True))
+            self.assert_setup_appearance(self.client.get('/setup'), theme)
+            self.assert_owner_appearance(theme)
+
+            response = self.client.post('/setup', data={'csrf_token': 'bootstrap-csrf'})
+            self.assert_setup_appearance(response, theme)
+            self.assertIn('Setup verified', response.get_data(as_text=True))
+            self.assertFalse(self.store.pending())
+            self.assert_owner_appearance(theme)
+
+    def test_saved_light_appearance_survives_setup_navigation_and_completion(self):
+        self.saved_appearance_survives_setup('light')
+
+    def test_saved_dark_appearance_survives_setup_navigation_and_completion(self):
+        self.saved_appearance_survives_setup('dark')
 
     def test_expired_bootstrap_after_authentication_cannot_claim(self):
         code = self.store.issue()
@@ -240,11 +429,58 @@ class FirstRunJourneyTests(unittest.TestCase):
         self.callback(self.store.issue())
         with self.client.session_transaction() as session:
             session['csrf_token'] = 'bootstrap-csrf'
-        with patch.object(keep, 'test_plex', side_effect=ValueError('private-secret')):
+        with self.saved_setup_configuration(), patch.object(keep, 'test_plex', side_effect=ValueError('private-secret')):
             response = self.client.post('/setup', data={'csrf_token': 'bootstrap-csrf'})
         self.assertTrue(self.store.pending())
         self.assertNotIn('private-secret', response.get_data(as_text=True))
         self.assertIn('Verification failed', response.get_data(as_text=True))
+
+    def test_saved_connections_return_to_setup_and_completion_survives_service_failure(self):
+        self.callback(self.store.issue())
+        with self.client.session_transaction() as session:
+            session['csrf_token'] = 'bootstrap-csrf'
+        settings = ConnectionSettings(self.directory.name + '/connections.sqlite3')
+        with patch.object(keep, 'connection_settings', settings), \
+             patch.dict(keep.os.environ, {}, clear=True), \
+             patch.object(keep, 'email_enabled', return_value=False):
+            settings.save({'PLEX_SERVER_URL': 'https://plex.example',
+                           'PLEX_MACHINE_IDENTIFIER': 'machine',
+                           'PLEX_ADMIN_TOKEN': 'private-plex-credential'}, plex_override=True)
+            response = self.client.post('/settings/connections', data={
+                'csrf_token': 'bootstrap-csrf', 'action': 'save-maintainerr',
+                'MAINTAINERR_URL': 'http://maintainerr.test:6246',
+            })
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(settings.get('MAINTAINERR_URL'), 'http://maintainerr.test:6246')
+            with patch.object(keep, 'discover_collections', return_value={2: 'Movies to watch'}):
+                response = self.client.post('/settings/connections', data={
+                    'csrf_token': 'bootstrap-csrf', 'action': 'collections', 'collection_id': '2',
+                })
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(self.store.pending())
+            self.assertIn('Return to Setup', response.get_data(as_text=True))
+
+            response = self.client.get('/setup')
+            self.assertEqual(response.status_code, 200)
+            page = response.get_data(as_text=True)
+            self.assertIn('http://maintainerr.test:6246', page)
+            self.assertIn('1 selected', page)
+            self.assertIn('Verify services and finish setup', page)
+            self.assertEqual(json.loads(settings.get('KEEP_COLLECTIONS')), {'2': 'Movies to watch'})
+
+            with patch.object(keep, 'test_plex'), \
+                 patch.object(keep, 'discover_collections', return_value={2: 'Movies to watch'}):
+                response = self.client.post('/setup', data={'csrf_token': 'bootstrap-csrf'})
+            self.assertIn('Setup verified', response.get_data(as_text=True))
+            self.assertFalse(Onboarding(self.store.path).pending())
+            with patch.object(keep, 'test_plex', side_effect=ValueError('Plex is offline')) as plex_probe, \
+                 patch.object(keep, 'discover_collections', side_effect=ValueError('Maintainerr is offline')) as maintainerr_probe:
+                self.assertEqual(self.client.get('/setup').location, '/settings/connections')
+                response = self.client.get('/settings/connections')
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn('Return to Setup', response.get_data(as_text=True))
+                plex_probe.assert_not_called()
+                maintainerr_probe.assert_not_called()
 
 class CallbackSessionTests(unittest.TestCase):
     setUp = PlexFlowTests.setUp

@@ -2,11 +2,22 @@
 
 ## Requirements
 
-Install Docker with Compose v2 and Python 3.9 or newer. Use curl on Linux/macOS,
-or PowerShell 5.1 or newer on Windows. Windows requires Docker Desktop running
-Linux containers; you run the installer directly in PowerShell, without a WSL
-terminal. Python must be available as `py -3` or `python` on Windows, or
-`python3` on Linux/macOS.
+Install the prerequisites first. Keep's one-command setup installs Keep, then
+you complete ownership and service configuration in your browser.
+
+| Prerequisite | Official installation instructions |
+| --- | --- |
+| Docker with Compose v2 | [Docker Desktop for macOS](https://docs.docker.com/desktop/setup/install/mac-install/) or [Windows](https://docs.docker.com/desktop/setup/install/windows-install/); on Linux, [Docker Engine](https://docs.docker.com/engine/install/) and the [Compose plugin](https://docs.docker.com/compose/install/linux/). |
+| Python 3.9 or newer | [Linux](https://docs.python.org/3/using/unix.html), [macOS](https://www.python.org/downloads/macos/), or [Windows](https://www.python.org/downloads/windows/). |
+| curl on Linux/macOS | [curl downloads](https://curl.se/download.html). macOS already includes curl. |
+| PowerShell 5.1 or newer on Windows | Windows PowerShell 5.1 is sufficient, or [install PowerShell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows). |
+| Plex and Maintainerr | [Plex Media Server](https://www.plex.tv/media-server-downloads/) and [Maintainerr installation](https://docs.maintainerr.info/installation/). Both services must already be running. |
+
+Start Docker before running the installer. Windows requires Docker Desktop
+running Linux containers; run the installer directly in PowerShell, without a
+WSL terminal. Python must be available as `py -3` or `python` on Windows, or
+`python3` on Linux/macOS. Python is used by the installer; the application and
+worker run inside Docker with their dependencies included.
 
 Your account must be able to run Docker, and the computer needs internet access
 to download Keep. Plex and Maintainerr must already be running and reachable
@@ -14,29 +25,31 @@ from both Keep containers. They are not included. Docker Desktop provides the
 Docker and Compose tools on Windows and macOS; on Linux you can use Docker Engine
 with the Compose v2 plugin.
 
-For Windows prerequisites, follow [Docker Desktop's installation guide](https://docs.docker.com/desktop/setup/install/windows-install/)
-and use a working [Python installation](https://www.python.org/downloads/windows/).
-Keep uses Linux containers; it does not run a Windows container image.
+The installer checks prerequisites and stops with repair guidance when a tool
+is missing or unusable. It does not install prerequisites or change Docker's
+permissions automatically. See [missing prerequisite help](#missing-prerequisites).
 
 Keep starts on your trusted local network. Git, a domain, and a reverse proxy
-are not required. The installation uses the prebuilt `brspoon/keep:2.21.2` image
+are not required. The installation uses the prebuilt `brspoon/keep:2.21.3` image
 for both the web app and worker, with a shared `keep-data` volume. Docker selects
 the amd64 or arm64 image for your server.
 
 ## First installation
 
-Run one command on the computer where Keep will live.
+Once the prerequisites are ready, run one command on the computer where Keep
+will live. The address, port, directory, and HTTPS examples later in this guide
+are optional alternatives; they are not additional steps for a default install.
 
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.ps1 | iex
 ```
 
 The installer checks prerequisites, downloads the release files into your home
@@ -47,13 +60,25 @@ Compose configuration, pulls the image, starts both services, and waits for
 both to become healthy. It then prints a setup address such as
 `http://192.168.1.100:5000/setup` and a temporary owner setup code.
 
-Open the printed address on a computer or phone on the same network. Enter the
-code, sign in with the Plex account that owns your server, and select that
-server. In **Admin → Connections**, save and test Maintainerr, then choose and
-save the collections Keep should track. Return to `/setup` and select
-**Verify services and finish setup**. Radarr, Sonarr, Seerr, Tautulli, and email
-are optional. The [Maintainerr webhook](#maintainerr-webhook-for-email-summaries)
-is only needed for email summaries.
+### Finish setup in your browser
+
+1. Open the printed `/setup` address on a computer or phone on the same network. On **Establish ownership**, enter the setup code printed by the installer and select **Continue with Plex**.
+2. Sign in with the Plex account that owns your server. Select the server on **Choose your Plex server**, then select **Verify and save selected server**. Keep verifies and saves the connection, then returns you to **Set up Keep**.
+3. Select **Configure services and collections** to open **Admin → Connections**. Enter Maintainerr's address, select **Save Maintainerr**, then **Test Maintainerr**. Choose at least one collection from the successful test and select **Save collection selection**.
+4. Select **Return to Setup** to review the setup checklist. It explains any missing configuration, and **Verify services and finish setup** stays disabled until the required settings are saved. Once available, select it to verify Plex's identity and server access, retrieve Maintainerr's collections, and check that every selected collection still exists. If email is enabled, Keep also checks the SMTP connection and configured authentication without sending an email.
+5. When **Setup verified** appears, select **Open Keep**.
+
+Radarr, Sonarr, Seerr, Tautulli, and email are optional. The
+[Maintainerr webhook](#maintainerr-webhook-for-email-summaries) is only needed
+for email summaries. The checklist requires a saved Plex address, server
+identity, and credential; a Maintainerr address; and at least one selected
+collection. If email is enabled, save the SMTP host and sender address. Having
+those settings enables the button; the final verification still tests the live
+services and any configured SMTP authentication before recording completion.
+Saving or testing connections alone does not complete setup. **Return to Setup**
+appears only for the owner while setup is unfinished. After completion, `/setup`
+opens Connections instead, and later connection changes or service outages do
+not restart setup.
 
 The setup code and Plex authorization each expire after ten minutes. If the
 code expires before you claim ownership, rerun the installation command to get
@@ -64,6 +89,33 @@ Keep the installation's `.env` private: it contains deployment secrets. The data
 volume also holds account and service credentials. [Back up both](PORTABLE_BACKUP.md) before
 upgrading or moving the installation.
 
+### Missing prerequisites
+
+If a prerequisite check fails, follow the reported command or official
+installation link, reopen your terminal if necessary, and rerun the Keep
+command. Commands that install system packages may require administrator access.
+Keep does not run them automatically.
+
+If `curl` is missing, the Linux/macOS download command cannot fetch Keep's
+launcher, so the message comes from your shell before Keep can offer help.
+Install curl first using your operating system's package manager:
+
+| System | Get curl |
+| --- | --- |
+| Debian / Ubuntu | Run `sudo apt-get update`, then `sudo apt-get install curl`. |
+| Fedora | Run `sudo dnf install curl`. |
+| macOS | Try `/usr/bin/curl --version`; curl is included with macOS. If it works, restore `/usr/bin` to your shell's `PATH`. If you already use Homebrew, its [curl formula](https://formulae.brew.sh/formula/curl) is another option. |
+| Other Linux distributions | Use your distribution's package manager or [curl's platform downloads](https://curl.se/download.html). |
+
+If Python is missing or older than 3.9, use the official Python links above or
+the installer's suggested package-manager command. Then check
+`python3 --version` on Linux/macOS or `py -3 --version` / `python --version` on
+Windows. If Docker is missing, install it using the official platform guide;
+if it is installed but unavailable, start Docker and confirm your account can
+run `docker info` and `docker compose version`. Use Docker's
+[Linux post-installation guide](https://docs.docker.com/engine/install/linux-postinstall/)
+for permission configuration; Keep does not change Docker group membership.
+
 ### Choose an address, port, or directory
 
 If the server has several network interfaces, specify the address your phone
@@ -73,13 +125,13 @@ server. You can also choose another available port or installation directory:
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
 ```
 
 Replace the example address with your server's address. If automatic detection
@@ -98,7 +150,7 @@ The commands above execute a versioned installation script. To review the Linux/
 macOS launcher first, download the same file, read it, then run it:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.sh -o install.sh
 less install.sh
 sh install.sh
 ```
@@ -107,7 +159,7 @@ On Windows, fetch the PowerShell launcher into a variable, inspect it, then
 execute that exact text:
 
 ```powershell
-$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.ps1'
+$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.ps1'
 $installer
 & ([scriptblock]::Create($installer))
 ```
@@ -149,13 +201,13 @@ HTTP. Replace the example hostname with the hostname configured in your proxy.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.sh | sh -s -- --url https://keep.example.com
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.sh | sh -s -- --url https://keep.example.com
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.21.2/install.ps1'))) --url https://keep.example.com
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.21.3/install.ps1'))) --url https://keep.example.com
 ```
 
 HTTPS mode binds the app to `127.0.0.1:5000` by default and uses secure session

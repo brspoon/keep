@@ -1429,7 +1429,7 @@ def send_email(to_addresses, subject, html_body, text_body):
         if connection_value('SMTP_SECURITY') == 'starttls':
             smtp.starttls(context=ssl.create_default_context())
         if connection_value('SMTP_USER'):
-            smtp.login(connection_value('SMTP_USER'), connection_value('SMTP_PASSWORD'))
+            smtp.login(connection_value('SMTP_USER'), connection_value('SMTP_PASSWORD') or '')
         refused = smtp.send_message(msg)
         if refused:
             raise RuntimeError("SMTP rejected one or more digest recipients")
@@ -4026,7 +4026,7 @@ def test_smtp_connection(getter=None):
             smtp.starttls(context=ssl.create_default_context())
             smtp.ehlo()
         if getter('SMTP_USER'):
-            smtp.login(getter('SMTP_USER'), getter('SMTP_PASSWORD'))
+            smtp.login(getter('SMTP_USER'), getter('SMTP_PASSWORD') or '')
 
 
 def owned_plex_servers(token):
@@ -4068,6 +4068,20 @@ def owned_plex_servers(token):
     return result
 
 
+def setup_missing_configuration():
+    """List saved settings needed before live setup verification can run."""
+    missing = []
+    if not all(connection_value(name) for name in PLEX_FIELDS):
+        missing.append('Plex: connect your owned server and save its address, server identity, and credential.')
+    if not connection_value('MAINTAINERR_URL'):
+        missing.append('Maintainerr: save its address.')
+    if not get_collections():
+        missing.append('Collections: select and save at least one Maintainerr collection.')
+    if email_enabled() and not all(connection_value(name) for name in ('SMTP_HOST', 'SMTP_FROM')):
+        missing.append('Email: save an SMTP host and sender email address, or disable email.')
+    return missing
+
+
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
     if owner_id():
@@ -4076,11 +4090,14 @@ def setup():
         if not onboarding.pending():
             return redirect('/settings/connections')
         message = ''
+        missing_configuration = setup_missing_configuration()
         if request.method == 'POST':
             error = require_form_csrf()
             if error:
                 return error
             try:
+                if missing_configuration:
+                    raise ValueError('Required setup settings are missing')
                 test_plex(connection_value('PLEX_SERVER_URL'), connection_value('PLEX_ADMIN_TOKEN'), connection_value('PLEX_MACHINE_IDENTIFIER'))
                 collections = discover_collections(connection_value('MAINTAINERR_URL'))
                 if not get_collections() or any(cid not in collections for cid in get_collections()):
@@ -4090,12 +4107,16 @@ def setup():
                 onboarding.finish()
                 return render_template('setup.html', mode='complete', csrf_token=get_csrf_token(),
                     collections=get_collections(), email=email_enabled(),
+                    plex_configured=True,
                     plex_url=connection_value('PLEX_SERVER_URL'),
                     maintainerr_url=connection_value('MAINTAINERR_URL'))
             except (ValueError, requests.RequestException, ET.ParseError, smtplib.SMTPException, OSError):
-                message = 'Verification failed. Test each service in Connections and select current Maintainerr collections before finishing.'
+                message = ('Save the required settings in Connections before finishing setup.' if missing_configuration else
+                           'Verification failed. Test each service in Connections and select current Maintainerr collections before finishing.')
         return render_template('setup.html', mode='summary', csrf_token=get_csrf_token(),
-                               message=message, collections=get_collections(), email=email_enabled(),
+                               message=message, missing_configuration=missing_configuration,
+                               collections=get_collections(), email=email_enabled(),
+                               plex_configured=all(connection_value(name) for name in PLEX_FIELDS),
                                plex_url=connection_value('PLEX_SERVER_URL'),
                                maintainerr_url=connection_value('MAINTAINERR_URL'))
     message = ''
@@ -4399,7 +4420,8 @@ def settings_connections():
         open_services=connection_open_services(request.form, request.form.get('action')),
         seerr_review=seerr_review(),
         automatic_states=connection_settings.automatic_states(connection_value),
-        notice=notice, error=error, csrf_token=get_csrf_token(), discovered=discovered, collection_error=collection_error,
+        notice=notice, error=error, csrf_token=get_csrf_token(), setup_pending=onboarding.pending(),
+        discovered=discovered, collection_error=collection_error,
         collection_diagnostic=collection_diagnostic,
         selected=get_collections(), collections_managed='KEEP_COLLECTIONS' in os.environ))
     response.headers["Cache-Control"] = "no-store"
