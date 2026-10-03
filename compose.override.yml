@@ -1,0 +1,3 @@
+# Keep portable defaults unchanged. Put private overrides in an ignored local file
+# and select it explicitly with docker compose -f compose.yml -f compose.local.yml.
+services: {}

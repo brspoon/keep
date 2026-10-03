@@ -1,0 +1,113 @@
+{
+  "description": "Sources and full notices for wheel archives retained in the immutable original Python APK layer, even when ensurepip is deleted from the final filesystem. These packages are supplemental base-layer code, outside the 17 installed application distributions.",
+  "distlib_vendor_version": "0.4.2",
+  "format": "keep-original-base-python-source-lock-v1",
+  "native_resources": [
+    {
+      "bytes": 97792,
+      "matching_distlib_member": "distlib-0.4.2/distlib/t32.exe",
+      "path": "pip/_vendor/distlib/t32.exe",
+      "sha256": "6b4195e640a85ac32eb6f9628822a622057df1e459df7c17a12f97aeabc9415b",
+      "wheel": "pip"
+    },
+    {
+      "bytes": 182784,
+      "matching_distlib_member": "distlib-0.4.2/distlib/t64-arm.exe",
+      "path": "pip/_vendor/distlib/t64-arm.exe",
+      "sha256": "ebc4c06b7d95e74e315419ee7e88e1d0f71e9e9477538c00a93a9ff8c66a6cfc",
+      "wheel": "pip"
+    },
+    {
+      "bytes": 108032,
+      "matching_distlib_member": "distlib-0.4.2/distlib/t64.exe",
+      "path": "pip/_vendor/distlib/t64.exe",
+      "sha256": "81a618f21cb87db9076134e70388b6e9cb7c2106739011b6a51772d22cae06b7",
+      "wheel": "pip"
+    },
+    {
+      "bytes": 91648,
+      "matching_distlib_member": "distlib-0.4.2/distlib/w32.exe",
+      "path": "pip/_vendor/distlib/w32.exe",
+      "sha256": "47872cc77f8e18cf642f868f23340a468e537e64521d9a3a416c8b84384d064b",
+      "wheel": "pip"
+    },
+    {
+      "bytes": 168448,
+      "matching_distlib_member": "distlib-0.4.2/distlib/w64-arm.exe",
+      "path": "pip/_vendor/distlib/w64-arm.exe",
+      "sha256": "c5dc9884a8f458371550e09bd396e5418bf375820a31b9899f6499bf391c7b2e",
+      "wheel": "pip"
+    },
+    {
+      "bytes": 101888,
+      "matching_distlib_member": "distlib-0.4.2/distlib/w64.exe",
+      "path": "pip/_vendor/distlib/w64.exe",
+      "sha256": "7a319ffaba23a017d7b1e18ba726ba6c54c53d6446db55f92af53c279894f8ad",
+      "wheel": "pip"
+    }
+  ],
+  "package": {
+    "apk_sha256": {
+      "amd64": "3c0f87ca054b3880b1e13e9666566a349966ffc26b89dc32ccbf7d84f1a8a0c0",
+      "arm64": "539ef075e671a6e2695000b75df4b19a6f718c630a1668c7c05818ef67e66443"
+    },
+    "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+    "name": "python-3.14",
+    "origin": "python-3.14",
+    "version": "3.14.7-r1"
+  },
+  "required_distlib_build_sources": [
+    "PC/launcher.c",
+    "PC/launcher.rc",
+    "PC/launcher.ico",
+    "PC/SimpleLauncher.sln",
+    "PC/CLISimpleLauncher.vcxproj",
+    "PC/GUISimpleLauncher.vcxproj"
+  ],
+  "sources": [
+    {
+      "bytes": 1848877,
+      "filename": "pip-26.2.1.tar.gz",
+      "name": "pip",
+      "sha256": "f6ad667e89a1fe78046c8f13232b247200f5258d7828f3f7883d660878e0813f",
+      "url": "https://files.pythonhosted.org/packages/ae/15/4500e320e6b101ec3b719ae85b697d9940b6cda672bc555bd6016fc60c6f/pip-26.2.1.tar.gz",
+      "version": "26.2.1"
+    },
+    {
+      "bytes": 66471,
+      "filename": "wheel-0.48.0.tar.gz",
+      "name": "wheel",
+      "sha256": "94800765601e9171bf5d58d066e640662842bcedcbab982b2c90787a2c987322",
+      "url": "https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f35baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz",
+      "version": "0.48.0"
+    },
+    {
+      "bytes": 614914,
+      "filename": "distlib-0.4.2.tar.gz",
+      "name": "distlib",
+      "sha256": "baeb401c90f27acd15c4861ae0847d1e731c27ac3dbf4210643ba61fa1e813db",
+      "url": "https://files.pythonhosted.org/packages/46/8d/873e9252ea2c0e0c857884e0a2899ec43ade132345df1925ef24cbe64f18/distlib-0.4.2.tar.gz",
+      "version": "0.4.2"
+    }
+  ],
+  "wheels": [
+    {
+      "apk_path": "usr/lib/python3.14/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl",
+      "bytes": 1816632,
+      "filename": "pip-26.2.1-py3-none-any.whl",
+      "name": "pip",
+      "sha256": "71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e",
+      "url": "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl",
+      "version": "26.2.1"
+    },
+    {
+      "apk_path": "usr/lib/python3.14/ensurepip/_bundled/wheel-0.48.0-py3-none-any.whl",
+      "bytes": 33320,
+      "filename": "wheel-0.48.0-py3-none-any.whl",
+      "name": "wheel",
+      "sha256": "3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab",
+      "url": "https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl",
+      "version": "0.48.0"
+    }
+  ]
+}

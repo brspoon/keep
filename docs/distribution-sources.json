@@ -1,0 +1,216 @@
+{
+  "format": "keep-distribution-source-lock-v1",
+  "native_wheels": {
+    "cffi_release_commit": "fd33e7700f0ebafe6f30bd5053f13327221b77a2",
+    "materials": [
+      {
+        "bytes": 598175,
+        "path": "libffi-3.4.6.tar.gz",
+        "sha256": "9ac790464c1eb2f5ab5809e978a1683e9393131aede72d1b0a0703771d3c6cda",
+        "url": "https://github.com/libffi/libffi/archive/v3.4.6.tar.gz"
+      },
+      {
+        "bytes": 25212,
+        "path": "cffi-2.1.1-wheel-build.yaml",
+        "sha256": "b1910ddbfc69d2fbe41f1493cb564658d0970522bfeb5e6fe93d3288c802736c",
+        "url": "https://raw.githubusercontent.com/python-cffi/cffi/fd33e7700f0ebafe6f30bd5053f13327221b77a2/.github/workflows/ci.yaml"
+      }
+    ],
+    "native_wheels": [
+      {
+        "architecture": "x86_64",
+        "binary_path": "_cffi_backend.cpython-314-x86_64-linux-musl.so",
+        "binary_sha256": "4b9f2ab66cec2eeda2cd3fc85b8b5eb870ba83c932aeecc99877e73115299c01",
+        "needed_libraries": [
+          "libc.musl-x86_64.so.1"
+        ],
+        "notice_coverage": "wrapper notice only; supplemental notice packaged by Keep",
+        "package": "cffi",
+        "url": "https://files.pythonhosted.org/packages/81/10/5dc0e7bdd18e22107054288283380fc97a06ae3f1656a106908d666a3c88/cffi-2.1.1-cp314-cp314-musllinux_1_2_x86_64.whl",
+        "version": "2.1.1",
+        "wheel": "cffi-2.1.1-cp314-cp314-musllinux_1_2_x86_64.whl",
+        "wheel_sha256": "5c58fe613dc5e5336357eff555824a314d8e43282600435c8d1cb6a7a2fedd13"
+      },
+      {
+        "architecture": "aarch64",
+        "binary_path": "_cffi_backend.cpython-314-aarch64-linux-musl.so",
+        "binary_sha256": "f270619a56a7e958d298429fdd4a0575330206602166132e908f30ec2cdf9cef",
+        "needed_libraries": [
+          "libc.musl-aarch64.so.1"
+        ],
+        "notice_coverage": "wrapper notice only; supplemental notice packaged by Keep",
+        "package": "cffi",
+        "url": "https://files.pythonhosted.org/packages/82/1d/a4aaf9babd75acb4d5f223bff71533bee748dd770a382619a798960ee9ba/cffi-2.1.1-cp314-cp314-musllinux_1_2_aarch64.whl",
+        "version": "2.1.1",
+        "wheel": "cffi-2.1.1-cp314-cp314-musllinux_1_2_aarch64.whl",
+        "wheel_sha256": "64faea20f4e2613363a1a9b9c7dd73058f3ecd00133a511e72ad7c511658f527"
+      },
+      {
+        "architecture": "x86_64",
+        "binary_path": "_argon2_cffi_bindings/_ffi.abi3.so",
+        "binary_sha256": "00d8d3d2d5d9c096f9c8955e4924dfa7849963439ecb81bae0322f1c21fe32b0",
+        "needed_libraries": [
+          "libc.musl-x86_64.so.1"
+        ],
+        "notice_coverage": "wrapper notice only; supplemental notice packaged by Keep",
+        "package": "argon2-cffi-bindings",
+        "url": "https://files.pythonhosted.org/packages/48/2f/7ee62a6e79f9309f9d9982d301b22a00010adb580c05c8109b94d7b33de0/argon2_cffi_bindings-26.1.0-cp310-abi3-musllinux_1_2_x86_64.whl",
+        "version": "26.1.0",
+        "wheel": "argon2_cffi_bindings-26.1.0-cp310-abi3-musllinux_1_2_x86_64.whl",
+        "wheel_sha256": "ffff613aaa9ce6236766e2fc6dc560bb5abde7a2e2416e3db1f9ae395a2b4dd4"
+      },
+      {
+        "architecture": "aarch64",
+        "binary_path": "_argon2_cffi_bindings/_ffi.abi3.so",
+        "binary_sha256": "3b032884922eb617e17ee3817f04e93e2d412c66cad412c688be106053790dd8",
+        "needed_libraries": [
+          "libc.musl-aarch64.so.1"
+        ],
+        "notice_coverage": "wrapper notice only; supplemental notice packaged by Keep",
+        "package": "argon2-cffi-bindings",
+        "url": "https://files.pythonhosted.org/packages/b3/81/b4a20d4902af7f796390bf9245ff83c5217dfa7367efa1d14986956c482b/argon2_cffi_bindings-26.1.0-cp310-abi3-musllinux_1_2_aarch64.whl",
+        "version": "26.1.0",
+        "wheel": "argon2_cffi_bindings-26.1.0-cp310-abi3-musllinux_1_2_aarch64.whl",
+        "wheel_sha256": "34b7d9c24a4165a2c61cc8ae11d44d48c9ce2830fb536cb7914e11fdd9962728"
+      }
+    ],
+    "supplemental_notices": [
+      {
+        "bytes": 17881,
+        "path": "docs/licenses/ARGON2_LICENSE.txt",
+        "sha256": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590"
+      },
+      {
+        "bytes": 1132,
+        "path": "docs/licenses/CFFI_LIBFFI_LICENSE.txt",
+        "sha256": "67894089811f93fca47a76f85e017da6f8582d4ba0905963c6e0f1ad6df7a195"
+      },
+      {
+        "bytes": 16726,
+        "path": "docs/licenses/MPL-2.0.txt",
+        "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+      }
+    ]
+  },
+  "python": [
+    {
+      "filename": "argon2_cffi-25.1.0.tar.gz",
+      "name": "argon2-cffi",
+      "sha256": "694ae5cc8a42f4c4e2bf2ca0e64e51e23a040c6a517a85074683d3959e1346c1",
+      "url": "https://files.pythonhosted.org/packages/0e/89/ce5af8a7d472a67cc819d5d998aa8c82c5d860608c4db9f46f1162d7dab9/argon2_cffi-25.1.0.tar.gz",
+      "version": "25.1.0"
+    },
+    {
+      "filename": "argon2_cffi_bindings-26.1.0.tar.gz",
+      "name": "argon2-cffi-bindings",
+      "sha256": "63505c71542a44b68b1e38060450fb006404170da375feb31af153e7f9c6205d",
+      "url": "https://files.pythonhosted.org/packages/0b/43/bb8b6e8708d49a5ab36781333af092d9f483b198a2710d01281204640055/argon2_cffi_bindings-26.1.0.tar.gz",
+      "version": "26.1.0"
+    },
+    {
+      "filename": "blinker-1.9.0.tar.gz",
+      "name": "blinker",
+      "sha256": "b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf",
+      "url": "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz",
+      "version": "1.9.0"
+    },
+    {
+      "filename": "certifi-2026.7.22.tar.gz",
+      "name": "certifi",
+      "sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55",
+      "url": "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz",
+      "version": "2026.7.22"
+    },
+    {
+      "filename": "cffi-2.1.1.tar.gz",
+      "name": "cffi",
+      "sha256": "dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be",
+      "url": "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz",
+      "version": "2.1.1"
+    },
+    {
+      "filename": "charset_normalizer-3.5.1.tar.gz",
+      "name": "charset-normalizer",
+      "sha256": "6117b84ea48435e5356dc737f5121485c30920ba43375fa7b434fd753df0eac3",
+      "url": "https://files.pythonhosted.org/packages/e5/3f/143b048436775b0f76ac3eec145c019e8173ccc2885c8f20319b996d5e83/charset_normalizer-3.5.1.tar.gz",
+      "version": "3.5.1"
+    },
+    {
+      "filename": "click-8.5.0.tar.gz",
+      "name": "click",
+      "sha256": "ba0d2089de75ea0310e2dde03160e6ca10009947fb95a182f9b54021bb272e34",
+      "url": "https://files.pythonhosted.org/packages/c7/0e/7fa0ef50764b67090eca4114772a2abf8b6148198475e54c660b97caeee6/click-8.5.0.tar.gz",
+      "version": "8.5.0"
+    },
+    {
+      "filename": "flask-3.1.3.tar.gz",
+      "name": "flask",
+      "sha256": "0ef0e52b8a9cd932855379197dd8f94047b359ca0a78695144304cb45f87c9eb",
+      "url": "https://files.pythonhosted.org/packages/26/00/35d85dcce6c57fdc871f3867d465d780f302a175ea360f62533f12b27e2b/flask-3.1.3.tar.gz",
+      "version": "3.1.3"
+    },
+    {
+      "filename": "gunicorn-26.2.0.tar.gz",
+      "name": "gunicorn",
+      "sha256": "62b864895d9ebff0b2f9867ba04fe811c93121596540830c9c916d0769668447",
+      "url": "https://files.pythonhosted.org/packages/d9/8a/e4ef6ee11701b6cd64702848415ffb69eeff85cb388a3c6c7fe86f22f3f8/gunicorn-26.2.0.tar.gz",
+      "version": "26.2.0"
+    },
+    {
+      "filename": "idna-3.19.tar.gz",
+      "name": "idna",
+      "sha256": "5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15",
+      "url": "https://files.pythonhosted.org/packages/5f/f7/abb373e5757eaec4b922b92f97ec8d6d7e057cf06778247604fbc4e7c3f3/idna-3.19.tar.gz",
+      "version": "3.19"
+    },
+    {
+      "filename": "itsdangerous-2.2.0.tar.gz",
+      "name": "itsdangerous",
+      "sha256": "e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173",
+      "url": "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz",
+      "version": "2.2.0"
+    },
+    {
+      "filename": "jinja2-3.1.6.tar.gz",
+      "name": "jinja2",
+      "sha256": "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d",
+      "url": "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz",
+      "version": "3.1.6"
+    },
+    {
+      "filename": "markupsafe-3.0.3.tar.gz",
+      "name": "markupsafe",
+      "sha256": "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698",
+      "url": "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz",
+      "version": "3.0.3"
+    },
+    {
+      "filename": "pycparser-3.0.tar.gz",
+      "name": "pycparser",
+      "sha256": "600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29",
+      "url": "https://files.pythonhosted.org/packages/1b/7d/92392ff7815c21062bea51aa7b87d45576f649f16458d78b7cf94b9ab2e6/pycparser-3.0.tar.gz",
+      "version": "3.0"
+    },
+    {
+      "filename": "requests-2.34.2.tar.gz",
+      "name": "requests",
+      "sha256": "f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed",
+      "url": "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz",
+      "version": "2.34.2"
+    },
+    {
+      "filename": "urllib3-2.8.0.tar.gz",
+      "name": "urllib3",
+      "sha256": "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63",
+      "url": "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz",
+      "version": "2.8.0"
+    },
+    {
+      "filename": "werkzeug-3.1.8.tar.gz",
+      "name": "werkzeug",
+      "sha256": "9bad61a4268dac112f1c5cd4630a56ede601b6ed420300677a869083d70a4c44",
+      "url": "https://files.pythonhosted.org/packages/dd/b2/381be8cfdee792dd117872481b6e378f85c957dd7c5bca38897b08f765fd/werkzeug-3.1.8.tar.gz",
+      "version": "3.1.8"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability reporting
+    url: https://github.com/brspoon/keep/security/advisories/new
+    about: Report vulnerabilities confidentially. See SECURITY.md if the form is unavailable; never put vulnerability details in a public issue.
+  - name: Installation and operator documentation
+    url: https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md
+    about: Read the installation guide and support notes before filing a usage question.

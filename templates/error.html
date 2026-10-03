@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script src="/static/keep-theme.js?v={{ app_version }}"></script>
+  <meta name="color-scheme" content="dark">
+  <title>Something went wrong · Keep</title>
+  <link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg">
+  <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; min-height:100svh; display:grid; place-items:center;
+      padding:24px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:#f1f2f4; background:#0c0d10; }
+    main { width:min(100%,480px); padding:36px; border:1px solid #30333b; border-radius:24px;
+      background:#17191e; box-shadow:0 24px 70px #0005; }
+    .error-brand { display:inline-flex; align-items:center; gap:12px; color:inherit;
+      text-decoration:none; font-size:22px; font-weight:700; }
+    h1 { margin:30px 0 14px; font-size:32px; }
+    p { margin:0; color:#a8adb8; line-height:1.65; }
+    nav { display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; }
+    .error-action { min-height:46px; display:inline-flex; align-items:center; justify-content:center;
+      padding:12px 20px; border-radius:10px; text-decoration:none; font-size:14px; font-weight:650;
+      background:#efb34f; color:#17120a; }
+    .error-action.secondary { background:transparent; color:#f1f2f4; border:1px solid #30333b; }
+    a:focus-visible { outline:2px solid #efb34f; outline-offset:4px; }
+    @media(max-width:400px) { main { padding:26px; } h1 { font-size:28px; } }
+  </style>
+  <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
+</head>
+<body>
+  <main aria-labelledby="error-heading">
+    <a class="error-brand" href="/" aria-label="Keep home"><img src="/static/keep-icon.svg" width="42" height="42" alt="">Keep</a>
+    <h1 id="error-heading">A little interruption.</h1>
+    <p>{% if is_action %}We couldn’t confirm that action. Check the latest state before trying again.{% else %}This view couldn’t load right now. Try again in a moment, or head back to Keep.{% endif %}</p>
+    <nav aria-label="Recovery options">
+      {% if not is_action %}<a class="error-action" href="{{ retry_url }}">Try again</a>{% endif %}
+      <a class="error-action{% if not is_action %} secondary{% endif %}" href="/">Back to Keep</a>
+    </nav>
+  </main>
+</body>
+</html>

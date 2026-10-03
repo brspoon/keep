@@ -1,0 +1,9 @@
+# Explicit source-build mode. Use with:
+# docker compose -f compose.yml -f compose.build.yml up -d --build
+services:
+  keep-app:
+    image: keep:local
+    build: .
+  keep-digest:
+    image: keep:local
+    build: .

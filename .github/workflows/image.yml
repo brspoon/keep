@@ -1,0 +1,213 @@
+name: Test Keep architectures and optional release publication
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish tested main images to version and stable tags
+        type: boolean
+        default: false
+      confirmation:
+        description: Enter release-stable for release
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: keep-image-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  installer-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Parse the launcher with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'Windows PowerShell 5.1 is required for this check' }
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'install.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw 'Installation launcher has PowerShell syntax errors' }
+      - name: Test native Windows permissions, locking and launcher behavior
+        shell: powershell
+        run: |
+          python -B -m unittest discover -s tests -p test_install_platform.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  contributor-tests:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Install pinned application dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Test contribution without registry or publishing credentials
+        run: |
+          python -B -m unittest discover -s tests
+          node --test tests/test_*.cjs
+      - name: Check contributed diff whitespace
+        run: git diff --check "$PR_BASE_SHA" "$PR_HEAD_SHA"
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  image:
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native-image.yml
+    with:
+      publish_release: false
+      confirmation: ''
+    secrets: inherit
+  release-native:
+    needs: [release-needed, prepare-release]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/native-image.yml
+    with:
+      publish_release: true
+      confirmation: ${{ inputs.confirmation }}
+    secrets: inherit
+  tested-images:
+    needs: [release-native, release-needed, prepare-release]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    permissions:
+      # GitHub exposes unpublished draft listings only to push-capable tokens.
+      # This confirmed-release job still performs only evidence GETs.
+      contents: write
+    outputs:
+      amd64: ${{ steps.aggregate.outputs.amd64 }}
+      arm64: ${{ steps.aggregate.outputs.arm64 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify original native evidence and source assets before aggregating tested digests
+        id: aggregate
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/release_materials.py aggregate
+  prepare-release:
+    needs: [release-needed, installer-windows]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Prepare the version draft release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/release_materials.py prepare
+  publish-release:
+    needs: [release-native, release-needed, tested-images, prepare-release]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: keep-release-stable
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Require current main and explicit stable confirmation
+        env:
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          python3 -c 'import sys; sys.path.insert(0,"scripts"); from publish_release import require_manual_dispatch; require_manual_dispatch(True)'
+      - name: Verify all release evidence before stable promotion
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          TESTED_DIGESTS: ${{ toJSON(needs.tested-images.outputs) }}
+        run: python3 scripts/release_materials.py verify
+      - name: Retrieve tested images by immutable digest
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          TESTED_DIGESTS: ${{ toJSON(needs.tested-images.outputs) }}
+        run: python3 scripts/registry_transfer.py fetch
+      - name: Publish version tags and promote stable last
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/publish_release.py --image "$DOCKERHUB_IMAGE" --revision "$GITHUB_SHA" --artifacts artifacts --execute --release
+      - name: Remove only this run's temporary transfer tags
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          TESTED_DIGESTS: ${{ toJSON(needs.tested-images.outputs) }}
+        run: python3 scripts/registry_transfer.py cleanup
+
+  release-needed:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - id: check
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/release_needed.py

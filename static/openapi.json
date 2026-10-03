@@ -1,0 +1,1047 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Keep API",
+    "version": "1.0.0",
+    "summary": "Read Leaving and Kept collection media and manage Keep protection.",
+    "description": "Keys are named, account-bound bearer credentials created by the Keep owner in Admin > API keys. API settings and the reference page are owner-only. Keep stores only a hash and reveals each secret once. Choose an expiry of 30, 90 or 365 days (default 90), or Never expires. Revoke or replace keys at any time; replacement preserves the original expiry. Revoked keys can be removed from the list while their activity history remains. Every request rechecks current account status, session version, and Keep permissions, including requests with never-expiring keys. Scopes constrain access but grant no permissions. No CORS is enabled by default. Use HTTPS in normal deployments. See docs/API.md for examples, retry behavior, rate limits, compatibility, and credential handling."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Keep API v1 on this Keep instance"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Collections",
+      "description": "Configured collection metadata."
+    },
+    {
+      "name": "Media",
+      "description": "Allowlisted media from selected Leaving and Kept collections only."
+    },
+    {
+      "name": "Keeps",
+      "description": "Keep protection records. Deleting a Keep removes protection only."
+    }
+  ],
+  "security": [
+    {
+      "KeepBearer": []
+    }
+  ],
+  "paths": {
+    "/collections": {
+      "get": {
+        "operationId": "listCollections",
+        "tags": [
+          "Collections"
+        ],
+        "summary": "List configured collections",
+        "description": "Requires the collections:read scope. Collection availability follows current Keep account access.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "422": {
+            "$ref": "#/components/responses/ResultLimitExceeded"
+          }
+        },
+        "x-required-scope": "collections:read"
+      }
+    },
+    "/media": {
+      "get": {
+        "operationId": "listMedia",
+        "tags": [
+          "Media"
+        ],
+        "summary": "List media in selected collections",
+        "description": "Requires media:read. Returns only the documented allowlist from configured Leaving and Kept collections; this is not Radarr/Sonarr library inventory. `state` defaults to `leaving`. Search matches titles case-insensitively. An incomplete or over-limit upstream read fails instead of returning a partial page as complete.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "name": "collection_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999999
+            },
+            "description": "Limit results to one configured collection."
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Case-insensitive title search."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "leaving",
+                "kept",
+                "all"
+              ],
+              "default": "leaving"
+            },
+            "description": "Collection state to include."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "422": {
+            "$ref": "#/components/responses/ResultLimitExceeded"
+          }
+        },
+        "x-required-scope": "media:read"
+      }
+    },
+    "/keeps": {
+      "get": {
+        "operationId": "listKeeps",
+        "tags": [
+          "Keeps"
+        ],
+        "summary": "List visible Keeps",
+        "description": "Requires keeps:read. The account sees its own Keeps. A current Keep manager or owner may also see other Keeps. Authorization is evaluated on each request.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "name": "collection_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999999999
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Keep page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeepPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "422": {
+            "$ref": "#/components/responses/ResultLimitExceeded"
+          }
+        },
+        "x-required-scope": "keeps:read"
+      },
+      "post": {
+        "operationId": "createKeep",
+        "tags": [
+          "Keeps"
+        ],
+        "summary": "Protect an eligible Leaving title",
+        "description": "Requires keeps:write and a valid Idempotency-Key. Only configured Leaving titles can be protected. Indefinite duration additionally requires current indefinite-Keep permission. This operation removes the selected title from Leaving and adds protection; it never deletes media.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKeepRequest"
+              },
+              "examples": {
+                "temporary": {
+                  "value": {
+                    "collection_id": 1,
+                    "media_id": "42"
+                  }
+                },
+                "indefinite": {
+                  "value": {
+                    "collection_id": 1,
+                    "media_id": "42",
+                    "duration": "indefinite"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Keep created.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Relative path to the created Keep."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeepResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/MutationUncertain"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-required-scope": "keeps:write"
+      }
+    },
+    "/keeps/{keep_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/KeepId"
+        }
+      ],
+      "get": {
+        "operationId": "getKeep",
+        "tags": [
+          "Keeps"
+        ],
+        "summary": "Read a visible Keep",
+        "description": "Requires keeps:read. The caller must own the Keep or currently have Keep manager or owner permission.",
+        "responses": {
+          "200": {
+            "description": "Keep record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeepResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-required-scope": "keeps:read"
+      },
+      "patch": {
+        "operationId": "updateKeep",
+        "tags": [
+          "Keeps"
+        ],
+        "summary": "Change a Keep duration",
+        "description": "Requires keeps:write and a valid Idempotency-Key. The caller must own the Keep or currently have Keep manager or owner permission. Indefinite duration requires current indefinite-Keep permission. Extending a temporary Keep follows Keep's existing extension-availability rules.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateKeepRequest"
+              },
+              "examples": {
+                "temporary": {
+                  "value": {
+                    "duration": "temporary"
+                  }
+                },
+                "indefinite": {
+                  "value": {
+                    "duration": "indefinite"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Keep updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeepResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/MutationUncertain"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-required-scope": "keeps:write"
+      },
+      "delete": {
+        "operationId": "removeKeepProtection",
+        "tags": [
+          "Keeps"
+        ],
+        "summary": "Remove Keep protection",
+        "description": "Requires keeps:write and a valid Idempotency-Key. The caller must own the Keep or currently have Keep manager or owner permission. Removes Keep protection only; it never deletes the title from Plex or its media files.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Protection removed. No response body."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/MutationUncertain"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-required-scope": "keeps:write"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "KeepBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Keep API key",
+        "description": "Account-bound key created by the owner in Admin > API keys. Required scopes are documented per operation: collections:read, media:read, keeps:read, keeps:write. Never put the key in a URL."
+      }
+    },
+    "parameters": {
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 25
+        },
+        "description": "Page size."
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 0
+        },
+        "description": "Zero-based offset. List feeds are capped at 10,000 records."
+      },
+      "KeepId": {
+        "name": "keep_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}$",
+          "maxLength": 30
+        },
+        "description": "Composite collection_id:media_id identifier, for example 1:42."
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+        },
+        "description": "Required on writes. A matching method, path, and body replays the successful response for 24 hours. Reuse with a different request returns 409."
+      }
+    },
+    "schemas": {
+      "Pagination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "limit",
+          "offset",
+          "total",
+          "next_offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "next_offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 10000
+          }
+        }
+      },
+      "Collection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collection_id",
+          "name"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "Media": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "media_id",
+          "collection_id",
+          "title",
+          "year",
+          "type",
+          "state"
+        ],
+        "properties": {
+          "media_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,19}$"
+          },
+          "collection_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "title": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "leaving",
+              "kept"
+            ]
+          }
+        }
+      },
+      "Keep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "collection_id",
+          "media_id",
+          "duration",
+          "expires_at",
+          "extension_available_at",
+          "owned_by_current_user"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}$"
+          },
+          "collection_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "media_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,19}$"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "indefinite"
+            ]
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "extension_available_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "owned_by_current_user": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CollectionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "MediaPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Media"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "KeepPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Keep"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
+      "CreateKeepRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collection_id",
+          "media_id"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999
+          },
+          "media_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,19}$"
+          },
+          "duration": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "indefinite"
+            ],
+            "default": "temporary"
+          }
+        }
+      },
+      "UpdateKeepRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "duration"
+        ],
+        "properties": {
+          "duration": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "indefinite"
+            ]
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "invalid_token",
+                  "insufficient_scope",
+                  "permission_denied",
+                  "not_found",
+                  "method_not_allowed",
+                  "busy",
+                  "conflict",
+                  "operation_uncertain",
+                  "payload_too_large",
+                  "unsupported_media_type",
+                  "rate_limited",
+                  "upstream_unavailable",
+                  "mutation_uncertain",
+                  "service_unavailable",
+                  "internal_error",
+                  "result_limit_exceeded"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "KeepResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Keep"
+          }
+        }
+      }
+    },
+    "responses": {
+      "InvalidRequest": {
+        "description": "Request parameters or body are invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, invalid, expired, revoked, or inactive account credential.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Required scope or current account permission is missing.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource is not found or not visible to this account.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Mutation is busy, conflicts with an earlier idempotency key, or has an uncertain outcome.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Request exceeds the write-body limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "A write body must use application/json.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Request rate limit exceeded.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected internal error. Details and credentials are not exposed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UpstreamError": {
+        "description": "A required upstream read failed or returned incomplete data.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "MutationUncertain": {
+        "description": "An upstream write may have completed; inspect current state before retrying with a new key.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "The service is temporarily unavailable.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "HTTP method is not supported for this resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ResultLimitExceeded": {
+        "description": "The complete aggregate exceeds 10,000 records. No partial data is returned; filter by collection or narrow the media search.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API keys · Keep Admin</title>
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg">
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-api-keys.css?v={{ app_version }}">
+<script defer src="/static/keep-api-keys.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="admin-ui api-keys-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+{% include 'shared_header.html' %}
+<div class="page-heading"><h2>API keys</h2><p class="subtitle">Give each integration its own access to your Keep account.</p></div>
+{% include 'shared_admin_tabs.html' %}
+{% if notice %}<p class="{{ 'settings-error' if error else 'notice' }}" role="{{ 'alert' if error else 'status' }}">{{ notice }}</p>{% endif %}
+{% if new_key %}
+<section class="key-disclosure" aria-labelledby="new-key-title">
+<h2 id="new-key-title">Save your new key</h2>
+<label for="new-api-key">Full API key</label>
+<input id="new-api-key" value="{{ new_key }}" readonly autocomplete="off" spellcheck="false" autofocus>
+<button id="copy-api-key" class="secondary" type="button">Copy key</button>
+<p id="copy-key-status" role="status" aria-live="polite"></p>
+<p>Store it in your integration’s secret settings. This value disappears when you leave this page. Keep stores its hash.</p>
+</section>
+{% endif %}
+<div class="key-panels">
+<section class="key-create" aria-labelledby="create-key-title">
+<h2 id="create-key-title">Create a key</h2>
+<form method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="create">
+<label for="key-name">Integration name<input id="key-name" name="name" maxlength="80" required autocomplete="off" placeholder="Home automation"></label>
+<label for="key-expiry">Expires after<select id="key-expiry" name="expiry_days"><option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">365 days</option><option value="never">Never expires</option></select></label>
+<fieldset><legend>Allowed operations</legend>
+{% for scope in scopes %}<label class="key-scope"><input type="checkbox" name="scope" value="{{ scope }}"><span>{{ {'collections:read':'Read selected collections', 'media:read':'Read Leaving and Kept media', 'keeps:read':'Read Keeps you can manage', 'keeps:write':'Create, change and remove Keep protection'}[scope] }}</span></label>{% endfor %}
+</fieldset>
+<p>Choose only the operations this integration needs. Removing Keep protection allows cleanup; it does not delete media.</p>
+<button type="submit">Create API key</button>
+</form>
+</section>
+<section class="key-list" aria-labelledby="existing-key-title"><h2 id="existing-key-title">Your keys</h2>
+{% for key in keys %}<article class="key-card">
+<h3>{{ key.name }}</h3><p class="key-prefix"><code>{{ key.prefix }}…</code> · {{ key.state }}</p>
+<p>{{ key.scopes|join(', ') }}</p>
+<dl><dt>Expires</dt><dd>{% if key.expires_at %}<time datetime="{{ key.expires_at }}">{{ key.expires_at_display }}</time>{% else %}{{ key.expires_at_display or 'Never' }}{% endif %}</dd><dt>Last used</dt><dd>{% if key.last_used_at %}<time datetime="{{ key.last_used_at }}">{{ key.last_used_at_display }}</time>{% else %}Never{% endif %}</dd></dl>
+{% if not key.revoked_at %}<div class="key-actions">
+{% for action,label in [('rotate','Replace key'),('revoke','Revoke key')] %}{% if action == 'revoke' or key.active %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ key.id }}"><input type="hidden" name="action" value="{{ action }}"><button type="submit" class="secondary">{{ label }}</button></form>{% endif %}{% endfor %}
+</div>{% if key.active %}<p class="key-action-note">Replacing a key immediately revokes its current value and keeps the same scopes and expiry.</p>{% endif %}{% else %}<div class="key-actions"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ key.id }}"><input type="hidden" name="action" value="remove"><button type="submit" class="secondary">Remove key</button></form></div>{% endif %}
+</article>{% else %}<p>You have no API keys yet.</p>{% endfor %}
+</section>
+</div>
+</main>
+</body></html>

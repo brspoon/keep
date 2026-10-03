@@ -1,0 +1,883 @@
+{
+  "schema_version": 1,
+  "architectures": [
+    "amd64",
+    "arm64"
+  ],
+  "base_index": "dhi.io/python@sha256:7b9528fefc51c9d3753ccd25dcf1dea9dd327e7c2f8bef89cd2cf3b34f847408",
+  "base_native_digests": {
+    "amd64": "sha256:b1f35cef0a3f43c7f377e75de003da89f0a8518ddc3805a5f94db9bd460246f1",
+    "arm64": "sha256:f38997c3b22744780d20cf7749649535d63fc9a167def975af9d4c1eb4aab605"
+  },
+  "source_predicate_type": "https://docker.com/dhi/source/v0.1",
+  "description": "Reviewed public Docker package-image tags and pinned recipes for 17 DHI base origins plus upgraded DHI Expat 2.8.5. Registry tags are discovery pointers: verify the native image subject and signature, and match each APK binary SHA256 before accepting corresponding-source materials. Original Alpine Expat 2.8.4 is covered separately in the base-layer bundle.",
+  "origins": [
+    {
+      "origin": "alpine-baselayout",
+      "version": "3.7.2-r1",
+      "image": "dhi.io/pkg-alpine-baselayout",
+      "tag": "3.7.2-r1-alpine3.24",
+      "reference": "dhi.io/pkg-alpine-baselayout:3.7.2-r1-alpine3.24",
+      "predicate_image_name": "dhi/pkg-alpine-baselayout",
+      "recipe": {
+        "path": "package/apk/main/alpine-baselayout/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "2b573f8f896bc9bc6372db73a14311517e95388c51b4dd0bbd4fcd428da715b0",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/alpine-baselayout/alpine-3.24/1.yaml",
+        "upstream_commit": "60a7585bbab2fa0f762504eb617dbca90216e31f"
+      },
+      "declared_tags": [
+        "3.7.2-alpine3.24",
+        "3.7.2-r1-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "alpine-baselayout-data",
+          "version": "3.7.2-r1",
+          "license": "GPL-2.0-only",
+          "build_commit": "b837137dc4637e2e576eb85c02b473101a1462eb",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/alpine-baselayout-data-3.7.2-r1.apk",
+              "sha256": "f696ade77afe77ba1cf0d5de3078f162fa7f3a85bd6e4c53beb1e9f7ad51ac26"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/alpine-baselayout-data-3.7.2-r1.apk",
+              "sha256": "f696ade77afe77ba1cf0d5de3078f162fa7f3a85bd6e4c53beb1e9f7ad51ac26"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "bzip2",
+      "version": "1.0.8-r6",
+      "image": "dhi.io/pkg-bzip2",
+      "tag": "1.0.8-r6-alpine3.24",
+      "reference": "dhi.io/pkg-bzip2:1.0.8-r6-alpine3.24",
+      "predicate_image_name": "dhi/pkg-bzip2",
+      "recipe": {
+        "path": "package/apk/main/bzip2/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "7daddc452fc57a282b433f3017d4b51483765dcb2558fa6399c3d5763c32a2e7",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/bzip2/alpine-3.24/1.yaml",
+        "upstream_commit": "33283848034c9885d984c8e8697c645c57324938"
+      },
+      "declared_tags": [
+        "1.0.8-alpine3.24",
+        "1.0.8-r6-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "bzip2",
+          "version": "1.0.8-r6",
+          "license": "bzip2-1.0.6",
+          "build_commit": "e9d524d2700f18354b11798082e04877e4662b69",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/bzip2-1.0.8-r6.apk",
+              "sha256": "ce0bcda2d87f4a67590840ac73a5474748fb18f841cba9382a1da74f9e5871f2"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/bzip2-1.0.8-r6.apk",
+              "sha256": "db50503019c6d2fefdb3390644aa9055c09180a16f72e2a3c4e7a7dd5d8a4613"
+            }
+          }
+        },
+        {
+          "name": "libbz2",
+          "version": "1.0.8-r6",
+          "license": "bzip2-1.0.6",
+          "build_commit": "e9d524d2700f18354b11798082e04877e4662b69",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libbz2-1.0.8-r6.apk",
+              "sha256": "3648cc721dd80587d0aede16b17c6a00ec16d6ecbda3263ebfbc57b5ebfc87e9"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libbz2-1.0.8-r6.apk",
+              "sha256": "6890462f093edf3f7baf29646fee1af2d60e92da88c8d1326ee984c2eed46c47"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "ca-certificates",
+      "version": "20260611-r0",
+      "image": "dhi.io/pkg-ca-certificates",
+      "tag": "20260611-r0-alpine3.24",
+      "reference": "dhi.io/pkg-ca-certificates:20260611-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-ca-certificates",
+      "recipe": {
+        "path": "package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
+        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
+        "sha256": "9367833f2f22547ea6c47835b49813f0dcf0cd39356058d1714746b765e42827",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
+        "upstream_commit": "e41cbd2ae991adfe8df298ba8e8e777e90bd0e03"
+      },
+      "declared_tags": [
+        "20260611-alpine3.24",
+        "20260611-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "ca-certificates-bundle",
+          "version": "20260611-r0",
+          "license": "MPL-2.0 AND MIT",
+          "build_commit": "1f115f951460dfe0686a3811df250e0fe949f63a",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-bundle-20260611-r0.apk",
+              "sha256": "5be2e420cc1ed6d0c2f041ab65c30c41a463f038b75cfcacb42dca594027733c"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20260611-r0.apk",
+              "sha256": "5be2e420cc1ed6d0c2f041ab65c30c41a463f038b75cfcacb42dca594027733c"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "expat",
+      "version": "2.8.5-r0",
+      "image": "dhi.io/pkg-expat",
+      "tag": "2.8.5-r0-alpine3.24",
+      "reference": "dhi.io/pkg-expat:2.8.5-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-expat",
+      "recipe": {
+        "path": "package/apk/main/expat/alpine-3.24/2.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "f5758eef26e4ae5578735037ba39fa8a5e9194ccb628d55d1f53181b53a5de12",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/expat/alpine-3.24/2.yaml",
+        "upstream_commit": "41a9605db84bb52cd65c6349e5e087c2c7fe9efb"
+      },
+      "declared_tags": [
+        "2.8.5-alpine3.24",
+        "2.8.5-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "expat",
+          "version": "2.8.5-r0",
+          "license": "MIT",
+          "build_commit": "19eef88fb758145d1245e7ad33a360b9e0cc62d0",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/expat-2.8.5-r0.apk",
+              "sha256": "57a44e22b36e6a8e1d8b4ca1eb6c0d46e84df67c2464ec76869fea526a52da38"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/expat-2.8.5-r0.apk",
+              "sha256": "1988363034a883de1564365eb09def335acb8922fc81e57507af6642ca7c31c7"
+            }
+          }
+        },
+        {
+          "name": "libexpat",
+          "version": "2.8.5-r0",
+          "license": "MIT",
+          "build_commit": "19eef88fb758145d1245e7ad33a360b9e0cc62d0",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk",
+              "sha256": "42b8146ab5a5ac7a78690a4280f9751284cdba25ecbff66776ad8d6b2237f512"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libexpat-2.8.5-r0.apk",
+              "sha256": "ca2ec23fee97d4f53ea437bb0cdc2239da9fc5df2ca58e162f41ac14cb81089a"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "gcc",
+      "version": "15.2.0-r7",
+      "image": "dhi.io/pkg-gcc",
+      "tag": "15.2.0-r7-alpine3.24",
+      "reference": "dhi.io/pkg-gcc:15.2.0-r7-alpine3.24",
+      "predicate_image_name": "dhi/pkg-gcc",
+      "recipe": {
+        "path": "package/apk/main/gcc/alpine-3.24/15.yaml",
+        "revision": "09e1489b269542c0e4e8abae57ac6bf60f044820",
+        "sha256": "e2cccc960e73a3559b14ad0474cdd37a6c6b7e572a9c11afdc0ea8463eef10e7",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/09e1489b269542c0e4e8abae57ac6bf60f044820/package/apk/main/gcc/alpine-3.24/15.yaml",
+        "upstream_commit": "2aa0eaee55c85d8e8bef5c058c6eb200f1c0243f"
+      },
+      "declared_tags": [
+        "15.2.0-alpine3.24",
+        "15.2.0-r7-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "libgcc",
+          "version": "15.2.0-r7",
+          "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+          "build_commit": "ddcf93c394b61ccf6be91b915a92a7454a14fcba",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libgcc-15.2.0-r7.apk",
+              "sha256": "6c961085b8e0f183b630fa7065eaf5774eb9b4624dd0f9e36176ccdbf4de7c08"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libgcc-15.2.0-r7.apk",
+              "sha256": "b13e04be2ce1d1b4a5bb58689e74e761808147b32de051c4f71526f7182e68e6"
+            }
+          }
+        },
+        {
+          "name": "libstdc++",
+          "version": "15.2.0-r7",
+          "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+          "build_commit": "ddcf93c394b61ccf6be91b915a92a7454a14fcba",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libstdc++-15.2.0-r7.apk",
+              "sha256": "967d7c1f8c21daa1b1e3ae1feafcfacd0278e2cbf143693fae9c2f2690f67257"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libstdc++-15.2.0-r7.apk",
+              "sha256": "d62d3b0f270635020079ba131f3cadf1bf8a8dc66324d6d6696c5abf88522f48"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "gdbm",
+      "version": "1.26-r0",
+      "image": "dhi.io/pkg-gdbm",
+      "tag": "1.26-r0-alpine3.24",
+      "reference": "dhi.io/pkg-gdbm:1.26-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-gdbm",
+      "recipe": {
+        "path": "package/apk/main/gdbm/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "f461b4867004bcd09ec6d75701f56f8aba12d9dbc224d858dfb4b137ab7639ca",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/gdbm/alpine-3.24/1.yaml",
+        "upstream_commit": "1ea03990396db618edfcc8a9a0bc6b72662bac8f"
+      },
+      "declared_tags": [
+        "1.26-alpine3.24",
+        "1.26-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "gdbm",
+          "version": "1.26-r0",
+          "license": "GPL-3.0-or-later",
+          "build_commit": "b7d42bc34c87aee2f748327b0f42971619ecbbb3",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/gdbm-1.26-r0.apk",
+              "sha256": "aac66eabd2d86e74d79f1b4831432be90dbc990a6abbe9ab68f25e9fdc7995f1"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/gdbm-1.26-r0.apk",
+              "sha256": "858cf7e57ac422cdd813d7bae7a591dc3bd009e9d1c91ad3cca0f2609a93a002"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "libffi",
+      "version": "3.5.2-r1",
+      "image": "dhi.io/pkg-libffi",
+      "tag": "3.5.2-r1-alpine3.24",
+      "reference": "dhi.io/pkg-libffi:3.5.2-r1-alpine3.24",
+      "predicate_image_name": "dhi/pkg-libffi",
+      "recipe": {
+        "path": "package/apk/main/libffi/alpine-3.24/3.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "7747dec1cb349186020af6378403090fb70c307142765798de473f2bc05cbe9c",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/libffi/alpine-3.24/3.yaml",
+        "upstream_commit": "2c2a7bb4a8b16066834e90402567b2c19403a790"
+      },
+      "declared_tags": [
+        "3.5.2-alpine3.24",
+        "3.5.2-r1-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "libffi",
+          "version": "3.5.2-r1",
+          "license": "MIT",
+          "build_commit": "7ae2f1bd73886eb22043616577fa0df5822f288d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libffi-3.5.2-r1.apk",
+              "sha256": "f1f5a59fd825f05001c6f55d1cdfc0661374cda00c02ec85c694d3f865a28186"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libffi-3.5.2-r1.apk",
+              "sha256": "1a201211a50617e5b88fcc4aa0b1c569edb28cc36bd521b568fa266efce2b512"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "mpdecimal",
+      "version": "4.0.1-r0",
+      "image": "dhi.io/pkg-mpdecimal",
+      "tag": "4.0.1-r0-alpine3.24",
+      "reference": "dhi.io/pkg-mpdecimal:4.0.1-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-mpdecimal",
+      "recipe": {
+        "path": "package/apk/main/mpdecimal/alpine-3.24/4.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "78d5005946fd820525171d6d3338adbd0ef3f14b921bf76bf90a87a2c72aaf38",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/mpdecimal/alpine-3.24/4.yaml",
+        "upstream_commit": "c0519b85456e9b838e3142e1d233aab0b433b476"
+      },
+      "declared_tags": [
+        "4.0.1-alpine3.24",
+        "4.0.1-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "mpdecimal",
+          "version": "4.0.1-r0",
+          "license": "BSD-2-Clause",
+          "build_commit": "191007bf1387d7904b2b6b8dd077e28a02528d94",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/mpdecimal-4.0.1-r0.apk",
+              "sha256": "7320c24ce64e46365de9afe87ca3aa34f0717970c8a824515ee2bab0c7e79a9c"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/mpdecimal-4.0.1-r0.apk",
+              "sha256": "e7f3930b736a1fd793fcb45842ef3c2aa422613bacf1d40b003ffc317e86c1a3"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "musl",
+      "version": "1.2.6-r2",
+      "image": "dhi.io/pkg-musl",
+      "tag": "1.2.6-r2-alpine3.24",
+      "reference": "dhi.io/pkg-musl:1.2.6-r2-alpine3.24",
+      "predicate_image_name": "dhi/pkg-musl",
+      "recipe": {
+        "path": "package/apk/main/musl/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "b6b997f7602ab1473d23539b63a0fab480b662549114cc0f1d17b55adbebc7c3",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/musl/alpine-3.24/1.yaml",
+        "upstream_commit": "f5640d3a10f664c9119720c60515265d3d6f6d01"
+      },
+      "declared_tags": [
+        "1.2.6-alpine3.24",
+        "1.2.6-r2-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "musl",
+          "version": "1.2.6-r2",
+          "license": "MIT",
+          "build_commit": "191007bf1387d7904b2b6b8dd077e28a02528d94",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/musl-1.2.6-r2.apk",
+              "sha256": "52ec02804d0dfce7f7e5ecedae91f3d538e45ad5041d178bc22dc1666d3f237d"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/musl-1.2.6-r2.apk",
+              "sha256": "cc1d6175187a4c6a4f4a56ec525fc06465bb1482e0eeb5356bb8350ddbad72c4"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "ncurses",
+      "version": "6.6_p20260516-r0",
+      "image": "dhi.io/pkg-ncurses",
+      "tag": "6.6-r0-alpine3.24",
+      "reference": "dhi.io/pkg-ncurses:6.6-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-ncurses",
+      "recipe": {
+        "path": "package/apk/main/ncurses/alpine-3.24/6.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "6156f784a2eeb632044b970d4eabb318c3b41b94bc9a6d75fdbcc133df2fe185",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/ncurses/alpine-3.24/6.yaml",
+        "upstream_commit": "2cee8a7328d061418336ad327b512d96bcd7bc5e"
+      },
+      "declared_tags": [
+        "6.6-r0-alpine3.24",
+        "6.6.20260516-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "libncursesw",
+          "version": "6.6_p20260516-r0",
+          "license": "X11",
+          "build_commit": "10948a1d84d0b0fd74db3ac458adc78b0889fecd",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libncursesw-6.6_p20260516-r0.apk",
+              "sha256": "6f7ae0b0e58f6a5335fdb4b86620d5383f778ef844551747eceeaf41480eb037"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libncursesw-6.6_p20260516-r0.apk",
+              "sha256": "6d4c806f44a6d2b2331d9aecf7532c6713f1e6cec1904e3024d94116441682c6"
+            }
+          }
+        },
+        {
+          "name": "libpanelw",
+          "version": "6.6_p20260516-r0",
+          "license": "X11",
+          "build_commit": "10948a1d84d0b0fd74db3ac458adc78b0889fecd",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libpanelw-6.6_p20260516-r0.apk",
+              "sha256": "d097b2a1132e86f541f49c40f43c6b0a267d4288bf718ee65ab5fc338f3d9d7f"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libpanelw-6.6_p20260516-r0.apk",
+              "sha256": "0d576956c5e7d3109c2a4d3e22569ced9ac048dfc3ac63468a64e24c8ee74b6a"
+            }
+          }
+        },
+        {
+          "name": "ncurses",
+          "version": "6.6_p20260516-r0",
+          "license": "X11",
+          "build_commit": "10948a1d84d0b0fd74db3ac458adc78b0889fecd",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ncurses-6.6_p20260516-r0.apk",
+              "sha256": "8ad16e747fb97c89209f9e7bb1f071572b4fc57716683d592a4090719c673389"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ncurses-6.6_p20260516-r0.apk",
+              "sha256": "73683eb01736f4a627b48ccbdba74449125c9ee4b1a4a0db5d6737dc736af552"
+            }
+          }
+        },
+        {
+          "name": "ncurses-terminfo-base",
+          "version": "6.6_p20260516-r0",
+          "license": "X11",
+          "build_commit": "10948a1d84d0b0fd74db3ac458adc78b0889fecd",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ncurses-terminfo-base-6.6_p20260516-r0.apk",
+              "sha256": "fef53a6cc0756667e18288d966d069e36112d064f8aed280746d4e1816c66790"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ncurses-terminfo-base-6.6_p20260516-r0.apk",
+              "sha256": "fef53a6cc0756667e18288d966d069e36112d064f8aed280746d4e1816c66790"
+            }
+          }
+        }
+      ],
+      "architecture_independent_outputs": {
+        "ncurses-terminfo-base": "arm64"
+      }
+    },
+    {
+      "origin": "openssl",
+      "version": "3.5.8-r1",
+      "image": "dhi.io/pkg-openssl",
+      "tag": "3.5.8-r1-alpine3.24",
+      "reference": "dhi.io/pkg-openssl:3.5.8-r1-alpine3.24",
+      "predicate_image_name": "dhi/pkg-openssl",
+      "recipe": {
+        "path": "package/apk/main/openssl/alpine-3.24/3.yaml",
+        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
+        "sha256": "cadcc3b4df5d02c882ed47a6735c53fb2776eb1c2165f72aaeb060cdb8486009",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/openssl/alpine-3.24/3.yaml",
+        "upstream_commit": "013edf8b29199933e8ea34dde460b5584b979042"
+      },
+      "declared_tags": [
+        "3.5.8-alpine3.24",
+        "3.5.8-r1-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "libcrypto3",
+          "version": "3.5.8-r1",
+          "license": "Apache-2.0",
+          "build_commit": "d3f8b2dac722561e110c4525a5b69ef232ad7835",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libcrypto3-3.5.8-r1.apk",
+              "sha256": "0dbd1b982bc01f2b9f439c7a79ec970cdb7aabb75d0138014bd84af4b8522b3d"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libcrypto3-3.5.8-r1.apk",
+              "sha256": "1804ac0ae31b9bafa6c4bcac4e93fdf9889eeab7dbaea0f3851b6a28874ce7d3"
+            }
+          }
+        },
+        {
+          "name": "libssl3",
+          "version": "3.5.8-r1",
+          "license": "Apache-2.0",
+          "build_commit": "d3f8b2dac722561e110c4525a5b69ef232ad7835",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libssl3-3.5.8-r1.apk",
+              "sha256": "f25fcbae10bd1c9ae5721ef24fbda6c9b6cedcd3ef3c9bf50285ab38d45bd72b"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libssl3-3.5.8-r1.apk",
+              "sha256": "7cc11b858a839c1f30d317bc3007adabc068f4e29d1cd1a0a48b78e7c05a97bf"
+            }
+          }
+        },
+        {
+          "name": "openssl",
+          "version": "3.5.8-r1",
+          "license": "Apache-2.0",
+          "build_commit": "d3f8b2dac722561e110c4525a5b69ef232ad7835",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/openssl-3.5.8-r1.apk",
+              "sha256": "0fecb7a6a5d64defa8eee69f0c743ddd7bf3ebb69296bc03b6b66b25f67283de"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/openssl-3.5.8-r1.apk",
+              "sha256": "f94ae69b3fc26a107b89fec4d8eef5818f0a7a66dc5e2806441e2c8097586294"
+            }
+          }
+        }
+      ],
+      "candidate_references": [
+        "dhi.io/pkg-openssl:3.5.8-alpine3.24"
+      ]
+    },
+    {
+      "origin": "python-3.14",
+      "version": "3.14.7-r1",
+      "image": "dhi.io/pkg-python",
+      "tag": "3.14.7-r1-apk-alpine3.24",
+      "reference": "dhi.io/pkg-python:3.14.7-r1-apk-alpine3.24",
+      "predicate_image_name": "dhi/pkg-python",
+      "recipe": {
+        "path": "package/apk/main/python/alpine-3.24/3.14.yaml",
+        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
+        "sha256": "ea3a135a37c899e2e6f89fddc2d4c6b58a309e1c956afe53b2374e67cf45c47b",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/python/alpine-3.24/3.14.yaml",
+        "upstream_commit": null
+      },
+      "declared_tags": [
+        "3.14.7-apk-alpine3.24",
+        "3.14.7-r1-apk-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "pyc-3.14",
+          "version": "3.14.7-r1",
+          "license": "PSF-2.0",
+          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/pyc-3.14-3.14.7-r1.apk",
+              "sha256": "3be600f4ec12f448daeb041de7c32c58f7969cfd863517789b22b1ca4d6d563a"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/pyc-3.14-3.14.7-r1.apk",
+              "sha256": "3be600f4ec12f448daeb041de7c32c58f7969cfd863517789b22b1ca4d6d563a"
+            }
+          }
+        },
+        {
+          "name": "python-3.14",
+          "version": "3.14.7-r1",
+          "license": "PSF-2.0",
+          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-3.14.7-r1.apk",
+              "sha256": "3c0f87ca054b3880b1e13e9666566a349966ffc26b89dc32ccbf7d84f1a8a0c0"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-3.14.7-r1.apk",
+              "sha256": "539ef075e671a6e2695000b75df4b19a6f718c630a1668c7c05818ef67e66443"
+            }
+          }
+        },
+        {
+          "name": "python-3.14-pyc",
+          "version": "3.14.7-r1",
+          "license": "PSF-2.0",
+          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pyc-3.14.7-r1.apk",
+              "sha256": "4f44def1cf940f14a05b1a9120ebac88f1e6009ac6f4d090484a7c2b6e537c40"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pyc-3.14.7-r1.apk",
+              "sha256": "4f44def1cf940f14a05b1a9120ebac88f1e6009ac6f4d090484a7c2b6e537c40"
+            }
+          }
+        },
+        {
+          "name": "python-3.14-pycache-pyc0",
+          "version": "3.14.7-r1",
+          "license": "PSF-2.0",
+          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pycache-pyc0-3.14.7-r1.apk",
+              "sha256": "2ba7360563a3b11c09bca41131dd352629372a9c237e91921beb673b66f3a4d5"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.7-r1.apk",
+              "sha256": "064c486acd278794f2c1df1b63cd9f642cfba4f58d51eddda39da6ef5ad8703c"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "readline",
+      "version": "8.3.3-r1",
+      "image": "dhi.io/pkg-readline",
+      "tag": "8.3.3-r1-alpine3.24",
+      "reference": "dhi.io/pkg-readline:8.3.3-r1-alpine3.24",
+      "predicate_image_name": "dhi/pkg-readline",
+      "recipe": {
+        "path": "package/apk/main/readline/alpine-3.24/8.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "92c40b55ab55887637d563a66747d6336365437a96ce2242abc04153444e6fd5",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/readline/alpine-3.24/8.yaml",
+        "upstream_commit": "a854c03acdac188901fb012f7acbee70a36e8041"
+      },
+      "declared_tags": [
+        "8.3.3-alpine3.24",
+        "8.3.3-r1-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "readline",
+          "version": "8.3.3-r1",
+          "license": "GPL-3.0-or-later",
+          "build_commit": "95f737a0dde715a4cf5f1a948a7f9d51718e6226",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/readline-8.3.3-r1.apk",
+              "sha256": "d2bcabe2d49878e067750a3a438be760c8166cc8d5122a177c12115aa30cecce"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/readline-8.3.3-r1.apk",
+              "sha256": "95fe9b591ff930eef234a29a988afab003a9cce7748db38098a5561d9805c69b"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "sqlite",
+      "version": "3.53.4-r0",
+      "image": "dhi.io/pkg-sqlite",
+      "tag": "3.53.4-r0-alpine3.24",
+      "reference": "dhi.io/pkg-sqlite:3.53.4-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-sqlite",
+      "recipe": {
+        "path": "package/apk/main/sqlite/alpine-3.24/3.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "26b945ee1412ea1ca88a31a91e34879720a8ea8b4ededc6fea96220e6147b407",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/sqlite/alpine-3.24/3.yaml",
+        "upstream_commit": "a9c3ba8b9129ec0f294d0a9bf538c2f1632bb016"
+      },
+      "declared_tags": [
+        "3.53.4-alpine3.24",
+        "3.53.4-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "sqlite-libs",
+          "version": "3.53.4-r0",
+          "license": "blessing",
+          "build_commit": "02faf84da04ae70c6ece2602e3cd8abdb5abb5aa",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/sqlite-libs-3.53.4-r0.apk",
+              "sha256": "51106cf0602767e9bdf7a75760fa14216d07467076f279e0447ec6286d497ac4"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/sqlite-libs-3.53.4-r0.apk",
+              "sha256": "540bd2a5c442658206e1bd5fb7193c9ffe501f8aabf8038263c8419a5cadf73a"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "tzdata",
+      "version": "2026c-r0",
+      "image": "dhi.io/pkg-tzdata",
+      "tag": "2026-r0-alpine3.24",
+      "reference": "dhi.io/pkg-tzdata:2026-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-tzdata",
+      "recipe": {
+        "path": "package/apk/main/tzdata/alpine-3.24/2025.yaml",
+        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
+        "sha256": "89b635b656749b62f535c5e8ce887eec1e31e5558700ad7b3eda72e8fadb42a5",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/tzdata/alpine-3.24/2025.yaml",
+        "upstream_commit": "abde3c23ae79b9d3b7bf1a089076703ccda73875"
+      },
+      "declared_tags": [
+        "2026-alpine3.24",
+        "2026-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": true,
+      "packages": [
+        {
+          "name": "tzdata",
+          "version": "2026c-r0",
+          "license": "Public-Domain",
+          "build_commit": "b1321d88e892b1f6120205f863ddba65108a930d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/tzdata-2026c-r0.apk",
+              "sha256": "7ec22b28aa068c4fd1f902db3f2deb67d12a1b20a36c3d0820f52814efab2e9f"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/tzdata-2026c-r0.apk",
+              "sha256": "7ec22b28aa068c4fd1f902db3f2deb67d12a1b20a36c3d0820f52814efab2e9f"
+            }
+          }
+        }
+      ],
+      "tag_note": "The published 2026-r0 tag is reused across 2026b, 2026c and 2026d. Require binary SHA256 matching; the tag alone does not identify 2026c."
+    },
+    {
+      "origin": "util-linux",
+      "version": "2.42.3-r1",
+      "image": "dhi.io/pkg-util-linux",
+      "tag": "2.42.3-r1-alpine3.24",
+      "reference": "dhi.io/pkg-util-linux:2.42.3-r1-alpine3.24",
+      "predicate_image_name": "dhi/pkg-util-linux",
+      "recipe": {
+        "path": "package/apk/main/util-linux/alpine-3.24/2.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "87e3d13bf2eecc87b87af21b1978ae7f60d996241134fe043caf762fa7278244",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/util-linux/alpine-3.24/2.yaml",
+        "upstream_commit": "d98c55af59055e6ca60fbe36e171546918709965"
+      },
+      "declared_tags": [
+        "2.42.3-alpine3.24",
+        "2.42.3-r1-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "libuuid",
+          "version": "2.42.3-r1",
+          "license": "BSD-3-Clause",
+          "build_commit": "df8caad5e4fa8f2f4ed90b937bce3b282b079979",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libuuid-2.42.3-r1.apk",
+              "sha256": "de34778d6ed106f002c18a31557f2450b186ad58de6167c7ae7e9052e0f04e84"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libuuid-2.42.3-r1.apk",
+              "sha256": "cc529727a233281f423109fb0396e60417884d8dda7937e6c732a0291fa11ba1"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "xz",
+      "version": "5.8.3-r0",
+      "image": "dhi.io/pkg-xz",
+      "tag": "5.8.3-r0-alpine3.24",
+      "reference": "dhi.io/pkg-xz:5.8.3-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-xz",
+      "recipe": {
+        "path": "package/apk/main/xz/alpine-3.24/5.yaml",
+        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
+        "sha256": "277349e25c0d0ac3bfdac48cacd072edd15c9daaeb600f53b13bbb5754f06961",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/xz/alpine-3.24/5.yaml",
+        "upstream_commit": "ce9944f1daadb681dd6f0f81a06e9cce97127377"
+      },
+      "declared_tags": [
+        "5.8.3-alpine3.24",
+        "5.8.3-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "xz-libs",
+          "version": "5.8.3-r0",
+          "license": "GPL-2.0-or-later AND 0BSD AND Public-Domain AND LGPL-2.1-or-later",
+          "build_commit": "47910f83ced1872ae27b08a763a16b1f4e56d960",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/xz-libs-5.8.3-r0.apk",
+              "sha256": "0806b0ad95a1b7add2f59a31670f1a62a6424d9a7bb2487b2cb631340b734046"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/xz-libs-5.8.3-r0.apk",
+              "sha256": "f24baabf06d19cf75e2f3ba4d49ea037ca994f66b9d10ffdc137cc1275272e83"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "zlib",
+      "version": "1.3.2-r0",
+      "image": "dhi.io/pkg-zlib",
+      "tag": "1.3.2-r0-alpine3.24",
+      "reference": "dhi.io/pkg-zlib:1.3.2-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-zlib",
+      "recipe": {
+        "path": "package/apk/main/zlib/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "e847c98224bdd96ea521ff76ba55f7dd2786867ee8d4e3f849a7e8d3d098c274",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/zlib/alpine-3.24/1.yaml",
+        "upstream_commit": "f248b33b5943c7dc69bf691031d7612ab2e8ed93"
+      },
+      "declared_tags": [
+        "1.3.2-alpine3.24",
+        "1.3.2-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "zlib",
+          "version": "1.3.2-r0",
+          "license": "Zlib",
+          "build_commit": "65a8fd550c9e75fc5dbf7e1aea4256b5f3d97c11",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/zlib-1.3.2-r0.apk",
+              "sha256": "16305aa4495fa104bd05cf78abdd74e9edc4258afa0dc3a8aef3b39b56bfdcba"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/zlib-1.3.2-r0.apk",
+              "sha256": "fe41875d7371df6f2a299e687efec66418d91b3e94bf76498206e635c5d38bb0"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

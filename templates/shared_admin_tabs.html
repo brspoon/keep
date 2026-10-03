@@ -1,0 +1,5 @@
+{% if owner %}<nav class="admin-nav" aria-label="Admin sections">
+{% for path, label in [('/settings/users', 'Users'), ('/settings/email', 'Email'), ('/settings/connections', 'Connections'), ('/settings/activity', 'Activity'), ('/settings/jobs', 'Jobs'), ('/settings/api-keys', 'API keys'), ('/settings/api-reference', 'API reference')] %}
+<a href="{{ path }}"{% if request.path == path %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+{% endfor %}
+</nav>{% endif %}

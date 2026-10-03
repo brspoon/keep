@@ -1,0 +1,23 @@
+<div class="collections">
+  <div class="connection-section-heading"><div><h3>Request history</h3><p class="help">Refreshes automatically every 15 minutes. Keep also asks Seerr to update availability after deletions; request history is preserved.</p></div><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary" name="action" value="refresh-seerr">Refresh now</button></form></div>
+  <dl class="connection-metrics"><div><dt>Last successful refresh</dt><dd>{{ seerr_review.stamp }}</dd></div><div><dt>History status</dt><dd>{{ seerr_review.state|title }}</dd></div>{% if seerr_review.updated %}<div><dt>Requests</dt><dd>{{ seerr_review.requests|length }}</dd></div><div><dt>Linked accounts</dt><dd>{{ seerr_review.linked_count }}</dd></div>{% endif %}</dl>
+  <p class="help connection-guidance">Browsing uses saved history. Failed refreshes retry automatically, up to an hour apart; history older than 24 hours is marked stale.</p>
+  {% if seerr_review.refresh_failed %}<p class="help" role="status">The last refresh failed. Previous history is preserved; Keep will retry automatically.</p>{% endif %}
+  <div class="connection-subheading"><h3>Account links</h3><p class="help">Plex accounts match automatically by verified ID. Choose a Seerr account for each local user.</p></div>
+  <form method="post" id="seerr-account-links" data-save-key="seerr-account-links">
+  <input type="hidden" name="action" value="save-seerr-links">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="seerr_scope" value="{{ seerr_review.scope }}">
+  {% set local = namespace(count=0) %}
+  {% for profile in seerr_review.profiles %}
+  <div class="seerr-account">
+    <strong>{{ profile.display_name or profile.plex_username or 'Keep user' }}</strong>
+    {% if profile.auth_type == 'plex' %}<p class="help">{% if not seerr_review.updated %}Account matches will appear after the first successful refresh.{% else %}{{ 'Verified Plex ID match' if profile.plex_id|string in seerr_review.links else 'No unambiguous Plex ID match' }}{% endif %}</p>
+    {% else %}{% set local.count = local.count + 1 %}<div class="seerr-link-form">
+      <label class="visually-hidden" for="seerr-link-{{ loop.index }}">Seerr account for {{ profile.display_name or profile.plex_username or 'Keep user' }}</label>
+      <select id="seerr-link-{{ loop.index }}" name="seerr-link-{{ profile.plex_id }}"><option value="">Not linked</option>
+      {% for user in seerr_review.users %}<option value="{{ user.id }}" {% if seerr_review.links.get(profile.plex_id|string) == user.id %}selected{% endif %}>{{ user.label }} · #{{ user.id }}</option>{% endfor %}</select>
+    </div>{% endif %}
+  </div>{% endfor %}
+  {% if local.count %}<div class="service-actions"><button class="save-button" type="submit">Save account links</button><span class="action-hint">Saves these account matches only, not connection settings.</span></div>{% endif %}
+  </form>
+</div>

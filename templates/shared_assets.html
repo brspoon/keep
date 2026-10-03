@@ -1,0 +1,15 @@
+{% if session.get('plex_user') %}
+<link rel="stylesheet" href="/static/keep-select.css?v={{ app_version }}">
+<script defer src="/static/keep-select.js?v={{ app_version }}"></script>
+<link rel="stylesheet" href="/static/keep-details.css?v={{ app_version }}">
+<script defer src="/static/keep-details.js?v={{ app_version }}"></script>
+<link rel="stylesheet" href="/static/keep-shell.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-admin.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
+<script defer src="/static/keep-navigation.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-preferences.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-refinements.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-admin-layout.js?v={{ app_version }}"></script>
+{% if request.path not in ('/', '/kept') %}<script defer src="/static/keep-whats-new.js?v={{ app_version }}"></script>{% endif %}
+{% if request.path == '/settings/connections' %}<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>{% endif %}
+{% endif %}

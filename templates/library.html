@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<meta name="theme-color" content="#f5a623"><meta name="referrer" content="same-origin">
+<title>Manage Library · Keep</title>
+<link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg">
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-library.css?v={{ app_version }}">
+<script defer src="/static/keep-toast.js?v=2.6.0"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-library.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-seasons.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-artwork.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="library-ui library-management-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+  {% include 'shared_header.html' %}
+<div class="page-heading"><h2>Manage Library</h2></div>
+
+  <p class="library-warning"><strong>Choose carefully.</strong> Deleting a title permanently removes it and its files. This cannot be undone.</p>
+
+  {% from 'shared_category_nav.html' import category_nav %}
+  {{ category_nav(sections, 'library') }}
+  <div class="media-search" role="search"><div class="search-field">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="media-search" type="search" placeholder="Search your media libraries" aria-label="Search your media libraries" autocomplete="off" spellcheck="false">
+    <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="m7 7 6 6m0-6-6 6" fill="none" stroke="var(--surface)" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+  </div><div id="search-status" class="search-status" aria-live="polite"></div></div>
+  <div id="search-empty" class="empty search-empty" hidden>No titles match your search. Try a different title or clear your search.</div>
+
+  <div class="media-view active">
+  {% for section in sections %}<section id="library-{{ loop.index }}" data-library-key="{{ section.library_key }}" data-empty-message="{{ 'No downloaded media is present in this library.' if capabilities.delete_any else 'No titles requested only by you are available here.' }}">
+    <div class="section-header"><h2>{{ section.name }}</h2><span class="count">{{ section['items']|length }}</span></div>
+    {% if section.error %}<div class="library-error" role="alert">Could not load this library. Deletion is unavailable until the connection recovers. <a href="/library">Try again</a></div>
+    {% elif section.access_unavailable %}<div class="empty" role="status">Your requests can’t be verified right now, so no titles are shown. Try again shortly, or ask the owner for help. <a href="/library">Try again</a></div>{% endif %}
+    {% if section['items'] %}<div class="grid">
+      {% for item in section['items'] %}<article class="card" data-title="{{ item.title }}" data-year="{{ item.year }}">
+        <div class="poster-wrap"><button class="title-details-trigger" type="button" data-details-url="/api/title-details/{{ item.service }}/{{ item.id }}" aria-label="Details for {{ item.title }}" aria-haspopup="dialog"></button><span class="poster-placeholder" aria-hidden="true"><span>Artwork unavailable</span></span>
+          <img class="poster" src="/library/artwork/{{ item.service }}/{{ item.id }}" alt="{{ item.title }}" loading="lazy" decoding="async" width="333" height="500" onerror="this.hidden=true;this.parentElement.classList.add('poster-unavailable')">
+          {% if item.badge %}<span class="library-status-badge {{ item.badge.state }}">{{ item.badge.state|capitalize }}</span>{% if item.badge.days is not none %}<span class="days-left-badge{{ ' keep-policy-badge indefinite' if item.badge.days == '∞' else '' }}" aria-label="{{ 'Kept indefinitely' if item.badge.days == '∞' else item.badge.days ~ ' days ' ~ ('until possible removal' if item.badge.state == 'leaving' else 'until Keep expires') }}">{{ '∞' if item.badge.days == '∞' else item.badge.days ~ 'd' }}</span>{% endif %}{% endif %}
+        </div>
+        <div class="card-body"><div class="title"><button class="title-details-name" type="button" data-details-url="/api/title-details/{{ item.service }}/{{ item.id }}" aria-haspopup="dialog">{{ item.title }}</button></div><div class="year">{{ item.year }}{% if item.episode_count is not none %} · {{ item.episode_count }} {{ 'episode' if item.episode_count == 1 else 'episodes' }}{% endif %} · {{ item.size }}</div>
+          {% if item.service == 'sonarr' and item.can_delete %}<button type="button" class="keep-button season-manage-button"
+            data-item-id="{{ item.id }}" data-library-key="{{ item.library_key }}" data-title="{{ item.title }}"
+            aria-label="Manage seasons" aria-haspopup="dialog" aria-controls="season-dialog">Seasons</button>{% endif %}
+          {% if item.can_delete and (item.service != 'sonarr' or capabilities.delete_any) %}<button type="button" class="keep-button delete-media-button{{ ' delete-series-button' if item.service == 'sonarr' else '' }}"
+            data-service="{{ item.service }}" data-item-id="{{ item.id }}" data-library-key="{{ item.library_key }}"
+            data-library-name="{{ section.name }}" data-title="{{ item.title }}"
+            aria-haspopup="dialog" aria-controls="delete-media-dialog">{{ 'Delete series' if item.service == 'sonarr' else 'Delete' }}</button>{% endif %}
+        </div>
+      </article>{% endfor %}
+    </div>{% elif not section.error and not section.access_unavailable %}<div class="empty">{% if capabilities.delete_any %}No downloaded media is present in this library.{% else %}No titles requested only by you are available here. If you expected a title, ask the owner to check your account link and request history.{% endif %}</div>{% endif %}
+  </section>{% else %}<div class="empty">No media libraries are available to you. Ask the owner to check your library access.</div>{% endfor %}
+  </div>
+</main>
+
+<dialog id="delete-media-dialog" class="delete-media-dialog" data-csrf="{{ csrf_token }}" aria-labelledby="delete-media-title" aria-describedby="delete-media-description">
+  <button type="button" class="welcome-close" aria-label="Cancel deletion">×</button>
+  <div class="dialog-eyebrow">Delete permanently</div><h2 id="delete-media-title" tabindex="-1">Delete title?</h2>
+  <p id="delete-media-description">This permanently removes the title and its files from your library. This cannot be undone.</p>
+  <dl><div><dt>Library</dt><dd data-delete-library></dd></div></dl>
+  <p class="welcome-error" role="alert" hidden></p>
+  <button type="button" class="confirm-delete">Delete</button><button type="button" class="delete-cancel">Cancel</button>
+</dialog>
+<dialog id="season-dialog" class="delete-media-dialog season-dialog" data-csrf="{{ csrf_token }}" aria-labelledby="season-title">
+  <button type="button" class="welcome-close season-close" aria-label="Close season management">×</button>
+  <div class="dialog-eyebrow season-eyebrow">Manage seasons</div>
+  <h2 id="season-title" tabindex="-1">Manage seasons</h2>
+  <p class="season-loading" role="status">Loading seasons…</p>
+  <div class="season-selection" hidden>
+    <p class="season-intro">Select the downloaded seasons you want to delete.</p>
+    <div class="season-options" role="group" aria-label="Seasons to delete"></div>
+    <div class="season-footer"><p class="season-summary" aria-live="polite">No seasons selected</p>
+      <button type="button" class="season-review" disabled>Review deletion</button></div>
+  </div>
+  <div class="season-confirmation" hidden>
+    <p class="season-confirm-summary"></p>
+    <p>These files will be permanently deleted. Automatic downloads will be turned off for the selected seasons. The series and other seasons will stay.</p>
+    <p><strong>This cannot be undone.</strong></p>
+    <button type="button" class="confirm-delete season-delete">Delete selected seasons</button>
+    <button type="button" class="delete-cancel season-back">Back to seasons</button>
+  </div>
+  <p class="welcome-error season-error" role="alert" hidden></p>
+  <a class="season-reload" href="/library" hidden>Reload library</a>
+</dialog>
+<button id="back-to-top" class="back-to-top" type="button" aria-label="Back to top" title="Back to top" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 11 6-6 6 6M12 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"><span class="toast-check">✓</span><span id="toast-message"></span></div>
+{% include 'shared_whats_new.html' %}</body></html>

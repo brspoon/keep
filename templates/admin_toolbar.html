@@ -1,0 +1,14 @@
+{% set is_users = section == 'users' %}
+{% set label = 'users' if is_users else 'email recipients' %}
+{% set count = users|length if is_users else recipients|length %}
+<div class="admin-toolbar">
+  <div class="admin-list-search" data-search-rows="{{ '.user-card' if is_users else '.recipient-row' }}" data-search-label="{{ label }}">
+    <div class="admin-search-field">
+      <input type="search" placeholder="Search {{ label }}" aria-label="Search {{ label }}">
+      <button type="button" class="admin-search-clear" aria-label="Clear search" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="m7 7 6 6m0-6-6 6" fill="none" stroke="var(--surface)" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+    </div>
+    <p class="help" role="status">{{ count }} {{ ('user' if is_users else 'email recipient') if count == 1 else label }}</p>
+  </div>
+  <button type="button" class="admin-add-button" aria-haspopup="dialog" disabled>{{ 'Add local user' if is_users else 'Add email recipient' }}</button>
+</div>
+<noscript><p class="help">Enable JavaScript to search or add {{ label }}.</p></noscript>

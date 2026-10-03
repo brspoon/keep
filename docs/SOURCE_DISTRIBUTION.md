@@ -1,0 +1,255 @@
+# Container sources and notices
+
+Each tested Keep release prepares a source archive and SHA-256 checksum for each
+architecture. These materials accompany the container; Keep's MIT license does
+not replace the licenses of Python, OS libraries, embedded wheel code or assets.
+The native image workflow must finish source packaging before transferring an
+image for publication.
+
+## Matching the container
+
+`docs/os-package-sources.json` records the exact installed OS package versions,
+both architectures' APK hashes, and pinned public Docker build recipes. Registry
+tags are discovery pointers. The collector checks the native image configuration
+and hashes the APK files in its output before accepting Docker's signed native
+build provenance and recipe. Upstream downloads must match the hashes in that
+provenance; the complete pinned Alpine context and every checksum-listed source
+input are retained. The collector preserves original statements, signatures,
+verification keys and OCI content hashes. Offline verification checks the
+signatures again; it does not claim Rekor transparency-log inclusion. A provider
+source-image attestation, when available, is checked separately.
+
+The historical ncurses snapshot is obtained from Alpine's retained distfiles
+because the recorded upstream `current/` URL no longer serves it. Both the
+original signed material hash and the Alpine recipe checksum must match the
+retained bytes; the manifest records the declared and retrieval URLs.
+The exact zlib 1.3.2 package archive also uses Alpine's retained distfile, with
+the same signed-source and recipe checksum requirements. Public downloads retry
+transient failures at most three times with Python's HTTPS client. If a transport
+failure persists and curl 8.4 or newer is available, one IPv4-only attempt uses
+the same URL, HTTPS-only redirects, verified TLS, and bounded time and size.
+HTTP errors never select this alternate transport. Authentication, certificate,
+permanent HTTP and checksum failures still block collection; recovery does not
+change the source identity or relax any signature or checksum requirement.
+
+The APK metadata's build commit is a provider build identifier. The public
+package recipe separately records the upstream Alpine recipe commit. Those
+identifiers are not interchangeable. The image-level source collection contains
+assembly inputs, so package-level sources are collected separately.
+
+The source map covers 18 origins and 29 installed OS packages. The original
+Expat 2.8.4 in an earlier image layer is covered separately from the upgraded
+2.8.5 package. Keep's exact Python patches and modified zlib 1.3.2 sources are
+also included. The Python source lock covers all 17 pinned distributions,
+including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
+against their embedded libffi 3.4.6 source and wheel build recipe; this is
+separate from the OS libffi package. Argon2's embedded source and complete
+license choices are retained too. Earlier base layers also carry Python's bundled
+pip 26.2.1 and wheel 0.48.0. Their Python modules are checked against matching
+source distributions; the six embedded distlib 0.4.2 Windows launchers are
+matched to its complete source distribution and C/build inputs. Their full
+notices and vendored attribution accompany these materials.
+
+Docker's timezone package tag is reused across IANA releases. If it no longer
+matches the recorded 2026c APK, a narrowly scoped fallback obtains IANA 2026c,
+the pinned provider and Alpine recipes, all checksum-verified source inputs and
+patches, and their notices. The report explicitly records that no historical
+provider OCI binding was established. It does not substitute this fallback for
+a missing signature or mismatched binary of another package.
+The complete GNU LGPL 2.0 notice for the retained POSIXtz build source is read
+from its committed `docs/licenses/os` file and checked against the same reviewed
+SHA-256 before collection. This avoids a repeated GNU website download. The
+source manifest keeps the original GNU URL and records that the verified notice
+was acquired from the repository; missing, changed or oversized notice files
+still block collection.
+
+The reviewed OpenSSL 3.5.8-r1 package repository returns no published image or
+package attestation. A separate narrow reconstruction checks the actual APK
+identities against the signed pinned base provenance and runtime inventory,
+then retains the matching pinned public provider/Alpine recipes, every patch,
+and checksum-verified OpenSSL source. Its report explicitly records the absence
+of a signed package build or source-image binding. This method does not rescue
+a signature failure or an unrelated missing package.
+
+## Contents and verification
+
+The archive includes preferred source files and source archives, package build
+recipes and patches, original signature evidence, full notices, Keep's source
+archive and Docker build inputs, runtime package identities, and a per-file
+`MANIFEST.json`. Original OCI paths, hashes, file modes and link metadata are
+recorded when source contexts are retained. No downloaded build recipe is
+executed during collection. Source archives retain upstream content; inspect
+their build instructions before extracting or rebuilding them.
+
+CPython and GCC include deliberately malformed archive test fixtures, and XZ
+includes compressed codec test streams. A finite reviewed inventory binds each fixture's path, size and SHA-256 to its exact
+outer source archive. Notice scanning records those fixtures and preserves their
+bytes in the source archive, without interpreting their unsafe test members.
+Other archives still undergo normal traversal and bounds checks.
+
+Use the adjacent checksum file before inspecting an archive. For example, for
+release 2.21.2:
+
+```sh
+sha256sum -c keep-2.21.2-source-materials-amd64.tar.gz.sha256
+```
+
+Use `shasum -a 256` on macOS and compare its output to the checksum file.
+After unpacking, the manifest identifies each retained file's SHA-256, release
+version, architecture and source revision. Both architecture archives are
+needed to cover both published images. Full OS notices and their provenance are
+also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
+container. The prepared runtime union contains 124 complete notice texts
+(814,844 bytes), covering all 20 current and earlier-layer origins on both
+architectures, including 20 explicitly reviewed source copyright headers.
+The native gate checks the rebuilt candidate against those committed hashes.
+Asset and installed Python notices remain in their original paths.
+
+The collection and packaging scripts are under `scripts/`. Authenticated
+provider collection uses temporary Docker credentials; final archives contain
+the sources and notices themselves and must be readable without that account.
+Every trusted native CI run still collects, verifies and packages both source
+archives. Routine pull-request and main-push runs print the source manifest and
+security reports in Actions logs without Actions artifact uploads or
+downloads. The reusable native workflow receives read-only repository permissions
+for these runs; only the deliberately confirmed current-main `release-native`
+invocation receives release-asset write permission.
+
+Keep copies needed for an investigation before the repository's log retention
+expires; logs do not replace corresponding-source delivery for a published image.
+
+## Durable release assets and retention
+
+Confirmed manual publication saves the complete original source archive
+and checksum directly from each native validation job to the matching
+draft release, alongside its original security evidence and portable recovery
+proof. The evidence also includes `installer-trial-amd64.json` and
+`installer-trial-arm64.json`, recording real Docker startup, HTTP setup cookies,
+reruns and synthetic owner/data preservation on the corresponding architecture.
+The archive is the one collected and verified by that job against its
+tested candidate; no second source collection or Actions artifact transport is
+used. Candidate tests, security review, source/notice verification and native
+recovery must still pass before a native image becomes eligible for publication.
+
+Aggregation binds both architectures' original run, attempt, source revision,
+native manifest and image-configuration identities to their source-member and
+report hashes. It verifies the durable server asset sizes and SHA-256 digests
+and the exact corresponding transfer tags before publishing the tested image
+pair. Stable promotion is last. Release writes require confirmed manual
+publication from current main; ordinary CI jobs retain read-only
+repository permissions. Routine logs are validation proof, not a
+substitute for these durable original release assets.
+
+Preserve each architecture's source archive and its adjacent checksum locally
+from the matching GitHub release. Include the original
+SPDX SBOM, scanner/review results, runtime regression probes, image-layer/notice
+inventory and verified provenance/signature evidence. The automatically generated
+`keep-<version>-release-materials.json` records the source revision, native manifest
+and image-configuration digests, source archive names/hashes and original native
+run. It is prepared before stable promotion and does not bind the final
+multi-platform index digest. Record that published index and its verified native
+children in a separate final-delivery receipt, together with the exact source
+assets and deployment evidence. Verify uploaded asset sizes and SHA-256 digests
+against the local files before recording delivery; the generated JSON alone does
+not establish final index publication or host deployment.
+
+## Component licenses and redistribution
+
+| Entry | Resolution |
+| --- | --- |
+| `keep-ci` | Image wrapper. Keep's own source is MIT; component licenses still apply. |
+| DHI `python` | Base-image wrapper, not an additional unlicensed Python distribution. The installed CPython records identify PSF-2.0 and Keep bundles the complete Python license. This does not cover all libraries in that base. |
+| `jinja2` 3.1.6 | BSD-3-Clause, verified against its retained wheel notice and the [upstream release license](https://github.com/pallets/jinja/blob/3.1.6/LICENSE.txt). |
+| `tzdata` 2026c-r0 | Installed package declares Public-Domain. [IANA's versioned license](https://data.iana.org/time-zones/tzdb-2026c/LICENSE) places the data in the public domain and names BSD exceptions for three code files; those exceptions must be considered if code is redistributed. |
+
+The scanner's broad origin license expressions sometimes use `OR` where the
+installed APK metadata uses `AND`, notably CA certificates, GCC and xz. Do not
+select the least restrictive scanner branch as a redistribution decision.
+
+### Python notices
+
+| Distributions | Declared/reviewed license |
+| --- | --- |
+| argon2-cffi, argon2-cffi-bindings, blinker, charset-normalizer, gunicorn, urllib3 | MIT |
+| cffi | MIT-0 |
+| click, Flask, idna, itsdangerous, Jinja2, MarkupSafe, pycparser, Werkzeug | BSD-3-Clause |
+| requests | Apache-2.0; retained NOTICE as well as LICENSE |
+| certifi | MPL-2.0 |
+
+Retain the installed notices and vendored attribution, including any additional
+notices recorded for Requests and Werkzeug. Redistribution must supply the
+matching source for covered MPL files (including CA material), not only a link
+to a newer release or an SBOM license label.
+
+Werkzeug also ships the Silk debugger icons with a separate
+[CC-BY-2.5 or CC-BY-3.0 attribution](https://github.com/pallets/werkzeug/blob/3.1.8/src/werkzeug/debug/shared/ICON_LICENSE.md)
+to Mark James in `werkzeug/debug/shared/ICON_LICENSE.md`. Its notice is retained
+in the native notice inventory. A package-level BSD label does not cover those
+assets. Likewise, retain and verify the source/license choices for
+code embedded in compiled wheels; the wheel's wrapper license is not proof
+that every bundled native component has the same license.
+
+### OS components and delivery requirements
+
+Use `candidate-notices-<architecture>.json` for the exact versions, package origins,
+build-commit identifiers and package URLs in each image. The source map covers:
+
+| Origin/components | Installed license metadata | Required review/delivery |
+| --- | --- | --- |
+| alpine-baselayout-data | GPL-2.0-only | Full notice and matching source/build inputs. |
+| gdbm, readline | GPL-3.0-or-later | Full notices and corresponding source/build inputs. |
+| libgcc, libstdc++ | GPL-2.0-or-later AND LGPL-2.1-or-later | Verify actual runtime-file licenses and any applicable [GCC runtime exception](https://github.com/gcc-mirror/gcc/blob/releases/gcc-15.2.0/COPYING.RUNTIME); retain notices and provide covered source. Do not apply an exception based solely on package name. |
+| xz-libs | GPL-2.0-or-later AND 0BSD AND Public-Domain AND LGPL-2.1-or-later | Identify installed library/file licenses from the exact source and retain their notices/source requirements. |
+| ca-certificates-bundle | MPL-2.0 AND MIT | Retain attribution and provide the matching covered source. |
+| libcrypto3, libssl3, openssl | Apache-2.0 | Full license, copyright and any applicable NOTICE from the matching source. |
+| bzip2, libbz2 | bzip2-1.0.6 | Full upstream copyright/conditions. |
+| expat, libexpat, libffi, musl | MIT | Full upstream copyright/conditions. |
+| ncurses, ncurses-terminfo-base, libncursesw, libpanelw | X11 | Full upstream copyright/conditions. |
+| libuuid | BSD-3-Clause | Matching copyright/conditions. |
+| mpdecimal | BSD-2-Clause | Matching copyright/conditions. |
+| python-3.14 and three bytecode subpackages | PSF-2.0 | Retain complete Python license and describe Keep's exact patches. |
+| sqlite-libs | blessing | Preserve provenance and attribution where present. |
+| tzdata | Public-Domain | Retain the versioned source license and identify any BSD code exceptions. |
+| zlib | Zlib | Retain the bundled license and identify the modified upstream source/security hunk. |
+
+For downloaded GPL binaries, provide the matching corresponding source with
+equivalent access, including patches and build scripts. A generic upstream URL,
+an SBOM license label or Keep's MIT license does not replace those materials.
+See the [SFLC compliance guide](https://softwarefreedom.org/resources/2008/compliance-guide.html).
+
+Scanner origin expressions can differ from the licenses of installed files.
+Review the actual package sources and retained notices before selecting a license
+branch or applying an exception. Embedded libraries and earlier image layers have
+their own source and notice requirements. The source collector binds package
+binaries, recipes and source hashes as described above; provider build identifiers
+and upstream recipe commits are not interchangeable.
+
+## Retention
+
+Keep every distributed release's matching source archives, checksums and original
+verification evidence, even after its container tags are removed or its security
+support ends. Source-release assets have no automated deletion policy. Preserve
+the local copies outside disposable worktrees and retain their accompanying
+notices. Routine CI log retention does not limit durable release-asset retention.
+The [seven-tag registry policy](REGISTRY_RETENTION.md) controls container tags only.
+Its persistent obsolete-manifest backlog and explicitly reviewed initial seed
+do not authorize source-asset removal. Host post-deployment cleanup runs separately
+from CI publication and preserves matching sources even when an obsolete image
+index or native child is deleted. Unknown/custom references remain protected;
+the absence of a supported arbitrary-untagged inventory API is not evidence that
+all unlisted objects are safe to remove.
+
+## Release delivery
+
+Each finalized GitHub release must retain its architecture-specific source
+archives, notices, checksums and original verification evidence. Link the matching
+source downloads beside the corresponding image on Docker Hub. Draft assets and
+finite Actions artifact retention do not provide public source delivery.
+
+Before announcing a public release, download both architecture source bundles and
+their checksums without authentication. Verify the archive hashes, manifest
+version and revision, and the image index and native digests against the release.
+Check every source and notice link as an unauthenticated recipient. An authenticated
+maintainer download or a public repository setting alone does not establish that
+all release assets are accessible. See the [release policy](RELEASE_POLICY.md) for
+validation, source delivery and reporting requirements.

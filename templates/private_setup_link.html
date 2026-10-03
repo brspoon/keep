@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <script src="/static/keep-theme.js?v={{ app_version }}"></script>
+  <script defer src="/static/keep-private-setup-link.js?v={{ app_version }}"></script>
+  <title>Private setup link · Keep</title>
+  <link rel="icon" href="/static/keep-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+  <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
+</head>
+<body class="setup-ui private-link-ui">
+  <main aria-labelledby="setup-link-heading">
+    <img class="mark" src="/static/keep-icon.svg" width="52" height="52" alt="Keep">
+    <h1 id="setup-link-heading">Private setup link</h1>
+    <p>Share this link directly with the intended person. It expires in 24 hours and can be used once.</p>
+    <label for="private-setup-url">Setup URL</label>
+    <input class="private-link" id="private-setup-url" type="url" value="{{ link }}" readonly spellcheck="false" autocomplete="off" aria-describedby="copy-setup-status">
+    <button id="copy-setup-url" type="button">Copy setup URL</button>
+    <p id="copy-setup-status" role="status" aria-live="polite"></p>
+    <a class="back" href="/settings/users">Back to users</a>
+  </main>
+</body>
+</html>

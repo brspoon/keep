@@ -1,0 +1,54 @@
+/*
+ * This version has been further modified by Rich Felker, primary author
+ * and maintainer of musl libc, to remove table generation code and
+ * replaced all runtime-generated constant tables with static-initialized
+ * tables in the binary, in the interest of minimizing non-shareable
+ * memory usage and stack size requirements.
+ */
+/*
+ * This version is derived from the original implementation of FreeSec
+ * (release 1.1) by David Burren.  I've made it reentrant, reduced its memory
+ * usage from about 70 KB to about 7 KB (with only minimal performance impact
+ * and keeping code size about the same), made the handling of invalid salts
+ * mostly UFC-crypt compatible, added a quick runtime self-test (which also
+ * serves to zeroize the stack from sensitive data), and added optional tests.
+ * - Solar Designer <solar at openwall.com>
+ */
+
+/*
+ * FreeSec: libcrypt for NetBSD
+ *
+ * Copyright (c) 1994 David Burren
+ * Copyright (c) 2000,2002,2010,2012 Solar Designer
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the author nor the names of other contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	$Owl: Owl/packages/glibc/crypt_freesec.c,v 1.6 2010/02/20 14:45:06 solar Exp $
+ *	$Id: crypt.c,v 1.15 1994/09/13 04:58:49 davidb Exp $
+ *
+ * This is an original implementation of the DES and the crypt(3) interfaces
+ * by David Burren.  It has been heavily re-worked by Solar Designer.
+ */

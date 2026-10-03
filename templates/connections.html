@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<title>Connections · Keep Admin</title>
+<link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg">
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<link rel="stylesheet" href="/static/keep-connections.css?v={{ app_version }}">
+<script defer src="/static/keep-connections.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="admin-ui connections-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+{% include 'shared_header.html' %}
+<div class="page-heading"><h2>Connections</h2><p class="subtitle">Connect your services and choose what appears in Keep.</p></div>
+{% include 'shared_admin_tabs.html' %}
+{% if notice %}<div class="{{ 'settings-error' if error else 'notice' }}" role="{{ 'alert' if error else 'status' }}">{{ notice }}</div>{% endif %}
+{% macro field(name) %}
+{% set f = fields[name] %}
+{% if name in url_parts %}
+{% set address = url_parts[name] %}
+<div class="connection-address" data-service-address="{{ name }}">
+<div class="connection-field connection-host">
+<div class="field-heading"><label for="{{ name }}_host">{{ f.label.replace(' URL', '') }} host</label>{% if f.managed %}<span class="badge">Environment</span>{% endif %}</div>
+<div class="address-control"><select id="{{ name }}_scheme" {% if not f.managed %}name="{{ name }}_scheme"{% endif %} aria-label="{{ f.label.replace(' URL', '') }} protocol" {% if f.managed %}disabled{% endif %}>{% for scheme in ['http', 'https'] %}<option value="{{ scheme }}" {% if address.scheme == scheme %}selected{% endif %}>{{ scheme }}://</option>{% endfor %}</select><input id="{{ name }}_host" {% if not f.managed %}name="{{ name }}_host"{% endif %} value="{{ address.host }}" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="Hostname or IP address" {% if f.managed %}readonly{% endif %}></div>
+{% if f.managed %}<small>Deployment override. Remove the environment setting to edit this value in Keep.</small>{% endif %}
+</div>
+<div class="connection-field connection-port"><div class="field-heading"><label for="{{ name }}_port">Port</label></div><input id="{{ name }}_port" {% if not f.managed %}name="{{ name }}_port"{% endif %} value="{{ address.port }}" type="text" inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5" autocomplete="off" {% if f.managed %}readonly{% endif %}></div>
+<div class="connection-field connection-path"><div class="field-heading"><label for="{{ name }}_path">URL base path</label></div><input id="{{ name }}_path" {% if not f.managed %}name="{{ name }}_path"{% endif %} value="{{ address.path }}" type="text" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="Optional, e.g. /{{ name.split('_')[0]|lower }}" {% if f.managed %}readonly{% endif %}></div>
+</div>
+{% else %}
+<div class="connection-field" {% if f.secret %}data-credential="{{ name }}" data-configured="{{ 'true' if f.configured else 'false' }}"{% endif %}>
+<div class="field-heading"><label for="{{ name }}">{{ f.label }}</label>{% if f.managed %}<span class="badge">Environment</span>{% endif %}</div>
+{% if f.secret %}
+<div class="credential-control"><input id="{{ name }}" {% if not f.managed %}name="{{ name }}"{% endif %} type="password" autocomplete="new-password" spellcheck="false" placeholder="{{ '••••••••••••' if f.configured else 'Not configured' }}" {% if f.managed %}readonly{% endif %} aria-describedby="{{ name }}_hint"><button type="button" class="secondary reveal" hidden aria-label="Show {{ f.label }}" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+<small id="{{ name }}_hint">{{ 'Managed by your deployment. Reveal to view.' if f.managed else 'Leave blank to keep the saved value.' }}</small>
+<p class="credential-error" role="alert" hidden>Unable to reveal the credential. Refresh the page and try again.</p>
+{% elif name == 'EMAIL_ENABLED' %}
+<label class="check-choice"><input id="{{ name }}" name="{{ name }}" type="checkbox" value="true" {% if f.value == 'true' %}checked{% endif %} {% if f.managed %}disabled{% endif %}>Enable email delivery</label>
+{% elif name == 'SMTP_SECURITY' %}
+<div class="security-choices" role="radiogroup" aria-label="SMTP encryption">{% for value, label in [('ssl', 'TLS (usually 465)'), ('starttls', 'STARTTLS (usually 587)')] %}<label class="check-choice"><input id="{{ name }}{{ '' if loop.first else '_starttls' }}" type="radio" name="{{ name }}" value="{{ value }}" {% if f.value == value %}checked{% endif %} {% if f.managed %}disabled{% endif %}>{{ label }}</label>{% endfor %}</div>
+{% else %}<input id="{{ name }}" {% if not f.managed %}name="{{ name }}"{% endif %} value="{{ f.value }}" type="text" {% if name == 'SMTP_PORT' %}inputmode="numeric" pattern="[0-9]{1,5}" maxlength="5"{% endif %} {% if f.managed %}readonly{% endif %} autocomplete="off" spellcheck="false">{% endif %}
+{% if f.managed and not f.secret %}<small>Deployment override. Remove the environment setting to edit this value in Keep.</small>{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+{% for key, title, description, names in [
+('plex', 'Plex', 'Your media server and owner account access.', ['PLEX_SERVER_URL', 'PLEX_MACHINE_IDENTIFIER', 'PLEX_ADMIN_TOKEN']),
+('maintainerr', 'Maintainerr', 'The collections of titles leaving your library.', ['MAINTAINERR_URL']),
+('radarr', 'Radarr', 'Movies available to permission-scoped Library Management.', ['RADARR_URL', 'RADARR_API_KEY']),
+('sonarr', 'Sonarr', 'Series available to permission-scoped Library Management.', ['SONARR_URL', 'SONARR_API_KEY']),
+('seerr', 'Seerr', 'Read-only request history and verified requester identities.', ['SEERR_URL', 'SEERR_API_KEY']),
+('tautulli', 'Tautulli', 'Qualifying watch history and live watched thresholds for Leaving forecasts.', ['TAUTULLI_URL', 'TAUTULLI_API_KEY']),
+('email', 'Email delivery', 'Optional email for invitations, password resets, and digests.', ['EMAIL_ENABLED', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURITY', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM', 'SMTP_SENDER_NAME'])] %}
+<details class="panel service-panel" aria-labelledby="{{ key }}-title" id="{{ key }}" {% if key in open_services %}open{% endif %}>
+{% set configured = namespace(ok=true) %}{% for name in names %}{% if name in ('PLEX_SERVER_URL', 'MAINTAINERR_URL', 'RADARR_URL', 'SONARR_URL', 'TAUTULLI_URL', 'SMTP_HOST') and not fields[name].value %}{% set configured.ok = false %}{% endif %}{% if name in ('RADARR_API_KEY', 'SONARR_API_KEY', 'TAUTULLI_API_KEY', 'PLEX_ADMIN_TOKEN') and not fields[name].configured %}{% set configured.ok = false %}{% endif %}{% endfor %}
+<summary class="service-summary"><span class="service-heading"><span class="service-icon{% if key == 'plex' %} service-icon-plex{% endif %}" aria-hidden="true">{% if key == 'email' %}@{% else %}<img src="/static/service-icons/{{ key }}.svg?v={{ app_version }}" alt="" width="{{ 28 if key == 'plex' else 32 }}" height="{{ 13 if key == 'plex' else 32 }}">{% endif %}</span><span><strong id="{{ key }}-title">{{ title }}</strong><span class="help">{{ description }}</span><span class="service-state help" data-state="{{ automatic_states[key].kind }}">Automatic: {{ automatic_states[key].label }}</span>{% if automatic_states[key].checked_at %}<time class="service-test-time" datetime="{{ automatic_states[key].checked_at_iso }}">Checked {{ automatic_states[key].checked_at }}</time>{% endif %}</span></span><svg class="creation-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></summary>
+<div class="service-editor">
+{% if key == 'plex' %}<form method="post" action="/settings/connections/plex/connect" class="plex-connect"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div><h3>Connect your server</h3><p class="help">Sign in with your owner account and choose a server, or edit the settings below.</p></div><button type="submit">Connect / Reconnect Plex</button></form>{% endif %}
+<form method="post" class="service-form" data-service="{{ title }}" data-protect-unsaved data-saved-test>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% if key == 'maintainerr' %}<p class="help connection-guidance">No API key required.</p>{% elif key in ('radarr', 'sonarr', 'seerr', 'tautulli') %}<p class="help connection-guidance">Find your API key in {{ title }} → Settings → General.</p>{% endif %}
+<div class="connection-fields">{% for name in names %}{{ field(name) }}{% endfor %}</div>
+{% if key == 'email' %}<p class="help email-note">When delivery is disabled, Keep provides private invitation and reset links for you to share directly. Use encrypted SMTP when email is enabled.</p>{% endif %}
+<div class="service-actions">
+{% set state = namespace(editable=false) %}{% for name in names %}{% if not fields[name].managed %}{% set state.editable = true %}{% endif %}{% endfor %}
+{% if state.editable %}<button name="action" value="save-{{ key }}" type="submit">Save {{ 'email settings' if key == 'email' else title }}</button>{% endif %}
+<button class="secondary" name="action" value="{{ 'smtp' if key == 'email' else key }}" type="submit" formnovalidate>Test {{ 'SMTP' if key == 'email' else title }}</button>
+</div></form>
+{% if key == 'plex' %}<p class="help plex-attribution">Plex and the Plex logo are trademarks of Plex and used under a license.</p>{% endif %}
+{% if key == 'seerr' %}{% include 'seerr_attribution.html' %}{% endif %}
+{% if key == 'maintainerr' %}
+<div class="collections"><div class="collection-heading"><h3>Collections in Keep</h3><span class="badge">{{ 'Environment' if collections_managed else selected | length ~ ' selected' }}</span></div>
+<p class="help">Choose which Maintainerr collections appear in Keep. Discovery uses the saved Maintainerr URL.</p>
+{% if not collections_managed %}<form method="post" action="/settings/connections#maintainerr"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary" name="action" value="discover-collections" type="submit">{{ 'Refresh collections' if discovered is not none else 'Choose collections' }}</button></form>{% else %}<p class="help">Deployment override. Update KEEP_COLLECTIONS in your deployment to change the selection.</p>{% endif %}
+{% if collection_error %}<p class="credential-error" role="alert">{{ collection_diagnostic or 'Could not load collections. Check the saved Maintainerr connection, then try again.' }} Your saved selection is unchanged.</p>{% endif %}
+{% if not collections_managed and discovered is not none %}
+<form method="post" data-protect-unsaved><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><div class="collection-options">
+{% for cid, label in discovered.items() %}<label class="collection-choice"><input type="checkbox" name="collection_id" value="{{ cid }}" {% if cid in selected %}checked{% endif %}><span>{{ label }}</span><small>#{{ cid }}</small></label>{% else %}<p class="help">No collections found in Maintainerr.</p>{% endfor %}
+</div><p class="help">Only selected collections appear in Keep. Existing Keeps still protect titles from deletion, and temporary Keeps expire on schedule. Select a collection again to manage its Keeps. Subscriptions are retained.</p><button name="action" value="collections" type="submit">Save collection selection</button></form>
+{% else %}<div class="collection-tags">{% for cid, label in selected.items() %}<span>{{ label }} <small>#{{ cid }}</small></span>{% else %}<p class="help">No collections selected. Choose collections to load the available options.</p>{% endfor %}</div>{% endif %}
+</div>{% endif %}
+</div></details>{% endfor %}
+</main>{% include 'shared_whats_new.html' %}</body></html>

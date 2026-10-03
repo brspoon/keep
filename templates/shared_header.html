@@ -1,0 +1,31 @@
+<header class="app-header">
+  <a class="app-brand" href="/" aria-label="Keep home">
+    <img src="/static/keep-icon.svg" alt="" width="44" height="44">
+    <span><span class="app-name">Keep</span><span class="app-tagline">Keep what you love.</span></span>
+  </a>
+  {% if request.path in ('/', '/kept') %}{% include 'shared_browse_tabs.html' %}{% endif %}
+  <div class="user-menu" id="account-menu">
+    <button type="button" class="account-toggle" aria-label="Account menu" aria-expanded="false" aria-controls="account-links">
+      <span class="user-avatar{% if not plex_user.thumb %} fallback{% endif %}">{% if plex_user.thumb %}<img src="{{ plex_user.thumb }}" alt="">{% else %}{{ plex_user.username[:1]|upper }}{% endif %}</span>
+      <svg class="account-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="user-links" id="account-links" hidden>
+      {% for href, label in [('/', 'Leaving'), ('/kept', 'Kept')] %}<a class="logout-link" href="{{ href }}" {% if request.path == href %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+      {% if capabilities.delete_media and granted_libraries %}<a class="logout-link" href="/library" {% if request.path == '/library' %}aria-current="page"{% endif %}>Manage Library</a>{% endif %}
+      <hr class="account-menu-divider">
+      <a class="logout-link" id="preferences-open" href="/preferences" aria-haspopup="dialog" aria-controls="preferences-dialog">Preferences</a>
+      {% if owner %}<a class="logout-link" href="/settings/users" {% if request.path.startswith('/settings/') %}aria-current="page"{% endif %}>Admin</a>{% endif %}
+      <a class="logout-link" href="/help" {% if request.path == '/help' %}aria-current="page"{% endif %}>FAQ</a>
+      <a class="logout-link" href="/logout">Logout</a>
+    </div>
+  </div>
+</header>
+{% if request.path.startswith('/settings/') or request.path == '/help' %}
+<button id="back-to-top" class="back-to-top" type="button" aria-label="Back to top" title="Back to top" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 11 6-6 6 6M12 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+{% endif %}
+{% include 'shared_preferences.html' %}
+<dialog id="unsaved-dialog" class="unsaved-dialog" aria-labelledby="unsaved-title" aria-describedby="unsaved-description">
+  <h2 id="unsaved-title">Leave without saving?</h2>
+  <p id="unsaved-description">You have unsaved changes. Stay to save them, or discard them and continue.</p>
+  <div class="unsaved-actions"><button type="button" data-stay autofocus>Stay here</button><button type="button" data-discard>Discard changes</button></div>
+</dialog>

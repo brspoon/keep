@@ -1,0 +1,70 @@
+# Development testing
+
+Use Python 3.14 and Node.js 22. From the repository root:
+
+```sh
+python3.14 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+python -B -m unittest discover -s tests
+node --test tests/test_*.cjs
+```
+
+Run the complete JavaScript glob; the interaction file alone omits Connections,
+welcome-dialog, pull-to-refresh and removal-explanation regression coverage.
+Tests use temporary SQLite databases, synthetic identities and mocked services.
+They do not establish that real Plex authorization, SMTP delivery, installation
+or recovery works end to end.
+
+Build development images locally. The active release workflow tests native amd64
+and arm64 images, Compose, non-root runtime, durable web/worker startup and security
+policy. Build test images locally rather than publishing development tags.
+See [release policy](RELEASE_POLICY.md) and [image security](IMAGE_SECURITY.md).
+
+For UI checks, use an isolated preview with synthetic credentials and media.
+Exercise desktop and narrow mobile layouts, keyboard focus, validation, saved
+state, disclosure controls and modal scrolling. A desktop mobile viewport is not
+physical-device acceptance. Never mount production SQLite or media in a test lab,
+or put production secrets in screenshots. Test SMTP sends no email; actual email
+acceptance requires a deliberately chosen test recipient and payload.
+
+Check account roles, owner-only settings and API pages, local-user setup with
+email disabled, connection saves and tests, Plex Connect/Reconnect, Keeps,
+email links and background-job status. Test with disposable accounts and restore
+the original settings afterward. Library deletion requires separately chosen
+disposable media; removing Keep protection is a different operation.
+
+## Installation platforms
+
+The shell launcher targets Linux and macOS. The PowerShell launcher targets
+native Windows with Docker Desktop running Linux containers, PowerShell 5.1 or
+newer, and Python 3.9 or newer. A WSL terminal is not required. Both launchers
+use the same Python installer and paired Linux container images.
+
+| Target | Validation scope |
+| --- | --- |
+| Linux containers, amd64 and arm64 | Each release requires native image builds, packaged tests, security/source checks, and paired web/worker health probes in CI. A real Docker installer trial also checks startup, HTTP setup cookies, reruns and synthetic owner/data preservation on each architecture. |
+| Linux/macOS shell installer | Launcher checks and isolated Python installer tests cover configuration, reruns, conflicts, bootstrap output, and simulated Docker failures. The Linux Docker trial exercises real containers; a clean macOS host, another device's LAN access and real Plex authorization remain separate acceptance checks. |
+| Windows PowerShell installer | CI requires Windows PowerShell 5.1 syntax validation and five native Windows tests covering private ACLs, unsafe ACL/junction rejection, process locking, argument forwarding and failed-download cleanup. These tests do not establish Windows Docker Desktop or firewall behavior. A full Windows installation, rerun, and phone-access/Plex trial remains a separate acceptance check. |
+
+Record the host OS, shell, Python version, Docker/Compose versions, image digest,
+and actual observations for an installation trial. Verify the printed LAN address
+from another device, not only from the Docker host. Follow the
+[installation](INSTALLATION.md), [upgrade](MIGRATION.md) and
+[backup/restore](PORTABLE_BACKUP.md) instructions on a disposable installation.
+Record real observations separately from CI results; do not describe a platform
+as tested end to end from unit tests alone.
+
+## Contributor and release checks
+
+External-fork pull requests run the Python and JavaScript suites plus a whitespace
+check in a separate job with read-only repository permissions and no registry or
+publishing credentials. This verifies contributor tests only; it does not run the
+native image, vendor-provenance, vulnerability-scan, source-acquisition, or image
+privacy gates. Those remain separate required evidence for trusted same-repository
+pull requests and release candidates. Do not expose repository secrets to fork code.
+
+Use results for the exact source revision being reviewed. For documentation edits,
+check diffs, relative links and consistency with the implementation. Files copied
+into the image also require the image checks. Runtime changes require the relevant
+application and native image checks; see [release policy](RELEASE_POLICY.md).

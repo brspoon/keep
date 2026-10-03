@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<meta name="theme-color" content="#f5a623"><meta name="referrer" content="same-origin">
+<title>FAQ · Keep</title>
+<link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg">
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-faq.css?v={{ app_version }}">
+<script defer src="/static/keep-faq.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="library-ui faq-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+  {% include 'shared_header.html' %}
+  <div class="faq-layout">
+    <header class="faq-intro">
+      <h1>FAQ</h1>
+      <p>Answers about Leaving, Keeps, your library, and your account.</p>
+      <div class="faq-search">
+        <label for="faq-search">Search questions</label>
+        <div class="faq-search-field">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input id="faq-search" type="search" placeholder="What would you like to know?" autocomplete="off" spellcheck="false" aria-controls="faq-content">
+          <button id="faq-search-clear" type="button" aria-label="Clear FAQ search" hidden>×</button>
+        </div>
+        <p id="faq-search-status" role="status" aria-live="polite"></p>
+      </div>
+    </header>
+    <nav class="faq-popular" aria-label="Popular questions">
+      <h2>Popular questions</h2>
+      <div class="faq-popular-links">
+        <a href="#faq-leaving-work">How does Leaving work?<span aria-hidden="true">↗</span></a>
+        <a href="#faq-keep-do">What does a Keep do?<span aria-hidden="true">↗</span></a>
+        <a href="#faq-day-badges">What do the day badges mean?<span aria-hidden="true">↗</span></a>
+      </div>
+    </nav>
+    <div class="faq-body">
+      <nav class="faq-topics" aria-label="FAQ topics">
+        <span class="faq-topics-title">Topics</span>
+        <a href="#leaving" data-faq-topic="leaving">Leaving &amp; watching</a>
+        <a href="#keeps" data-faq-topic="keeps">Keeps</a>
+        <a href="#library-account" data-faq-topic="library-account">Library &amp; account</a>
+        {% if owner %}
+        <a href="#api" data-faq-topic="api">API access</a>
+        <a href="#admin-connections" data-faq-topic="admin-connections">Admin &amp; connections</a>
+        {% endif %}
+      </nav>
+      <div class="faq-content" id="faq-content">
+        <p class="faq-empty" id="faq-search-empty" hidden>No matching questions. Try a different word.</p>
+        <section class="faq-section" id="leaving" aria-labelledby="leaving-heading">
+          <div class="faq-section-head"><h2 id="leaving-heading">Leaving &amp; watching</h2><p>Why titles appear, when they may leave, and how watching affects them.</p></div>
+          <div class="faq-questions">
+            <details class="faq-question" id="faq-leaving-work"><summary>How does Leaving work?</summary><div class="faq-answer"><p>Keep checks titles daily. A title may qualify under its library’s rules, then appear in Leaving. It is not removed from Plex just because it qualifies. Once it appears in Leaving, its day badge shows when removal could happen. An active Keep protects it.</p><a href="/">Go to Leaving <span aria-hidden="true">↗</span></a></div></details>
+            <details class="faq-question" id="faq-why-leaving"><summary>Why is a title here?</summary><div class="faq-answer"><p>Each bullet below is one way a movie or show can qualify for Leaving. If a bullet says “and,” all its parts must be true. “Added” means added to the Plex library, not the year it was released.</p><div id="faq-criteria" class="faq-criteria" role="status" aria-live="polite">Loading current Leaving rules…</div></div></details>
+            <details class="faq-question" id="faq-day-badges"><summary>What do the day badges mean?</summary><div class="faq-answer"><p>On Leaving, the number shows days before possible removal from Plex. On Kept, it shows days until the Keep expires. ∞ means the Keep does not expire.</p></div></details>
+            <details class="faq-question" id="faq-watch-threshold"><summary>How much do I need to watch?</summary><div class="faq-answer"><p>When available, each library above shows the percentage you need to watch. A shorter play does not update the last watched date Keep uses for Leaving.</p></div></details>
+            <details class="faq-question" id="faq-after-watching"><summary>What happens after I watch something in Leaving?</summary><div class="faq-answer"><p>After a movie or episode is considered watched, Keep checks its Leaving status during the next daily update. If it no longer meets any Leaving rule, it disappears from Leaving but stays in Plex. If another rule still applies, it stays in Leaving. It may return later after going unwatched long enough.</p></div></details>
+          </div>
+        </section>
+        <section class="faq-section" id="keeps" aria-labelledby="keeps-heading">
+          <div class="faq-section-head"><h2 id="keeps-heading">Keeps</h2><p>Protecting a title and managing its Keep.</p></div>
+          <div class="faq-questions">
+            <details class="faq-question" id="faq-keep-do"><summary>What does a Keep do?</summary><div class="faq-answer"><p>It protects a title from scheduled removal. A temporary Keep lasts 30 days. Use Manage Keep on a title to see when you can extend it.</p><a href="/kept">Go to Kept <span aria-hidden="true">↗</span></a></div></details>
+            {% if capabilities.keep_indefinitely %}<details class="faq-question"><summary>Can I keep a title indefinitely?</summary><div class="faq-answer"><p>Yes. You can protect it until the Keep is removed.</p></div></details>{% endif %}
+            {% if capabilities.manage_any %}<details class="faq-question"><summary>Can I manage someone else’s Keep?</summary><div class="faq-answer"><p>Yes. You can manage or remove other people’s Keeps.</p></div></details>{% endif %}
+            <details class="faq-question"><summary>What happens if I remove a Keep?</summary><div class="faq-answer"><p>The title may qualify for Leaving again when its library is checked. Removing a Keep does not immediately delete the title from Plex.</p></div></details>
+          </div>
+        </section>
+        <section class="faq-section" id="library-account" aria-labelledby="library-account-heading">
+          <div class="faq-section-head"><h2 id="library-account-heading">Library &amp; account</h2><p>Your library access, title status, and email preferences.</p></div>
+          <div class="faq-questions">
+            {% if capabilities.delete_media and granted_libraries %}
+            <details class="faq-question"><summary>What do the badges mean in Manage Library?</summary><div class="faq-answer"><p>Leaving and Kept show a title’s current status. A day badge on Leaving counts down to possible removal; on Kept, it counts down to Keep expiry. ∞ means the Keep does not expire.</p><a href="/library">Go to Manage Library <span aria-hidden="true">↗</span></a></div></details>
+            <details class="faq-question"><summary>What can I remove from Manage Library?</summary><div class="faq-answer"><p>{% if capabilities.delete_any %}You can permanently delete titles or selected TV seasons and their files from libraries you can access.{% else %}You can permanently delete movies and TV seasons requested only by you from libraries you can access.{% endif %} These deletions cannot be undone.</p></div></details>
+            {% endif %}
+            <details class="faq-question"><summary>When will Keep remind me about titles that are leaving?</summary><div class="faq-answer"><p>Keep emails you when titles enter Leaving and reminds you when they have seven days or less remaining. If an update was missed, the reminder can arrive later. Titles you keep are excluded, and each reminder is sent once per Leaving entry.</p></div></details>
+            <details class="faq-question"><summary>Can I choose which emails arrive?</summary><div class="faq-answer"><p>Yes. Turn Keep emails on or off and choose which Leaving lists you want updates about. Your account needs an email address to receive them.</p><a href="/preferences">Go to Preferences <span aria-hidden="true">↗</span></a></div></details>
+          </div>
+        </section>
+        {% if owner %}
+        <section class="faq-section" id="api" aria-labelledby="api-heading">
+          <div class="faq-section-head"><h2 id="api-heading">API access</h2><p>Using Keep’s API and managing API keys.</p></div>
+          <div class="faq-questions">
+            <details class="faq-question"><summary>What can Keep’s API do?</summary><div class="faq-answer"><p>It lets an authorized client read selected Leaving and Kept collections and manage Keep protection. It does not provide media files or delete titles from your media library. Removing a Keep removes protection only.</p>{% if owner %}<a href="/settings/api-reference">Go to API reference <span aria-hidden="true">↗</span></a>{% endif %}</div></details>
+            <details class="faq-question"><summary>Are API keys the same as connected services?</summary><div class="faq-answer"><p>No. An API key lets a client access Keep’s API as your Keep account. {% if owner %}Plex sign-in and connections such as Maintainerr and Seerr let Keep communicate with those services.{% else %}Connected services let Keep communicate with those services.{% endif %} Changing a service connection does not create an API key.</p>{% if owner %}<a href="/settings/connections">Go to Connections <span aria-hidden="true">↗</span></a>{% endif %}</div></details>
+            <details class="faq-question"><summary>What can an API key access?</summary><div class="faq-answer"><p>A key’s scopes limit which API operations it can request. Your current Keep account permissions still apply, so a key cannot grant its owner extra access.</p></div></details>
+            <details class="faq-question"><summary>How do I create or replace an API key?</summary><div class="faq-answer"><p>Only the Keep owner can manage API keys. Create a named key with only the scopes it needs. Keep shows the secret once when you create or rotate a key; copy it to a protected credential store. Rotation replaces the old secret and keeps the key’s existing expiry.</p>{% if owner %}<a href="/settings/api-keys">Manage API keys <span aria-hidden="true">↗</span></a>{% endif %}</div></details>
+            <details class="faq-question"><summary>When does an API key expire?</summary><div class="faq-answer"><p>New keys expire after 90 days by default. The owner can choose 30, 90 or 365 days, or Never expires. Revoke a key you no longer need.</p></div></details>
+            <details class="faq-question"><summary>What happens when I revoke or remove a key?</summary><div class="faq-answer"><p>Revoking a key stops it from authorizing new requests. Remove is available for a revoked key: it removes the credential from the key list and clears its retry and rate-limit records while keeping the audit history.</p>{% if owner %}<a href="/settings/api-keys">Manage API keys <span aria-hidden="true">↗</span></a>{% endif %}</div></details>
+          </div>
+        </section>
+        <section class="faq-section" id="admin-connections" aria-labelledby="admin-connections-heading">
+          <div class="faq-section-head"><h2 id="admin-connections-heading">Admin &amp; connections</h2><p>Accounts, email delivery, connected services, and activity.</p></div>
+          <div class="faq-questions">
+            <details class="faq-question"><summary>How do I control access?</summary><div class="faq-answer"><p>Manage accounts, Keep permissions, and access to specific libraries here. A user’s permissions also determine which pages and FAQ sections they can see.</p><a href="/settings/users">Go to Users <span aria-hidden="true">↗</span></a></div></details>
+            <details class="faq-question"><summary>Who receives Leaving email summaries?</summary><div class="faq-answer"><p>Choose who receives Leaving emails and which lists each person follows. Each person can also adjust their own email preferences.</p><a href="/settings/email">Go to Email <span aria-hidden="true">↗</span></a></div></details>
+            <details class="faq-question"><summary>What does each connection do?</summary><div class="faq-answer"><ul class="faq-service-list">
+              <li><strong>Plex</strong> provides Plex sign-in, media identity, and access to your selected server.</li>
+              <li><strong>Maintainerr</strong> provides Leaving and Kept lists, their rules, and Keep protection.</li>
+              <li><strong>Radarr</strong> provides movies and movie libraries for Manage Library.</li>
+              <li><strong>Sonarr</strong> provides shows and seasons for Manage Library.</li>
+              <li><strong>Seerr</strong> provides request history and helps Keep identify who requested a title. It also helps limit deletion access for users without broader permission.</li>
+              <li><strong>Tautulli</strong> provides watches that count, watched percentages, and Leaving forecasts.</li>
+              <li><strong>Email delivery</strong> sends invitations, password resets, and Leaving email summaries when enabled.</li>
+            </ul><a href="/settings/connections">Go to Connections <span aria-hidden="true">↗</span></a></div></details>
+            <details class="faq-question"><summary>Do I need every connection?</summary><div class="faq-answer"><p>Plex and Maintainerr are needed for Keep’s core browsing and protection. The others enable the features above. Manage Library needs Radarr for movies or Sonarr for shows; request history and requester-based deletion access also need Seerr.</p></div></details>
+            <details class="faq-question"><summary>What is the difference between Save and Test?</summary><div class="faq-answer"><p>Save stores settings for future use. Test checks the saved settings and records the result. A passed test shows what worked when you ran it; it is not continuous monitoring. Connection tests do not change your media.</p></div></details>
+            <details class="faq-question"><summary>Why is information missing when a connection passed its test?</summary><div class="faq-answer"><p>Some features need more than one service or a matching title in a selected Plex library. For example, a Leaving estimate needs the current rules, watched history, and a verified Plex match. Check the other relevant connections and the title’s Plex match.</p></div></details>
+            <details class="faq-question"><summary>What does choosing Maintainerr collections do?</summary><div class="faq-answer"><p>Only selected collections appear on Keep’s Leaving and Kept pages. Changing the selection does not erase existing Keeps or email subscriptions.</p></div></details>
+            <details class="faq-question"><summary>Why link Seerr accounts?</summary><div class="faq-answer"><p>Keep matches Plex users to Seerr accounts automatically when it can verify their Plex ID. Choose a Seerr account for each local Keep user so their request history can be identified. Linking an account does not grant deletion permission by itself.</p></div></details>
+            <details class="faq-question"><summary>What is recorded in Activity?</summary><div class="faq-answer"><p>Review account, library, and email activity to see what changed and when.</p><a href="/settings/activity">Go to Activity <span aria-hidden="true">↗</span></a></div></details>
+          </div>
+        </section>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</main>
+{% include 'shared_whats_new.html' %}
+</body>
+</html>

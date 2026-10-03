@@ -1,0 +1,4 @@
+<nav class="header-views" aria-label="Keep views">
+  <a class="view-tab{% if not is_kept_view %} active{% endif %}" href="/" {% if not is_kept_view %}aria-current="page"{% endif %}>Leaving <span id="leaving-total" aria-live="polite">{{ total_items }}</span></a>
+  <a class="view-tab{% if is_kept_view %} active{% endif %}" href="/kept" {% if is_kept_view %}aria-current="page"{% endif %}>Kept <span id="kept-total" aria-live="polite">{{ total_kept }}</span></a>
+</nav>

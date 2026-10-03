@@ -1,0 +1,12 @@
+/* origin: FreeBSD /usr/src/lib/msun/ld80/k_tanl.c */
+/* origin: FreeBSD /usr/src/lib/msun/ld128/k_tanl.c */
+/*
+ * ====================================================
+ * Copyright 2004 Sun Microsystems, Inc.  All Rights Reserved.
+ * Copyright (c) 2008 Steven G. Kargl, David Schultz, Bruce D. Evans.
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ */

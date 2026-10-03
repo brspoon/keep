@@ -1,0 +1,24 @@
+  {% if saved %}<div class="notice" role="status">Your preferences were saved.</div>{% endif %}
+  {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/preferences" data-save-key="preferences">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <fieldset class="appearance-options" aria-describedby="{{ preference_id_prefix|default('') }}appearance-help">
+      <legend>Appearance</legend>
+      <div class="appearance-choices">
+      {% for value, label in [('system', 'System'), ('light', 'Light'), ('dark', 'Dark')] %}
+        <label class="choice"><input type="radio" name="theme_mode" value="{{ value }}" {% if theme == value %}checked{% endif %}>{{ label }}</label>
+      {% endfor %}
+      </div>
+      <p id="{{ preference_id_prefix|default('') }}appearance-help" class="appearance-help">System follows your device setting.</p>
+    </fieldset>
+    <div class="email">Account email<br><strong>{{ email or "No email address available" }}</strong></div>
+    <label class="choice"><input id="{{ preference_id_prefix|default('') }}receive-email" type="checkbox" name="receive_email" value="1" {% if enabled %}checked{% endif %}>
+      Receive Keep email notifications</label>
+    <fieldset class="topics" aria-label="Email topics" id="{{ preference_id_prefix|default('') }}email-topics" {% if not enabled %}disabled{% endif %}>
+    {% for collection_id, collection_name in collections.items() %}
+      <label class="choice"><input type="checkbox" name="collection_id" value="{{ collection_id }}"
+        {% if collection_id in selected %}checked{% endif %}>{{ collection_name.replace(" Leaving Plex Soon", "") }}</label>
+    {% endfor %}
+    </fieldset>
+    <button class="save-button" type="submit">Save preferences</button>
+  </form>

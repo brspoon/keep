@@ -1,0 +1,159 @@
+name: Native Keep architecture gates
+on:
+  workflow_call:
+    inputs:
+      publish_release:
+        type: boolean
+        required: false
+        default: false
+      confirmation:
+        type: string
+        required: false
+        default: ''
+jobs:
+  image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read release metadata
+        id: release
+        run: |
+          VERSION=$(cat VERSION)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build the image to test with temporary registry credentials
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 - <<'PYBUILD'
+          import os, subprocess, tempfile
+          username = os.environ.pop('DOCKERHUB_USERNAME')
+          token = os.environ.pop('DOCKERHUB_TOKEN')
+          with tempfile.TemporaryDirectory() as directory:
+              env = {**os.environ, 'DOCKER_CONFIG': directory}
+              subprocess.run(['docker', 'login', 'dhi.io', '--username', username, '--password-stdin'], input=token, text=True, env=env, check=True)
+              subprocess.run(['docker', 'build', '--label', 'org.opencontainers.image.version=' + env['VERSION'], '--label', 'org.opencontainers.image.revision=' + env['GITHUB_SHA'], '--label', 'org.opencontainers.image.source=https://github.com/' + env['GITHUB_REPOSITORY'], '-t', 'keep-ci', '.'], env=env, check=True)
+          PYBUILD
+      - name: Test installation launcher on the native host
+        run: |
+          sh -n install.sh
+          python3 -B -m unittest discover -s tests -p test_install_launcher.py
+      - name: Test Python application and release tools
+        run: |
+          docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace keep-ci python -B -c "import pathlib, unittest; loader=unittest.TestLoader(); suite=unittest.TestSuite(loader.discover('tests', pattern=p.name) for p in sorted(pathlib.Path('tests').glob('test_*.py')) if p.name not in ('test_deploy.py', 'test_install_launcher.py')); result=unittest.TextTestRunner(verbosity=1).run(suite); raise SystemExit(not result.wasSuccessful())"
+      - name: Test JavaScript
+        run: docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace node:22-alpine node --test tests/test_*.cjs
+      - name: Verify packaged version
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: test "$(docker run --rm --network none keep-ci python -c "from pathlib import Path; print(Path('/app/VERSION').read_text().strip())")" = "$VERSION"
+      - name: Verify non-root runtime
+        run: test "$(docker run --rm --network none keep-ci python -c 'import os; print(os.getuid())' )" = 10001
+      - name: Verify private runtime data directory
+        run: |
+          docker run --rm --network none keep-ci python -c "import os, stat; s=os.stat('/app/data'); assert s.st_uid == 10001 and stat.S_IMODE(s.st_mode) == 0o700, f'unexpected /app/data owner/mode: {s.st_uid}:{s.st_gid} {stat.S_IMODE(s.st_mode):04o}'"
+      - name: Verify installation tools are absent and runtime libraries work
+        run: |
+          docker run --rm --network none keep-ci python -c "import importlib.util, zlib, sqlite3, ssl; assert all(importlib.util.find_spec(name) is None for name in ('pip', 'ensurepip', 'setuptools', 'msgpack')); assert zlib.decompress(zlib.compress(b'keep')) == b'keep'; assert sqlite3.connect(':memory:').execute('select 1').fetchone() == (1,); assert ssl.create_default_context().get_ca_certs()"
+      - name: Validate portable Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+      - name: Smoke-test packaged web and worker with durable data
+        run: sh scripts/smoke_container.sh keep-ci
+      - name: Exercise portable installation, restore and failed-upgrade recovery
+        run: python3 scripts/portable_container_trial.py --candidate-image keep-ci:latest --evidence portable-recovery-${{ matrix.arch }}.json
+      - name: Exercise one-command installation and owner-preserving reruns
+        run: python3 scripts/installer_container_trial.py --candidate-image keep-ci:latest --evidence installer-trial-${{ matrix.arch }}.json
+      - name: Capture verified vendor evidence and Scout assessment
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python3 scripts/inspect_candidate.py
+      - name: Inventory installed notices and inspect every image layer
+        env:
+          KEEP_PRIVATE_IMAGE_MARKERS: ${{ secrets.KEEP_PRIVATE_IMAGE_MARKERS }}
+        run: |
+          docker run --rm --network none --read-only -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/image_distribution.py --runtime > candidate-notices-${{ matrix.arch }}.json
+          IMAGE_ARCHIVE=$(mktemp)
+          trap 'rm -f "$IMAGE_ARCHIVE"' EXIT
+          docker save --output "$IMAGE_ARCHIVE" keep-ci
+          python3 scripts/image_distribution.py --archive "$IMAGE_ARCHIVE" > candidate-layers-${{ matrix.arch }}.json
+      - name: Scan candidate without suppressions
+        if: ${{ !cancelled() }}
+        run: sh scripts/scan_image.sh keep-ci candidate-${{ matrix.arch }}.json --report-only
+      - name: Verify all nine runtime security fixes in the tested image
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/python_security_checks.py --report > candidate-regression-${{ matrix.arch }}.json
+      - name: Accept only the nine verified-fixed findings and block all others
+        run: python3 scripts/review_image.py ${{ matrix.arch }}
+      - name: Retain full scan and review evidence
+        if: always()
+        run: python3 scripts/registry_transfer.py report ${{ matrix.arch }}
+      - name: Verify Zstandard source-layer decoder is available
+        run: zstd --version
+      - name: Obtain verified base source materials and license notices
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: set -o pipefail; python3 scripts/collect_image_sources.py --download --output source-materials | tee source-acquisition-base-${{ matrix.arch }}.log
+      - name: Obtain matching sources for every installed OS package
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: set -o pipefail; python3 scripts/collect_package_sources.py --map docs/os-package-sources.json --architecture ${{ matrix.arch }} --output source-materials/packages | tee source-acquisition-packages-${{ matrix.arch }}.log
+      - name: Package sources and notices for the exact tested runtime
+        run: |
+          set -o pipefail
+          test -s candidate-notices-${{ matrix.arch }}.json
+          python3 scripts/build_distribution_bundle.py --sources source-materials --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --output distribution | tee source-distribution-${{ matrix.arch }}.log
+          cd distribution
+          sha256sum --check keep-${{ steps.release.outputs.version }}-source-materials-${{ matrix.arch }}.tar.gz.sha256
+      - name: Print source bundle manifest and compact summary
+        run: python3 scripts/release_materials.py report ${{ matrix.arch }}
+      - name: Check whether image transfer is needed
+        id: transfer-needed
+        if: inputs.publish_release && inputs.confirmation == 'release-stable'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/release_needed.py
+      - name: Transfer exact tested image through the registry
+        id: transfer
+        if: inputs.publish_release && inputs.confirmation == 'release-stable' && steps.transfer-needed.outputs.publish == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/registry_transfer.py stage ${{ matrix.arch }}
+      - name: Archive original corresponding sources and native security evidence in the version draft release
+        if: inputs.publish_release && inputs.confirmation == 'release-stable' && steps.transfer-needed.outputs.publish == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/release_materials.py archive-native ${{ matrix.arch }}

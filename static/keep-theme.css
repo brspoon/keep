@@ -1,0 +1,245 @@
+/* Light appearance is applied after the existing page and dialog styles. */
+html[data-appearance="light"] {
+  color-scheme: light;
+  --background:#f7f8fa; --bg:#f7f8fa;
+  --surface:#ffffff; --surface-hover:#f1f3f6;
+  --surface-2:#f0f2f5; --surface2:#f0f2f5;
+  --border:#d3d9e1; --border-hover:#aeb7c2;
+  --text:#20242b; --muted:#566171;
+  --accent:#efb34f; --accent-hover:#f6c36d;
+  --accent-soft:#fff0d4;
+  --accent-ink:#805000; --control-accent:#805000; --focus:#805000;
+  --close-background:#fff; --close-hover:#f0f2f5;
+  --close-text:#20242b; --close-border:#929daa; --close-shadow:#25324840;
+  --positive:#25643d; --positive-surface:#e8f5ed; --positive-border:#7daf8d;
+  --negative:#962f30; --negative-surface:#fff0ef; --negative-border:#d69896;
+  --purple:#563875; --purple-surface:#f0e9f8; --purple-border:#a58abb;
+  --option-surface:#f0f2f5; --option-border:#aeb7c2;
+  --option-recommended:#fff0d4; --option-accent-border:#a87926;
+}
+html[data-appearance="light"] body,
+html[data-appearance="light"] body:is(.auth-ui,.setup-ui,.preferences-ui) {
+  color:var(--text);
+  background:var(--background);
+}
+html[data-appearance="light"] :is(input:not([type=checkbox]):not([type=radio]), select, textarea) {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] input::placeholder { color:#6c7582; }
+html[data-appearance="light"] :is(.auth-ui .login-card,.setup-ui main,.preferences-ui main,
+  .library-ui .card,.admin-ui .panel,.admin-ui .stat,.admin-ui .admin-card-list .user-card,
+  .admin-ui .admin-card-list .recipient-row,.welcome-dialog,.delete-media-dialog,
+  .title-details-dialog,.admin-create-dialog,.unsaved-dialog) {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+  box-shadow:0 12px 34px #25324817;
+}
+html[data-appearance="light"] :is(.library-ui .view-switcher,.library-ui .count,
+  .admin-ui .admin-nav,.library-ui .user-links,.app-header .user-links,
+  .admin-ui .user-card.is-editing .user-editor) {
+  background:var(--surface-2); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] .app-header .user-avatar.fallback {
+  background:#29313b; color:#fff; border-color:#29313b;
+}
+html[data-appearance="light"] :is(.library-ui .section-nav,.library-ui .browse-controls,
+  .library-ui .browse-controls .section-nav) { background:var(--background); }
+html[data-appearance="light"] :is(.library-ui .section-nav a,.library-ui .user-links > :is(a,button),
+  .app-header .user-links :is(a,button),.back,.logout-link,.secondary,.local-button,
+  .admin-ui .user-edit-label,.faq-popular-links a,.faq-criteria details,
+  .appearance-choices .choice,.preferences-dialog .choice,.choice,.subscription,
+  .collection-choice,.security-choices .check-choice,.badge,.connection-metrics) {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] :is(.library-ui .section-nav a,.library-ui .user-links > :is(a,button),
+  .app-header .user-links :is(a,button),.faq-topics a):hover {
+  background:var(--surface-hover); color:var(--text);
+}
+html[data-appearance="light"] :is(.appearance-choices .choice:has(:checked),
+  .preferences-ui .choice:has(input:checked),.collection-choice:has(:checked),
+  .security-choices .check-choice:has(:checked)) {
+  background:var(--accent-soft); border-color:var(--accent);
+}
+html[data-appearance="light"] :is(.admin-ui .admin-nav a.active,
+  .preferences-dialog .save-button,.preferences-ui button:not(.secondary),
+  .library-ui .keep-button,.library-ui .remove-kept-button,.library-ui .removal-info-button,
+  .admin-add-button) {
+  color:var(--on-accent);
+}
+html[data-appearance="light"] :is(.admin-ui .admin-nav a.active,
+  .preferences-dialog .save-button,.library-ui .keep-button,.admin-add-button) {
+  background:var(--accent);
+}
+html[data-appearance="light"] :is(.library-ui .remove-kept-button,.library-ui .removal-info-button) {
+  background:var(--accent);
+}
+html[data-appearance="light"] .library-ui .keep-manage-button {
+  background:#f0e9f8; color:#563875; border-color:#a58abb;
+}
+html[data-appearance="light"] :is(.title-details-dialog .details-copy,.details-overview,
+  .details-loading,.details-history h3,.details-season-disclosure summary) { color:var(--text); }
+html[data-appearance="light"] :is(.details-genres,.details-muted,.details-facts,
+  .details-seasons span,.details-season-disclosure summary span,.details-season-heading small) { color:var(--muted); }
+html[data-appearance="light"] :is(.details-history,.details-season-disclosure,.details-seasons li) {
+  border-color:var(--border);
+}
+html[data-appearance="light"] :is(.details-timeline,.details-retry,.empty,
+  .preferences-dialog .notice,.preferences-dialog .error,.faq-empty) {
+  background:var(--surface-2); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] :is(.preferences-dialog .email,.preferences-ui .email,
+  .auth-ui input,.setup-ui input) { background:var(--surface-2); color:var(--text); border-color:var(--border); }
+html[data-appearance="light"] :is(.auth-ui .login-card,.setup-ui main,.preferences-ui main) {
+  box-shadow:0 20px 60px #2532481c;
+}
+html[data-appearance="light"] :is(.auth-ui .login-card p,.setup-ui p,
+  .auth-ui .login-card label,.setup-ui label,.connections-ui .field-heading,
+  .management-note strong) { color:var(--muted); }
+html[data-appearance="light"] :is(.notice,.success) {
+  background:#e8f5ed; border-color:#7daf8d; color:#225835;
+}
+html[data-appearance="light"] :is(.error,.settings-error,.credential-error,.welcome-error) {
+  background:#fff0ef; border-color:#d69896; color:#962f30;
+}
+html[data-appearance="light"] :is(.danger,.delete-cancel) {
+  background:#fff0ef; color:#962f30; border-color:#d69896;
+}
+html[data-appearance="light"] :is(.toast,.toast.error) {
+  box-shadow:0 16px 40px #25324833;
+}
+html[data-appearance="light"] :is(.service-icon,.connection-tags > span) {
+  background:var(--accent-soft); color:var(--accent-ink); border-color:#d6b476;
+}
+html[data-appearance="light"] :is(.service-state[data-state=success],.setup-state.ready) { color:#256c42; }
+html[data-appearance="light"] :is(.service-state[data-state=error],.setup-state.error) { color:#aa3030; }
+html[data-appearance="light"] :is(.service-state[data-state=warning],.service-state[data-state=unknown]) { color:#855600; }
+html[data-appearance="light"] :is(.admin-create-dialog input:not([type=checkbox]),
+  .admin-ui .fields input,.admin-ui .fields select,.connections-ui input,.connections-ui select) {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] :is(.error-action.secondary,.error-action.secondary:hover) {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] body:has(.error-brand) { background:var(--background); color:var(--text); }
+html[data-appearance="light"] body:has(.error-brand) main {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+}
+html[data-appearance="light"] body:has(.error-brand) p { color:var(--muted); }
+/* Keep the shared navigation and compact controls consistent in both appearances. */
+html[data-appearance="light"] .library-ui .header-views .view-tab.active {
+  background:transparent; color:var(--text);
+}
+html[data-appearance="light"] .library-ui .keep-scope-option[aria-pressed="true"] {
+  background:var(--accent); color:var(--on-accent);
+}
+html[data-appearance="light"] .faq-search-field input[type="search"] {
+  background:transparent; border:0; border-radius:0;
+}
+html[data-appearance="light"] .app-header .user-links :is(a,button) {
+  background:transparent; border-color:transparent;
+}
+html[data-appearance="light"] .app-header .user-links [aria-current="page"] {
+  background:var(--accent); color:var(--on-accent);
+}
+html[data-appearance="light"] .admin-ui .summary .stat,
+html[data-appearance="light"] .admin-ui section.panel.admin-card-list {
+  background:transparent; border:0; box-shadow:none;
+}
+html[data-appearance="light"] .preferences-dialog .email {
+  background:transparent;
+}
+html[data-appearance="light"] :is(.library-ui,.admin-ui) .back-to-top {
+  background:var(--surface); color:var(--text); border-color:var(--border);
+  box-shadow:0 4px 16px #25324826;
+}
+html[data-appearance="light"] :is(.library-ui,.admin-ui) .back-to-top:is(:hover,:focus-visible) {
+  color:var(--accent-ink); border-color:var(--focus);
+}
+@media(max-width:520px) {
+  html[data-appearance="light"] .appearance-choices { gap:5px; }
+}
+
+/* Component states use the same palette as their containing surface. */
+html[data-appearance="light"] :is(.auth-ui .forgot-link a, .auth-ui .footnote a,
+ .details-eyebrow, .details-status, .setup-state.pending) { color:var(--accent-ink); }
+html[data-appearance="light"] :is(.auth-ui .plex-button, .auth-ui .local-form button:not(.local-button),
+ .setup-ui button, .setup-ui .button, .onboarding-ui button,
+ .connections-ui .service-actions button:not(.secondary), .connections-ui .plex-connect button,
+ .connections-ui .collections button:not(.secondary), .connections-ui .seerr-link-form button:not(.secondary),
+ .connections-ui .connection-section-heading button:not(.secondary), .admin-ui .save-button,
+ .admin-create-dialog button[type="submit"], .whats-new-done) {
+ background:var(--accent); color:var(--on-accent);
+}
+html[data-appearance="light"] .admin-ui .source-plex {
+ background:var(--accent-soft); color:var(--accent-ink); border-color:var(--option-accent-border);
+}
+html[data-appearance="light"] .admin-ui .source-local {
+ background:#eaf3ff; color:#245e9d; border-color:#91b7e2;
+}
+html[data-appearance="light"] .admin-ui .source-owner {
+ background:var(--purple-surface); color:var(--purple); border-color:var(--purple-border);
+}
+html[data-appearance="light"] :is(.admin-ui .status.on, .setup-state.ready) { color:var(--positive); }
+html[data-appearance="light"] :is(.admin-ui .status.off, .subscription-error,
+ .clear-warning, .whats-new-error, .welcome-dialog .welcome-error) { color:var(--negative); }
+html[data-appearance="light"] .admin-ui .status.warn { color:var(--accent-ink); }
+html[data-appearance="light"] .admin-ui .activity-filters a.active {
+ background:var(--accent-soft); color:var(--accent-ink); border-color:var(--option-accent-border);
+}
+html[data-appearance="light"] .library-ui .poster-placeholder {
+ background:var(--surface-2); color:var(--muted);
+}
+html[data-appearance="light"] .library-ui .poster-wrap { background:var(--surface-2); }
+html[data-appearance="light"] .library-error {
+ background:var(--negative-surface); color:var(--negative); border-color:var(--negative-border);
+}
+html[data-appearance="light"] .library-error a { color:inherit; }
+html[data-appearance="light"] .delete-media-dialog .dialog-eyebrow { color:var(--negative); }
+html[data-appearance="light"] .delete-media-dialog .season-eyebrow { color:var(--accent-ink); }
+html[data-appearance="light"] .delete-media-dialog .delete-cancel { background:transparent; color:var(--muted); border-color:var(--border); }
+html[data-appearance="light"] .library-ui .card-body .delete-series-button:hover { color:var(--negative); }
+html[data-appearance="light"] .library-ui .keep-manage-button:not(:disabled):hover {
+ background:#e6daf2; color:var(--purple); border-color:var(--purple-border);
+}
+html[data-appearance="light"] :is(button.action-succeeded, .library-ui .keep-button.action-succeeded) {
+ background:var(--positive-surface); color:var(--positive); border-color:var(--positive-border); opacity:1;
+}
+html[data-appearance="light"] .library-ui .keep-button[data-confirming="true"] {
+ background:var(--accent-soft); color:var(--accent-ink); border-color:var(--option-accent-border);
+}
+html[data-appearance="light"] :is(.toast, .preferences-dialog .notice) {
+ background:var(--positive-surface); color:var(--positive); border-color:var(--positive-border);
+}
+html[data-appearance="light"] :is(.toast .toast-check, .library-ui .toast .toast-check) { color:var(--positive); }
+html[data-appearance="light"] :is(.toast.error, .library-ui .toast.error, .preferences-dialog .error) {
+ background:var(--negative-surface); color:var(--negative); border-color:var(--negative-border);
+}
+html[data-appearance="light"] :is(.toast.error .toast-check, .library-ui .toast.error .toast-check) { color:var(--negative); }
+/* Disabled primary actions remain readable without implying they are available. */
+html[data-appearance="light"] :is(.preferences-dialog button.save-button, .save-button, .keep-button, .season-review, .confirm-delete):disabled {
+ background:var(--surface-2); color:var(--muted); border:1px solid var(--border); opacity:1;
+}
+/* Yellow is for fills; amber ink supplies contrast on white backgrounds. */
+html[data-appearance="light"] :is(a, button, input, select, textarea, summary):focus-visible {
+ outline-color:var(--focus);
+}
+html[data-appearance="light"] .faq-search-field:focus-within { border-color:var(--focus); }
+html[data-appearance="light"] .appearance-choices .choice:has(:checked) { border-color:var(--option-accent-border); }
+html[data-appearance="light"] .keep-duration-option:not(:disabled):hover { border-color:var(--option-accent-border); }
+html[data-appearance="light"] .keep-duration-option.is-current { color:var(--text); }
+html[data-appearance="light"] .library-ui .pull-refresh { background:var(--surface); color:var(--muted); border-color:var(--border); box-shadow:0 4px 16px #25324826; }
+html[data-appearance="light"] .library-ui .pull-refresh.ready { color:var(--accent-ink); border-color:var(--option-accent-border); }
+
+/* Poster overlays share one high-contrast treatment in both appearances. */
+.library-ui :is(.keeper-badge, .days-left-badge, .keep-policy-badge.indefinite, .library-status-badge) {
+ background:var(--art-badge-surface); color:var(--art-badge-text);
+ border:1px solid var(--art-badge-border); border-radius:8px;
+ box-shadow:0 3px 10px var(--art-badge-shadow);
+}
+/* Status labels on plain surfaces follow the surface's appearance. */
+.details-state-badge {
+ background:var(--accent-soft); color:var(--accent-ink);
+ border-color:var(--option-accent-border); box-shadow:none;
+}
+.details-state-badge.kept {
+ background:var(--purple-surface); color:var(--purple); border-color:var(--purple-border);
+}

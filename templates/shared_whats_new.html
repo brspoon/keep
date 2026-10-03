@@ -1,0 +1,18 @@
+<dialog id="whats-new-dialog" class="welcome-dialog whats-new-dialog" aria-labelledby="whats-new-title"
+        data-auto-open="{{ 'true' if show_announcement else 'false' }}" data-version="{{ announcement_version }}" data-csrf="{{ csrf_token }}">
+  <button type="button" class="welcome-close" aria-label="Close what's new">×</button>
+  <div class="whats-new-eyebrow">NEW IN KEEP</div>
+  <h2 id="whats-new-title" tabindex="-1" autofocus>More ways to see what stays.</h2>
+  <p class="whats-new-intro">Here are the updates you can use:</p>
+  <ul class="whats-new-list">
+    <li>Leaving and Kept badges make each title's status easier to spot.</li>
+    <li>When Keep can verify playback and rule data, title details show the last watch that counted and estimate when a title may qualify for Leaving.</li>
+    {% if capabilities.delete_media and granted_libraries %}<li>Manage Library shows status and time left on titles you can manage.</li>{% endif %}
+    {% if owner %}<li>Connections can use Tautulli for watched history and, when the required inputs are available, Leaving estimates.</li>{% endif %}
+  </ul>
+  <p class="whats-new-error" role="alert" hidden>Couldn’t save that you’ve seen this update. Please try again.</p>
+  <div class="whats-new-actions">
+    <a href="/help" class="whats-new-help">Explore FAQ</a>
+    <button type="button" class="whats-new-done">Got it</button>
+  </div>
+</dialog>

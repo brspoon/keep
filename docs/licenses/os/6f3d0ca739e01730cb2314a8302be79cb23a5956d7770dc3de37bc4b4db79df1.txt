@@ -1,0 +1,66 @@
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+#
+# certdata.txt
+#
+# This file contains the object definitions for the certs and other
+# information "built into" NSS.
+#
+# Object definitions:
+#
+#    Certificates
+#
+#  -- Attribute --               -- type --          -- value --
+#  CKA_CLASS                     CK_OBJECT_CLASS     CKO_CERTIFICATE
+#  CKA_TOKEN                     CK_BBOOL            CK_TRUE
+#  CKA_PRIVATE                   CK_BBOOL            CK_FALSE
+#  CKA_MODIFIABLE                CK_BBOOL            CK_FALSE
+#  CKA_LABEL                     UTF8                (varies)
+#  CKA_CERTIFICATE_TYPE          CK_CERTIFICATE_TYPE CKC_X_509
+#  CKA_SUBJECT                   DER+base64          (varies)
+#  CKA_ID                        byte array          (varies)
+#  CKA_ISSUER                    DER+base64          (varies)
+#  CKA_SERIAL_NUMBER             DER+base64          (varies)
+#  CKA_VALUE                     DER+base64          (varies)
+#  CKA_NSS_EMAIL                 ASCII7              (unused here)
+#  CKA_NSS_SERVER_DISTRUST_AFTER DER+base64          (varies)
+#  CKA_NSS_EMAIL_DISTRUST_AFTER  DER+base64          (varies)
+#
+#    Trust
+#
+#  -- Attribute --              -- type --          -- value --
+#  CKA_CLASS                    CK_OBJECT_CLASS     CKO_TRUST
+#  CKA_TOKEN                    CK_BBOOL            CK_TRUE
+#  CKA_PRIVATE                  CK_BBOOL            CK_FALSE
+#  CKA_MODIFIABLE               CK_BBOOL            CK_FALSE
+#  CKA_LABEL                    UTF8                (varies)
+#  CKA_ISSUER                   DER+base64          (varies)
+#  CKA_SERIAL_NUMBER            DER+base64          (varies)
+#  CKA_CERT_HASH                binary+base64       (varies)
+#  CKA_EXPIRES                  CK_DATE             (not used here)
+#  CKA_TRUST_DIGITAL_SIGNATURE  CK_TRUST            (varies)
+#  CKA_TRUST_NON_REPUDIATION    CK_TRUST            (varies)
+#  CKA_TRUST_KEY_ENCIPHERMENT   CK_TRUST            (varies)
+#  CKA_TRUST_DATA_ENCIPHERMENT  CK_TRUST            (varies)
+#  CKA_TRUST_KEY_AGREEMENT      CK_TRUST            (varies)
+#  CKA_TRUST_KEY_CERT_SIGN      CK_TRUST            (varies)
+#  CKA_TRUST_CRL_SIGN           CK_TRUST            (varies)
+#  CKA_TRUST_SERVER_AUTH        CK_TRUST            (varies)
+#  CKA_TRUST_CLIENT_AUTH        CK_TRUST            (varies)
+#  CKA_TRUST_CODE_SIGNING       CK_TRUST            (varies)
+#  CKA_TRUST_EMAIL_PROTECTION   CK_TRUST            (varies)
+#  CKA_TRUST_IPSEC_END_SYSTEM   CK_TRUST            (varies)
+#  CKA_TRUST_IPSEC_TUNNEL       CK_TRUST            (varies)
+#  CKA_TRUST_IPSEC_USER         CK_TRUST            (varies)
+#  CKA_TRUST_TIME_STAMPING      CK_TRUST            (varies)
+#  CKA_TRUST_STEP_UP_APPROVED   CK_BBOOL            (varies)
+#  (other trust attributes can be defined)
+#
+
+#
+# The object to tell NSS that this is a root list and we don't
+# have to go looking for others.
+#

@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible Keep problem without sensitive data.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, tokens, database files, private artwork, invitation/reset URLs, or unredacted logs/service responses. Suspected vulnerabilities must not be reported here; see [SECURITY.md](https://github.com/brspoon/keep/blob/main/SECURITY.md) for private reporting instructions.
+  - type: input
+    id: version
+    attributes:
+      label: Keep version
+      description: Use the version shown in Keep or the image tag. Do not include a private registry token.
+      placeholder: "e.g. version number"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the behavior using synthetic titles and IDs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include safe steps and sanitized settings only. Never include service URLs with credentials or response bodies.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, private media information, and sensitive logs.
+          required: true
+        - label: This is not a suspected security vulnerability.
+          required: true

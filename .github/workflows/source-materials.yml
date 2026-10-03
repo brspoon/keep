@@ -1,0 +1,60 @@
+name: Obtain pinned container source materials
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Probe package attestation routes or download all provider materials'
+        type: choice
+        options: [discovery, full]
+        default: discovery
+permissions:
+  contents: read
+jobs:
+  sources:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify Zstandard source-layer decoder is available
+        run: zstd --version
+      - name: Acquire corresponding-source files and inventory notices
+        if: inputs.mode == 'full'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python3 scripts/collect_image_sources.py --download
+      - name: Obtain sources for every installed OS package
+        if: inputs.mode == 'full'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python3 scripts/collect_package_sources.py --map docs/os-package-sources.json --architecture ${{ matrix.arch }} --output source-materials/packages
+      - name: Probe native, index, external and embedded package attestations
+        if: inputs.mode != 'full'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: python3 scripts/collect_package_sources.py --map docs/os-package-sources.json --architecture ${{ matrix.arch }} --output source-materials/packages-discovery --discover-origin gdbm --discover-origin openssl
+      - name: Retain acquired provider materials
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: provider-sources-${{ matrix.runner }}
+          path: |
+            source-materials/**/*.json
+            source-materials/**/*.yaml
+            source-materials/**/*.yml
+            source-materials/**/*.pem
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 6

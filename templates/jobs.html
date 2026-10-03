@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jobs · Keep Admin</title>
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg">
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-jobs.css?v={{ app_version }}">
+<script defer src="/static/keep-jobs.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="admin-ui jobs-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+{% include 'shared_header.html' %}
+<div class="page-heading"><h2>Jobs</h2><p class="subtitle">Background work and scheduled connection checks.</p></div>
+{% include 'shared_admin_tabs.html' %}
+<section class="jobs-worker" aria-labelledby="worker-heading">
+  <h3 id="worker-heading">Background worker</h3>
+  <span class="job-status job-status-{{ jobs_snapshot.worker.kind }}">{{ jobs_snapshot.worker.label }}</span>
+  {% if jobs_snapshot.worker.checked_at %}<p>Last seen <time datetime="{{ jobs_snapshot.worker.checked_at }}">{{ jobs_snapshot.worker.checked_at }}</time></p>{% else %}<p>No heartbeat recorded yet.</p>{% endif %}
+</section>
+<div class="jobs-list">
+<div class="job-columns" aria-hidden="true"><span>Job</span><span>Status</span><span>Last run</span><span>Next check</span><span>Schedule</span><span>Duration</span></div>
+{% for job in jobs_snapshot.jobs %}
+<article class="job-row" aria-labelledby="job-{{ job.id }}">
+  <div class="job-summary"><h3 id="job-{{ job.id }}">{{ job.title }}</h3><p class="job-description">{{ job.description }}</p>{% if job.result not in ('Completed', 'No recorded run') %}<p class="job-result">{{ job.result }}</p>{% endif %}</div>
+  <span class="job-status job-status-{{ job.status }}">{{ job.label }}</span>
+  <dl class="job-details">
+    <div><dt>Last run</dt><dd>{% if job.last_run %}<time datetime="{{ job.last_run }}">{{ job.last_run }}</time>{% else %}Not recorded{% endif %}</dd></div>
+    <div><dt>Next check</dt><dd>{% if job.next_run %}<time datetime="{{ job.next_run }}">{{ job.next_run }}</time>{% else %}—{% endif %}</dd></div>
+    <div><dt>Schedule</dt><dd>{{ job.schedule }}</dd></div>
+    <div><dt>Duration</dt><dd>{{ job.duration or '—' }}</dd></div>
+  </dl>
+</article>
+{% endfor %}
+</div>
+</main>
+</body></html>

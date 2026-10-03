@@ -1,0 +1,1008 @@
+{
+  "schema": 1,
+  "purpose": "Finite inspected upstream test fixtures whose complete bytes remain in the checked original source archive. Fixture content is hash-checked but never recursively interpreted as another source archive; deliberate unsafe member names and malformed compression are test inputs. All other source archives retain strict traversal and bounds.",
+  "archives": [
+    {
+      "origin": "python-3.14",
+      "version": "3.14.7-r1",
+      "upstream_url": "https://www.python.org/ftp/python/3.14.7/Python-3.14.7.tar.xz",
+      "upstream_archive_sha256": "3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81",
+      "fixtures": [
+        {
+          "path": "Python-3.14.7/Lib/test/archivetestdata/recursion.tar",
+          "sha256": "d80f55ac66a2570c8a19d2b1dad7c057cf4c944d9c2f8adaf5bf6c8539881e13",
+          "bytes": 516,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/archivetestdata/testtar.tar",
+          "sha256": "760200dda3cfdff2cd31d8ab6c806794f3770faa465e7eae00a1cb3a2fbcbe3a",
+          "bytes": 435200,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/archivetestdata/testtar.tar.xz",
+          "sha256": "89e0326292b96a5700582a37ebf3d8ba60f1d136772b5cd15b2c2ae653fda188",
+          "bytes": 172,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/archivetestdata/zip_cp437_header.zip",
+          "sha256": "e2cdb56febb5106607bf5f9b92b2b7a9516814e7650139cfe46f6b36bfcfa327",
+          "bytes": 270,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/archivetestdata/zipdir.zip",
+          "sha256": "19cb87050b0fb410da3b88df752c2e1bdaeec77ac052b04febef31a68823cfcb",
+          "bytes": 374,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/archivetestdata/zipdir_backslash.zip",
+          "sha256": "afdfa1f139c91c2b486f3a4a931bef18e08883fc5f5c81975f5bd19cf92e6d1f",
+          "bytes": 192,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/test_importlib/metadata/data/example-21.12-py3-none-any.whl",
+          "sha256": "23e918b9f11389dfad0d8c91f1fd4e149dede6efc8a36de4d1c6d0c494d43782",
+          "bytes": 1455,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/test_importlib/metadata/data/example-21.12-py3.6.egg",
+          "sha256": "f847ae8050228e47543bdc724074d9910c19a055cad3f431202063e91e40009a",
+          "bytes": 1497,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/test_importlib/metadata/data/example2-1.0.0-py3-none-any.whl",
+          "sha256": "59ecf7fd1d2a1d72a7acf81ebc772b3a220cdb3afac6481bc5000d431d5bd2d3",
+          "bytes": 1167,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/test_importlib/namespace_pkgs/missing_directory.zip",
+          "sha256": "2507eab0cb7a594b25fb2fc1c6a0b0f27af53d1980ba358d4e0c1b1dc32a9e63",
+          "bytes": 515,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/test_importlib/namespace_pkgs/nested_portion1.zip",
+          "sha256": "9d6e1c27870cb53512a2e29ab03e61c25188ebed57e933ee5ce4e749d72c0a87",
+          "bytes": 556,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/test_importlib/namespace_pkgs/top_level_portion1.zip",
+          "sha256": "42376ede22fbd49cd23ecb7fcd690206b53e5304c1c75fcf36358ab8acdda62a",
+          "bytes": 332,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/wheeldata/setuptools-79.0.1-py3-none-any.whl",
+          "sha256": "e147c0549f27767ba362f9da434eab9c5dc0045d5304feb602a0af001089fc51",
+          "bytes": 1256281,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.7/Lib/test/zipimport_data/sparse-zip64-c0-0x000000000.part",
+          "sha256": "16bb488f291d5e19adb5c5d638c3c7ffd16574a0b56112407a1aea16ad424fa5",
+          "bytes": 4096,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        }
+      ]
+    },
+    {
+      "origin": "gcc",
+      "version": "15.2.0-r7",
+      "upstream_url": "https://gcc.gnu.org/pub/gcc/releases/gcc-15.2.0/gcc-15.2.0.tar.xz",
+      "upstream_archive_sha256": "438fd996826b0c82485a29da03a72d71d6e3541a83ec702df4271f6fe025d24e",
+      "fixtures": [
+        {
+          "path": "gcc-15.2.0/libgo/go/encoding/json/testdata/code.json.gz",
+          "sha256": "a4203315e4cea0a763eb61e244c8fb44fc723cbb9fb67645afee002e0d30093d",
+          "bytes": 120432,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/html/template/testdata/fs.zip",
+          "sha256": "af5e3cb635c27b492ead712c3eadba4d672398099559680e8176776918ffaf7b",
+          "bytes": 406,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/debug/elf/testdata/hello-world-core.gz",
+          "sha256": "6cbaef86ba040903e15c351f17988579dc20cc69557dff723938bed5f71d29f1",
+          "bytes": 12678,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/regexp/testdata/re2-exhaustive.txt.bz2",
+          "sha256": "f1253bff45157cd2a71d7729e11a19ad8ae15efdc0af00fe0939289e6e1a4ec8",
+          "bytes": 428262,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/test-trailing-junk.zip",
+          "sha256": "acb77caa34accd11067629705ceb3d7cb01868134ae56fca3f9c6348dbd585d4",
+          "bytes": 1184,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/zip64.zip",
+          "sha256": "d1a659d5a2d292682a17d789834d97b97650b6a8d188799ac1166fd85ace7dbd",
+          "bytes": 242,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/zip64-2.zip",
+          "sha256": "941bf893b024dcb2269684357b6df18ca747ce873d6bdc626796572bf3a3f9e3",
+          "bytes": 266,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/go-with-datadesc-sig.zip",
+          "sha256": "6be41a66578438afdda77edfaec1857ca553fa091dc31a2bd7db0d8a3a3e9a30",
+          "bytes": 242,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/crc32-not-streamed.zip",
+          "sha256": "bbf109e827cd301e67ef3b08082db8e0bacd9d7fe7e517278bf41821d3207898",
+          "bytes": 314,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/utf8-winzip.zip",
+          "sha256": "f04b2fca5ebaac681e7ca1f859bc0a1abe4193800255a449b2a3a871dc3f64a0",
+          "bytes": 146,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/utf8-osx.zip",
+          "sha256": "5da98564f0188c6ea25c5a681adac2bcf402a22b7e16bfdf087034be9e8b17a5",
+          "bytes": 138,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/utf8-7zip.zip",
+          "sha256": "fda31b416bcacec89be0a8e1a9fe8f16b07b1761b34285a073f3cdde25209c4e",
+          "bytes": 146,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-go.zip",
+          "sha256": "45c2b43fd74e27b3a511a2f3f31de08651689366e4344ff5e4a644b3be35f4b9",
+          "bytes": 148,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-winrar.zip",
+          "sha256": "058b9c059e88fcd17d8e8bee4239f31073969c8affa4993498dbb7e5c1508518",
+          "bytes": 150,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/winxp.zip",
+          "sha256": "d60fd70a6de4cc16363b5a424bcf703f5345f01c6a0595f5246ae12822bf719d",
+          "bytes": 412,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-7zip.zip",
+          "sha256": "12e1b7b71a0943547acca38516aef5d89d2466c79dae5279a915389b7beace4d",
+          "bytes": 150,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-22738.zip",
+          "sha256": "ffecd2607b24eb31a12d3d94b8cf951c48b2e17c66b19d71150fb98da0a727e3",
+          "bytes": 140,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-osx.zip",
+          "sha256": "c374ae7910a6b6b8499c0bb7757474456450c994bf39dbe4d9a1ab8361f50856",
+          "bytes": 142,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/unix.zip",
+          "sha256": "ae84fe91799e805724d20949195c4476aa4e7c124a9229c79987a4f7e0cdb178",
+          "bytes": 620,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/utf8-infozip.zip",
+          "sha256": "d73791c790a2e4593a207d5e9ef7a5fdcb937db571be85747421b951655c98f6",
+          "bytes": 162,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-winzip.zip",
+          "sha256": "b1ae5e20dc1608e8fda463f6d19c667f1dd2ce290981565528a1e11ac7452bfa",
+          "bytes": 150,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/readme.zip",
+          "sha256": "9ee76aa8a1c2ce04924b43424bf9d1b3138f812a80d6239f06f1133876f50d40",
+          "bytes": 1886,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/test.zip",
+          "sha256": "e36d2ee9fbc41f7fe0b2717dc4b1fdc1978c9396dd28f3398b1f3a1a29dc146c",
+          "bytes": 1170,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/subdir.zip",
+          "sha256": "d57eff008fa79aab7d863c5e003d2bc35a5f734a9eac8b62289b9c6c395bb71f",
+          "bytes": 428,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/symlink.zip",
+          "sha256": "c871234a8d0c8787eacb357e53245d6663803fef1750518204a1aa97ec321f62",
+          "bytes": 173,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-win7.zip",
+          "sha256": "28774f00d29804f65a6af708a125d9b56ea20a98b1681ae4ab0e001474710e2a",
+          "bytes": 114,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/dd.zip",
+          "sha256": "dcec917ea7852418f21c2b8fe67c8355fd6ff0e875c5bc3718e1b8684a064171",
+          "bytes": 154,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/time-infozip.zip",
+          "sha256": "0e129eb30eeda61f7bec57f7708047750e4cf6add713a289d4b879b394459846",
+          "bytes": 166,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/zip/testdata/utf8-winrar.zip",
+          "sha256": "f41036f0d011ae1c98de383360b1e26eb41f216cea17ab909f8fcf027ba20791",
+          "bytes": 146,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/issue10968.tar",
+          "sha256": "a302db10909ff2822f09f362576eca6e1b4f0d70e34748f6fa1eea79e7d3713a",
+          "bytes": 512,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-incremental.tar",
+          "sha256": "675b784cae33a0a4856b66b1752a3892455b983f505d3e27505b07a525d61055",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/sparse-formats.tar",
+          "sha256": "3dfc8596ba248ba48e18fc2c635753d033bfe8987d34121cea69a4a3a8e2ef40",
+          "bytes": 17920,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax.tar",
+          "sha256": "e313f478c14978e346fb2454f256876de83b154acf75fa49f498d7684964e8e1",
+          "bytes": 10240,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/trailing-slash.tar",
+          "sha256": "de161ee91e4f1bf9c98b8c5399ebf3d4f1f3d5be719bab8fe9ac8ac255715e02",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu.tar",
+          "sha256": "4635a876c70af74b13976fdf86811e809ec29dc1ccb2a18c1174a493240edf8b",
+          "bytes": 3072,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/nil-uid.tar",
+          "sha256": "e18d729821696dc33c7eb0bf32622146365bb3e0c2bd2d72ce4b2e460a84690e",
+          "bytes": 1024,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-global-records.tar",
+          "sha256": "e4e6b8700915613e10edbfe16f31c8d3edfd80603fa4f12fd6eeee5881cbd881",
+          "bytes": 7168,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/hardlink.tar",
+          "sha256": "57be2655401e9cb4b79515257a2978db683ca5b3c9b4ea0a3f1adcd1b43d56a7",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/ustar-file-devs.tar",
+          "sha256": "a14b8f41c96d4d00f36642455f734396766397fa5c636115f4881c5b53959b88",
+          "bytes": 1536,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/file-and-dir.tar",
+          "sha256": "97b7612d21901a62cb80af3b976878da051b512f0a8018c16931ffd6e176067b",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-multi-hdrs.tar",
+          "sha256": "f3e3e97854feebc6ee48069dc759b93e32c432109ca146ee691d61dc34fedb7b",
+          "bytes": 4608,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-sparse-big.tar",
+          "sha256": "027bb1a0d7f778fde347be353b1920141bc4d4d2da6828ace084cb339787fd17",
+          "bytes": 5120,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/writer.tar",
+          "sha256": "c126eb856810b76ae112d2dfeddf2c9aa89531dfc6f5e7c878301495a08d1b6d",
+          "bytes": 3584,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/neg-size.tar",
+          "sha256": "831bd782db9d2b552cbcfcb87adfded0941762596e5d8fbd742dba03c6dc357b",
+          "bytes": 512,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/issue12435.tar",
+          "sha256": "de7e983cc020b72b10819773e487c794e1269fc5a3793bc13d3c61ffacc553a5",
+          "bytes": 512,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-nul-xattrs.tar",
+          "sha256": "d2a5221cdcd6bd73be8301f02c266fb13a2cba400d6836cce86ba9b6e044937a",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-bad-mtime-file.tar",
+          "sha256": "02e95784ed0c0a6c028eb2959c2c6393094d9687cfb44100fd7305955dbe6b0a",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/writer-big-long.tar",
+          "sha256": "36edba10087c389ffab0200dbf56013237af1ec8867a2442187c7147d899e7e4",
+          "bytes": 1536,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-utf8.tar",
+          "sha256": "1d46bde4ea43f780c4f184a7ef11b11cdde9f9e02d6892a03c67d9b6c6608973",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/xattrs.tar",
+          "sha256": "577d18c199858f40ddb297b18de9b31041e253c04019f00b06067c1015925605",
+          "bytes": 5120,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-pos-size-file.tar",
+          "sha256": "7eafa3b2f293d90eca480a6630941775dbfe332f54c344162ff1913e3746a96f",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-nul-path.tar",
+          "sha256": "a47d0adca51594bf284a2a1c50286f877a3718766dae1b262c4568ecd0bfa5e7",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/star.tar",
+          "sha256": "a178aeda2cd08b0f738b53120ebd9c27767546736e03ca47516c80ceec1d299c",
+          "bytes": 3072,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/v7.tar",
+          "sha256": "59b6b112db4107ed60bf30cd4a0a81b96f4f955808c06ce029194eff31e8d8ce",
+          "bytes": 3584,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/ustar.tar",
+          "sha256": "f58d4abcbc3a42dc21788e8aba382b3141ce34585100f7b2e2884601ce45273c",
+          "bytes": 2048,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/writer-big.tar",
+          "sha256": "5a0bee74a7bd0caa1d572ff1ae58c3c79310c8fc646a5e84fb5e1eea488ea4b5",
+          "bytes": 512,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-nil-sparse-data.tar",
+          "sha256": "31585b656cf569c03f800d79e43b311c54c8ec88018a44e9e2ec05009abc8f5f",
+          "bytes": 4096,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-records.tar",
+          "sha256": "261f3807fa134322126c117bb3ef987d019d00bc25e882fb3ebdd81cf57c812e",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-multi-hdrs.tar",
+          "sha256": "7445b1987611850b4810e9b56a99188923f9dc467b7b240e0431f37f58cc6df3",
+          "bytes": 4608,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-nil-sparse-data.tar",
+          "sha256": "fbd8462155e49f06b82b17b8c4c871d85d322e2d95e2fc3108fad51f1f4ce107",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/invalid-go17.tar",
+          "sha256": "53fe0bb9e743531a01d601f70482f6e47e43469894ca101abf7069424edbe81f",
+          "bytes": 1536,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-not-utf8.tar",
+          "sha256": "3560b7b37f487f1c41a46b39b74d9f00a52d6b9f3430d64a6e42544df3c14c95",
+          "bytes": 1536,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-nil-sparse-hole.tar",
+          "sha256": "506d08fe8bbee110612f4672e632e5e9a6373cafba15cbd5866bdd09e3f79d2b",
+          "bytes": 1536,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-nil-sparse-hole.tar",
+          "sha256": "68135f04e9b4fc6bc6a46508779912050028428f19f2eced56706a0bd297c13a",
+          "bytes": 3072,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/ustar-file-reg.tar",
+          "sha256": "e81dbec6483c207ff01013f682d96040c7f936083f5ca7c97456d20965778a89",
+          "bytes": 1536,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-path-hdr.tar",
+          "sha256": "2f434250f98a8aad5e77b8695d751b11bca1625d4d0264638113ad27ebeb11c7",
+          "bytes": 1024,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/gnu-long-nul.tar",
+          "sha256": "146a47c77ea4b77dff0d94403a80e6164629262d66ec56d8dbad0195174c8a47",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/issue11169.tar",
+          "sha256": "9c80a95a15edc3eef8fd6c506c4a92481f517bebd088d5db0eb260033a77c0f6",
+          "bytes": 602,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-sparse-big.tar",
+          "sha256": "d4afb4ca10dbf46d071752d82b2d148a82953f8b8776b7bc57f9f1f0e3c50a64",
+          "bytes": 6144,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/pax-bad-hdr-file.tar",
+          "sha256": "63d5e53472b1ea35cd8814f9d4dee7597601c99eca367177bbaaab1e09d30468",
+          "bytes": 2560,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/archive/tar/testdata/hdr-only.tar",
+          "sha256": "065f7d6cdcebbb9a2a0afbac24849165d1fe83872550b0abad9460520854ad4d",
+          "bytes": 10240,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/pass-sawtooth.bz2",
+          "sha256": "f2ea87906abc369de1bdbb38148a0a213ab40eca28813b74ae66b0017fdc0c2d",
+          "bytes": 2017,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/Isaac.Newton-Opticks.txt.bz2",
+          "sha256": "021d07ccf2ab164a4c9d06ca7d9989cf91cbefe7f7711daf10ffd42f8d30a52f",
+          "bytes": 132469,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/e.txt.bz2",
+          "sha256": "74e8ac4107b08fc8366d3b65e70c32bad6de32737cb64dc47e296c079eab1a5c",
+          "bytes": 43149,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/random.data.bz2",
+          "sha256": "3e82116782f75d275dfcd25fc5ff4338242119ed7db3ce894915848f765e6519",
+          "bytes": 16846,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/pass-random1.bz2",
+          "sha256": "c9900d9404c6c4c93a2262adf371188e6009fd00a8b4094418196d68d39636cf",
+          "bytes": 1309,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/fail-issue5747.bz2",
+          "sha256": "82afc498aaf9ffc73dc3cdc4fef609386d3e3f8c84aa6c73cc8b259f3d60186d",
+          "bytes": 7232,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/compress/bzip2/testdata/pass-random2.bz2",
+          "sha256": "54970d3d3db19b2fe2e3eaf8ae84bb6404b04105009c402090ad24697edaa61e",
+          "bytes": 125,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/crypto/ecdsa/testdata/SigVer.rsp.bz2",
+          "sha256": "2e56d510e8db119d089bc13a520656c1bc23b2a743bc1163f2b705f37ecd11cc",
+          "bytes": 95485,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/crypto/ed25519/testdata/sign.input.gz",
+          "sha256": "ae02ad0b05f2aa54bbc1a90cd87d1733932caa298a243e69d6623f27d1251d5c",
+          "bytes": 50330,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "gcc-15.2.0/libgo/go/crypto/rsa/testdata/pss-vect.txt.bz2",
+          "sha256": "ed6655f6fd1887a1698aeafe7bddb995a133859b39520180ed9c3312eaaefd59",
+          "bytes": 28526,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        }
+      ]
+    },
+    {
+      "origin": "xz",
+      "version": "5.8.3-r0",
+      "upstream_url": "https://github.com/tukaani-project/xz/archive/refs/tags/v5.8.3/xz-5.8.3.tar.gz",
+      "upstream_archive_sha256": "8ec1767fa517642ecb4cf08b891ce667ba6f143551e382b07c7ef437bda335e2",
+      "fixtures": [
+        {
+          "path": "xz-5.8.3/tests/files/bad-0-backward_size.xz",
+          "bytes": 32,
+          "sha256": "894d4b6d4ea8657893e9ab1c48162438605537e6ff974ee8ee61903b8eaec55a",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0-empty-truncated.xz",
+          "bytes": 31,
+          "sha256": "9de843e125667ecf9b804469889bcea152758585c0e335a7dc15ed243ce83a50",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0-footer_magic.xz",
+          "bytes": 32,
+          "sha256": "b7d60be0dd400c8d8b2a04094d297f4bbf563fd33041cf27ef6e9be74f7df829",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0-nonempty_index.xz",
+          "bytes": 32,
+          "sha256": "ece3915eacdc4edc296f593b3cb2617cdd888315eada28dcb366a3fda131590a",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0cat-alone.xz",
+          "bytes": 55,
+          "sha256": "14bbcda4f97f6d3583f36c6a4946d0d0dfb847653175d432ee275d5738d6d9b7",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0cat-header_magic.xz",
+          "bytes": 64,
+          "sha256": "bd3f4dfeae3f4ec3e778809e013859b6b291d18e067c8e9557cc0d4c1009f22e",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0catpad-empty.xz",
+          "bytes": 69,
+          "sha256": "56317222b2ef4743fb18b457c3760094937dacc9fdf18d645c181e5be4b327c6",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-0pad-empty.xz",
+          "bytes": 37,
+          "sha256": "a5995e19c63bdb9d327d514c8e8c9d2971b4cfdbc755ffcb11aee30b8a9787b1",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-block_header-1.xz",
+          "bytes": 64,
+          "sha256": "c8bc15e7bfb1056d358cbe5f9b6ae86489e277e353f275a79a1c212a09cc56af",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-block_header-2.xz",
+          "bytes": 64,
+          "sha256": "3b0de551b66e8ee65abfaed399e1638de2955aebc882b9585e12d5f93eb21146",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-block_header-3.xz",
+          "bytes": 68,
+          "sha256": "2a05eb3e61e10b862f09ddaf030ee5a04ca4c875b2dac251ef0529a8ddbb61f3",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-block_header-4.xz",
+          "bytes": 76,
+          "sha256": "8ac58b8fade15875213c116bec05ec78fc659d3cda69116d3aa4dc71557b2d1c",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-block_header-5.xz",
+          "bytes": 72,
+          "sha256": "a76c17d193405f180c3b84c9047ccaf1b4f0483242dda58e7c5070313898f3e9",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-block_header-6.xz",
+          "bytes": 72,
+          "sha256": "f7cc702ce7a2523e9718816b4a5983b05fa8acbb07341df2a5234ce1828731cb",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-check-crc32-2.xz",
+          "bytes": 72,
+          "sha256": "7bb7ebde35677c7187ae590a63bfcae24c622a0fc87d479c43f7095efa38f91e",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-check-crc32.xz",
+          "bytes": 68,
+          "sha256": "4f2de28e30a05d979c7b2db4ba4f4126e92563e3f591bef1508b0926dcf17fa8",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-check-crc64.xz",
+          "bytes": 72,
+          "sha256": "d7218954fd4bd69eb77b545d8b2428ac35a984ff3bb015846b65d88b325ca219",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-check-sha256.xz",
+          "bytes": 96,
+          "sha256": "f106a808e57ca48fa4a64b1913042c526c1d777f9eb1622a0857ce18ee34aba3",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-1.xz",
+          "bytes": 64,
+          "sha256": "b99d620ac64188c4af54e88c79404f153642bed63442a31b642942804f1e1785",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-10.xz",
+          "bytes": 60,
+          "sha256": "439870b79c45cc862f49a7a13e985b620f617924708d7a2de39826e0b2fff1af",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-11.xz",
+          "bytes": 64,
+          "sha256": "917be0d82e2f4bdc0f00f0f2d9731ba2ea0b8c04c2f2ed21debbc31237d6e926",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-2.xz",
+          "bytes": 424,
+          "sha256": "91517a1280b5e52ddaa5a327e7c7f5a045d22db94cdc8a2f79781135f461de12",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-3.xz",
+          "bytes": 424,
+          "sha256": "e063697abf2d7cbb7271eaffb064484095abbc2397268cbe11897dca8af52427",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-4.xz",
+          "bytes": 408,
+          "sha256": "8777af9f9c9e3ddca331d0671a7753a219ef01f3b87708bc5129cc619e63c6e6",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-5.xz",
+          "bytes": 408,
+          "sha256": "2e2759a097712c49a3e93446276cd56ecb748315c0cdec1d8603d8740c0a1494",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-6.xz",
+          "bytes": 68,
+          "sha256": "646cb3043b6aac6da1540af308a78e6504c7708af54d5815f224f27a58f00919",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-7.xz",
+          "bytes": 408,
+          "sha256": "ddd7b265fe96595408d72a6664ac3693de097c0d887a9419c5aff3a7fee83d5e",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-8.xz",
+          "bytes": 464,
+          "sha256": "85c49abc062cddf535f41347edb368f702c442241ede7276c4d99b0051f19b0e",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-lzma2-9.xz",
+          "bytes": 72,
+          "sha256": "b193319df9c497d1bfa91c3e008cc4dcd27a4a5aef2ba2c27af73ce52381b578",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-stream_flags-1.xz",
+          "bytes": 68,
+          "sha256": "c65babcb94c3c175f2d8686391d2d0113fbc434fc8dca009e3f5d1ddf7c83d61",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-stream_flags-2.xz",
+          "bytes": 68,
+          "sha256": "35ece04169f64180ba2b4fff03f80a3048ba11b3ef4e16a0ce8d9b5c32ce5e9c",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-stream_flags-3.xz",
+          "bytes": 68,
+          "sha256": "c59b030817cec49b51d1f1b8e9f06ff2535de25e2c4c07a3f45c197d0e3db949",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-vli-1.xz",
+          "bytes": 72,
+          "sha256": "dde033a0281c2326178e23ace66268dddac8f5d7d2e585ce865c6f3b4e7ed7da",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-1-vli-2.xz",
+          "bytes": 76,
+          "sha256": "9eddf417be15f3f7170fdcdadd753c0fe35d22d13377f271319f0c16889b0e4d",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-2-compressed_data_padding.xz",
+          "bytes": 92,
+          "sha256": "9cfe1c1e950111e4563d773790073637c3f76d42d586f10e77469844a0c84dd2",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-2-index-1.xz",
+          "bytes": 92,
+          "sha256": "ff6b77b8ce16cdb0b6d455c8045029fa6baec1877798a7e7ed7431b9cec83bca",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-2-index-2.xz",
+          "bytes": 92,
+          "sha256": "fa394dea8bedb64ad388a8d44ab324cc0aefe9d5b6d7a78b4dfd610ef78263d0",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-2-index-3.xz",
+          "bytes": 92,
+          "sha256": "62f82cabb391bb98ba87162ad04376e2d839741b56eff0750e93cea822b767c8",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-2-index-4.xz",
+          "bytes": 92,
+          "sha256": "102877780afb8155832afd630e426d2e1456f4da62360e4091bec3524d599cec",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-2-index-5.xz",
+          "bytes": 92,
+          "sha256": "72ac8e7907c092126bfcc999474e44aa17d29feeeabacc50819a0b5a737afdb3",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/bad-3-index-uncomp-overflow.xz",
+          "bytes": 132,
+          "sha256": "a8024da54ce96e32497457b8725d5b04558fe2bd31fa2c47e545b8a347278b34",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-0-empty.xz",
+          "bytes": 32,
+          "sha256": "14c80c40f5b247deead9e9d1d31b8b4f5f0b4f4425e6eb12291fd3e505fc8414",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-0cat-empty.xz",
+          "bytes": 64,
+          "sha256": "65de7e01eff8cf2f9a287153971467b1c11811213b64a38bdf673bad240436ff",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-0catpad-empty.xz",
+          "bytes": 68,
+          "sha256": "019ad3e542d5f5797c6d98148f72725930a057fec6abd9a426ce889302a9fbfe",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-0pad-empty.xz",
+          "bytes": 36,
+          "sha256": "6b97fc3c4f6f4a9115377b3dce52caf4e726458ed9dfd68b60f94ccdff3c5f8c",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-3delta-lzma2.xz",
+          "bytes": 528,
+          "sha256": "00058b3c84d5e2718c298dd8689730ae79c46995943d242897537e9da3d1b04f",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-arm64-lzma2-1.xz",
+          "bytes": 512,
+          "sha256": "3eb890ddccd424c05a42f897cb0830c8c766ebd60fb2631dd8f9a12c5b374364",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-arm64-lzma2-2.xz",
+          "bytes": 488,
+          "sha256": "a8c7b9fa6e170d1c7a01077bcf197b9b1c69960d99367f10b275f1409e02659c",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-block_header-1.xz",
+          "bytes": 72,
+          "sha256": "b94444ef9b5918e4b6c9bcd83080884b61c0c5072588f66c03f244faec475f12",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-block_header-2.xz",
+          "bytes": 68,
+          "sha256": "96d4c234920acdd9b61ca904b2c38a402706131a5136ec04d98592f755e52664",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-block_header-3.xz",
+          "bytes": 68,
+          "sha256": "2bb7072476150fdf06cbe83465f443f7928ee011538296f5713e22856b808fb8",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-check-crc32.xz",
+          "bytes": 68,
+          "sha256": "eaa0f7d82fb273920c5247fa4928e695830ce40631945c6dda3cdf3f14d65cec",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-check-crc64.xz",
+          "bytes": 72,
+          "sha256": "a0b759464fa8d02f0a3da4d19cebdd1d7d86b19728b599f7f946f58e687a22c1",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-check-none.xz",
+          "bytes": 64,
+          "sha256": "cf3bece11d937fceb9c7599bfeffb067d140441d806823ace927a24e4410c16d",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-check-sha256.xz",
+          "bytes": 96,
+          "sha256": "dda8bb24f50e39e750a5ad3697960083450a21ae054b2dff30699d542894826c",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-delta-lzma2.tiff.xz",
+          "bytes": 51316,
+          "sha256": "c9005e580f3e74b2cb8d817120f68cc2177840cda75f48d679551a7f3e323413",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-empty-bcj-lzma2.xz",
+          "bytes": 52,
+          "sha256": "2a05dacdba9c472f4872416211c80bad48e6ee9e4bb6d7f4b8f589009376166f",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-lzma2-1.xz",
+          "bytes": 424,
+          "sha256": "d0e6089fe87776cb754b08012cc05b922e2d04f8a5484baf2d946cceebc24546",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-lzma2-2.xz",
+          "bytes": 424,
+          "sha256": "8d8d4708327aa13930373d80ce3b996ccf0f1ff67d3cdd3d494aa6360fa53537",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-lzma2-3.xz",
+          "bytes": 408,
+          "sha256": "2c286d6b18f24301f25a1c501a2c74c2036c94e0ab85d2289991f7fca2acb3ad",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-lzma2-4.xz",
+          "bytes": 464,
+          "sha256": "ee91a262eaac56d93ffe9b3d582bcfdc1d92a8edb3a5555d52adc4c21f5347f1",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-1-lzma2-5.xz",
+          "bytes": 52,
+          "sha256": "a59afee16f97700f89a3cc81740058a0e64fc9e06d176450b44aff3d70716c4f",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/good-2-lzma2.xz",
+          "bytes": 92,
+          "sha256": "c096d08c0effa829b9c1cb92242b80e26be3a206f7a503d73b552da205b64d6d",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/unsupported-block_header.xz",
+          "bytes": 68,
+          "sha256": "acf4e10b6f8e885ca80cf27c36187cafd974af46b42f70a761d969f5c0edbcaf",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/unsupported-check.xz",
+          "bytes": 68,
+          "sha256": "c781077a53fcb200131fc6aaa3eaed6140f71f8cea5bcf9aae6898c5df4371bd",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/unsupported-filter_flags-1.xz",
+          "bytes": 68,
+          "sha256": "adb9d23d6645ffa0a4dfd377cb8fb6a01a2622edc1c8bf1ed1ddc91b45b6d5f1",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/unsupported-filter_flags-2.xz",
+          "bytes": 68,
+          "sha256": "e7cd859ba5efd8e238fd4bb44724ee3ee27fa2c993cc8794330e97867d137eff",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "xz-5.8.3/tests/files/unsupported-filter_flags-3.xz",
+          "bytes": 68,
+          "sha256": "03b202ddc097d5918b808c2de99b37fbf1d138274998911bff2d514d1a04f109",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        }
+      ]
+    }
+  ]
+}

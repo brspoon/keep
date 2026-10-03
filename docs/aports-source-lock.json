@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "aports": [
+    {
+      "origin": "alpine-baselayout",
+      "commit": "60a7585bbab2fa0f762504eb617dbca90216e31f",
+      "url": "https://github.com/alpinelinux/aports/archive/60a7585bbab2fa0f762504eb617dbca90216e31f.tar.gz",
+      "sha256": "46aa2ec001e215bb51d0fb72fdf9dc977a3add4c3820b8591e2c2b104bd62b9b",
+      "bytes": 13522677,
+      "apkbuild_sha256": "aef255516b71e39109860b92eb027a0986d90197427fb93ec91ebcd04bf59763"
+    },
+    {
+      "origin": "bzip2",
+      "commit": "33283848034c9885d984c8e8697c645c57324938",
+      "url": "https://github.com/alpinelinux/aports/archive/33283848034c9885d984c8e8697c645c57324938.tar.gz",
+      "sha256": "cefce3032d6ffe0fa08a80a32c1ae44332ad64b051b8732a48df4e2daa6e1e90",
+      "bytes": 10757673,
+      "apkbuild_sha256": "7e046e9c4b1c265af9791a790049ed864c361c0949b9cd68564a48bc0f672de2"
+    },
+    {
+      "origin": "ca-certificates",
+      "commit": "e41cbd2ae991adfe8df298ba8e8e777e90bd0e03",
+      "url": "https://github.com/alpinelinux/aports/archive/e41cbd2ae991adfe8df298ba8e8e777e90bd0e03.tar.gz",
+      "sha256": "623722c83ddcf5d2881a19a3acff903ee8b7f6d9d33c661b5e6afee99b631ee2",
+      "bytes": 13960468,
+      "apkbuild_sha256": "a1429622d05b27e016c1266312be8a9a7e4610da01d7d40826b1681677c53843"
+    },
+    {
+      "origin": "expat",
+      "commit": "41a9605db84bb52cd65c6349e5e087c2c7fe9efb",
+      "url": "https://github.com/alpinelinux/aports/archive/41a9605db84bb52cd65c6349e5e087c2c7fe9efb.tar.gz",
+      "sha256": "4ce20407cfb5926f6fb917b6a50a7b365df9c9670ad93a9b48822ca895e4d982",
+      "bytes": 13979305,
+      "apkbuild_sha256": "3c5e016861039fe180beb108c674b0518f178b49747c2b65c95783059bc70618"
+    },
+    {
+      "origin": "gcc",
+      "commit": "2aa0eaee55c85d8e8bef5c058c6eb200f1c0243f",
+      "url": "https://github.com/alpinelinux/aports/archive/2aa0eaee55c85d8e8bef5c058c6eb200f1c0243f.tar.gz",
+      "sha256": "63f1c9a1c64a0eeff296f988ef1fe54d825e4af1478130a87c87196e60b67427",
+      "bytes": 14040126,
+      "apkbuild_sha256": "6376f7a54994d59e184eb6cc003c14dcb51d8c29c1a5f4b4f66fef741fbfae7e"
+    },
+    {
+      "origin": "gdbm",
+      "commit": "1ea03990396db618edfcc8a9a0bc6b72662bac8f",
+      "url": "https://github.com/alpinelinux/aports/archive/1ea03990396db618edfcc8a9a0bc6b72662bac8f.tar.gz",
+      "sha256": "3a30d33df75868fdb7fc8737d4e468a41a0d76bf668a08eb85178fb6a4f17e2e",
+      "bytes": 13670339,
+      "apkbuild_sha256": "862f63ae6868bb40b80a3da3c97d6e603af549e05c3051ceadcfa4ad7b135f1b"
+    },
+    {
+      "origin": "libffi",
+      "commit": "2c2a7bb4a8b16066834e90402567b2c19403a790",
+      "url": "https://github.com/alpinelinux/aports/archive/2c2a7bb4a8b16066834e90402567b2c19403a790.tar.gz",
+      "sha256": "996d792b860a4255b35e61c9058bc3222aca86afe691665d4bc6644f12a7b724",
+      "bytes": 13775408,
+      "apkbuild_sha256": "7dcba5b144b4882426dbd4fcacf10c09d19e3c4347cdd8faa7c1946912b55c1f"
+    },
+    {
+      "origin": "mpdecimal",
+      "commit": "c0519b85456e9b838e3142e1d233aab0b433b476",
+      "url": "https://github.com/alpinelinux/aports/archive/c0519b85456e9b838e3142e1d233aab0b433b476.tar.gz",
+      "sha256": "7493c81be92d61e774830d680263684dc7ebf95571cef6062f957720a743e9fd",
+      "bytes": 13703424,
+      "apkbuild_sha256": "3838e02aad7a5984e8c1296c3741ac4f82e643d24bbc1aade02288b600d62bb7"
+    },
+    {
+      "origin": "musl",
+      "commit": "f5640d3a10f664c9119720c60515265d3d6f6d01",
+      "url": "https://github.com/alpinelinux/aports/archive/f5640d3a10f664c9119720c60515265d3d6f6d01.tar.gz",
+      "sha256": "ffd5ee6e7cfe6e6aaaf1e354d6f05ba1526e488b66dbbfcf1f8f0bc72bf648b0",
+      "bytes": 13673762,
+      "apkbuild_sha256": "db4e568cdf2b256815fdfdb55704cd2efdffdc0e8ecd0cb935fdc3e89e2140f4"
+    },
+    {
+      "origin": "ncurses",
+      "commit": "2cee8a7328d061418336ad327b512d96bcd7bc5e",
+      "url": "https://github.com/alpinelinux/aports/archive/2cee8a7328d061418336ad327b512d96bcd7bc5e.tar.gz",
+      "sha256": "be5266ed42c676fff89046b4badb92e98d75f23679bc4a07dfbc17121edd0d6d",
+      "bytes": 13943575,
+      "apkbuild_sha256": "9801a0e262437b470ddfd6c35e55c231a79b6903262fe68df8a547845d095d6a"
+    },
+    {
+      "origin": "openssl",
+      "commit": "013edf8b29199933e8ea34dde460b5584b979042",
+      "url": "https://github.com/alpinelinux/aports/archive/013edf8b29199933e8ea34dde460b5584b979042.tar.gz",
+      "sha256": "38efb39aec042bda9d117ef4b27602a76a14472a30ff7732f6304715d4e2647e",
+      "bytes": 13965540,
+      "apkbuild_sha256": "612ccf2841efe957089e825b50292a20efb0d9ba8ca3f2a292cefa2515963d21"
+    },
+    {
+      "origin": "readline",
+      "commit": "a854c03acdac188901fb012f7acbee70a36e8041",
+      "url": "https://github.com/alpinelinux/aports/archive/a854c03acdac188901fb012f7acbee70a36e8041.tar.gz",
+      "sha256": "0e738761096dbf04a1810a8371138cfacd0496e5424fce721d0b9a6990312939",
+      "bytes": 13410598,
+      "apkbuild_sha256": "d6ea7771ae1475b0f0843ed543664beba1beea893a99000dbb34ef20878cf4e9"
+    },
+    {
+      "origin": "sqlite",
+      "commit": "a9c3ba8b9129ec0f294d0a9bf538c2f1632bb016",
+      "url": "https://github.com/alpinelinux/aports/archive/a9c3ba8b9129ec0f294d0a9bf538c2f1632bb016.tar.gz",
+      "sha256": "bf0db6b94762b6f736f3574e29812152099b5c3099f9dc9dcb664a0aff02918d",
+      "bytes": 13965280,
+      "apkbuild_sha256": "8e0cdc5e9d36fa52760c2b89b538e0125552ee0b53451a0712c33b7dcdd609dd"
+    },
+    {
+      "origin": "tzdata",
+      "commit": "abde3c23ae79b9d3b7bf1a089076703ccda73875",
+      "url": "https://github.com/alpinelinux/aports/archive/abde3c23ae79b9d3b7bf1a089076703ccda73875.tar.gz",
+      "sha256": "2608485df3d15023b18c97022f5d3d1a9b8189120e0b8d5567fe8cee1d999b8f",
+      "bytes": 13979900,
+      "apkbuild_sha256": "f5b07ef538adab90964624e7a3df7d0b144ce31b0387f360bb3e6c9b480b33d1"
+    },
+    {
+      "origin": "util-linux",
+      "commit": "d98c55af59055e6ca60fbe36e171546918709965",
+      "url": "https://github.com/alpinelinux/aports/archive/d98c55af59055e6ca60fbe36e171546918709965.tar.gz",
+      "sha256": "a9cafd8a2f1241173994738bbb1c8a95b2715a2be9e3edc6a7c8b41390e8de6d",
+      "bytes": 13958824,
+      "apkbuild_sha256": "5347f9d386c8684e7f5cc160ae8595c5c3d3cfedcfdc758f5e022a46e560b944"
+    },
+    {
+      "origin": "xz",
+      "commit": "ce9944f1daadb681dd6f0f81a06e9cce97127377",
+      "url": "https://github.com/alpinelinux/aports/archive/ce9944f1daadb681dd6f0f81a06e9cce97127377.tar.gz",
+      "sha256": "ab4e154833f872f4b7ed81a37d3cb4efffe57fcae708e899de72639b1fefb4b7",
+      "bytes": 13937747,
+      "apkbuild_sha256": "2edc494eb48c9bab6864dc20d9ed51bbc336dc20b4fa04cc543a7b7fc132d6f6"
+    },
+    {
+      "origin": "zlib",
+      "commit": "f248b33b5943c7dc69bf691031d7612ab2e8ed93",
+      "url": "https://github.com/alpinelinux/aports/archive/f248b33b5943c7dc69bf691031d7612ab2e8ed93.tar.gz",
+      "sha256": "2063394ef958ee579bf9293e34b325827c8a7a15912bc7286528ba5254c6ce17",
+      "bytes": 13380856,
+      "apkbuild_sha256": "7b8d064be19f39b5e921e9e2dddb960964c6e159ca035848cc362375f0da9b9f"
+    }
+  ],
+  "provider_contexts": [
+    {
+      "origin": "python-3.14",
+      "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
+      "url": "https://github.com/docker-hardened-images/catalog/archive/a399ba8b3297ee5f29c05f9a1d2068743eaae797.tar.gz",
+      "sha256": "293e63ca6b0f7730dbebeeaf0adc9ea251dd581063ba9fc57732b5aac1c7f82f",
+      "bytes": 24409580
+    }
+  ]
+}

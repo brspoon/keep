@@ -1,0 +1,39 @@
+name: keep
+x-keep: &keep
+  image: ${KEEP_IMAGE:-brspoon/keep:2.21.2}
+  restart: unless-stopped
+  env_file: .env
+  volumes:
+    - keep-data:/app/data
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+services:
+  keep-app:
+    <<: *keep
+    ports:
+      - "${KEEP_BIND_ADDRESS:-127.0.0.1}:${KEEP_PORT:-5000}:5000"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+  keep-digest:
+    <<: *keep
+    command: [python, -u, app.py, --digest-worker]
+    healthcheck:
+      test: [CMD, python, -c, "import os,sys,time; p='/app/data/digest-worker.heartbeat'; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p)<300 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+volumes:
+  keep-data:

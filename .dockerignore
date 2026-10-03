@@ -1,0 +1,34 @@
+# Only application build inputs belong in the Docker context.
+# Secrets, backups, and other runtime files are excluded.
+**
+!Dockerfile
+!requirements.txt
+!app.py
+!api_v1.py
+!email_templates.py
+!artwork_cache.py
+!VERSION
+!static/**
+!connection_settings.py
+!connection_monitor.py
+!deployment_transport.py
+!background_jobs.py
+!media_services.py
+!seerr.py
+!title_details.py
+!leaving_forecast.py
+!service_discovery.py
+!LICENSE
+!THIRD_PARTY.md
+!scripts/
+!scripts/patch_python_runtime.py
+!scripts/python_security_patches.json
+!scripts/build_patched_zlib.py
+!docs/
+!docs/PYTHON_LICENSE.txt
+!docs/licenses/**
+!templates/
+!templates/**
+
+!onboarding.py
+!portable_backup.py
