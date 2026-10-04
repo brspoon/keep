@@ -35,7 +35,7 @@ class TitleDetailsTests(unittest.TestCase):
         self.assertIn('A Leaving estimate needs watch history', html)
         self.assertNotIn('Tautulli', html)
 
-    def request_details(self, source='leaving', data=None):
+    def request_details(self, source='leaving', data=None, view=''):
         title_details._cache.clear()
         store = Mock()
         store.read.return_value = {'state':'current', 'requests':[], 'users':[]}
@@ -44,7 +44,7 @@ class TitleDetailsTests(unittest.TestCase):
                 patch.object(keep, 'get_collection_exclusions', return_value={'items':[self.item]}), \
                 patch.object(keep.requests, 'get', return_value=Mock(json=lambda: data or {'title':'A movie', 'summary':'Description', 'type':'movie', 'providerIds':{'tmdb':['100']}})), \
                 patch.object(keep, 'seerr_store', return_value=store):
-            return self.client.get(f'/api/title-details/{source}/42?collection={self.cid}')
+            return self.client.get(f'/api/title-details/{source}/42?collection={self.cid}&view={view}')
 
     def test_browse_sources_and_escaped_metadata(self):
         for source in ('leaving', 'kept'):
@@ -56,9 +56,10 @@ class TitleDetailsTests(unittest.TestCase):
 
     def test_unknown_collection_and_nonmember_do_not_fetch_metadata(self):
         with patch.object(keep.requests, 'get') as fetch:
-            self.assertEqual(self.client.get('/api/title-details/leaving/42?collection=999').status_code, 404)
-            with patch.object(keep, 'get_collection_media', return_value={'items':[]}):
-                self.assertEqual(self.client.get(f'/api/title-details/leaving/42?collection={self.cid}').status_code, 404)
+            for view in ('', 'core', 'status'):
+                self.assertEqual(self.client.get(f'/api/title-details/leaving/42?collection=999&view={view}').status_code, 404)
+                with patch.object(keep, 'get_collection_media', return_value={'items':[]}):
+                    self.assertEqual(self.client.get(f'/api/title-details/leaving/42?collection={self.cid}&view={view}').status_code, 404)
             fetch.assert_not_called()
 
     def test_live_maintainerr_genre_shape_on_both_browse_views(self):
@@ -182,18 +183,16 @@ class TitleDetailsTests(unittest.TestCase):
             self.assertEqual(len(title_details._cache),128)
         title_details._cache.clear()
 
-    def test_keep_status_does_not_guess_on_service_failure(self):
-        with patch.object(keep,'media_matches_active_keep',return_value=True):
+    def test_browse_status_reuses_membership_without_unused_keep_inventory_sweeps(self):
+        with patch.object(keep,'media_matches_active_keep') as scan:
             self.assertIn(b'details-state-badge leaving">Leaving</span>',self.request_details().data)
-        self.item['addDate'] = '2026-09-23T00:00:00Z'
-        with patch.object(keep,'media_matches_active_keep',return_value=False), \
-             patch.object(keep,'get_collection_delete_after_days',return_value=30):
-            page = self.request_details().data
-            self.assertNotIn(b'>Not kept</span>',page)
-            self.assertIn(b'watches enough to count',page)
-        with patch.object(keep,'media_matches_active_keep',side_effect=ValueError('offline')):
-            self.assertNotIn(b'>Keep status unavailable</span>',self.request_details().data)
+            self.item['addDate'] = '2026-09-23T00:00:00Z'
+            with patch.object(keep,'get_collection_delete_after_days',return_value=30):
+                page = self.request_details().data
+                self.assertNotIn(b'>Not kept</span>',page)
+                self.assertIn(b'watches enough to count',page)
             self.assertIn(b'details-state-badge kept">Kept</span>',self.request_details('kept').data)
+            scan.assert_not_called()
 
     def test_cached_metadata_never_bypasses_removed_membership(self):
         self.assertEqual(self.request_details().status_code,200)
@@ -201,7 +200,7 @@ class TitleDetailsTests(unittest.TestCase):
             self.assertEqual(self.client.get(f'/api/title-details/leaving/42?collection={self.cid}').status_code,404)
             fetch.assert_not_called()
 
-    def test_repeated_open_reuses_only_metadata_not_keep_status(self):
+    def test_repeated_browse_open_reuses_only_metadata_not_membership_or_history(self):
         title_details._cache.clear()
         store=Mock()
         store.read.return_value={'state':'current','requests':[],'users':[]}
@@ -209,17 +208,82 @@ class TitleDetailsTests(unittest.TestCase):
         with patch.object(keep,'get_collection_media',return_value={'items':[self.item]}) as membership, \
                 patch.object(keep.requests,'get',return_value=Mock(json=lambda:{'title':'Cached movie','type':'movie','runtime':90})) as fetch, \
                 patch.object(keep,'seerr_store',return_value=store), \
-                patch.object(keep,'media_matches_active_keep',side_effect=[False,True]):
+                patch.object(keep,'media_matches_active_keep') as scan:
             url=f'/api/title-details/leaving/42?collection={self.cid}'
             first=self.client.get(url)
             second=self.client.get(url)
             self.assertNotIn(b'>Not kept</span>',first.data)
             self.assertNotIn(b'details-keep-status',second.data)
-            self.assertEqual(keep.media_matches_active_keep.call_count, 2)
+            scan.assert_not_called()
             self.assertEqual(fetch.call_count,1)
             self.assertEqual(membership.call_count,2)
             self.assertEqual(store.read.call_count,2)
         title_details._cache.clear()
+
+    def test_core_details_do_not_wait_for_optional_live_status(self):
+        with patch.object(keep, 'title_forecast') as forecast, \
+                patch.object(keep, 'media_matches_active_keep') as scan:
+            for source in ('leaving', 'kept'):
+                response = self.request_details(source, view='core')
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'Description', response.data)
+                self.assertIn(b'Request history', response.data)
+                self.assertIn(b'data-status-url=', response.data)
+                self.assertIn(b'view=status', response.data)
+                self.assertIn('no-store', response.headers['Cache-Control'])
+            forecast.assert_not_called()
+            scan.assert_not_called()
+
+    def test_library_core_does_not_wait_for_keep_sweeps_or_watch_forecast(self):
+        library = {'library_key':'radarr:1', 'service':'radarr', 'path':'/allowed'}
+        with patch.object(keep, 'granted_library_keys', return_value={'radarr:1'}), \
+                patch.object(keep, 'media_libraries', return_value=[library]), \
+                patch.object(keep.media_services, 'get_media', return_value={'id':1, 'title':'Library movie', 'hasFile':True, 'path':'/allowed/movie'}), \
+                patch.object(keep, 'title_forecast') as forecast, \
+                patch.object(keep, 'media_matches_active_keep') as scan:
+            response = self.client.get('/api/title-details/radarr/1?view=core')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Library movie', response.data)
+        self.assertIn(b'Checking Keep status and watch history', response.data)
+        forecast.assert_not_called()
+        scan.assert_not_called()
+
+    def test_status_followup_rechecks_membership_without_reloading_request_history(self):
+        self.assertEqual(self.request_details(view='core').status_code, 200)
+        status = {'state':'leaving', 'days':5, 'played':None, 'forecast':None, 'reason':None}
+        with patch.object(keep, 'get_collection_media', return_value={'items':[self.item]}) as membership, \
+                patch.object(keep, 'seerr_store') as store, \
+                patch.object(keep, 'title_forecast', return_value=status), \
+                patch.object(keep, 'media_matches_active_keep') as scan:
+            response = self.client.get(f'/api/title-details/leaving/42?collection={self.cid}&view=status')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'5 days until possible removal', response.data)
+        self.assertNotIn(b'Request history', response.data)
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        membership.assert_called_once_with(self.cid)
+        store.assert_not_called()
+        scan.assert_not_called()
+        with patch.object(keep, 'get_collection_media', return_value={'items':[]}), \
+                patch.object(keep, 'title_forecast') as forecast:
+            self.assertEqual(self.client.get(f'/api/title-details/leaving/42?collection={self.cid}&view=status').status_code, 404)
+            forecast.assert_not_called()
+
+    def test_library_status_preserves_fresh_keep_checks_and_unknown_on_failure(self):
+        library = {'library_key':'radarr:1', 'service':'radarr', 'path':'/allowed'}
+        with patch.object(keep, 'granted_library_keys', return_value={'radarr:1'}), \
+                patch.object(keep, 'media_libraries', return_value=[library]), \
+                patch.object(keep.media_services, 'get_media', return_value={'id':1, 'title':'Library movie', 'tmdbId':100, 'hasFile':True, 'path':'/allowed/movie'}), \
+                patch.object(keep, 'title_forecast', return_value={'state':None}), \
+                patch.object(keep, 'media_matches_active_keep', side_effect=[False, True, ValueError('offline')]) as scan:
+            for label in (b'Not kept', b'Kept', b'Keep status unavailable'):
+                response = self.client.get('/api/title-details/radarr/1?view=status')
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(label, response.data)
+            self.assertEqual(scan.call_count, 3)
+        with patch.object(keep, 'granted_library_keys', return_value=set()), \
+                patch.object(keep.media_services, 'get_media') as fetch:
+            self.assertEqual(self.client.get('/api/title-details/radarr/1?view=status').status_code, 404)
+            fetch.assert_not_called()
 
     def test_failed_and_oversized_metadata_are_not_cached(self):
         title_details._cache.clear()

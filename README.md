@@ -29,7 +29,7 @@ See the [features and access guide](docs/FEATURES.md) for account types, permiss
 
 ![Keep's Leaving page in dark mode, showing movies with removal countdowns and Keep buttons.](docs/screenshots/leaving.png)
 
-[Browse the preview gallery](docs/PREVIEW.md) to see light and dark mode, protected titles, and library cleanup.
+[Browse the preview gallery](docs/PREVIEW.md) to see sign-in, light and dark mode, protected titles, and library cleanup.
 
 ## Before you install
 
@@ -52,13 +52,13 @@ After installing the prerequisites, run one command for your system on the compu
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.4/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.21.5/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.21.4/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.21.5/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.

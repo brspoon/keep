@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.21.5 — 2026-10-04
+
+- Open title details immediately with the existing card artwork and title, and load optional watch history and Leaving estimates separately from the main details.
+- Remove redundant Keep inventory checks from title details while retaining fresh membership and permission checks.
+- Hide empty collection sections and their jump links across Leaving, Kept, and Manage Library, including My Keeps, search filters, and removal of the last title; show a single helpful empty state when nothing remains.
+- Sort Leaving and Kept titles alphabetically to match Manage Library.
+- Keep the selected All Keeps/My Keeps control yellow in both appearances, and match Delete series to the other delete buttons.
+- Add the sign-in screenshot to the repository gallery.
+
 ## 2.21.4 — 2026-10-03
 
 - Replace backtracking email validation with a bounded linear check shared by local accounts, recipients, and personal preferences, retaining the existing address policy.

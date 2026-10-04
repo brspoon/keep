@@ -33,9 +33,8 @@
 .details-season-heading small{color:#aeb3be;font-size:12px}
 .details-season-disclosure .details-seasons{margin:0}
 @media(prefers-reduced-motion:reduce){.details-season-disclosure summary svg{transition:none}}
-.details-loading{padding:64px 32px 24px;line-height:1.6}
 .details-retry{margin:0 32px 32px;padding:12px 20px;justify-self:start;border:1px solid #555;border-radius:10px;background:#262930;color:white;cursor:pointer}
-@media(prefers-reduced-motion:no-preference){.title-details-dialog[open]{animation:details-enter .18s ease-out}@keyframes details-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}}
+.details-status-retry{margin:0 0 16px}
 @media(max-width:700px){.title-details-dialog{width:calc(100% - 24px);max-height:calc(100dvh - 24px);border-radius:20px}.details-content:has(.details-poster){grid-template-columns:1fr}.details-poster{width:100%;height:230px;object-fit:cover;object-position:center 25%;border-radius:19px 19px 0 0;mask-image:linear-gradient(black 60%,transparent)}.details-copy{padding:28px 24px}.details-poster+.details-copy{padding-top:0}}
 .details-state-badge{display:inline-flex;align-items:center;min-height:30px;padding:5px 10px;border:1px solid #ffffff30;border-radius:8px;background:#121318ed;color:#f6e1b9;font-size:12px;font-weight:650;line-height:1.4;box-shadow:0 4px 14px #0006}
 .details-timeline{margin:12px 0;padding:11px 13px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);font-size:13px;line-height:1.5}

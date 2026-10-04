@@ -128,7 +128,7 @@ html[data-appearance="light"] body:has(.error-brand) p { color:var(--muted); }
 html[data-appearance="light"] .library-ui .header-views .view-tab.active {
   background:transparent; color:var(--text);
 }
-html[data-appearance="light"] .library-ui .keep-scope-option[aria-pressed="true"] {
+.library-ui .keep-scope-option[aria-pressed="true"] {
   background:var(--accent); color:var(--on-accent);
 }
 html[data-appearance="light"] .faq-search-field input[type="search"] {
@@ -196,7 +196,6 @@ html[data-appearance="light"] .library-error a { color:inherit; }
 html[data-appearance="light"] .delete-media-dialog .dialog-eyebrow { color:var(--negative); }
 html[data-appearance="light"] .delete-media-dialog .season-eyebrow { color:var(--accent-ink); }
 html[data-appearance="light"] .delete-media-dialog .delete-cancel { background:transparent; color:var(--muted); border-color:var(--border); }
-html[data-appearance="light"] .library-ui .card-body .delete-series-button:hover { color:var(--negative); }
 html[data-appearance="light"] .library-ui .keep-manage-button:not(:disabled):hover {
  background:#e6daf2; color:var(--purple); border-color:var(--purple-border);
 }

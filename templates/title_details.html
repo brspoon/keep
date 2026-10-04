@@ -1,13 +1,12 @@
 <div class="details-copy">
   <p class="details-eyebrow">{{ 'Series' if details.kind == 'tv' else 'Movie' if details.kind == 'movie' else 'Title' }}{% if details.year %} · {{ details.year }}{% endif %}</p>
   <h2 id="title-details-heading" tabindex="-1">{{ details.title }}</h2>
-  <div class="details-facts">{% if details.runtime %}<span>{{ details.runtime }}</span>{% endif %}{% if title_status.state %}<span class="details-state-badge {{ title_status.state }}">{{ title_status.state|capitalize }}</span>{% endif %}{% if title_status.state not in ('leaving', 'kept') %}<span class="details-keep-status">{{ keep_status }}</span>{% endif %}</div>
-  {% if title_status.state == 'leaving' and title_status.days is not none %}<p class="details-timeline"><strong>{{ title_status.days }} {{ 'day' if title_status.days == 1 else 'days' }} until possible removal</strong> from Plex unless someone keeps it or watches enough to count.</p>{% endif %}
-  {% if title_status.state == 'kept' %}<p class="details-timeline"><strong>{{ 'Kept indefinitely' if title_status.days == '∞' else 'Keep expires in ' ~ title_status.days ~ (' day' if title_status.days == 1 else ' days') if title_status.days is not none else 'Kept' }}</strong></p>{% endif %}
-  {% if title_status.played %}<p class="details-played">Last watch that counted: <strong>{{ title_status.played.strftime('%B') }} {{ title_status.played.day }}, {{ title_status.played.year }}</strong> · {{ title_status.viewer }}{% if title_status.threshold %} · At least {{ title_status.threshold }}% watched{% endif %}</p>{% endif %}
-  {% if title_status.forecast and title_status.state not in ('leaving', 'kept') %}<p class="details-timeline"><strong>May qualify for Leaving {{ title_status.forecast.time_label }}</strong>{% if title_status.forecast.days > 0 %} if nothing changes{% endif %}. Keep checks daily, so it could appear in Leaving shortly after that.</p>{% endif %}
-  {% if title_status.forecast and title_status.state == 'kept' %}<p class="details-muted">Based on current rules, this title could qualify for Leaving {{ 'now' if title_status.forecast.days == 0 else 'after ' ~ title_status.forecast.eligible_at.strftime('%B') ~ ' ' ~ title_status.forecast.eligible_at.day ~ ', ' ~ title_status.forecast.eligible_at.year }}. Its Keep protects it while active.</p>{% endif %}
-  {% if title_status.reason and not title_status.forecast and title_status.state not in ('leaving', 'kept') %}<p class="details-muted">{{ title_status.reason }}</p>{% endif %}
+  {% if status_pending %}
+  <div class="details-live-status" data-status-url="{{ status_url }}" aria-busy="true" aria-live="polite">
+    <div class="details-facts">{% if details.runtime %}<span>{{ details.runtime }}</span>{% endif %}{% if title_status.state %}<span class="details-state-badge {{ title_status.state }}">{{ title_status.state|capitalize }}</span>{% endif %}</div>
+    <p class="details-muted" role="status">Checking Keep status and watch history…</p>
+  </div>
+  {% else %}{% include 'title_details_status.html' %}{% endif %}
   {% if details.genres %}<p class="details-genres">{{ details.genres|join(' · ') }}</p>{% endif %}
   <p class="details-overview">{{ details.overview }}</p>
   <section class="details-history" aria-label="Request history">

@@ -1,6 +1,4 @@
 .season-manage-button:hover{background:var(--accent-hover)}
-.library-ui.library-management-ui .card-body .delete-series-button{background:transparent;color:var(--muted);border:0;min-height:44px;font-size:12px;padding:8px 0;margin-top:6px}
-.library-ui.library-management-ui .card-body .delete-series-button:hover{background:transparent;color:#ffb0b0}
 .season-dialog{max-height:calc(100dvh - 32px);overflow-y:auto;width:min(580px,calc(100% - 28px))}
 .season-dialog .season-eyebrow{color:var(--accent-ink)}
 .season-dialog h2{overflow-wrap:anywhere}
