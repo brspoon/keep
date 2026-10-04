@@ -65,3 +65,40 @@ test('recipient creation retains its error and retry behavior', async () => {
   assert.equal(f.submit.textContent, 'Add and invite');
   assert.equal(f.navigations.length, 0);
 });
+
+function activityNavigation(value) {
+  const navigations = [];
+  const select = {value, addEventListener(name, handler) { this[name] = handler; }};
+  vm.runInNewContext(fs.readFileSync('static/keep-admin-layout.js', 'utf8'), {
+    document: {body: {classList: {contains: () => true}},
+      querySelector: selector => selector === '.activity-mobile-filter select' ? select : null,
+      querySelectorAll: () => []},
+    URLSearchParams,
+    location: {assign: url => navigations.push(url), set href(url) { navigations.push(url); }},
+  });
+  select.change();
+  assert.equal(navigations.length, 1);
+  return new URL(navigations[0], 'https://keep.example.com');
+}
+
+test('mobile activity filters navigate locally and reset pagination', () => {
+  for (const filter of ['all', 'users', 'api', 'email', 'keeps', 'library']) {
+    const destination = activityNavigation(filter);
+    assert.equal(destination.origin, 'https://keep.example.com');
+    assert.equal(destination.pathname, '/settings/activity');
+    assert.deepEqual([...destination.searchParams], [['filter', filter]]);
+    assert.equal(destination.hash, '');
+  }
+});
+
+test('DOM-controlled activity values cannot supply a URL or extra parameters', () => {
+  for (const value of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>',
+    'https://other.example/', '//other.example/', 'keeps&page=2#fragment',
+    '%26page%3D2', '\n javascript:alert(1)']) {
+    const destination = activityNavigation(value);
+    assert.equal(destination.origin, 'https://keep.example.com');
+    assert.equal(destination.pathname, '/settings/activity');
+    assert.deepEqual([...destination.searchParams], [['filter', value]]);
+    assert.equal(destination.hash, '');
+  }
+});

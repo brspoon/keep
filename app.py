@@ -3902,7 +3902,7 @@ def email_preferences_page():
             error = 'Choose System, Light, or Dark appearance.'
         elif not profile:
             error = 'Your account is unavailable. Sign in again.'
-        elif receive_email and (not email_address or not EMAIL_ADDRESS.fullmatch(email_address)):
+        elif receive_email and not valid_email_address(email_address):
             error = "Your Keep account does not have an email address. Ask the owner to add one."
         elif receive_email and (not selected or not selected.issubset(set(recipient_collection_ids()))):
             error = "Select at least one collection or turn off email delivery."
@@ -3912,19 +3912,19 @@ def email_preferences_page():
             with closing(attribution_db()) as db, db:
                 db.execute('UPDATE user_profiles SET theme_mode=? WHERE plex_id=?',
                            (requested_theme, str(user['id'])))
-                if email_address and EMAIL_ADDRESS.fullmatch(email_address):
-                    if receive_email:
-                        db.execute("""INSERT INTO email_recipients(email, enabled) VALUES (?, 1)
-                            ON CONFLICT(email) DO UPDATE SET enabled = 1""", (email_address,))
-                        ensure_recipient_subscriptions(db, email_address)
-                        db.execute("UPDATE recipient_subscriptions SET enabled = 0 WHERE email = ?",
-                                   (email_address,))
-                        db.executemany("""UPDATE recipient_subscriptions SET enabled = 1
-                            WHERE email = ? AND collection_id = ?""",
-                            ((email_address, collection_id) for collection_id in selected))
-                    else:
-                        db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?",
-                                   (email_address,))
+                if receive_email:
+                    db.execute("""INSERT INTO email_recipients(email, enabled) VALUES (?, 1)
+                        ON CONFLICT(email) DO UPDATE SET enabled = 1""", (email_address,))
+                    ensure_recipient_subscriptions(db, email_address)
+                    db.execute("UPDATE recipient_subscriptions SET enabled = 0 WHERE email = ?",
+                               (email_address,))
+                    db.executemany("""UPDATE recipient_subscriptions SET enabled = 1
+                        WHERE email = ? AND collection_id = ?""",
+                        ((email_address, collection_id) for collection_id in selected))
+                elif email_address:
+                    # Allow opting out of an address saved under older validation rules.
+                    db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?",
+                               (email_address,))
             log_activity('personal-preferences-updated', 'Updated personal preferences')
             return redirect(url_for("email_preferences_page", saved="1", **({"fragment": "1"} if request.args.get("fragment") == "1" else {})))
 
@@ -4954,7 +4954,7 @@ def render_settings_section(section):
     {% if section == "activity" %}
     <section class="panel">
         <div class="panel-head"><div><h2>Recent activity</h2><p class="help">Security, user, recipient, email, and Keep actions.</p>
-            <label class="activity-mobile-filter">Activity type<select>{% for filter_key, filter_data in activity_filters.items() %}<option value="/settings/activity?filter={{ filter_key }}" {% if activity_filter == filter_key %}selected{% endif %}>{{ filter_data[0] }}</option>{% endfor %}</select></label>
+            <label class="activity-mobile-filter">Activity type<select>{% for filter_key, filter_data in activity_filters.items() %}<option value="{{ filter_key }}" {% if activity_filter == filter_key %}selected{% endif %}>{{ filter_data[0] }}</option>{% endfor %}</select></label>
             <div class="activity-filters">
             {% for filter_key, filter_data in activity_filters.items() %}
                 <a href="/settings/activity?filter={{ filter_key }}" class="{% if activity_filter == filter_key %}active{% endif %}">{{ filter_data[0] }}</a>
@@ -5048,7 +5048,7 @@ def save_user_settings(plex_id):
     email_address = profile["email"]
     if profile["auth_type"] == "local":
         email_address = request.form.get("email", "").strip().lower()
-        if len(email_address) > 254 or not EMAIL_ADDRESS.fullmatch(email_address):
+        if not valid_email_address(email_address):
             return "Enter a valid email address", 400
     can_remove_any = int(
         str(plex_id) != owner_id() and request.form.get("can_remove_any") == "1"
@@ -5088,7 +5088,14 @@ def save_user_settings(plex_id):
     return redirect_to_settings_with_notice("user")
 
 
-EMAIL_ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+def valid_email_address(value):
+    """Keep the existing address policy without backtracking over domain dots."""
+    if not value or len(value) > 254 or value.count('@') != 1:
+        return False
+    if any(character.isspace() for character in value):
+        return False
+    local, _, domain = value.partition('@')
+    return bool(local and '.' in domain[1:-1])
 
 
 @app.post("/settings/users/local")
@@ -5103,7 +5110,7 @@ def create_local_user():
     full_name = " ".join(request.form.get("full_name", "").split())
     display_name = " ".join(request.form.get("display_name", "").split())
     add_recipient = request.form.get("add_recipient") == "1"
-    if len(email_address) > 254 or not EMAIL_ADDRESS.fullmatch(email_address):
+    if not valid_email_address(email_address):
         return "Enter a valid email address", 400
     if not full_name or not display_name:
         return "Full name and display name are required", 400
@@ -5203,7 +5210,7 @@ def save_recipient_settings():
         return csrf_error
     action = request.form.get("action")
     address = request.form.get("email", "").strip().lower()
-    if len(address) > 254 or not EMAIL_ADDRESS.fullmatch(address):
+    if not valid_email_address(address):
         return "Enter a valid email address", 400
     with closing(attribution_db()) as db, db:
         db.execute("BEGIN IMMEDIATE")
