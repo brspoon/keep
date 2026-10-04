@@ -169,6 +169,11 @@ button:disabled { cursor:default; }
 .library-ui .card { transition:transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease; }
 .library-ui .card-body { gap:0; }
 .library-ui .card-body :is(.delete-media-button, .season-manage-button) { color:#17120a; }
+.library-ui .season-manage-button + .delete-series-button { margin-top:8px; }
+.library-ui .browse-empty { display:grid; justify-items:center; gap:12px; padding:clamp(32px,6vw,64px) 24px; text-align:center; }
+.library-ui .browse-empty-icon { width:56px; height:56px; color:var(--accent-ink); }
+.library-ui .browse-empty h2 { margin:0; color:var(--text); font-size:clamp(22px,3vw,28px); }
+.library-ui .browse-empty p { max-width:48ch; margin:0; color:var(--muted); }
 .library-ui .media-search { margin-bottom:28px; }
 
 /* Admin: compact disclosure controls and legible, grouped permissions. */

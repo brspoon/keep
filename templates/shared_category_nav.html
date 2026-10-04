@@ -1,7 +1,9 @@
 {% macro category_nav(entries, prefix) -%}
+{% if entries %}
 <nav class="section-nav" aria-label="Collections">
   {% for entry in entries %}
   <a href="#{{ prefix }}-{{ entry.id if prefix == 'collection' else loop.index }}">{{ entry.name|replace(' Leaving Plex Soon', '')|replace('TV Shows', 'Shows') }}</a>
   {% endfor %}
 </nav>
+{% endif %}
 {%- endmacro %}

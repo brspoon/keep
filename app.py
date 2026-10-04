@@ -1731,7 +1731,9 @@ def build_review_collections():
         data = get_collection_media(collection_id)
         delete_after_days = get_collection_delete_after_days(collection_id)
 
-        items = data.get("items", [])
+        items = sorted(data.get("items", []),
+                       key=lambda item: (((item.get("mediaData") or {}).get("title") or "Untitled").casefold(),
+                                         str((item.get("mediaData") or {}).get("year") or "")))
         for item in items:
             item["days_left"] = calculate_days_left(
                 item.get("addDate"),
@@ -1770,7 +1772,9 @@ def build_kept_collections():
 
     now = datetime.now(timezone.utc)
     for collection_id, collection_name in get_collections().items():
-        kept_items = exclusions_by_collection[collection_id]
+        kept_items = sorted(exclusions_by_collection[collection_id],
+                            key=lambda item: (((item.get("mediaData") or {}).get("title") or "Untitled").casefold(),
+                                              str((item.get("mediaData") or {}).get("year") or "")))
 
         for item in kept_items:
             key = (str(collection_id), str(item.get("mediaServerId")))
@@ -1844,6 +1848,7 @@ def home():
         collections = build_kept_collections()
     else:
         collections = build_review_collections()
+    collections = [collection for collection in collections if collection["items"]]
 
     total_items = sum(
         len(get_collection_media(collection_id).get("items", []))
@@ -2678,6 +2683,10 @@ def home():
         <div id="search-empty" class="empty search-empty" hidden>
             No movies or shows match your search.
         </div>
+        {% set empty_title = 'Nothing kept just yet' if is_kept_view else 'The coast is clear' %}
+        {% set empty_description = 'Found a favorite in Leaving? Give it a Keep and it will have a home here.' if is_kept_view else 'No movies or shows are leaving right now. Enjoy what’s on the shelves.' %}
+        {% set empty_hidden = collections|length > 0 %}
+        {% include 'shared_browse_empty.html' %}
 
         <div class="media-view active">
             {% for collection in collections %}
@@ -2788,14 +2797,6 @@ def home():
                     </article>
                     {% endfor %}
                 </div>
-                {% else %}
-                <div class="empty">
-                    {% if is_kept_view %}
-                    No titles are currently kept in this library.
-                    {% else %}
-                    No titles are currently in Leaving for this library.
-                    {% endif %}
-                </div>
                 {% endif %}
             </section>
             {% endfor %}
@@ -2875,6 +2876,11 @@ def home():
         const searchClear = document.getElementById("search-clear");
         const searchStatus = document.getElementById("search-status");
         const searchEmpty = document.getElementById("search-empty");
+        const browseEmpty = document.getElementById("browse-empty");
+        const browseEmptyTitle = browseEmpty.querySelector("[data-browse-empty-title]");
+        const browseEmptyDescription = browseEmpty.querySelector("[data-browse-empty-description]");
+        const sectionNav = document.querySelector(".section-nav");
+        const sectionLinks = [...document.querySelectorAll(".section-nav a")];
         const keepScopeButtons = [...document.querySelectorAll("[data-keep-scope]")];
         let keepScope = "all";
 
@@ -2896,12 +2902,21 @@ def home():
                     card.hidden = !matches;
                     if (matches) sectionMatches += 1;
                 });
-                section.hidden = filtering && sectionMatches === 0;
+                section.hidden = sectionMatches === 0;
+                sectionLinks.forEach((link) => {
+                    if (link.getAttribute("href") === `#${section.id}`) link.hidden = section.hidden;
+                });
                 const count = section.querySelector(".count");
                 if (count) count.textContent = filtering ? sectionMatches : cards.length;
                 totalMatches += sectionMatches;
             });
-            searchEmpty.hidden = !filtering || totalMatches > 0;
+            if (sectionNav) sectionNav.hidden = sectionLinks.every((link) => link.hidden);
+            searchEmpty.hidden = !query || totalMatches > 0;
+            browseEmpty.hidden = Boolean(query) || totalMatches > 0;
+            browseEmptyTitle.textContent = myKeeps ? "Your favorites are waiting" : browseEmpty.dataset.title;
+            browseEmptyDescription.textContent = myKeeps
+                ? "You haven’t kept any titles yet. Find a favorite in Leaving and give it a Keep."
+                : browseEmpty.dataset.description;
             searchEmpty.textContent = myKeeps
                 ? (query ? "No titles in My Keeps match your search." : "You haven’t kept any titles yet.")
                 : "No movies or shows match your search.";
@@ -3024,17 +3039,6 @@ def home():
 
                         count.textContent = remaining;
 
-                        if (remaining === 0) {
-                            const grid = section.querySelector(".grid");
-
-                            if (grid) {
-                                grid.outerHTML = `
-                                    <div class="empty">
-                                        No titles are currently kept in this library.
-                                    </div>
-                                `;
-                            }
-                        }
                         applyMediaSearch();
                     }, "Removed ✓", restoreFocus);
 
@@ -3283,6 +3287,7 @@ def title_forecast(details, source, item_id, collection_id=None, arr_data=None, 
 @app.get('/api/title-details/<source>/<int:item_id>')
 def get_title_details(source, item_id):
     import title_details
+    view = request.args.get('view', '')
     if item_id < 1:
         return 'Not found', 404
     collection_id = None
@@ -3332,14 +3337,46 @@ def get_title_details(source, item_id):
             details = title_details.normalize(data)
     except (ValueError, requests.RequestException):
         return 'Title details are temporarily unavailable. Please try again.', 503
+    if view == 'status':
+        # This follow-up repeats the live access checks above, but never reloads
+        # requester identities or history just to display optional watch data.
+        keep_status, status = title_details_status(details, source, item_id, collection_id,
+                                                  arr_data, membership_row)
+        response = app.make_response(render_template('title_details_status.html', details=details,
+                                                     keep_status=keep_status, title_status=status))
+        response.headers['Cache-Control'] = 'private, no-store'
+        return response
     store = seerr_store()
     snapshot = store.read(connection_value)
     identities = store.identities(connection_value, snapshot, seerr_profiles())
     history = seerr.attribution(snapshot, identities, details['kind'], details['external_id'])
     if details['kind'] == 'tv':
         details['seasons'] = title_details.season_rows(details, snapshot, identities, seerr.attribution)
+    if view == 'core':
+        # Basic details do not wait for cross-library Keep checks, rule queries,
+        # playback history, Arr inventory, or Plex episode lookups.
+        keep_status = 'Keep status unavailable'
+        status = {'state': source if source in ('leaving', 'kept') else None, 'days': None}
+    else:
+        keep_status, status = title_details_status(details, source, item_id, collection_id,
+                                                  arr_data, membership_row)
+    response = app.make_response(render_template('title_details.html', details=details, history=history,
+                                                keep_status=keep_status, title_status=status,
+                                                status_pending=view == 'core',
+                                                status_url=url_for('get_title_details', source=source,
+                                                                   item_id=item_id, collection=collection_id,
+                                                                   view='status')))
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+def title_details_status(details, source, item_id, collection_id=None, arr_data=None, membership_row=None):
+    """Optional live context, separate from the dialog's opening response."""
     keep_status = 'Kept' if source == 'kept' else 'Keep status unavailable'
-    if source != 'kept':
+    if source in media_services.SERVICES:
+        # Leaving/Kept membership was already checked, and those dialogs show
+        # that state instead of keep_status. Avoid the unused deletion-grade
+        # sweep of every selected and legacy collection on those requests.
         try:
             service = 'sonarr' if details['kind'] == 'tv' else 'radarr'
             target = {'title': details['title'], 'year': details['year'],
@@ -3348,10 +3385,7 @@ def get_title_details(source, item_id):
         except (ValueError, requests.RequestException):
             pass  # Unknown is not an unprotected title; deletion checks remain independent.
     status = title_forecast(details, source, item_id, collection_id, arr_data, membership_row)
-    response = app.make_response(render_template('title_details.html', details=details, history=history,
-                                                keep_status=keep_status, title_status=status))
-    response.headers['Cache-Control'] = 'private, no-store'
-    return response
+    return keep_status, status
 
 
 def media_item_library(item, libraries):
@@ -3562,8 +3596,13 @@ def library_management():
             message="Your Keep account does not have permission to manage a media library.",
             button_label="Back to Keep", button_url=url_for("home"),
         ), 403
+    all_sections = build_library_sections()
+    sections = [section for section in all_sections if section["items"]]
+    library_errors = [section["name"] for section in all_sections if section.get("error")]
+    access_unavailable = any(section.get("access_unavailable") for section in all_sections)
     response = app.make_response(render_template(
-        "library.html", sections=build_library_sections(), plex_user=session["plex_user"],
+        "library.html", sections=sections, library_errors=library_errors,
+        access_unavailable=access_unavailable, plex_user=session["plex_user"],
         owner=is_owner(), csrf_token=get_csrf_token(), capabilities=capabilities,
     ))
     response.headers["Cache-Control"] = "no-store"

@@ -369,7 +369,8 @@ class MovieDeletionRouteTests(unittest.TestCase):
         self.assertNotIn('class="keep-button delete-media-button"', page)
         self.assertNotIn('Details for A movie', page)
         self.assertIn('No titles requested only by you are available here.', page)
-        self.assertIn('href="#library-2"', page)
+        self.assertNotIn('class="section-nav"', page)
+        self.assertNotIn('<section id="library-', page)
         cached.return_value = {**history(), 'state': 'stale'}
         self.assertNotIn('class="keep-button delete-media-button"', self.client.get('/library').get_data(as_text=True))
         self.live.assert_not_called()

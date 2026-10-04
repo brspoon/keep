@@ -31,12 +31,16 @@
     <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="m7 7 6 6m0-6-6 6" fill="none" stroke="var(--surface)" stroke-width="1.7" stroke-linecap="round"/></svg></button>
   </div><div id="search-status" class="search-status" aria-live="polite"></div></div>
   <div id="search-empty" class="empty search-empty" hidden>No titles match your search. Try a different title or clear your search.</div>
+  {% if library_errors %}<div class="library-error" role="alert">Could not load {{ library_errors|join(', ') }}. Deletion is unavailable for these libraries until the connection recovers. <a href="/library">Try again</a></div>{% endif %}
+  {% if access_unavailable %}<div class="empty" role="status">Your requests can’t be verified right now, so no titles are shown. Try again shortly, or ask the owner for help. <a href="/library">Try again</a></div>{% endif %}
+  {% set empty_title = 'A little breathing room' %}
+  {% set empty_description = 'No downloaded movies or shows are available here right now.' if capabilities.delete_any else 'No titles requested only by you are available here. If you expected a title, ask the owner to check your account link and request history.' %}
+  {% set empty_hidden = sections|length > 0 or library_errors or access_unavailable %}
+  {% include 'shared_browse_empty.html' %}
 
-  <div class="media-view active">
-  {% for section in sections %}<section id="library-{{ loop.index }}" data-library-key="{{ section.library_key }}" data-empty-message="{{ 'No downloaded media is present in this library.' if capabilities.delete_any else 'No titles requested only by you are available here.' }}">
+  <div class="media-view active" data-library-unavailable="{{ 'true' if library_errors or access_unavailable else 'false' }}">
+  {% for section in sections %}<section id="library-{{ loop.index }}" data-library-key="{{ section.library_key }}">
     <div class="section-header"><h2>{{ section.name }}</h2><span class="count">{{ section['items']|length }}</span></div>
-    {% if section.error %}<div class="library-error" role="alert">Could not load this library. Deletion is unavailable until the connection recovers. <a href="/library">Try again</a></div>
-    {% elif section.access_unavailable %}<div class="empty" role="status">Your requests can’t be verified right now, so no titles are shown. Try again shortly, or ask the owner for help. <a href="/library">Try again</a></div>{% endif %}
     {% if section['items'] %}<div class="grid">
       {% for item in section['items'] %}<article class="card" data-title="{{ item.title }}" data-year="{{ item.year }}">
         <div class="poster-wrap"><button class="title-details-trigger" type="button" data-details-url="/api/title-details/{{ item.service }}/{{ item.id }}" aria-label="Details for {{ item.title }}" aria-haspopup="dialog"></button><span class="poster-placeholder" aria-hidden="true"><span>Artwork unavailable</span></span>
@@ -53,8 +57,8 @@
             aria-haspopup="dialog" aria-controls="delete-media-dialog">{{ 'Delete series' if item.service == 'sonarr' else 'Delete' }}</button>{% endif %}
         </div>
       </article>{% endfor %}
-    </div>{% elif not section.error and not section.access_unavailable %}<div class="empty">{% if capabilities.delete_any %}No downloaded media is present in this library.{% else %}No titles requested only by you are available here. If you expected a title, ask the owner to check your account link and request history.{% endif %}</div>{% endif %}
-  </section>{% else %}<div class="empty">No media libraries are available to you. Ask the owner to check your library access.</div>{% endfor %}
+    </div>{% endif %}
+  </section>{% endfor %}
   </div>
 </main>
 

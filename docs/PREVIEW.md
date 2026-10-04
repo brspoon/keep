@@ -2,6 +2,12 @@
 
 Explore Keep's main features in these screenshots from a live installation. Titles, libraries, and available controls depend on the owner's configuration and your permissions. See [features, accounts, and permissions](FEATURES.md) for how these features work, or return to the [project README](../README.md).
 
+## Sign in — dark mode
+
+Sign in with Plex or use an email address and password for a local Keep account created by the owner. Access depends on your account and the owner's permissions.
+
+![Keep's sign-in page in dark mode, with a Sign in with Plex button, email and password fields for household sign-in, and a password recovery link.](screenshots/login.png)
+
 ## Leaving — dark mode
 
 Browse titles scheduled to leave Plex, search your selected collections, and choose **Keep** for something you still plan to watch. The day badges show the time before possible removal.

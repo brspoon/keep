@@ -45,10 +45,6 @@
       const count = section.querySelector('.count');
       const remaining = section.querySelectorAll('.card').length;
       count.textContent = remaining;
-      if (remaining === 0) {
-        const grid = section.querySelector('.grid');
-        if (grid) grid.outerHTML = '<div class="empty">No titles are currently in Leaving for this library.</div>';
-      }
       applyMediaSearch();
     }, 'Kept ✓', false);
   }

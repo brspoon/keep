@@ -3,6 +3,10 @@
   const clear = document.getElementById('search-clear');
   const status = document.getElementById('search-status');
   const empty = document.getElementById('search-empty');
+  const browseEmpty = document.getElementById('browse-empty');
+  const view = document.querySelector('.media-view');
+  const sectionNav = document.querySelector('.section-nav');
+  const sectionLinks = [...document.querySelectorAll('.section-nav a')];
   const dialog = document.getElementById('delete-media-dialog');
   const confirm = dialog?.querySelector('.confirm-delete');
   const cancel = dialog?.querySelector('.delete-cancel');
@@ -23,11 +27,16 @@
         const visible = !query || `${card.dataset.title} ${card.dataset.year}`.toLocaleLowerCase().includes(query);
         card.hidden = !visible; if (visible) sectionMatches++;
       });
-      section.hidden = Boolean(query) && sectionMatches === 0;
+      section.hidden = sectionMatches === 0;
+      sectionLinks.forEach(link => {
+        if (link.getAttribute('href') === `#${section.id}`) link.hidden = section.hidden;
+      });
       section.querySelector('.count').textContent = query ? sectionMatches : cards.length;
       matches += sectionMatches;
     });
     empty.hidden = !query || matches > 0;
+    if (sectionNav) sectionNav.hidden = sectionLinks.every(link => link.hidden);
+    if (browseEmpty) browseEmpty.hidden = Boolean(query) || matches > 0 || view?.dataset.libraryUnavailable === 'true';
     status.textContent = query ? `${matches} ${matches === 1 ? 'title' : 'titles'} found` : '';
   }
   search?.addEventListener('input', applySearch);
@@ -58,14 +67,11 @@
         body:JSON.stringify({service:opener.dataset.service,itemId:Number(opener.dataset.itemId),libraryKey:opener.dataset.libraryKey})});
       const result = await response.json().catch(() => ({error:'Could not confirm deletion. Reload the library to check its current state.'}));
       if (!response.ok || result.status !== 'deleted') throw new Error(result.error || 'Could not confirm deletion. Reload the library to check its current state.');
-      const card = opener.closest('.card'), section = opener.closest('section'), grid = card.closest('.grid');
+      const card = opener.closest('.card'), section = opener.closest('section');
       const nextFocus = card.nextElementSibling?.querySelector('.delete-media-button') || card.previousElementSibling?.querySelector('.delete-media-button');
       card.remove();
       const remaining = section.querySelectorAll('.card').length;
       section.querySelector('.count').textContent = remaining;
-      if (!remaining) {
-        grid.replaceWith(Object.assign(document.createElement('div'), {className:'empty', textContent:section.dataset.emptyMessage || 'No downloaded media is present in this library.'}));
-      }
       window.showToast?.(`${result.title} deleted`); dialog.close(); applySearch();
       (nextFocus || search)?.focus({preventScroll:true});
     } catch (failure) { error.textContent = failure.message; error.hidden = false; resetConfirmation(); }
