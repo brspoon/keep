@@ -30,10 +30,11 @@ FIXTURE_PASSWORD = "synthetic-recovery-trial-password-2026"
 COLLECTIONS = {"901": "Recovery Trial Movies", "902": "Recovery Trial Series"}
 LOCAL_ID = "local-trial"
 LOCAL_EMAIL = "local-trial@example.com"
-# Public deterministic credentials belong only to the isolated offline fixture.
+# Public deterministic API bearers belong only to the isolated offline fixture.
 # Production key generation uses secrets.token_urlsafe; these values never go
 # into a deployment environment, image or reported database output.
-API_TOKENS = {name: 'keep_' + letter * 43 for name, letter in (
+# Their SHA-256 lookup hashes match the API protocol; account passwords use Argon2.
+RECOVERY_BEARERS = {name: 'keep_' + letter * 43 for name, letter in (
     ('active', 'A'), ('expired', 'B'), ('revoked', 'C'), ('changed', 'D'),
     ('disabled', 'E'), ('replacement', 'F'))}
 SEERR_URL = "https://seerr.example.invalid"
@@ -276,7 +277,7 @@ def seed_api_credentials(db):
         auth_type,status,password_hash,session_version,plex_access)
         VALUES ('local-api-disabled','Recovery disabled','disabled-trial@example.invalid',
         'Recovery Trial Disabled','local','disabled','',0,'active')""")
-    for name, token in API_TOKENS.items():
+    for name, token in RECOVERY_BEARERS.items():
         db.execute('INSERT INTO api_keys VALUES (?,?,?,?,?,?,?,?,?,?,NULL)', (
             'recovery-api-' + name, 'local-api-disabled' if name == 'disabled' else LOCAL_ID,
             'Recovery trial ' + name, token[:13], hashlib.sha256(token.encode()).hexdigest(),
@@ -315,13 +316,13 @@ def verify_api_credential_state(app):
                     'pre-API snapshot unexpectedly gained credentials')
             return 'pre-API snapshot; new credential tables empty'
         rows = db.execute('SELECT * FROM api_keys').fetchall()
-        require(len(rows) == len(API_TOKENS), 'persistent fixture API keys are missing')
-        for token in API_TOKENS.values():
+        require(len(rows) == len(RECOVERY_BEARERS), 'persistent fixture API keys are missing')
+        for token in RECOVERY_BEARERS.values():
             require(all(token not in row for row in rows), 'a usable fixture API key was stored')
             require(any(hashlib.sha256(token.encode()).hexdigest() in row for row in rows),
                     'a fixture API key hash changed')
     client = app.app.test_client()
-    for name, token in API_TOKENS.items():
+    for name, token in RECOVERY_BEARERS.items():
         response = client.get('/api/v1/collections', headers={'Authorization':'Bearer ' + token})
         require(response.status_code == (200 if name in ('active', 'replacement') else 401),
                 'restored API credential lifecycle failed')
@@ -329,7 +330,7 @@ def verify_api_credential_state(app):
             require({row['collection_id'] for row in response.json['data']} == {901,902},
                     'restored API collection settings differ')
         require(response.headers.get('Cache-Control') == 'no-store', 'API response is cacheable')
-    headers = {'Authorization':'Bearer ' + API_TOKENS['active']}
+    headers = {'Authorization':'Bearer ' + RECOVERY_BEARERS['active']}
     response = client.get('/api/v1/keeps', headers=headers)
     require(response.status_code == 200 and len(response.json['data']) == 1 and
             response.json['data'][0]['id'] == '901:991001', 'restored API object ownership differs')

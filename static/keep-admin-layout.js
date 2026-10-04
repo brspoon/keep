@@ -41,7 +41,9 @@
     open.disabled=false;
   }
   const select = document.querySelector('.activity-mobile-filter select');
-  select?.addEventListener('change', () => { location.href = select.value; });
+  select?.addEventListener('change', () => {
+    location.assign('/settings/activity?' + new URLSearchParams({filter: select.value}));
+  });
   for (const card of document.querySelectorAll('.recipient-row')) {
     const editor = card.querySelector('.user-editor');
     if (!editor.hidden) { const toggle = card.querySelector('[data-user-toggle]'); toggle.setAttribute('aria-expanded','true'); toggle.querySelector('[data-edit-label]').textContent='Close'; }

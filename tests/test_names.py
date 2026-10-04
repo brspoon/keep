@@ -560,6 +560,30 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn('owner@example.com', keep.get_email_recipients())
         self.assertEqual(self.client.post('/preferences', data={}).status_code, 403)
 
+    def test_preferences_reject_overlong_stored_email_without_blocking_appearance(self):
+        address = 'a' * 251 + '@b.c'
+        with closing(keep.attribution_db()) as db, db:
+            db.execute("UPDATE user_profiles SET email=? WHERE plex_id='7'", (address,))
+        response = self.form('/preferences', receive_email='1', collection_id='1')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Ask the owner to add one.', response.get_data(as_text=True))
+        self.assertNotIn(address, keep.get_email_recipients())
+        self.assertEqual(self.form('/preferences', theme_mode='dark').status_code, 302)
+        with closing(keep.attribution_db()) as db:
+            self.assertEqual(db.execute("SELECT theme_mode FROM user_profiles WHERE plex_id='7'").fetchone()[0], 'dark')
+
+    def test_preferences_can_disable_email_saved_under_the_legacy_length_policy(self):
+        address = 'a' * 251 + '@b.c'
+        with closing(keep.attribution_db()) as db, db:
+            db.execute("UPDATE user_profiles SET email=? WHERE plex_id='7'", (address,))
+            db.execute('INSERT INTO email_recipients(email, enabled) VALUES (?, 1)', (address,))
+            keep.ensure_recipient_subscriptions(db, address)
+        self.assertEqual(self.form('/preferences', receive_email='1', collection_id='1').status_code, 200)
+        self.assertIn(address, keep.get_email_recipients())
+        self.assertEqual(self.form('/preferences', theme_mode='dark').status_code, 302)
+        self.assertNotIn(address, keep.get_email_recipients())
+        self.assertIn('one@example.com', keep.get_email_recipients())
+
     def test_preferences_fragment_roundtrip_and_csrf(self):
         response = self.client.get('/preferences?fragment=1')
         body = response.get_data(as_text=True)
@@ -726,6 +750,29 @@ class SettingsTests(unittest.TestCase):
         self.assertIn('Page 2 of 2', second)
         self.assertIn('filter=keeps&amp;page=1', second)
 
+    def test_mobile_activity_options_are_filter_keys_and_unknown_filters_use_all(self):
+        class FilterOptions(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.in_select = False
+                self.options = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == 'select':
+                    self.in_select = True
+                if tag == 'option' and self.in_select:
+                    self.options.append(dict(attrs))
+
+            def handle_endtag(self, tag):
+                if tag == 'select':
+                    self.in_select = False
+
+        page = FilterOptions()
+        page.feed(self.client.get('/settings/activity?filter=javascript:alert(1)').get_data(as_text=True))
+        self.assertEqual([option['value'] for option in page.options],
+                         ['all', 'users', 'api', 'email', 'keeps', 'library'])
+        self.assertEqual([option['value'] for option in page.options if 'selected' in option], ['all'])
+
     def test_persistent_rate_limit_survives_requests(self):
         with self.client.application.test_request_context('/auth/local',
                                                           environ_base={'REMOTE_ADDR': '10.0.0.5'}):
@@ -738,6 +785,24 @@ class SettingsTests(unittest.TestCase):
     def test_invalid_recipient_and_unknown_user_rejected(self):
         self.assertEqual(self.form('/settings/recipients', action='add', email='not-an-email').status_code, 400)
         self.assertEqual(self.form('/settings/users/999', full_name='Nobody', display_name='N').status_code, 404)
+
+    def test_email_validation_is_shared_by_local_users_and_recipients(self):
+        address = 'a' * 250 + '@b.c'
+        profile, _ = self.create_local(email=address)
+        self.assertEqual(self.form('/settings/recipients', action='add', email=address).status_code, 302)
+        for invalid in ('a' * 251 + '@b.c', 'a@' + '.' * 250 + ' a',
+                        'a@' + 'b.' * 120 + '@c', 'a@b.\u00a0c'):
+            with self.subTest(address=invalid):
+                self.assertEqual(self.form('/settings/users/local', email=invalid,
+                    full_name='Invalid Person', display_name='Invalid').status_code, 400)
+                self.assertEqual(self.form('/settings/users/' + profile['plex_id'],
+                    email=invalid, full_name='Invalid Person', display_name='Invalid').status_code, 400)
+                self.assertEqual(self.form('/settings/recipients', action='add', email=invalid).status_code, 400)
+        with closing(keep.attribution_db()) as db:
+            self.assertEqual(db.execute('SELECT email FROM user_profiles WHERE plex_id=?',
+                             (profile['plex_id'],)).fetchone()[0], address)
+        self.assertEqual(self.form('/settings/users/' + profile['plex_id'],
+            email='updated+local@example.com', full_name='Local Person', display_name='Local P').status_code, 302)
 
     def test_login_observation_preserves_owner_managed_names(self):
         keep.remember_plex_user({'id': 7, 'username': 'updated-handle', 'email': 'new@example.com'})
