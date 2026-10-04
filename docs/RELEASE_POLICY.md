@@ -8,6 +8,21 @@ and fully validates amd64 and arm64 once. Native security, installation, recover
 and matching-source checks remain required before publication. Only trusted main
 jobs receive the credentials needed to obtain the pinned base and source materials.
 
+The workflow first classifies the complete Git diff. Only explicitly allowlisted
+prose and screenshots for an already published version may skip native image
+validation. Python, JavaScript and Windows installer checks still run, and the
+Actions summary explains which validation path was selected. Build inputs,
+dependencies, installers, tests, source locks, security policies and license
+materials receive full native validation. Unknown paths, missing diff information
+or unavailable release metadata also require full validation. An unpublished
+version needs exact-commit native validation even for documentation changes;
+no image or source evidence is borrowed from another commit.
+
+Independent OS and Python source downloads use up to four workers. Each source
+still passes its original identity, checksum, signature, architecture and coverage
+checks, and reports retain their deterministic order. This does not introduce a
+persistent source cache or reuse an earlier successful verification result.
+
 Both architectures also run the installer against real Docker containers,
 checking startup, HTTP setup cookies and owner-preserving reruns. An independent
 Windows job validates PowerShell 5.1 syntax and native filesystem permissions,
@@ -88,6 +103,30 @@ expired, explicitly request new main validation before publication. Keep candida
 drafts intact while their validation may be used; deleting one prevents promotion.
 Already published versions retain their durable source and evidence assets
 independently of candidate/index expiry.
+
+## Temporary validation storage
+
+The **Clean superseded validation drafts** workflow runs after main validation
+completes, with a daily catch-up run. It protects all candidates for current main
+and the latest usable successful native build, even
+when a later documentation commit skipped image validation. It leaves storage
+alone while validation or publication is active. Superseded or abandoned failed
+candidates are eligible immediately, without an extra grace period. If no
+usable index remains, it conservatively protects the latest successful candidate
+until replacement validation exists.
+
+Cleanup verifies the primary-repository producer, draft namespace, creator,
+original indexes and exact provider IDs before removing a candidate's temporary
+indexes and draft. It rechecks mutable state before deletion and refuses changed
+or ambiguous metadata. It never deletes version releases, their distributed
+source/evidence assets, Git tags or registry objects. Cleanup, main validation
+and publication share a queue with cancellation disabled.
+
+Maintainers can select **Run workflow** for a read-only inventory. The manual
+`execute` input defaults to `false`; enable it only to apply the scoped retention
+plan. The local command `python3 scripts/validation_retention.py` also defaults to
+an inventory and requires authenticated read access to drafts. Deletion is
+restricted to the trusted retention workflow on current main.
 
 ## Deployment and registry cleanup
 

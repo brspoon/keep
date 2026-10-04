@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-- Build and fully validate both native images once per merged main commit, retaining the exact images, matching sources and original evidence for approved publication.
+- Build and fully validate both native images once for each main commit that requires native validation, retaining the exact images, matching sources and original evidence for approved publication.
 - Publish retained images without rebuilding or repeating native tests; reject missing, expired, altered or wrong-commit validation records before promotion.
 - Keep pull-request checks read-only and preserve per-architecture evidence when retrying failed native jobs.
+- Skip native image validation for allowlisted documentation and screenshot changes only when the current version is already published; keep fast checks and exact-commit publication requirements.
+- Download independent OS and Python package sources with up to four workers while preserving every checksum, signature, architecture and source-coverage check.
+- Clean up superseded validation drafts and their temporary indexes after main validation completes, protecting current-main candidates, the latest usable build and active validation/publication runs.
 
 ## 2.21.3 — 2026-10-03
 

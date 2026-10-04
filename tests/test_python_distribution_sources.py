@@ -4,12 +4,16 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import sys
 import tarfile
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 import zipfile
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 spec = importlib.util.spec_from_file_location('python_distribution_sources',
     Path(__file__).resolve().parents[1] / 'scripts/python_distribution_sources.py')
 sources = importlib.util.module_from_spec(spec)
@@ -147,6 +151,126 @@ class PythonDistributionSourceTests(unittest.TestCase):
         with patch.object(sources, 'MAX_UNPACKED', 5):
             with self.assertRaisesRegex(ValueError, 'inspection limits'):
                 self.collect()
+
+    def pinned_fetch(self, names):
+        responses = {}
+        for name in names:
+            body = package(name=name)
+            archive_url = f'https://files.pythonhosted.org/packages/{name}-1.2.tar.gz'
+            responses[archive_url] = body
+            responses[f'https://pypi.org/pypi/{name}/1.2/json'] = json.dumps({
+                'info': {'name': name, 'version': '1.2'}, 'urls': [{
+                    'packagetype': 'sdist', 'filename': f'{name}-1.2.tar.gz',
+                    'url': archive_url, 'digests': {'sha256': hashlib.sha256(body).hexdigest()}}]}).encode()
+        return responses
+
+    def test_parallel_downloads_overlap_stay_bounded_and_preserve_manifest_order(self):
+        names = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+        responses = self.pinned_fetch(names)
+        guard = threading.Lock()
+        second_finished = threading.Event()
+        active = maximum = 0
+        finished = []
+
+        def fetch(url):
+            nonlocal active, maximum
+            with guard:
+                active += 1
+                maximum = max(maximum, active)
+            try:
+                if url == 'https://pypi.org/pypi/alpha/1.2/json':
+                    self.assertTrue(second_finished.wait(3), 'second source must download while first waits')
+                    pending = json.loads((output / 'python-source-acquisition.json').read_text())
+                    self.assertFalse(pending['success'])
+                    self.assertEqual(pending['pending_packages'], [f'{name}==1.2' for name in names])
+                if url == 'https://pypi.org/pypi/bravo/1.2/json':
+                    with guard:
+                        finished.append('bravo')
+                    second_finished.set()
+                return responses[url]
+            finally:
+                with guard:
+                    active -= 1
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / 'requirements.txt'
+            requirements.write_text(''.join(f'{name}==1.2\n' for name in reversed(names)))
+            output = root / 'bundle'
+            manifest = sources.collect_sources(requirements, output, fetch, workers=2)
+            self.assertEqual([row['name'] for row in manifest['packages']], names)
+            self.assertEqual(maximum, 2)
+            self.assertEqual(finished, ['bravo'])
+            report = json.loads((root / 'bundle/python-source-acquisition.json').read_text())
+            self.assertTrue(report['success'])
+            self.assertEqual(report['pending_packages'], [])
+            self.assertEqual([row['name'] for row in report['packages']], names)
+
+    def test_parallel_failures_record_every_pin_and_keep_successful_source_bytes(self):
+        names = ['alpha', 'bravo', 'charlie', 'delta']
+        responses = self.pinned_fetch(names)
+        responses['https://files.pythonhosted.org/packages/alpha-1.2.tar.gz'] = b'changed bytes'
+        responses['https://pypi.org/pypi/charlie/1.2/json'] = b'{"info":{"name":"wrong","version":"1.2"}}'
+        seen = []
+        guard = threading.Lock()
+
+        def fetch(url):
+            with guard:
+                seen.append(url)
+            return responses[url]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / 'requirements.txt'
+            requirements.write_text(''.join(f'{name}==1.2\n' for name in names))
+            output = root / 'bundle'
+            output.mkdir()
+            (output / 'python-sources.json').write_text('{"old_success":true}')
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch: alpha'):
+                sources.collect_sources(requirements, output, fetch, workers=4)
+            report = json.loads((output / 'python-source-acquisition.json').read_text())
+            self.assertFalse(report['success'])
+            self.assertEqual(report['pending_packages'], [])
+            self.assertEqual([row['name'] for row in report['packages']], names)
+            self.assertEqual([row['success'] for row in report['packages']], [False, True, False, True])
+            self.assertIn('checksum mismatch', report['packages'][0]['error'])
+            self.assertIn('release identity', report['packages'][2]['error'])
+            self.assertFalse((output / 'python-sources.json').exists())
+            self.assertEqual((output / 'python/delta-1.2/delta-1.2.tar.gz').read_bytes(),
+                             responses['https://files.pythonhosted.org/packages/delta-1.2.tar.gz'])
+            self.assertIn('https://files.pythonhosted.org/packages/delta-1.2.tar.gz', seen)
+
+    def test_one_worker_matches_parallel_manifest_and_serial_callback_order(self):
+        names = ['alpha', 'bravo', 'charlie']
+        responses = self.pinned_fetch(names)
+        seen = []
+        caller = threading.get_ident()
+
+        def serial_fetch(url):
+            self.assertEqual(threading.get_ident(), caller)
+            seen.append(url)
+            return responses[url]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / 'requirements.txt'
+            requirements.write_text(''.join(f'{name}==1.2\n' for name in reversed(names)))
+            serial = sources.collect_sources(requirements, root / 'serial', serial_fetch, workers=1)
+            parallel = sources.collect_sources(requirements, root / 'parallel', responses.__getitem__, workers=4)
+            self.assertEqual(serial, parallel)
+            self.assertEqual(seen, [url for name in names for url in (
+                f'https://pypi.org/pypi/{name}/1.2/json',
+                f'https://files.pythonhosted.org/packages/{name}-1.2.tar.gz')])
+
+    def test_invalid_worker_setting_prevents_any_download(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requirements = root / 'requirements.txt'
+            requirements.write_text('sample==1.2\n')
+            fetch = lambda url: self.fail('invalid workers must fail before download')
+            for value in (0, 5, True, 'unbounded'):
+                with self.subTest(workers=value), self.assertRaisesRegex(ValueError, 'workers'):
+                    sources.collect_sources(requirements, root / 'bundle', fetch, workers=value)
 
 
 if __name__ == '__main__':

@@ -6,6 +6,11 @@ not replace the licenses of Python, OS libraries, embedded wheel code or assets.
 The native image workflow must finish source packaging before transferring an
 image for publication.
 
+Independent OS origins and pinned Python distributions download concurrently,
+with four workers by default. `KEEP_SOURCE_DOWNLOAD_WORKERS` or each collector's
+`--workers` option accepts 1–4 workers. Reports remain in input order; every
+source must pass its original verification before the bundle can succeed.
+
 ## Matching the container
 
 `docs/os-package-sources.json` records the exact installed OS package versions,
@@ -112,7 +117,10 @@ Every trusted main-push native run collects, verifies and packages both source
 archives against its tested images. It saves the original images, archives and
 reports in an unpublished candidate draft, with a small immutable Actions index
 binding their asset IDs, sizes and SHA-256 hashes to the original run and producing
-attempt. The index is retained for 90 days; bulk files stay in draft release assets.
+attempt. Indexes expire after 90 days. Superseded candidate drafts and their
+temporary indexes are eligible for cleanup once superseded. Current-main
+candidates, the latest usable build and published source assets are protected. See the
+[retention policy](RELEASE_POLICY.md#temporary-validation-storage).
 Pull-request checks remain read-only and receive no publication credentials.
 
 Keep copies needed for an investigation before the repository's log retention

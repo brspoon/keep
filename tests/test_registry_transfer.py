@@ -134,8 +134,17 @@ class RegistryTransferTests(unittest.TestCase):
         for name in ('prepare-candidate', 'image'):
             self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", jobs[name])
             self.assertIn('contents: write', jobs[name])
-        self.assertIn('needs: [installer-windows, contributor-tests]', jobs['prepare-candidate'])
-        self.assertIn('needs: [prepare-candidate]', jobs['image'])
+        self.assertIn('needs: [classify-changes, installer-windows, contributor-tests]', jobs['prepare-candidate'])
+        self.assertIn('needs: [classify-changes, prepare-candidate]', jobs['image'])
+        for name in ('prepare-candidate', 'image'):
+            self.assertIn("needs.classify-changes.outputs.native_required == 'true'", jobs[name])
+        classifier = jobs['classify-changes']
+        self.assertIn('contents: read', classifier)
+        self.assertIn('scripts/ci_changes.py', classifier)
+        for credential in ('${{ secrets.', 'DOCKERHUB_TOKEN', 'GITHUB_TOKEN', 'contents: write'):
+            self.assertNotIn(credential, classifier)
+        self.assertNotIn('paths-ignore:', workflow)
+        self.assertIn('queue: max\n  cancel-in-progress: false', workflow)
         self.assertIn('scripts/validated_build.py prepare', jobs['prepare-candidate'])
         native = Path('.github/workflows/native-image.yml').read_text()
         self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", native)
@@ -225,25 +234,48 @@ class RegistryTransferTests(unittest.TestCase):
     def test_required_merge_check_rejects_failed_cancelled_or_missing_prerequisites(self):
         _, jobs = self.workflow_jobs()
         gate = jobs['required-checks']
-        self.assertIn('needs: [installer-windows, contributor-tests, image]', gate)
+        self.assertIn('needs: [classify-changes, installer-windows, contributor-tests, prepare-candidate, image]', gate)
         self.assertIn("if: ${{ always() && github.event_name != 'workflow_dispatch' }}", gate)
         self.assertNotIn('${{ secrets.', gate)
         self.assertNotIn('uses: actions/checkout', gate)
         script = compile(textwrap.dedent(gate.split("          python3 - <<'PYCHECK'\n", 1)[1].split('          PYCHECK', 1)[0]), '<required-checks>', 'exec')
         statuses = ('success', 'failure', 'cancelled', 'skipped', '')
-        for event, installer, contributor, image in itertools.product(('pull_request', 'push', 'workflow_dispatch', ''), statuses, statuses, statuses):
-            with self.subTest(event=event, installer=installer, contributor=contributor, image=image):
-                with patch.dict(os.environ, {
+        def run_gate(environment):
+            with patch.dict(os.environ, environment), patch('builtins.print'):
+                try:
+                    exec(script, {})
+                except SystemExit:
+                    return False
+                return True
+        for event, installer, contributor, image, native, documentation in itertools.product(
+                ('pull_request', 'push', 'workflow_dispatch', ''), statuses, statuses, statuses,
+                ('true', 'false', ''), ('true', 'false', '')):
+            with self.subTest(event=event, installer=installer, contributor=contributor,
+                              image=image, native=native, documentation=documentation):
+                environment = {
+                    'CLASSIFICATION_RESULT': 'success',
+                    'NATIVE_REQUIRED': native, 'DOCUMENTATION_ONLY': documentation,
+                    'CANDIDATE_RESULT': image,
                     'VALIDATION_EVENT': event,
                     'INSTALLER_RESULT': installer, 'CONTRIBUTOR_RESULT': contributor,
                     'IMAGE_RESULT': image,
-                }):
-                    try:
-                        exec(script, {})
-                    except SystemExit:
-                        passed = False
-                    else:
-                        passed = True
-                expected_image = {'pull_request': 'skipped', 'push': 'success'}.get(event)
-                expected = installer == contributor == 'success' and expected_image is not None and image == expected_image
-                self.assertEqual(passed, expected)
+                }
+                expected_image = ('skipped' if event == 'pull_request' or
+                    (event == 'push' and native == 'false') else 'success' if event == 'push' else None)
+                safe_plan = native in ('true', 'false') and documentation in ('true', 'false') and (
+                    native != 'false' or documentation == 'true')
+                expected = safe_plan and installer == contributor == 'success' and expected_image is not None and image == expected_image
+                self.assertEqual(run_gate(environment), expected)
+        for event, native, documentation, expected in (
+                ('pull_request', 'true', 'false', 'skipped'),
+                ('push', 'true', 'false', 'success'),
+                ('push', 'true', 'true', 'success'),
+                ('push', 'false', 'true', 'skipped')):
+            environment = {'VALIDATION_EVENT': event, 'NATIVE_REQUIRED': native,
+                'DOCUMENTATION_ONLY': documentation, 'CLASSIFICATION_RESULT': 'success',
+                'INSTALLER_RESULT': 'success', 'CONTRIBUTOR_RESULT': 'success',
+                'CANDIDATE_RESULT': expected, 'IMAGE_RESULT': expected}
+            for name in ('CLASSIFICATION_RESULT', 'CANDIDATE_RESULT'):
+                for status in statuses:
+                    with self.subTest(event=event, native=native, name=name, status=status):
+                        self.assertEqual(run_gate({**environment, name: status}), status == environment[name])

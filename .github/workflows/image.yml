@@ -21,8 +21,31 @@ permissions:
   contents: read
 concurrency:
   group: keep-image-${{ github.ref }}
+  # Preserve queued main/publication operations as well as the running one.
+  queue: max
   cancel-in-progress: false
 jobs:
+  classify-changes:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      native_required: ${{ steps.classify.outputs.native_required }}
+      documentation_only: ${{ steps.classify.outputs.documentation_only }}
+      reason: ${{ steps.classify.outputs.reason }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Choose applicable native validation without changing publication identity
+        id: classify
+        env:
+          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/ci_changes.py
   installer-windows:
     if: github.event_name != 'workflow_dispatch'
     runs-on: windows-latest
@@ -79,8 +102,8 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
   prepare-candidate:
-    needs: [installer-windows, contributor-tests]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [classify-changes, installer-windows, contributor-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.classify-changes.outputs.native_required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -95,15 +118,15 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/validated_build.py prepare
   image:
-    needs: [prepare-candidate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [classify-changes, prepare-candidate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.classify-changes.outputs.native_required == 'true'
     permissions:
       contents: write
       actions: read
     uses: ./.github/workflows/native-image.yml
     secrets: inherit
   required-checks:
-    needs: [installer-windows, contributor-tests, image]
+    needs: [classify-changes, installer-windows, contributor-tests, prepare-candidate, image]
     if: ${{ always() && github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -112,19 +135,29 @@ jobs:
     steps:
       - name: Require successful applicable checks
         env:
+          CLASSIFICATION_RESULT: ${{ needs.classify-changes.result }}
           INSTALLER_RESULT: ${{ needs.installer-windows.result }}
           CONTRIBUTOR_RESULT: ${{ needs.contributor-tests.result }}
+          CANDIDATE_RESULT: ${{ needs.prepare-candidate.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
+          NATIVE_REQUIRED: ${{ needs.classify-changes.outputs.native_required }}
+          DOCUMENTATION_ONLY: ${{ needs.classify-changes.outputs.documentation_only }}
           VALIDATION_EVENT: ${{ github.event_name }}
         run: |
           python3 - <<'PYCHECK'
           import os
-          for result in ('INSTALLER_RESULT', 'CONTRIBUTOR_RESULT'):
+          for result in ('CLASSIFICATION_RESULT', 'INSTALLER_RESULT', 'CONTRIBUTOR_RESULT'):
               if os.environ.get(result) != 'success':
                   raise SystemExit(f'{result} must succeed before merging.')
-          expected_image = {'pull_request': 'skipped', 'push': 'success'}.get(os.environ.get('VALIDATION_EVENT'))
-          if expected_image is None or os.environ.get('IMAGE_RESULT') != expected_image:
+          native = os.environ.get('NATIVE_REQUIRED')
+          documentation = os.environ.get('DOCUMENTATION_ONLY')
+          if native not in ('true', 'false') or documentation not in ('true', 'false') or (native == 'false' and documentation != 'true'):
+              raise SystemExit('Applicable native validation was not classified safely.')
+          event = os.environ.get('VALIDATION_EVENT')
+          expected_image = 'skipped' if event == 'pull_request' or (event == 'push' and native == 'false') else 'success' if event == 'push' else None
+          if expected_image is None or any(os.environ.get(result) != expected_image for result in ('CANDIDATE_RESULT', 'IMAGE_RESULT')):
               raise SystemExit('Required native image checks did not complete as expected.')
+          print('Fast checks passed; native checks ' + ('passed.' if expected_image == 'success' else 'were skipped according to the verified validation plan.'))
           PYCHECK
   release-native:
     needs: [release-needed, prepare-release]
