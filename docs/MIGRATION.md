@@ -9,10 +9,10 @@ of the database, `.env`, Compose files, and exact current image before upgrading
 Test the new release on an isolated copy when it changes data or recovery behavior.
 
 Edit `KEEP_IMAGE` in `.env` to select the new version. For example, to select
-Keep 2.21.3:
+Keep 2.21.4:
 
 ```dotenv
-KEEP_IMAGE=brspoon/keep:2.21.3
+KEEP_IMAGE=brspoon/keep:2.21.4
 ```
 
 Then pull and recreate both services together:
