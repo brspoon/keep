@@ -108,37 +108,41 @@ Asset and installed Python notices remain in their original paths.
 The collection and packaging scripts are under `scripts/`. Authenticated
 provider collection uses temporary Docker credentials; final archives contain
 the sources and notices themselves and must be readable without that account.
-Every trusted native CI run still collects, verifies and packages both source
-archives. Routine pull-request and main-push runs print the source manifest and
-security reports in Actions logs without Actions artifact uploads or
-downloads. The reusable native workflow receives read-only repository permissions
-for these runs; only the deliberately confirmed current-main `release-native`
-invocation receives release-asset write permission.
+Every trusted main-push native run collects, verifies and packages both source
+archives against its tested images. It saves the original images, archives and
+reports in an unpublished candidate draft, with a small immutable Actions index
+binding their asset IDs, sizes and SHA-256 hashes to the original run and producing
+attempt. The index is retained for 90 days; bulk files stay in draft release assets.
+Pull-request checks remain read-only and receive no publication credentials.
 
 Keep copies needed for an investigation before the repository's log retention
 expires; logs do not replace corresponding-source delivery for a published image.
 
 ## Durable release assets and retention
 
-Confirmed manual publication saves the complete original source archive
-and checksum directly from each native validation job to the matching
-draft release, alongside its original security evidence and portable recovery
+Confirmed manual publication restores the complete original source archive
+and checksum from the selected successful main validation run, then saves those
+same bytes in the matching version draft, alongside original security evidence and portable recovery
 proof. The evidence also includes `installer-trial-amd64.json` and
 `installer-trial-arm64.json`, recording real Docker startup, HTTP setup cookies,
 reruns and synthetic owner/data preservation on the corresponding architecture.
 The archive is the one collected and verified by that job against its
-tested candidate; no second source collection or Actions artifact transport is
-used. Candidate tests, security review, source/notice verification and native
+tested candidate; no second source collection, image build, scanner or native test
+run is used. Only the small index travels through Actions artifacts. Candidate
+tests, security review, source/notice verification and native
 recovery must still pass before a native image becomes eligible for publication.
 
 Aggregation binds both architectures' original run, attempt, source revision,
 native manifest and image-configuration identities to their source-member and
-report hashes. It verifies the durable server asset sizes and SHA-256 digests
+report hashes. The original validation run and each architecture's producing job
+and attempt are checked separately from the approving publication run. It verifies
+the durable server asset sizes and SHA-256 digests
 and the exact corresponding transfer tags before publishing the tested image
-pair. Stable promotion is last. Release writes require confirmed manual
-publication from current main; ordinary CI jobs retain read-only
-repository permissions. Routine logs are validation proof, not a
-substitute for these durable original release assets.
+pair. Stable promotion is last. Public release writes require confirmed manual
+publication from current main; trusted main validation can write only its
+unpublished candidate storage. Routine logs are validation proof, not a
+substitute for these durable original release assets. Missing or expired candidate
+indexes block promotion without rebuilding. See the [release policy](RELEASE_POLICY.md#publishing-a-validated-main-commit).
 
 Preserve each architecture's source archive and its adjacent checksum locally
 from the matching GitHub release. Include the original

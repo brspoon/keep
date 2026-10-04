@@ -2,24 +2,27 @@
 
 ## Validation and publication
 
-GitHub Actions tests amd64 and arm64 on main pushes and trusted pull requests.
-External-fork pull requests receive a separate read-only Python and JavaScript
-validation job, without repository secrets. Native build, security, and source
-checks require the maintainer's configured registry credentials and are required
-for a release.
+Every pull request receives read-only Python, JavaScript and Windows installer
+checks without repository secrets. After merging, the main-push workflow builds
+and fully validates amd64 and arm64 once. Native security, installation, recovery,
+and matching-source checks remain required before publication. Only trusted main
+jobs receive the credentials needed to obtain the pinned base and source materials.
 
 Both architectures also run the installer against real Docker containers,
 checking startup, HTTP setup cookies and owner-preserving reruns. An independent
 Windows job validates PowerShell 5.1 syntax and native filesystem permissions,
-locking and launcher behavior before release preparation. Full Windows Docker
+locking and launcher behavior in the same main validation run. Full Windows Docker
 Desktop, LAN-device and Plex acceptance remain separate checks; see
 [development testing](DEVELOPMENT_TESTING.md#installation-platforms).
 
 Image publication runs only from a manual `workflow_dispatch` on `main`, with
-`publish_release` set to `true` and confirmation set to `release-stable`.
+`publish_release` set to `true`, confirmation set to `release-stable`, and
+`validation_run_id` identifying the successful main-push run for that exact commit.
 Main pushes never publish an image, even when `VERSION` changes. Both native
 jobs must pass, the tested source commit must still be current main, and the
-publisher may use only their exact tested images. Publication supports private
+publisher may use only their retained tested images. The manual workflow restores
+and verifies the original files; it does not build, rescan or repeat the long native
+tests. Publication supports private
 or public repositories without changing either repository's visibility.
 
 Version and commit tags are immutable. The publisher verifies the native child
@@ -31,21 +34,27 @@ do not.
 
 ## Release files
 
-The native workflow prepares matching source archives, checksums, and original
-security, installation and recovery evidence for each architecture. During a deliberately
-confirmed release, it stages those files in a GitHub draft release. Aggregation
-checks the original image identities, asset sizes and hashes, and exact run and
-attempt transfer tags before promoting the image. It does not recollect source
-materials or replace evidence from the jobs that tested the images.
+Main validation saves each tested image, matching source archive, checksum, and
+original security, installation and recovery evidence in an unpublished candidate
+draft named for the full source commit and validation run. These draft assets are
+available to maintainers; validation never uploads an unapproved image to Docker Hub.
+Only a small immutable index is uploaded as an Actions artifact, retained for
+90 days. It binds the original producer job and attempt to the draft asset IDs,
+sizes and SHA-256 hashes. Large image and source archives stay out of Actions
+artifact storage.
 
-Ordinary pull-request and main-push validation uses read-only repository
-permissions, retains proof in CI logs, and does not upload Actions artifacts.
-Only the confirmed release jobs receive the write permissions needed for draft
-assets. The aggregation job uses that permission to read draft metadata and
-verify assets; it never changes repository visibility.
+Approved publication checks the successful primary-repository main workflow and
+its required jobs, verifies the index and original assets, and restores the exact
+image configuration. It stages the original source archives and evidence in the
+version's separate draft release. Aggregation checks both original build identities,
+asset hashes and current publication transfer tags. The publisher checks loaded
+image configurations and native manifest digests before creating version or commit
+indexes and promoting stable. Original scanner reports must still satisfy the
+checked-in review policy and its expiry; scanners are not rerun.
 
-After verification, finalize the candidate as a normal GitHub release, preserving
-all assets. A draft is temporary staging, not a release for users to install.
+After verification, finalize the version draft as a normal GitHub release,
+preserving all assets. Candidate storage remains unpublished. A draft is temporary
+staging, not a release for users to install.
 For a public release, finalized notes, source archives, notices, checksums and
 image tags must be accessible without authentication. Source delivery requirements
 are described in [source distribution](SOURCE_DISTRIBUTION.md).
@@ -54,6 +63,31 @@ Matching source archives and original verification evidence are retained for
 every distributed version, independently of container tag cleanup or support
 status. CI log expiry is not a source-retention policy. See
 [source distribution](SOURCE_DISTRIBUTION.md).
+
+## Publishing a validated main commit
+
+1. Wait for the main-push **Validate Keep and publish retained images** run to
+   succeed. Copy its numeric run ID from the Actions URL (`/actions/runs/<id>`).
+2. Review that commit and its original validation evidence, then obtain publication
+   approval. A successful validation run alone does not authorize publication.
+3. Select **Run workflow** on `main`, enter that ID as `validation_run_id`, enable
+   `publish_release`, and enter `release-stable` as confirmation.
+4. Review the promotion result and finalize the version draft with its original
+   source and evidence assets. Verify public downloads and image identities before
+   announcing the release.
+
+If a native job fails, investigate the failure and use **Re-run failed jobs** after
+it is understood and safe to retry. A successful architecture can retain its
+original attempt's image; restoration verifies each architecture's producing job,
+attempt and retention steps independently, and requires the entire selected run
+to finish successfully. Do not rerun successful jobs just to publish.
+
+Missing, expired, altered or wrong-commit records stop publication. There is no
+fallback build or substitution from another commit. When the 90-day index has
+expired, explicitly request new main validation before publication. Keep candidate
+drafts intact while their validation may be used; deleting one prevents promotion.
+Already published versions retain their durable source and evidence assets
+independently of candidate/index expiry.
 
 ## Deployment and registry cleanup
 

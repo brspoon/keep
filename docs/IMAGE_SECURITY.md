@@ -12,9 +12,12 @@ an unsuppressed Grype scan, and executes all nine runtime regression probes.
 Scout must report zero findings. Grype permits only the verified-fixed
 findings recorded in docs/image-exceptions.json; every other finding blocks release.
 Source hashes, base identity, successful probes and the October 7, 2026 review
-expiry are enforced by scripts/review_image.py. Full raw JSON reports are retained
-in the workflow logs under each architecture's security-evidence groups
-(subject to repository log retention), independently of Actions artifact quota.
+expiry are enforced by scripts/review_image.py. Full raw JSON reports are printed
+in the workflow logs under each architecture's security-evidence groups and saved
+with the tested image in an unpublished main-validation draft. A small immutable
+Actions index binds the original reports to their producing run and attempt,
+independently of log retention. Large evidence and source archives stay out of
+Actions artifact storage.
 The checksum-verified Scout executable also captures
 the final image's complete SPDX SBOM as `candidate-sbom-<architecture>.json`.
 The existing evidence reporter retains it alongside scans. License inventory
@@ -43,7 +46,11 @@ libraries are included. Full OS and supplemental notices are also copied into
 the image. See [source distribution](SOURCE_DISTRIBUTION.md) for matching
 source downloads, verification, and retention requirements.
 
-Tested main images pass through temporary run-and-attempt-specific registry tags;
+Tested main images remain in unpublished candidate storage until approved manual
+publication restores them. Publication verifies successful original native jobs,
+image configurations, retained evidence hashes and the original reports against
+the current review policy and expiry, without rebuilding or rerunning scanners.
+Approved images then pass through temporary run-and-attempt-specific registry tags;
 the publication job receives immutable digests, validates source/runtime identity,
 and promotes stable only after both architecture jobs succeed. After publication,
 CI attempts to remove only its temporary tags, not their shared image manifests. If the CI

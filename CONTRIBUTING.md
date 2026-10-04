@@ -29,7 +29,9 @@ The tests use temporary databases, synthetic data, and mocked service calls. The
 
 Explain the problem, the resulting behavior, and how you validated it. Call out migrations, configuration changes, permission changes, and any limits that operators need to know.
 
-Every pull request runs the Python, JavaScript, and Windows installer tests. Pull requests from forks use read-only permissions and receive no repository secrets. Trusted same-repository pull requests also run both native image, security, and source-distribution checks. The required `required-checks` result verifies that all checks applicable to the pull request passed; a failed or cancelled prerequisite blocks merging.
+Every pull request runs the Python, JavaScript, and Windows installer tests with read-only permissions and no repository secrets. The required `required-checks` result verifies that all applicable checks passed; a failed or cancelled prerequisite blocks merging.
+
+After merging, main builds and fully validates the amd64 and arm64 images once, including security, installation, recovery, and matching-source checks. It retains those exact images and original evidence for later approved publication. Publication verifies and promotes the retained images without rebuilding or repeating the long native tests. See the [release policy](docs/RELEASE_POLICY.md#publishing-a-validated-main-commit).
 
 The maintainer reviews contributions before merging. You do not need registry or publishing credentials to contribute or run the local tests. Native image checks remain required before a release.
 

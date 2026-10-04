@@ -1,6 +1,7 @@
 import json
 import itertools
 import os
+import re
 from contextlib import chdir
 from pathlib import Path
 import sys
@@ -110,67 +111,62 @@ class RegistryTransferTests(unittest.TestCase):
                 transfer.execute('fetch')
             docker.assert_not_called()
 
-    def test_workflow_keeps_security_gates_and_digest_transfer(self):
+    def workflow_jobs(self):
         workflow = Path('.github/workflows/image.yml').read_text()
+        matches = list(re.finditer(r'^  ([a-z][a-z-]+):\s*$', workflow.split('jobs:\n', 1)[1], re.M))
+        body = workflow.split('jobs:\n', 1)[1]
+        return workflow, {match.group(1): body[match.start():matches[index + 1].start() if index + 1 < len(matches) else len(body)]
+                          for index, match in enumerate(matches)}
+
+    def test_pr_checks_are_read_only_and_only_main_builds_native_images(self):
+        workflow, jobs = self.workflow_jobs()
+        self.assertNotIn('pull_request_target', workflow)
         self.assertNotIn('continue-on-error', workflow)
         self.assertIn('branches: [main]', workflow)
-        self.assertNotIn("branches: [main, 'brspoon/**']", workflow)
-        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable'", workflow)
-        self.assertIn('KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}', workflow)
-        self.assertIn('KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}', workflow)
-        self.assertNotIn('pull_request_target', workflow)
-        contributor = workflow.split('  contributor-tests:', 1)[1].split('  image:', 1)[0]
-        self.assertIn("if: github.event_name != 'workflow_dispatch'", contributor)
-        self.assertIn("if: github.event_name == 'pull_request'\n        run: git diff --check", contributor)
-        self.assertIn('contents: read', contributor)
-        for secret_reference in ('secrets:', '${{ secrets.', 'DOCKERHUB_TOKEN', 'GITHUB_TOKEN'):
-            self.assertNotIn(secret_reference, contributor)
-        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
+        self.assertEqual(workflow.count('uses: ./.github/workflows/native-image.yml'), 1)
+        for name in ('installer-windows', 'contributor-tests'):
+            job = jobs[name]
+            self.assertIn("if: github.event_name != 'workflow_dispatch'", job)
+            self.assertIn('contents: read', job)
+            for credential in ('secrets:', '${{ secrets.', 'DOCKERHUB_TOKEN', 'GITHUB_TOKEN', 'contents: write'):
+                self.assertNotIn(credential, job)
+        self.assertIn("if: github.event_name == 'pull_request'\n        run: git diff --check", jobs['contributor-tests'])
+        for name in ('prepare-candidate', 'image'):
+            self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", jobs[name])
+            self.assertIn('contents: write', jobs[name])
+        self.assertIn('needs: [installer-windows, contributor-tests]', jobs['prepare-candidate'])
+        self.assertIn('needs: [prepare-candidate]', jobs['image'])
+        self.assertIn('scripts/validated_build.py prepare', jobs['prepare-candidate'])
+        native = Path('.github/workflows/native-image.yml').read_text()
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", native)
+        self.assertIn('name: image (${{ matrix.arch }})', native)
+
+    def test_native_checks_all_precede_retention_and_upload_only_small_index(self):
         native = Path('.github/workflows/native-image.yml').read_text()
         self.assertNotIn('continue-on-error', native)
         stages = [native.index(command) for command in (
-            'scripts/review_image.py', 'scripts/collect_package_sources.py',
-            'scripts/build_distribution_bundle.py', 'scripts/release_materials.py report',
-            'registry_transfer.py stage', 'scripts/release_materials.py archive-native')]
+            'scripts/portable_container_trial.py', 'scripts/installer_container_trial.py',
+            'scripts/inspect_candidate.py', 'scripts/image_distribution.py --archive',
+            'scripts/scan_image.sh', '/checks/python_security_checks.py',
+            'scripts/review_image.py', 'scripts/collect_image_sources.py',
+            'scripts/collect_package_sources.py', 'scripts/build_distribution_bundle.py',
+            'scripts/release_materials.py report', 'scripts/validated_build.py retain',
+            'Retain immutable validation index')]
         self.assertEqual(stages, sorted(stages))
         self.assertIn('--runtime-inventory candidate-notices-${{ matrix.arch }}.json', native)
         self.assertIn('sha256sum --check keep-', native)
-        for text in (workflow, native):
-            self.assertNotIn('actions/upload-artifact@', text)
-            self.assertNotIn('actions/download-artifact@', text)
-            self.assertNotIn('actions: read', text)
-        image_job = workflow.split('  image:', 1)[1].split('  release-native:', 1)[0]
-        self.assertIn('contents: read', image_job)
-        self.assertIn('publish_release: false', image_job)
-        self.assertNotIn('contents: write', image_job)
-        release_native = workflow.split('  release-native:', 1)[1].split('  tested-images:', 1)[0]
-        self.assertIn('needs: [release-needed, prepare-release]', release_native)
-        self.assertIn('contents: write', release_native)
-        self.assertIn('publish_release: true', release_native)
-        tested_images = workflow.split('  tested-images:', 1)[1].split('  prepare-release:', 1)[0]
-        self.assertIn('needs: [release-native, release-needed, prepare-release]', tested_images)
-        self.assertIn('contents: write', tested_images)
-        self.assertIn('amd64: ${{ steps.aggregate.outputs.amd64 }}', tested_images)
-        self.assertIn('arm64: ${{ steps.aggregate.outputs.arm64 }}', tested_images)
-        self.assertIn('scripts/release_materials.py aggregate', tested_images)
-        prepare = workflow.split('  prepare-release:', 1)[1].split('  publish-release:', 1)[0]
-        self.assertIn('needs: [release-needed, installer-windows]', prepare)
-        self.assertIn('contents: write', prepare)
-        self.assertIn('scripts/release_materials.py prepare', prepare)
-        self.assertNotIn('  release-materials:', workflow)
-        verify = workflow.index('scripts/release_materials.py verify')
-        publish = workflow.index('scripts/publish_release.py --image')
-        self.assertLess(verify, publish)
-        publisher = workflow.split('  publish-release:', 1)[1].split('  release-needed:', 1)[0]
-        self.assertIn('needs: [release-native, release-needed, tested-images, prepare-release]', publisher)
-        self.assertIn('contents: write', publisher)
-        for job in (release_native, tested_images, prepare, publisher):
-            self.assertIn("needs.release-needed.outputs.publish == 'true'", job)
-        for job in (native, tested_images, prepare, publisher):
-            self.assertIn('persist-credentials: false', job)
-            self.assertIn('GITHUB_TOKEN: ${{ github.token }}', job)
-            self.assertIn('KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}', job)
-            self.assertIn('KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}', job)
+        self.assertIn('actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', native)
+        self.assertIn('name: validated-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}', native)
+        self.assertIn('path: validated-build/${{ matrix.arch }}/index.json', native)
+        self.assertIn('if-no-files-found: error', native)
+        self.assertIn('retention-days: 90', native)
+        self.assertNotIn('registry_transfer.py stage', native)
+        self.assertNotIn('scripts/release_materials.py archive-native', native)
+        launcher = native.split('      - name: Test installation launcher on the native host', 1)[1].split('      - name: Test Python application and release tools', 1)[0]
+        self.assertIn('sh -n install.sh', launcher)
+        self.assertIn('python3 -B -m unittest discover -s tests -p test_install_launcher.py', launcher)
+        runtime_suite = native.split('      - name: Test Python application and release tools', 1)[1].split('      - name: Test JavaScript', 1)[0]
+        self.assertIn("p.name not in ('test_deploy.py', 'test_install_launcher.py')", runtime_suite)
         source_workflow = Path('.github/workflows/source-materials.yml').read_text()
         self.assertNotIn('path: source-materials\n', source_workflow)
         for metadata in ('source-materials/**/*.json', 'source-materials/**/*.yaml',
@@ -178,38 +174,67 @@ class RegistryTransferTests(unittest.TestCase):
             self.assertIn(metadata, source_workflow)
         self.assertIn('retention-days: 7', source_workflow)
         self.assertIn('compression-level: 6', source_workflow)
-        self.assertNotIn('toJSON(needs.image.outputs)', workflow)
-        self.assertGreaterEqual(workflow.count('toJSON(needs.tested-images.outputs)'), 3)
-        self.assertLess(publish, workflow.index('registry_transfer.py cleanup'))
-        windows = workflow.split('  installer-windows:', 1)[1].split('  contributor-tests:', 1)[0]
+
+    def test_manual_publication_restores_and_verifies_without_retesting(self):
+        workflow, jobs = self.workflow_jobs()
+        self.assertIn('validation_run_id:', workflow)
+        self.assertIn('required: true', workflow.split('validation_run_id:', 1)[1].split('confirmation:', 1)[0])
+        guard = "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable'"
+        for name in ('validated-main', 'prepare-release', 'release-native', 'tested-images', 'publish-release'):
+            job = jobs[name]
+            self.assertIn(guard, job)
+            self.assertIn("needs.release-needed.outputs.publish == 'true'", job)
+            self.assertIn('persist-credentials: false', job)
+            for expensive_command in ('docker build', 'scripts/review_image.py', 'scripts/inspect_candidate.py',
+                                      'scripts/scan_image.sh', 'scripts/collect_image_sources.py',
+                                      'scripts/collect_package_sources.py', 'scripts/build_distribution_bundle.py',
+                                      'scripts/portable_container_trial.py', 'scripts/installer_container_trial.py',
+                                      'unittest discover', 'node --test', 'uses: ./.github/workflows/native-image.yml'):
+                self.assertNotIn(expensive_command, job)
+        self.assertIn('needs: [release-needed, validated-main]', jobs['prepare-release'])
+        self.assertIn('scripts/validated_build.py check', jobs['validated-main'])
+        promotion = jobs['release-native']
+        stages = [promotion.index(command) for command in (
+            'scripts/validated_build.py restore', 'scripts/registry_transfer.py stage',
+            'scripts/release_materials.py archive-native')]
+        self.assertEqual(stages, sorted(stages))
+        for name in ('validated-main', 'release-native', 'tested-images', 'publish-release'):
+            self.assertIn('actions: read', jobs[name])
+            self.assertIn('KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}', jobs[name])
+        for arch in ('amd64', 'arm64'):
+            self.assertIn(f'{arch}: ${{{{ steps.aggregate.outputs.{arch} }}}}', jobs['tested-images'])
+            self.assertIn(f'{arch}_config: ${{{{ steps.aggregate.outputs.{arch}_config }}}}', jobs['tested-images'])
+        publisher = jobs['publish-release']
+        stages = [publisher.index(command) for command in (
+            'scripts/release_materials.py verify', 'scripts/registry_transfer.py fetch',
+            'scripts/publish_release.py --image', 'scripts/registry_transfer.py cleanup')]
+        self.assertEqual(stages, sorted(stages))
+        self.assertIn('TESTED_CONFIG_DIGESTS:', publisher)
+        self.assertNotIn('toJSON(needs.tested-images.outputs)', workflow)
+        self.assertIn('group: keep-release-stable', publisher)
+
+    def test_windows_installer_remains_a_separate_native_check(self):
+        _, jobs = self.workflow_jobs()
+        windows = jobs['installer-windows']
         self.assertIn('runs-on: windows-latest', windows)
         self.assertIn('shell: powershell', windows)
         self.assertIn('test_install_platform.py', windows)
         self.assertIn('Parser]::ParseFile', windows)
         self.assertNotIn('unittest discover -s tests\n', windows)
-        self.assertNotIn('${{ secrets.', windows)
-        launcher = native.split('      - name: Test installation launcher on the native host', 1)[1].split('      - name: Test Python application and release tools', 1)[0]
-        self.assertIn('sh -n install.sh', launcher)
-        self.assertIn('python3 -B -m unittest discover -s tests -p test_install_launcher.py', launcher)
-        runtime_suite = native.split('      - name: Test Python application and release tools', 1)[1].split('      - name: Test JavaScript', 1)[0]
-        self.assertIn("p.name not in ('test_deploy.py', 'test_install_launcher.py')", runtime_suite)
-        self.assertLess(native.index('Test installation launcher on the native host'), native.index('Test Python application and release tools'))
-        self.assertLess(native.index('scripts/installer_container_trial.py'), native.index('scripts/collect_image_sources.py'))
 
     def test_required_merge_check_rejects_failed_cancelled_or_missing_prerequisites(self):
-        workflow = Path('.github/workflows/image.yml').read_text()
-        gate = workflow.split('  required-checks:', 1)[1].split('  release-native:', 1)[0]
+        _, jobs = self.workflow_jobs()
+        gate = jobs['required-checks']
         self.assertIn('needs: [installer-windows, contributor-tests, image]', gate)
         self.assertIn("if: ${{ always() && github.event_name != 'workflow_dispatch' }}", gate)
-        self.assertIn("github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository", gate)
         self.assertNotIn('${{ secrets.', gate)
         self.assertNotIn('uses: actions/checkout', gate)
         script = compile(textwrap.dedent(gate.split("          python3 - <<'PYCHECK'\n", 1)[1].split('          PYCHECK', 1)[0]), '<required-checks>', 'exec')
         statuses = ('success', 'failure', 'cancelled', 'skipped', '')
-        for fork, installer, contributor, image in itertools.product(('true', 'false'), statuses, statuses, statuses):
-            with self.subTest(fork=fork, installer=installer, contributor=contributor, image=image):
+        for event, installer, contributor, image in itertools.product(('pull_request', 'push', 'workflow_dispatch', ''), statuses, statuses, statuses):
+            with self.subTest(event=event, installer=installer, contributor=contributor, image=image):
                 with patch.dict(os.environ, {
-                    'FORK_PULL_REQUEST': fork,
+                    'VALIDATION_EVENT': event,
                     'INSTALLER_RESULT': installer, 'CONTRIBUTOR_RESULT': contributor,
                     'IMAGE_RESULT': image,
                 }):
@@ -219,5 +244,6 @@ class RegistryTransferTests(unittest.TestCase):
                         passed = False
                     else:
                         passed = True
-                expected = installer == contributor == 'success' and image == ('skipped' if fork == 'true' else 'success')
+                expected_image = {'pull_request': 'skipped', 'push': 'success'}.get(event)
+                expected = installer == contributor == 'success' and expected_image is not None and image == expected_image
                 self.assertEqual(passed, expected)

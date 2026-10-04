@@ -1,4 +1,4 @@
-name: Test Keep architectures and optional release publication
+name: Validate Keep and publish retained images
 on:
   pull_request:
   push:
@@ -6,9 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish tested main images to version and stable tags
+        description: Publish retained main images to version and stable tags
         type: boolean
         default: false
+      validation_run_id:
+        description: Successful main validation run containing the exact images to publish
+        type: string
+        required: true
       confirmation:
         description: Enter release-stable for release
         type: string
@@ -20,6 +24,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   installer-windows:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 15
     permissions:
@@ -73,14 +78,29 @@ jobs:
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-  image:
-    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+  prepare-candidate:
+    needs: [installer-windows, contributor-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
-      contents: read
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Prepare unpublished storage for this main validation run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/validated_build.py prepare
+  image:
+    needs: [prepare-candidate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      actions: read
     uses: ./.github/workflows/native-image.yml
-    with:
-      publish_release: false
-      confirmation: ''
     secrets: inherit
   required-checks:
     needs: [installer-windows, contributor-tests, image]
@@ -95,15 +115,14 @@ jobs:
           INSTALLER_RESULT: ${{ needs.installer-windows.result }}
           CONTRIBUTOR_RESULT: ${{ needs.contributor-tests.result }}
           IMAGE_RESULT: ${{ needs.image.result }}
-          FORK_PULL_REQUEST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          VALIDATION_EVENT: ${{ github.event_name }}
         run: |
           python3 - <<'PYCHECK'
           import os
           for result in ('INSTALLER_RESULT', 'CONTRIBUTOR_RESULT'):
               if os.environ.get(result) != 'success':
                   raise SystemExit(f'{result} must succeed before merging.')
-          fork = os.environ.get('FORK_PULL_REQUEST')
-          expected_image = {'true': 'skipped', 'false': 'success'}.get(fork)
+          expected_image = {'pull_request': 'skipped', 'push': 'success'}.get(os.environ.get('VALIDATION_EVENT'))
           if expected_image is None or os.environ.get('IMAGE_RESULT') != expected_image:
               raise SystemExit('Required native image checks did not complete as expected.')
           PYCHECK
@@ -112,11 +131,44 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
     permissions:
       contents: write
-    uses: ./.github/workflows/native-image.yml
-    with:
-      publish_release: true
-      confirmation: ${{ inputs.confirmation }}
-    secrets: inherit
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    name: Promote retained image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
+      KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+      KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Restore the exact image and original evidence from successful main validation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/validated_build.py restore ${{ matrix.arch }}
+      - name: Transfer retained image through the registry without rebuilding
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/registry_transfer.py stage ${{ matrix.arch }}
+      - name: Archive original corresponding sources and evidence in the approved version draft
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_materials.py archive-native ${{ matrix.arch }}
   tested-images:
     needs: [release-native, release-needed, prepare-release]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
@@ -124,9 +176,12 @@ jobs:
       # GitHub exposes unpublished draft listings only to push-capable tokens.
       # This confirmed-release job still performs only evidence GETs.
       contents: write
+      actions: read
     outputs:
       amd64: ${{ steps.aggregate.outputs.amd64 }}
       arm64: ${{ steps.aggregate.outputs.arm64 }}
+      amd64_config: ${{ steps.aggregate.outputs.amd64_config }}
+      arm64_config: ${{ steps.aggregate.outputs.arm64_config }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -142,9 +197,10 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
         run: python3 scripts/release_materials.py aggregate
   prepare-release:
-    needs: [release-needed, installer-windows]
+    needs: [release-needed, validated-main]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
     permissions:
       contents: write
@@ -165,6 +221,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
     permissions:
       contents: write
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
@@ -178,6 +235,7 @@ jobs:
         env:
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
         run: |
           python3 -c 'import sys; sys.path.insert(0,"scripts"); from publish_release import require_manual_dispatch; require_manual_dispatch(True)'
       - name: Verify all release evidence before stable promotion
@@ -188,7 +246,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-          TESTED_DIGESTS: ${{ toJSON(needs.tested-images.outputs) }}
+          KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
+          TESTED_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64 }}","arm64":"${{ needs.tested-images.outputs.arm64 }}"}'
         run: python3 scripts/release_materials.py verify
       - name: Retrieve tested images by immutable digest
         env:
@@ -198,7 +257,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-          TESTED_DIGESTS: ${{ toJSON(needs.tested-images.outputs) }}
+          TESTED_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64 }}","arm64":"${{ needs.tested-images.outputs.arm64 }}"}'
         run: python3 scripts/registry_transfer.py fetch
       - name: Publish version tags and promote stable last
         env:
@@ -208,6 +267,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          TESTED_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64 }}","arm64":"${{ needs.tested-images.outputs.arm64 }}"}'
+          TESTED_CONFIG_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64_config }}","arm64":"${{ needs.tested-images.outputs.arm64_config }}"}'
         run: python3 scripts/publish_release.py --image "$DOCKERHUB_IMAGE" --revision "$GITHUB_SHA" --artifacts artifacts --execute --release
       - name: Remove only this run's temporary transfer tags
         env:
@@ -217,9 +278,30 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-          TESTED_DIGESTS: ${{ toJSON(needs.tested-images.outputs) }}
+          TESTED_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64 }}","arm64":"${{ needs.tested-images.outputs.arm64 }}"}'
         run: python3 scripts/registry_transfer.py cleanup
 
+  validated-main:
+    needs: [release-needed]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Reading unpublished candidate drafts requires a push-capable token.
+      # This preflight performs metadata GETs and downloads only tiny indexes.
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Require a successful main validation run for this exact revision
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
+          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
+          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 scripts/validated_build.py check
   release-needed:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable'
     runs-on: ubuntu-latest
