@@ -2,6 +2,7 @@ import json
 import errno
 import io
 import os
+import re
 import socket
 import stat
 import sys
@@ -409,6 +410,28 @@ class InstallStartTests(unittest.TestCase):
             install_keep.NoRedirects().redirect_request(None, None, 302, "redirect", {}, "https://other.example")
         self.assertEqual(install_keep.RELEASE_BASE,
                          f"https://raw.githubusercontent.com/brspoon/keep/{install_keep.RELEASE_VERSION}/")
+
+    def test_fresh_install_accepts_the_actual_checkout_bundle(self):
+        source = Path(__file__).resolve().parents[1]
+        result = self.start(source_directory=source, requested_image="keep-ci:latest", skip_pull=True)
+        self.assertEqual(result["version"], (source / "VERSION").read_text().strip())
+        self.assertEqual(self.downloads, [])
+        self.assertEqual((self.directory / "compose.yml").read_bytes(), (source / "compose.yml").read_bytes())
+        self.assertEqual(self.runner.bootstrap_calls, 1)
+
+    def test_release_entrypoints_and_default_image_match_checkout_version(self):
+        source = Path(__file__).resolve().parents[1]
+        version = (source / "VERSION").read_text().strip()
+        for name in ("install.sh", "install.ps1", "README.md", "docs/INSTALLATION.md"):
+            with self.subTest(path=name):
+                references = re.findall(r"https://raw\.githubusercontent\.com/brspoon/keep/([0-9]+\.[0-9]+\.[0-9]+)/",
+                                        (source / name).read_text())
+                self.assertTrue(references, "Missing versioned installation URL")
+                self.assertEqual(set(references), {version})
+        for name in ("compose.yml", ".env.example"):
+            with self.subTest(path=name):
+                references = re.findall(r"brspoon/keep:([0-9]+\.[0-9]+\.[0-9]+)", (source / name).read_text())
+                self.assertEqual(references, [version])
 
     def test_real_free_port_probe_rejects_an_occupied_port(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:

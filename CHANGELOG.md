@@ -5,6 +5,7 @@
 - Replace backtracking email validation with a bounded linear check shared by local accounts, recipients, and personal preferences, retaining the existing address policy.
 - Build mobile activity-filter navigation from a fixed local path and encoded filter values so DOM values cannot become executable or external URLs.
 - Clarify that recovery-trial credentials are synthetic API bearers, with SHA-256 lookup hashes matching the production API; account passwords continue to use Argon2.
+- Align the installer, launchers, Compose image and installation guides with 2.21.4; check the actual checkout bundle and versioned entrypoints before native image validation.
 
 - Build and fully validate both native images once for each main commit that requires native validation, retaining the exact images, matching sources and original evidence for approved publication.
 - Publish retained images without rebuilding or repeating native tests; reject missing, expired, altered or wrong-commit validation records before promotion.
