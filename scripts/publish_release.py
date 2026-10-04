@@ -13,6 +13,7 @@ from publish_image import hub
 from publish_portable import release_plan
 
 BRANCH = 'refs/heads/main'
+ARCHES = {'amd64', 'arm64'}
 
 
 def development_plan(image, revision):
@@ -101,12 +102,29 @@ def verify_manifest(manifest, expected):
         raise ValueError('Published platforms or digests differ from the tested images')
 
 
+def tested_identity():
+    """Require both native manifests and config IDs from verified release evidence."""
+    values = []
+    for name in ('TESTED_DIGESTS', 'TESTED_CONFIG_DIGESTS'):
+        try:
+            identity = json.loads(os.environ[name])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError('Both verified architecture identities are required: ' + name) from error
+        if (not isinstance(identity, dict) or set(identity) != ARCHES or
+                any(not isinstance(value, str) or
+                    not re.fullmatch(r'sha256:[0-9a-f]{64}', value) for value in identity.values())):
+            raise ValueError('Both verified architecture identities are required: ' + name)
+        values.append(identity)
+    return values
+
+
 def execute(image, revision, artifacts, release=False):
     version = Path('VERSION').read_text().strip()
     plan = release_plan(image, version, revision) if release else development_plan(image, revision)
     require_manual_dispatch(release)
     if revision != os.environ.get('GITHUB_SHA'):
         raise ValueError('Revision differs from this workflow run')
+    expected_digests, expected_configs = tested_identity()
     require_current_source(revision, release)
     version = Path('VERSION').read_text().strip()
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
@@ -134,7 +152,8 @@ def execute(image, revision, artifacts, release=False):
                     labels.get('org.opencontainers.image.revision') != revision or
                     labels.get('org.opencontainers.image.version') != version or
                     labels.get('org.opencontainers.image.source') != 'https://github.com/' + github_repository() or
-                    metadata.get('Config', {}).get('User') != '10001:10001'):
+                    metadata.get('Config', {}).get('User') != '10001:10001' or
+                    metadata.get('Id') != expected_configs[arch]):
                 raise ValueError('Test artifact identity or runtime configuration does not match')
             ids[arch] = metadata['Id']
         require_current_source(revision, release)
@@ -147,6 +166,8 @@ def execute(image, revision, artifacts, release=False):
             digest = descriptor['digest']
             if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
                 raise ValueError('Invalid registry digest')
+            if digest != expected_digests[arch]:
+                raise ValueError('Published native digest differs from the tested image: ' + arch)
             digests[arch] = digest
         refs = [image + '@' + digest for digest in digests.values()]
         for reference in plan['manifests']:

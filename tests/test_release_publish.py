@@ -12,10 +12,21 @@ sys.path.insert(0, str(Path('scripts').resolve()))
 import publish_release as publisher
 
 SHA = 'a' * 40
+DIGESTS = {'amd64': 'sha256:' + '1' * 64, 'arm64': 'sha256:' + '2' * 64}
+CONFIGS = {'amd64': 'sha256:' + '3' * 64, 'arm64': 'sha256:' + '4' * 64}
 ENV = {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_REF': publisher.BRANCH,
        'GITHUB_SHA': SHA, 'GITHUB_REPOSITORY': 'example/keep',
        'KEEP_RELEASE_PUBLISH': 'true', 'KEEP_RELEASE_CONFIRMATION': 'release-stable',
-       'DOCKERHUB_USERNAME': 'example', 'DOCKERHUB_TOKEN': 'test-secret'}
+       'DOCKERHUB_USERNAME': 'example', 'DOCKERHUB_TOKEN': 'test-secret',
+       'TESTED_DIGESTS': json.dumps(DIGESTS), 'TESTED_CONFIG_DIGESTS': json.dumps(CONFIGS)}
+
+
+def inspected_image(arch, config=None):
+    return {'Id': config or CONFIGS[arch], 'Architecture': arch, 'Os': 'linux',
+            'Config': {'User': '10001:10001', 'Labels': {
+                'org.opencontainers.image.revision': SHA,
+                'org.opencontainers.image.version': Path('VERSION').read_text().strip(),
+                'org.opencontainers.image.source': 'https://github.com/example/keep'}}}
 
 
 class ReleasePublishTests(unittest.TestCase):
@@ -83,15 +94,15 @@ class ReleasePublishTests(unittest.TestCase):
 
     def test_exact_artifacts_publish_by_digest_and_promote_alias_last(self):
         calls = []
-        digests = {'amd64': 'sha256:' + '1' * 64, 'arm64': 'sha256:' + '2' * 64}
+        configs = []
+        digests = DIGESTS
         def docker(command, **kwargs):
             calls.append(command)
+            configs.append(kwargs['env']['DOCKER_CONFIG'])
             output = ''
             if command[1:3] == ['image', 'inspect']:
                 arch = command[-1].removeprefix('keep-ci-')
-                output = json.dumps([{'Id': 'sha256:' + arch, 'Architecture': arch, 'Os': 'linux', 'Config': {'User': '10001:10001', 'Labels': {
-                    'org.opencontainers.image.revision': SHA, 'org.opencontainers.image.version': Path('VERSION').read_text().strip(),
-                    'org.opencontainers.image.source': 'https://github.com/example/keep'}}}])
+                output = json.dumps([inspected_image(arch)])
             elif command[1:4] == ['manifest', 'inspect', '--verbose']:
                 arch = 'amd64' if command[-1].endswith('-amd64') else 'arm64'
                 output = json.dumps({'Descriptor': {'digest': digests[arch]}})
@@ -102,6 +113,7 @@ class ReleasePublishTests(unittest.TestCase):
             for hub_private in (False, True):
                 with self.subTest(github_private=github_private, hub_private=hub_private), tempfile.TemporaryDirectory() as directory:
                     calls.clear()
+                    configs.clear()
                     for arch in digests:
                         (Path(directory) / ('keep-' + arch + '.tar')).write_bytes(b'test-only')
                     def github(path):
@@ -115,6 +127,75 @@ class ReleasePublishTests(unittest.TestCase):
                     self.assertEqual(pushes[-1], 'example/keep:stable')
                     creates = [c for c in calls if c[1:3] == ['manifest', 'create']]
                     self.assertTrue(all(ref.startswith('example/keep@sha256:') for c in creates for ref in c[4:]))
+                    self.assertEqual(len(set(configs)), 1)
+                    self.assertFalse(Path(configs[0]).exists())
+
+    def test_missing_or_malformed_verified_identity_blocks_registry_and_docker(self):
+        for name in ('TESTED_DIGESTS', 'TESTED_CONFIG_DIGESTS'):
+            for value in (None, '', 'broken-json', 'null', '[]',
+                          json.dumps({'amd64': DIGESTS['amd64']}),
+                          json.dumps({**DIGESTS, 'extra': DIGESTS['amd64']}),
+                          json.dumps({**DIGESTS, 'arm64': 'sha256:wrong'}),
+                          json.dumps({**DIGESTS, 'arm64': 1})):
+                with self.subTest(name=name, value=value), patch.dict(os.environ, ENV), \
+                     patch.object(publisher, 'hub') as hub, \
+                     patch.object(publisher.subprocess, 'run') as docker:
+                    if value is None:
+                        os.environ.pop(name, None)
+                    else:
+                        os.environ[name] = value
+                    with self.assertRaisesRegex(ValueError, 'verified architecture identities'):
+                        publisher.execute('example/keep', SHA, Path('missing'), release=True)
+                    hub.assert_not_called()
+                    docker.assert_not_called()
+
+    def test_image_config_mismatch_blocks_all_registry_pushes(self):
+        for wrong_arch in ('amd64', 'arm64'):
+            calls = []
+            def docker(command, **kwargs):
+                calls.append(command)
+                output = ''
+                if command[1:3] == ['image', 'inspect']:
+                    arch = command[-1].removeprefix('keep-ci-')
+                    config = 'sha256:' + '0' * 64 if arch == wrong_arch else CONFIGS[arch]
+                    output = json.dumps([inspected_image(arch, config)])
+                return subprocess.CompletedProcess(command, 0, output)
+            with self.subTest(architecture=wrong_arch), tempfile.TemporaryDirectory() as directory:
+                for arch in DIGESTS:
+                    (Path(directory) / ('keep-' + arch + '.tar')).write_bytes(b'offline-only')
+                with patch.dict(os.environ, ENV), patch.object(publisher, 'require_current_source'), \
+                     patch.object(publisher, 'require_new_tags'), \
+                     patch.object(publisher, 'hub', side_effect=[{'access_token': 'token'}, {'is_private': False}]), \
+                     patch.object(publisher.subprocess, 'run', side_effect=docker):
+                    with self.assertRaisesRegex(ValueError, 'artifact identity'):
+                        publisher.execute('example/keep', SHA, Path(directory), release=True)
+                self.assertFalse(any(c[1] in ('login', 'push') or c[1] == 'manifest' for c in calls))
+
+    def test_changed_native_digest_blocks_every_multiarch_manifest(self):
+        for wrong_arch in ('amd64', 'arm64'):
+            calls = []
+            def docker(command, **kwargs):
+                calls.append(command)
+                output = ''
+                if command[1:3] == ['image', 'inspect']:
+                    arch = command[-1].removeprefix('keep-ci-')
+                    output = json.dumps([inspected_image(arch)])
+                elif command[1:4] == ['manifest', 'inspect', '--verbose']:
+                    arch = 'amd64' if command[-1].endswith('-amd64') else 'arm64'
+                    digest = 'sha256:' + '0' * 64 if arch == wrong_arch else DIGESTS[arch]
+                    output = json.dumps({'Descriptor': {'digest': digest}})
+                return subprocess.CompletedProcess(command, 0, output)
+            with self.subTest(architecture=wrong_arch), tempfile.TemporaryDirectory() as directory:
+                for arch in DIGESTS:
+                    (Path(directory) / ('keep-' + arch + '.tar')).write_bytes(b'offline-only')
+                with patch.dict(os.environ, ENV), patch.object(publisher, 'require_current_source'), \
+                     patch.object(publisher, 'require_new_tags'), \
+                     patch.object(publisher, 'hub', side_effect=[{'access_token': 'token'}, {'is_private': False}]), \
+                     patch.object(publisher.subprocess, 'run', side_effect=docker):
+                    with self.assertRaisesRegex(ValueError, 'native digest differs'):
+                        publisher.execute('example/keep', SHA, Path(directory), release=True)
+                self.assertFalse(any(c[1:3] in (['manifest', 'create'], ['manifest', 'push']) for c in calls))
+                self.assertNotIn(['docker', 'push', 'example/keep:stable'], calls)
 
     def test_release_refuses_wrong_ref_or_confirmation_before_registry(self):
         for changes in ({'GITHUB_REF': 'refs/heads/brspoon/test'},

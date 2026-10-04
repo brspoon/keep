@@ -1014,7 +1014,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
                  patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
                  patch.object(materials, 'hub', side_effect=hub) as registry:
                 materials.aggregate()
-            self.assertEqual(output.read_text(), 'amd64=' + self.DIGEST + '\narm64=sha256:' + 'c' * 64 + '\n')
+            self.assertEqual(output.read_text(), 'amd64=' + self.DIGEST + '\namd64_config=sha256:' + 'd' * 64 +
+                             '\narm64=sha256:' + 'c' * 64 + '\narm64_config=sha256:' + 'd' * 64 + '\n')
             registry.assert_any_call('repositories/brspoon/keep/tags/transfer-123456-3-amd64/',
                                      'synthetic-hub-access-token')
             registry.assert_any_call('repositories/brspoon/keep/tags/transfer-123456-3-arm64/',
@@ -1081,3 +1082,123 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     materials.aggregate()
                 self.assertFalse(output.exists())
+
+    def main_validation_fixture(self):
+        import validated_build
+        self.prepare_archive_inputs()
+        with chdir(self.root):
+            records = []
+            for number, name in enumerate(validated_build.input_paths('amd64')):
+                path = Path(name)
+                body = b'original docker save' if name.endswith('.tar') else path.read_bytes()
+                records.append({'path': name, 'id': 200 + number,
+                                'name': 'build-100-2-amd64--' + path.name,
+                                'bytes': len(body), 'sha256': hashlib.sha256(body).hexdigest()})
+        index = {'schema': validated_build.SCHEMA, 'repository': 'brspoon/keep',
+                 'version': self.VERSION, 'revision': self.REVISION, 'architecture': 'amd64',
+                 'config_digest': 'sha256:' + 'd' * 64,
+                 'build': {'run_id': 100, 'run_attempt': 2, 'job_id': 50, 'job_name': validated_build.job_name('amd64'),
+                           'workflow_id': 40},
+                 'candidate': {'id': 70, 'tag_name': 'candidate-' + self.REVISION + '-100'}, 'assets': records}
+        proof = {'schema': validated_build.PROVENANCE_SCHEMA, 'architecture': 'amd64', 'index': index,
+                 'artifact': {'id': 500, 'name': 'validated-build-100-2-amd64', 'size_in_bytes': 400,
+                              'digest': 'sha256:' + 'e' * 64, 'expired': False,
+                              'workflow_run': {'id': 100, 'head_sha': self.REVISION}}}
+        (self.root / 'validation-provenance-amd64.json').write_text(json.dumps(proof))
+        os.environ['KEEP_VALIDATION_RUN_ID'] = '100'
+        return index, proof
+
+    def test_archive_retains_original_main_provenance_and_review_bytes(self):
+        import validated_build
+        index, proof = self.main_validation_fixture()
+        review = self.root / 'candidate-review-amd64.json'
+        original = review.read_bytes()
+        captured = {}
+
+        def upload(_release, path):
+            path = Path(path)
+            if path.name.endswith('.tar.gz') and 'security-evidence' in path.name:
+                with tarfile.open(path) as package:
+                    prefix = path.name.removesuffix('.tar.gz') + '/'
+                    captured['identity'] = json.load(package.extractfile(prefix + 'IDENTITY.json'))
+                    captured['proof'] = json.load(package.extractfile(prefix + 'validation-provenance-amd64.json'))
+                    captured['review'] = package.extractfile(prefix + review.name).read()
+            return {'name': path.name}
+
+        with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
+             patch.object(materials, 'draft', return_value={'id': 44}), \
+             patch.object(materials, 'upload', side_effect=upload), \
+             patch.object(validated_build, 'verify_provenance', return_value=index) as origin, \
+             patch.object(materials.subprocess, 'run', side_effect=lambda *a, **kw: review.write_bytes(b'current review')):
+            materials.archive('amd64', native_digest=self.DIGEST)
+        origin.assert_called_once_with(proof, 'amd64', 'sha256:' + 'd' * 64)
+        self.assertEqual(review.read_bytes(), original)
+        self.assertEqual(captured['review'], original)
+        self.assertEqual(captured['proof'], proof)
+        self.assertEqual(captured['identity']['run_id'], '123456')
+        self.assertEqual(captured['identity']['run_attempt'], 3)
+        self.assertEqual(captured['identity']['main_validation']['run_id'], 100)
+        self.assertEqual(captured['identity']['main_validation']['run_attempt'], 2)
+
+    def test_archive_blocks_missing_provenance_or_mutated_original_evidence(self):
+        import validated_build
+        index, _ = self.main_validation_fixture()
+        (self.root / 'candidate-scout-amd64.json').write_bytes(b'changed report')
+        with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
+             patch.object(validated_build, 'verify_provenance', return_value=index), \
+             patch.object(materials.subprocess, 'run') as review, patch.object(materials, 'upload') as upload:
+            with self.assertRaisesRegex(ValueError, 'bytes changed'):
+                materials.archive('amd64', native_digest=self.DIGEST)
+            (self.root / 'validation-provenance-amd64.json').unlink()
+            with self.assertRaisesRegex(ValueError, 'main validation provenance'):
+                materials.archive('amd64', native_digest=self.DIGEST)
+        review.assert_not_called()
+        upload.assert_not_called()
+
+    def test_failed_current_review_preserves_original_review_and_blocks_archival(self):
+        self.prepare_archive_inputs()
+        review = self.root / 'candidate-review-amd64.json'
+        original = review.read_bytes()
+
+        def blocked(*args, **kwargs):
+            review.write_bytes(b'blocked current review')
+            raise subprocess.CalledProcessError(1, args[0])
+
+        with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
+             patch.object(materials.subprocess, 'run', side_effect=blocked), patch.object(materials, 'upload') as upload:
+            with self.assertRaises(subprocess.CalledProcessError):
+                materials.archive('amd64', native_digest=self.DIGEST)
+        self.assertEqual(review.read_bytes(), original)
+        upload.assert_not_called()
+
+    def test_durable_provenance_rejects_substituted_sources_reports_or_producer(self):
+        import validated_build
+        index, proof = self.main_validation_fixture()
+        original_source = next(row for row in index['assets'] if row['path'].endswith('.tar.gz'))
+        identity = {'version': self.VERSION, 'config_digest': index['config_digest'],
+                    'source': {'name': Path(original_source['path']).name, 'sha256': original_source['sha256'],
+                               'bytes': original_source['bytes']},
+                    'main_validation': materials.validation_summary(proof),
+                    'evidence': [{'path': Path(row['path']).name, 'sha256': row['sha256'], 'bytes': row['bytes']}
+                                 for row in index['assets'] if not row['path'].endswith(('.tar', '.tar.gz', '.sha256'))]}
+        with patch.object(validated_build, 'verify_provenance', return_value=index) as origin:
+            materials.verify_durable_validation(identity, proof, 'amd64')
+            for field in ('source', 'main_validation', 'evidence'):
+                invalid = copy.deepcopy(identity)
+                if field == 'source':
+                    invalid[field]['sha256'] = '0' * 64
+                elif field == 'main_validation':
+                    invalid[field]['run_id'] = 101
+                else:
+                    invalid[field][0]['sha256'] = '0' * 64
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    materials.verify_durable_validation(invalid, proof, 'amd64')
+        self.assertEqual(origin.call_count, 4)
+
+    def test_publication_readback_cannot_accept_legacy_evidence_without_main_provenance(self):
+        rows, bodies = self.verify_fixture()
+        os.environ['KEEP_VALIDATION_RUN_ID'] = '100'
+        with chdir(self.root), patch.object(materials, 'api', return_value=rows), \
+             patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]):
+            with self.assertRaisesRegex(ValueError, 'inventory is incomplete'):
+                materials.verify_identities(self.VERSION, {'id': 44})

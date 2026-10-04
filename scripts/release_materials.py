@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Retain corresponding sources in version draft releases, outside Actions quota.
 
-Routine CI prints the verified bundle inventory only. Write operations require
-confirmed manual publication of current main, never a PR or push.
+Main validation retains its original bundles privately through validated_build.
+Version-release writes here require confirmed manual publication of current main.
 """
 import argparse
 import base64
@@ -359,11 +359,27 @@ def archive(arch, native_digest=None):
                     'native_digest': native, 'config_digest': identity.get('config_digest')}:
         raise ValueError('Native release identity differs')
     checked_digest(identity['config_digest'])
+    validation_path = Path(f'validation-provenance-{arch}.json')
+    validation = None
+    if os.environ.get('KEEP_VALIDATION_RUN_ID') or os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch':
+        if not validation_path.is_file() or validation_path.is_symlink() or validation_path.stat().st_size > 128 * 1024:
+            raise ValueError('Approved publication requires original main validation provenance')
+        import validated_build
+        validation = json.loads(validation_path.read_text())
+        index = validated_build.verify_provenance(validation, arch, identity['config_digest'])
+        validated_build.verify_files(index, arch)
     reports = [Path(name) for name in evidence_names(arch)]
     if any(not p.is_file() or p.is_symlink() for p in reports):
         raise ValueError('Require all twelve original native security reports')
     # Existing review rechecks the unsuppressed report and fixed/blocked ledger.
-    subprocess.run(['python3', 'scripts/review_image.py', arch], check=True)
+    # Reassess current exception expiry without replacing the review report
+    # produced by the original successful main build.
+    original_review = Path(f'candidate-review-{arch}.json')
+    review_bytes = original_review.read_bytes()
+    try:
+        subprocess.run(['python3', 'scripts/review_image.py', arch], check=True)
+    finally:
+        original_review.write_bytes(review_bytes)
     portable = Path(f'portable-recovery-{arch}.json')
     if not portable.is_file() or portable.is_symlink():
         raise ValueError('Native portable recovery evidence is required')
@@ -376,7 +392,11 @@ def archive(arch, native_digest=None):
     with tempfile.TemporaryDirectory(prefix='keep-native-evidence-') as directory:
         stage = Path(directory)
         records = []
-        for path in [*reports, portable, installer, Path('distribution') / f'source-bundle-{arch}.json']:
+        retained = [*reports, portable, installer, Path('distribution') / f'source-bundle-{arch}.json']
+        if validation is not None:
+            retained.append(validation_path)
+            identity['main_validation'] = validation_summary(validation)
+        for path in retained:
             body = path.read_bytes()
             records.append({'path': path.name, 'bytes': len(body), 'sha256': hashlib.sha256(body).hexdigest()})
             (stage / path.name).write_bytes(body)
@@ -416,6 +436,33 @@ def asset_body(asset):
     return body
 
 
+def validation_summary(proof):
+    """Separate the producer's identity from this manual publication run."""
+    build = proof['index']['build']
+    artifact = proof['artifact']
+    return {'run_id': build['run_id'], 'run_attempt': build['run_attempt'],
+            'job_id': build['job_id'], 'workflow_id': build['workflow_id'],
+            'artifact_id': artifact['id'], 'artifact_digest': artifact['digest']}
+
+
+def verify_durable_validation(identity, proof, arch):
+    import validated_build
+    index = validated_build.verify_provenance(proof, arch, identity['config_digest'])
+    if identity.get('main_validation') != validation_summary(proof):
+        raise ValueError('Durable main validation producer identity differs')
+    originals = {PurePosixPath(row['path']).name: row for row in index['assets']}
+    source = originals[f"keep-{identity['version']}-source-materials-{arch}.tar.gz"]
+    if identity['source'] != {'name': PurePosixPath(source['path']).name,
+                             'sha256': source['sha256'], 'bytes': source['bytes']}:
+        raise ValueError('Durable sources differ from the original main validation')
+    for record in identity['evidence']:
+        if record['path'] == f'validation-provenance-{arch}.json':
+            continue
+        original = originals.get(record['path'], {})
+        if record['sha256'] != original.get('sha256') or record['bytes'] != original.get('bytes'):
+            raise ValueError('Durable native evidence differs from the original main validation')
+
+
 def verify_identities(version, release, digests=None):
     rows = api(f"/releases/{release['id']}/assets?per_page=100")
     assets = {row['name']: row for row in rows}
@@ -441,6 +488,9 @@ def verify_identities(version, release, digests=None):
                 checked_digest(identity['config_digest'])
                 required = set(evidence_names(arch)) | {f'portable-recovery-{arch}.json', f'installer-trial-{arch}.json',
                                                       f'source-bundle-{arch}.json'}
+                require_validation = bool(os.environ.get('KEEP_VALIDATION_RUN_ID')) or os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+                if require_validation or identity.get('main_validation') is not None:
+                    required.add(f'validation-provenance-{arch}.json')
                 records = identity['evidence']
                 if len(records) != len(required) or {row['path'] for row in records} != required:
                     raise ValueError('Durable evidence inventory is incomplete')
@@ -453,6 +503,9 @@ def verify_identities(version, release, digests=None):
                     data = package.extractfile(prefix + record['path']).read()
                     if len(data) != record['bytes'] or hashlib.sha256(data).hexdigest() != record['sha256']:
                         raise ValueError('Durable native evidence member differs')
+                if f'validation-provenance-{arch}.json' in required:
+                    proof = json.load(package.extractfile(prefix + f'validation-provenance-{arch}.json'))
+                    verify_durable_validation(identity, proof, arch)
             source_name = f'keep-{version}-source-materials-{arch}.tar.gz'
             source = assets[source_name]
             if (identity['source'] != {'name': source_name, 'sha256': source.get('digest', '').removeprefix('sha256:'),
@@ -484,6 +537,7 @@ def aggregate():
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
         for arch, identity in identities.items():
             output.write(f"{arch}={identity['native_digest']}\n")
+            output.write(f"{arch}_config={identity['config_digest']}\n")
     print('Both original native digests verified against source and security assets.')
 
 

@@ -1,17 +1,10 @@
 name: Native Keep architecture gates
 on:
   workflow_call:
-    inputs:
-      publish_release:
-        type: boolean
-        required: false
-        default: false
-      confirmation:
-        type: string
-        required: false
-        default: ''
 jobs:
   image:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: image (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -126,34 +119,15 @@ jobs:
           sha256sum --check keep-${{ steps.release.outputs.version }}-source-materials-${{ matrix.arch }}.tar.gz.sha256
       - name: Print source bundle manifest and compact summary
         run: python3 scripts/release_materials.py report ${{ matrix.arch }}
-      - name: Check whether image transfer is needed
-        id: transfer-needed
-        if: inputs.publish_release && inputs.confirmation == 'release-stable'
+      - name: Retain exact tested image, sources and original evidence
         env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
-          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-        run: python3 scripts/release_needed.py
-      - name: Transfer exact tested image through the registry
-        id: transfer
-        if: inputs.publish_release && inputs.confirmation == 'release-stable' && steps.transfer-needed.outputs.publish == 'true'
-        env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
-          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
-          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-        run: python3 scripts/registry_transfer.py stage ${{ matrix.arch }}
-      - name: Archive original corresponding sources and native security evidence in the version draft release
-        if: inputs.publish_release && inputs.confirmation == 'release-stable' && steps.transfer-needed.outputs.publish == 'true'
-        env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
-          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-        run: python3 scripts/release_materials.py archive-native ${{ matrix.arch }}
+        run: python3 scripts/validated_build.py retain ${{ matrix.arch }}
+      - name: Retain immutable validation index
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validated-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+          path: validated-build/${{ matrix.arch }}/index.json
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0

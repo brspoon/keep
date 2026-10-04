@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Build and fully validate both native images once per merged main commit, retaining the exact images, matching sources and original evidence for approved publication.
+- Publish retained images without rebuilding or repeating native tests; reject missing, expired, altered or wrong-commit validation records before promotion.
+- Keep pull-request checks read-only and preserve per-architecture evidence when retrying failed native jobs.
+
 ## 2.21.3 — 2026-10-03
 
 - Disable setup completion until the required settings are saved, with a checklist identifying missing Plex, Maintainerr, collection, or enabled email configuration before live verification.
