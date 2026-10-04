@@ -66,7 +66,9 @@ body.auth-ui, body.setup-ui, body.preferences-ui {
 }
 .auth-ui .login-card { width: min(440px, 100%); padding: 36px; }
 .auth-ui h1 { font-size: 36px; }
-.auth-ui .brand-mark { width: 52px; height: 52px; border-radius: 15px; font-size: 28px; }
+.auth-ui .brand-mark { width: 80px; height: 80px; border-radius: 15px; font-size: 28px; }
+.auth-ui button.plex-button { -webkit-appearance: none; appearance: none; border: 0; }
+.auth-ui button.plex-button:not(:disabled) { cursor: pointer; }
 .auth-ui .subtitle { font-size: 15px; margin-bottom: 26px; }
 .auth-ui .local-form { gap: 16px; }
 .auth-ui .local-form label, .setup-ui label { font-size: 13px; color: #c0c4cd; }
@@ -75,6 +77,7 @@ body.auth-ui, body.setup-ui, body.preferences-ui {
 .auth-ui .footnote { font-size: 12px; line-height: 1.6; }
 .setup-ui main { padding: 36px; }
 .auth-ui img.brand-mark, .setup-ui img.mark { display:block; padding:0; background:transparent; border:0; border-radius:12px; box-shadow:none; object-fit:contain; }
+.setup-ui img.mark, .onboarding-ui img.mark { width:64px; height:64px; }
 .preferences-ui main { width: min(600px,100%); padding: 36px; }
 .preferences-ui h1 { font-size: 28px; }
 .preferences-ui .choice { min-height: 52px; font-size: 14px; }
@@ -364,7 +367,7 @@ html.removal-info-open, html.removal-info-open body { overflow: hidden; overscro
 @media(max-width:700px) {
   .library-ui .hero { display: flex; flex-direction: row; align-items: center; gap: 12px; margin-bottom: 8px; padding-bottom: 16px; }
   .library-ui .brand { gap: 10px; min-width: 0; }
-  .library-ui .brand-mark { width: 42px; height: 42px; }
+  .library-ui .hero .brand-mark { width: 42px; height: 42px; }
   .library-ui h1 { font-size: 28px; }
   .library-ui .subtitle { font-size: 12px; }
   .library-ui .header-actions { width: auto; margin-left: auto; flex-shrink: 0; }

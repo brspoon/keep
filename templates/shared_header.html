@@ -1,6 +1,6 @@
 <header class="app-header">
   <a class="app-brand" href="/" aria-label="Keep home">
-    <img src="/static/keep-icon.svg" alt="" width="44" height="44">
+    <img src="/static/keep-icon.svg?v={{ app_version }}" alt="" width="64" height="64">
     <span><span class="app-name">Keep</span><span class="app-tagline">Keep what you love.</span></span>
   </a>
   {% if request.path in ('/', '/kept') %}{% include 'shared_browse_tabs.html' %}{% endif %}

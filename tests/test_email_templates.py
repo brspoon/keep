@@ -37,6 +37,40 @@ class EmailTemplateTests(unittest.TestCase):
             self.assertIn('24 hours', body)
             self.assertIn('Reset' if reset else 'Set up', subject)
 
+    def test_every_email_uses_the_embedded_brand_icon_at_a_fixed_size(self):
+        bodies = [email.account_email('Alex', 'https://keep.example/setup', reset)[1]
+                  for reset in (False, True)]
+        bodies.append(email.digest_email([], 'https://keep.example')[1])
+        for body in bodies:
+            with self.subTest(body=body[:100]):
+                logos = [attrs for tag, attrs in Elements(body).elements
+                         if tag == 'img' and attrs.get('src') == f'cid:{email.LOGO_CID}']
+                self.assertEqual(len(logos), 1)
+                self.assertEqual((logos[0]['width'], logos[0]['height']), ('64', '64'))
+                self.assertEqual(logos[0]['alt'], '')  # Adjacent Keep wordmark names the brand.
+                self.assertNotIn('>K</td>', body)
+
+    def test_compact_brand_header_has_light_fallback_and_matching_dark_theme(self):
+        bodies = [email.account_email('Alex', 'https://keep.example/setup', reset)[1]
+                  for reset in (False, True)]
+        bodies.append(email.digest_email([], 'https://keep.example')[1])
+        for body in bodies:
+            elements = Elements(body).elements
+            header = next(attrs for tag, attrs in elements if 'mail-brand' in attrs.get('class', '').split())
+            self.assertEqual(header['role'], 'presentation')
+            self.assertEqual(header['width'], '100%')
+            self.assertEqual(header['bgcolor'], '#ffffff')
+            wordmark = next(attrs for _, attrs in elements if 'mail-brand-name' in attrs.get('class', '').split())
+            tagline = next(attrs for _, attrs in elements if 'mail-brand-tagline' in attrs.get('class', '').split())
+            for attrs, palette in ((header, 'surface'), (wordmark, 'text'), (tagline, 'accent')):
+                self.assertIn(f'mail-{palette}', attrs['class'].split())
+                self.assertIn(email.STYLES[palette], attrs['style'])
+                self.assertIn(f'.mail-{palette}{{{email.DARK[palette]}}}', body)
+            self.assertIn('background:#ffffff;', header['style'])
+            self.assertIn('color:#20242b;', wordmark['style'])
+            self.assertIn('color:#805000;', tagline['style'])
+            self.assertIn('.mail-hero,.mail-brand-pad{padding:20px!important}', body)
+
     def test_digest_uses_distinct_readable_urgent_badge_and_unknown_timing(self):
         _, body, plain = email.digest_email([
             dict(collection='Movies', title='<One>', year=2026, days=1, urgent=True),

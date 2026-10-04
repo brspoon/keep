@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.21.6 — 2026-10-04
+
+- Adopt the gold media-case Keep logo across the app, setup and admin pages, empty states, browser and mobile icons, emails, and repository branding.
+- Give the logo more presence on app pages, add a shorter banner to the repository overviews, and use a compact email header that follows the message theme.
+- Embed the logo in email messages so it displays without fetching a remote image.
+- Remove the native beveled edge from the Plex sign-in button while retaining visible keyboard focus.
+- Show recipient validation inside Email admin and use a themed page for missing URLs, preserving validation rules and API error responses.
+
 ## 2.21.5 — 2026-10-04
 
 - Open title details immediately with the existing card artwork and title, and load optional watch history and Leaving estimates separately from the main details.

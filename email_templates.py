@@ -3,6 +3,7 @@ from datetime import datetime
 from html import escape
 
 FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+LOGO_CID = 'keep-logo@keep'
 # Inline styles are the fallback for clients that strip style blocks/media queries.
 STYLES = {
     'canvas': 'background:#f7f8fa;color:#20242b;',
@@ -46,16 +47,17 @@ def layout(title, content, preheader=''):
 <title>{escape(title)}</title><style>
 :root{{color-scheme:light dark;supported-color-schemes:light dark}}
 @media(prefers-color-scheme:dark){{{dark_rules}}}
-@media(max-width:480px){{.mail-pad{{padding:22px 12px!important}}.mail-hero{{padding:20px!important}}}}
+@media(max-width:480px){{.mail-pad{{padding:22px 12px!important}}.mail-hero,.mail-brand-pad{{padding:20px!important}}}}
 </style></head><body {style('canvas', f'margin:0;padding:0;font-family:{FONT};')}>
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">{escape(preheader)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" {style('canvas')}>
 <tr><td align="center" class="mail-pad" style="padding:32px 18px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;font-family:{FONT}">
-<tr><td style="padding-bottom:24px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
-<td width="48" height="48" align="center" style="background:#17191e;color:#efb34f;border-radius:12px;font-size:30px;font-weight:900">K</td>
-<td style="padding-left:14px"><div {style('text', 'font-size:32px;line-height:38px;font-weight:750;letter-spacing:-1px;')}>Keep</div>
-<div {style('muted', 'font-size:13px;line-height:20px;')}>Keep what you love.</div></td></tr></table></td></tr>
+<tr><td style="padding-bottom:24px"><table role="presentation" class="mail-brand mail-surface" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="{STYLES['surface']}"><tr><td class="mail-brand-pad" style="padding:24px">
+<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td width="64" height="64" align="center" valign="middle"><img src="cid:{LOGO_CID}" alt="" width="64" height="64" style="display:block;width:64px;height:64px;border:0"></td>
+<td valign="middle" style="padding-left:16px"><div class="mail-brand-name mail-text" style="{STYLES['text']}font-size:36px;line-height:40px;font-weight:750;letter-spacing:-1px">Keep</div>
+<div class="mail-brand-tagline mail-accent" style="{STYLES['accent']}font-size:13px;line-height:20px;font-weight:600">Keep what you love.</div></td></tr></table></td></tr></table></td></tr>
 <tr><td>{content}</td></tr></table></td></tr></table></body></html>'''
 
 

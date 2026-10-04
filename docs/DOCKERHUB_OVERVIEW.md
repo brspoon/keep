@@ -1,3 +1,5 @@
+![Keep — Keep what you love. Give Plex viewers a say in what stays.](https://raw.githubusercontent.com/brspoon/keep/refs/heads/main/docs/branding/repository-banner.png)
+
 # Keep
 
 Keep gives the people who use your Plex server a say in what stays and what goes.
@@ -12,6 +14,8 @@ When it's time to make room, **Manage Library** lets people with the owner's per
 - **Keep your watch plans.** Protect titles for 30 days, manage your Keeps, and see who kept each title.
 - **Make space together.** Give trusted users controlled access to library cleanup through Radarr and Sonarr.
 - **Stay informed.** Optional email summaries and watch history help people decide what to keep.
+
+<br>
 
 ## Sign-in and access
 
@@ -45,7 +49,7 @@ Open the printed `/setup` address and enter the setup code supplied by the insta
 
 Follow the [installation and configuration guide](https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md) for setup, manual Compose installation, supported image tags, and HTTPS configuration. Back up your configuration and data before upgrading.
 
-Use an explicit version tag, such as `brspoon/keep:2.21.5`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
+Use an explicit version tag, such as `brspoon/keep:2.21.6`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
 
 ## Integrations and API
 
@@ -59,6 +63,8 @@ Maintainerr supplies Leaving collections and Keep protection. Radarr and Sonarr 
 - [Report a bug or request a feature](https://github.com/brspoon/keep/issues)
 - [Contributing](https://github.com/brspoon/keep/blob/main/CONTRIBUTING.md)
 - [Security policy](https://github.com/brspoon/keep/security/policy)
+
+<br>
 
 Report suspected vulnerabilities through [GitHub's private reporting form](https://github.com/brspoon/keep/security/advisories/new). If the form is unavailable, open an issue asking the maintainer to enable private reporting without including vulnerability details, and wait for a private channel before sharing the report.
 
