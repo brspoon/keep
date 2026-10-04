@@ -239,6 +239,32 @@ class ValidatedBuildTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     builds.read_index(artifact)
 
+    def test_binary_download_negotiates_endpoint_media_type(self):
+        opener, response = MagicMock(), MagicMock()
+        opener.open.return_value = response
+        with patch.object(builds.urllib.request, 'build_opener', return_value=opener):
+            for artifact, path, media_type in (
+                    (True, '/actions/artifacts/500/zip', 'application/vnd.github+json'),
+                    (False, '/releases/assets/1', 'application/octet-stream')):
+                with self.subTest(artifact=artifact):
+                    self.assertIs(builds.binary_response(path, artifact=artifact), response)
+                    request = opener.open.call_args.args[0]
+                    self.assertEqual(request.get_header('Accept'), media_type)
+                    self.assertEqual(request.get_header('X-github-api-version'), '2022-11-28')
+
+    def test_binary_download_reports_api_errors_without_redirect_or_secret_details(self):
+        opener = MagicMock()
+        with patch.object(builds.urllib.request, 'build_opener', return_value=opener):
+            for status in (403, 410, 415):
+                opener.open.reset_mock()
+                opener.open.side_effect = urllib.error.HTTPError(
+                    'https://api.github.com/example?sig=secret', status, 'secret body',
+                    {'Location': 'https://attacker.example/x?sig=secret'}, None)
+                with self.subTest(status=status), self.assertRaisesRegex(
+                        ValueError, rf'^GitHub binary download request failed \(HTTP {status}\)$'):
+                    builds.binary_response('/actions/artifacts/500/zip', artifact=True)
+                self.assertEqual(opener.open.call_count, 1)
+
     def test_binary_redirect_drops_auth_and_rejects_non_github_signed_hosts(self):
         response = MagicMock()
         opener = MagicMock()

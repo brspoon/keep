@@ -406,20 +406,26 @@ def select_artifact(rows, run, repository_id, arch):
 
 
 def binary_response(path, *, artifact=False):
+    # The Actions ZIP endpoint negotiates its redirect using the GitHub API
+    # media type. Release assets instead require the binary media type.
     request = urllib.request.Request('https://api.github.com/repos/' + REPOSITORY + path,
-        headers={'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'], 'Accept': 'application/octet-stream',
+        headers={'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
+                 'Accept': 'application/vnd.github+json' if artifact else 'application/octet-stream',
+                 'X-GitHub-Api-Version': '2022-11-28',
                  'User-Agent': 'Keep-validated-build'})
     opener = urllib.request.build_opener(materials.NoRedirect())
     try:
         return opener.open(request, timeout=300)
     except urllib.error.HTTPError as error:
+        if error.code != 302:
+            raise ValueError(f'GitHub binary download request failed (HTTP {error.code})') from None
         location = error.headers.get('Location', '')
         parsed = urllib.parse.urlsplit(location)
         allowed = ('release-assets.githubusercontent.com',)
         # Actions artifacts are served by GitHub's signed Azure Blob URLs. No
         # authentication headers may cross either redirect trust boundary.
         actions_host = artifact and bool(re.fullmatch(r'[a-z0-9-]+\.blob\.core\.windows\.net', parsed.hostname or ''))
-        if (error.code != 302 or parsed.scheme != 'https' or parsed.username or parsed.password or
+        if (parsed.scheme != 'https' or parsed.username or parsed.password or
                 parsed.port is not None or parsed.fragment or
                 (parsed.hostname not in allowed and not actions_host)):
             raise ValueError('Rejected GitHub binary download redirect') from None
