@@ -1,0 +1,45 @@
+name: Clean superseded validation drafts
+on:
+  workflow_run:
+    workflows: ['Validate Keep and publish retained images']
+    branches: [main]
+    types: [completed]
+  schedule:
+    - cron: '43 6 * * *'
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: Remove only the superseded candidates listed by the retention plan
+        type: boolean
+        default: false
+permissions:
+  contents: read
+# Serialize with main validation and approved publication, including pending
+# runs. A scheduled cleanup must never replace a queued publication request.
+concurrency:
+  group: keep-image-refs/heads/main
+  queue: max
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.repository == 'brspoon/keep' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Protect current candidates and remove only superseded validation storage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RETENTION_EXECUTE: ${{ github.event_name == 'workflow_run' || github.event_name == 'schedule' || inputs.execute }}
+          RETENTION_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          if [ "$RETENTION_EXECUTE" = true ]; then
+            python3 -B scripts/validation_retention.py --execute
+          else
+            python3 -B scripts/validation_retention.py
+          fi

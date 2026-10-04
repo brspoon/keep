@@ -1,6 +1,7 @@
 """Package names/tags never replace exact APK-byte and source-subject binding."""
 import hashlib
 import gzip
+from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import types
 import unittest
 from unittest.mock import patch
@@ -525,11 +527,118 @@ class PackageSourceTests(unittest.TestCase):
                 'origins': [{'origin': 'first'}, {'origin': 'second'}]}
         responses = [{'origin': 'first', 'success': True}, ValueError('binary mismatch')]
         with patch.object(collection, 'acquire_origin', side_effect=responses):
-            report = collection.collect_packages(lock, 'amd64', self.root / 'partial', object())
+            report = collection.collect_packages(lock, 'amd64', self.root / 'partial', object(), workers=1)
         self.assertFalse(report['success'])
         self.assertTrue(report['origins'][0]['success'])
         self.assertFalse(report['origins'][1]['success'])
         self.assertTrue((self.root / 'partial/package-sources.json').exists())
+
+    def source_lock(self, names):
+        return {'schema_version': 1, 'architectures': ['amd64'],
+                'source_predicate_type': collection.PREDICATE,
+                'origins': [{'origin': name} for name in names]}
+
+    def test_parallel_origins_overlap_stay_bounded_and_report_in_lock_order(self):
+        names = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth']
+        lock = self.source_lock(names)
+        second_finished = threading.Event()
+        guard = threading.Lock()
+        active = maximum = 0
+        completed = []
+        output = self.root / 'parallel'
+        provenance, inventory = {'signed': True}, {'observed': True}
+        client = object()
+
+        def acquire(origin, architecture, destination, registry, **inputs):
+            nonlocal active, maximum
+            name = origin['origin']
+            self.assertEqual(architecture, 'amd64')
+            self.assertEqual(destination, output / name)
+            self.assertIs(registry, client)
+            self.assertIs(inputs['base_provenance'], provenance)
+            self.assertIs(inputs['runtime_inventory'], inventory)
+            with guard:
+                active += 1
+                maximum = max(maximum, active)
+            try:
+                if name == 'first':
+                    self.assertTrue(second_finished.wait(3), 'second origin must run while first waits')
+                    partial = json.loads((output / 'package-sources.json').read_text())
+                    self.assertFalse(partial['success'])
+                    self.assertEqual(partial['pending_origins'], names)
+                with guard:
+                    completed.append(name)
+                if name == 'second':
+                    second_finished.set()
+                return {'origin': name, 'success': True}
+            finally:
+                with guard:
+                    active -= 1
+
+        log = io.StringIO()
+        with patch.object(collection, 'acquire_origin', side_effect=acquire), redirect_stdout(log):
+            report = collection.collect_packages(lock, 'amd64', output, client,
+                base_provenance=provenance, runtime_inventory=inventory, workers=2)
+        self.assertEqual(maximum, 2)
+        self.assertLess(completed.index('second'), completed.index('first'))
+        self.assertTrue(report['success'])
+        self.assertEqual(report['pending_origins'], [])
+        self.assertEqual([row['origin'] for row in report['origins']], names)
+        self.assertEqual([json.loads(line)['origin'] for line in log.getvalue().splitlines()], names)
+        self.assertEqual(json.loads((output / 'package-sources.json').read_text()), report)
+
+    def test_parallel_failures_preserve_every_origin_and_block_success(self):
+        names = ['first', 'second', 'third', 'fourth']
+
+        def acquire(origin, *args, **kwargs):
+            name = origin['origin']
+            if name == 'first':
+                raise ValueError('binary mismatch')
+            if name == 'third':
+                raise RuntimeError('source transport unavailable')
+            return {'origin': name, 'success': True}
+
+        output = self.root / 'failures'
+        with patch.object(collection, 'acquire_origin', side_effect=acquire), redirect_stdout(io.StringIO()):
+            report = collection.collect_packages(self.source_lock(names), 'amd64', output, object(), workers=4)
+        self.assertFalse(report['success'])
+        self.assertEqual(report['pending_origins'], [])
+        self.assertEqual([row['origin'] for row in report['origins']], names)
+        self.assertEqual([row['success'] for row in report['origins']], [False, True, False, True])
+        self.assertIn('binary mismatch', report['origins'][0]['error'])
+        self.assertIn('transport unavailable', report['origins'][2]['error'])
+        self.assertEqual(json.loads((output / 'package-sources.json').read_text()), report)
+
+    def test_one_worker_preserves_serial_behavior_and_parallel_report(self):
+        names = ['third', 'first', 'second']
+        caller = threading.get_ident()
+        seen = []
+
+        def serial_acquire(origin, *args, **kwargs):
+            self.assertEqual(threading.get_ident(), caller)
+            seen.append(origin['origin'])
+            return {'origin': origin['origin'], 'success': True}
+
+        with patch.object(collection, 'acquire_origin', side_effect=serial_acquire), redirect_stdout(io.StringIO()):
+            serial = collection.collect_packages(self.source_lock(names), 'amd64', self.root / 'serial', object(), workers=1)
+        with patch.object(collection, 'acquire_origin', side_effect=lambda origin, *args, **kwargs:
+                {'origin': origin['origin'], 'success': True}), redirect_stdout(io.StringIO()):
+            parallel = collection.collect_packages(self.source_lock(names), 'amd64', self.root / 'parallel', object(), workers=4)
+        self.assertEqual(seen, names)
+        self.assertEqual(serial, parallel)
+
+    def test_duplicate_or_unsafe_origins_fail_before_starting_workers(self):
+        for names in (['same', 'same'], ['../escape'], ['safe', []], []):
+            with self.subTest(origins=names), patch.object(collection, 'acquire_origin') as acquire:
+                with self.assertRaisesRegex(ValueError, 'unique safe'):
+                    collection.collect_packages(self.source_lock(names), 'amd64', self.root / 'invalid', object())
+                acquire.assert_not_called()
+
+    def test_registry_copies_credentials_environment_before_workers_start(self):
+        environment = {'DOCKER_CONFIG': '/private/temporary/config'}
+        registry = collection.Registry('/regctl', '/cosign', '/key', environment)
+        environment['DOCKER_CONFIG'] = '/changed'
+        self.assertEqual(registry.env['DOCKER_CONFIG'], '/private/temporary/config')
 
     def test_all_layer_regular_file_matches_include_overwritten_binary(self):
         first = self.layer

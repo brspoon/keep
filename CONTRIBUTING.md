@@ -31,7 +31,9 @@ Explain the problem, the resulting behavior, and how you validated it. Call out 
 
 Every pull request runs the Python, JavaScript, and Windows installer tests with read-only permissions and no repository secrets. The required `required-checks` result verifies that all applicable checks passed; a failed or cancelled prerequisite blocks merging.
 
-After merging, main builds and fully validates the amd64 and arm64 images once, including security, installation, recovery, and matching-source checks. It retains those exact images and original evidence for later approved publication. Publication verifies and promotes the retained images without rebuilding or repeating the long native tests. See the [release policy](docs/RELEASE_POLICY.md#publishing-a-validated-main-commit).
+After merging, main builds and fully validates the amd64 and arm64 images once, including security, installation, recovery, and matching-source checks. Allowlisted prose and screenshot changes can skip native validation when the current version is already published. Fast checks still run, and the Actions summary explains the decision. Changes to application, build, installation, test, license, security, source-verification or unknown inputs receive full native validation; an unpublished version always needs fresh validation of the exact commit.
+
+Main retains those exact images and original evidence for later approved publication. Publication verifies and promotes the retained images without rebuilding or repeating the long native tests. Cleanup runs after main validation completes to remove superseded validation drafts and their temporary indexes; published version sources and evidence are retained. See the [release policy](docs/RELEASE_POLICY.md#publishing-a-validated-main-commit).
 
 The maintainer reviews contributions before merging. You do not need registry or publishing credentials to contribute or run the local tests. Native image checks remain required before a release.
 

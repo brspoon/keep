@@ -27,6 +27,7 @@ from inspect_candidate import BASE, DIRECT, HASHES, download
 from oci_source_materials import SourceInventory, open_layer, safe_name
 from tzdata_distribution_sources import collect_sources as collect_timezone_sources
 from verify_source_proof import KEY_SHA256, PREDICATE, digest, read_regular, verify_attestation_proof, verify_source_proof
+from source_concurrency import ordered_map, source_workers
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -242,7 +243,10 @@ def retain_recipe(origin, root):
 
 class Registry:
     def __init__(self, regctl, cosign, key, env):
-        self.regctl, self.cosign, self.key, self.env = str(regctl), str(cosign), Path(key), env
+        # Acquisition commands only read the completed temporary login config.
+        # Each command runs in its own process and each origin has its own OCI
+        # output directories; no registry/client state is written by workers.
+        self.regctl, self.cosign, self.key, self.env = str(regctl), str(cosign), Path(key), dict(env)
 
     def manifest(self, reference):
         return subprocess.check_output([self.regctl, 'manifest', 'get', reference,
@@ -657,26 +661,39 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
     return result
 
 
-def collect_packages(lock, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None):
+def collect_packages(lock, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None,
+                     workers=None):
     if (lock.get('schema_version') != 1 or architecture not in lock.get('architectures', [])
             or lock.get('source_predicate_type') != PREDICATE):
         raise ValueError('Unsupported reviewed OS package source map')
+    workers = source_workers(workers)
+    origins = lock['origins']
+    names = [row.get('origin', '') for row in origins]
+    if (not names or any(not isinstance(name, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_.-]*', name)
+                         for name in names)
+            or len(set(names)) != len(names)):
+        raise ValueError('OS package origins require unique safe output directory names')
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     results = []
     report = {'format': 'keep-os-package-source-acquisition-v1', 'architecture': architecture,
               'success': False, 'origins': results,
-              'pending_origins': [row['origin'] for row in lock['origins']]}
+              'pending_origins': names.copy()}
     (destination / 'package-sources.json').write_text(json.dumps(redacted(report), indent=2) + '\n')
-    for origin in lock['origins']:
+
+    def acquire(origin):
         try:
-            result = acquire_origin(origin, architecture, destination / origin['origin'], registry,
-                                    base_provenance=base_provenance, runtime_inventory=runtime_inventory)
-        except ACQUISITION_ERRORS as error:
-            result = {'origin': origin.get('origin'), 'success': False,
-                      'error': type(error).__name__ + ': ' + str(error)}
+            return acquire_origin(origin, architecture, destination / origin['origin'], registry,
+                                  base_provenance=base_provenance, runtime_inventory=runtime_inventory)
+        except Exception as error:
+            return {'origin': origin['origin'], 'success': False,
+                    'error': type(error).__name__ + ': ' + str(error)}
+
+    # Only the caller writes aggregate reports/logs. Workers return independent
+    # origin results, so completion order cannot change retained evidence.
+    for result in ordered_map(acquire, origins, workers):
         results.append(result)
-        report['pending_origins'] = [row['origin'] for row in lock['origins'][len(results):]]
+        report['pending_origins'] = names[len(results):]
         (destination / 'package-sources.json').write_text(json.dumps(redacted(report), indent=2) + '\n')
         print(json.dumps(redacted({'origin': result['origin'], 'success': result['success']})), flush=True)
     report['success'] = bool(results) and all(row['success'] for row in results)
@@ -707,6 +724,8 @@ def main():
     parser.add_argument('--architecture', choices=('amd64', 'arm64'))
     parser.add_argument('--base-provenance', help='Verified base SLSA JSON (defaults beside output directory)')
     parser.add_argument('--runtime-inventory', help='Actual runtime inventory JSON (defaults to base inventory beside output)')
+    parser.add_argument('--workers', type=int, choices=range(1, 5),
+                        help='Concurrent source origins (default KEEP_SOURCE_DOWNLOAD_WORKERS or 4)')
     parser.add_argument('--discover-origin', action='append', default=[],
                         help='Only retain attestation discovery metadata for this reviewed origin; repeatable')
     args = parser.parse_args()
@@ -741,7 +760,7 @@ def main():
             provenance, inventory = verified_base_inputs(provenance_path, inventory_path,
                 Path(args.output).parent / 'base-build-provenance', architecture)
             report = collect_packages(lock, architecture, args.output, client,
-                base_provenance=provenance, runtime_inventory=inventory)
+                base_provenance=provenance, runtime_inventory=inventory, workers=args.workers)
     (Path(args.output).parent / 'os-package-source-review.json').write_text(json.dumps(redacted(report), indent=2) + '\n')
     print(json.dumps(redacted(report), indent=2), flush=True)
     if not args.discover_origin and not report['success']:
