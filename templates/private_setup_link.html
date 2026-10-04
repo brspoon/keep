@@ -7,13 +7,13 @@
   <script src="/static/keep-theme.js?v={{ app_version }}"></script>
   <script defer src="/static/keep-private-setup-link.js?v={{ app_version }}"></script>
   <title>Private setup link · Keep</title>
-  <link rel="icon" href="/static/keep-icon.svg" type="image/svg+xml">
+  {% include 'shared_brand_head.html' %}
   <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
   <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
 </head>
 <body class="setup-ui private-link-ui">
   <main aria-labelledby="setup-link-heading">
-    <img class="mark" src="/static/keep-icon.svg" width="52" height="52" alt="Keep">
+    <img class="mark" src="/static/keep-icon.svg?v={{ app_version }}" width="64" height="64" alt="Keep">
     <h1 id="setup-link-heading">Private setup link</h1>
     <p>Share this link directly with the intended person. It expires in 24 hours and can be used once.</p>
     <label for="private-setup-url">Setup URL</label>

@@ -512,6 +512,59 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(keep.get_recipient_delivery_preferences(),
                          {'one@example.com': {1, 6}})
 
+    def test_last_enabled_recipient_errors_stay_in_the_email_page_without_mutation(self):
+        with closing(keep.attribution_db()) as db, db:
+            db.execute("INSERT INTO email_recipients(email,enabled) VALUES ('two@example.com',0)")
+            keep.ensure_recipient_subscriptions(db, 'two@example.com')
+        def snapshot():
+            with closing(keep.attribution_db()) as db:
+                return {table: [tuple(row) for row in db.execute('SELECT * FROM ' + table + ' ORDER BY 1,2')]
+                        for table in ('email_recipients', 'recipient_subscriptions', 'activity_log')}
+        before = snapshot()
+        with self.client.session_transaction() as state:
+            state['settings_error'] = 'Choose at least one email topic for this recipient.'
+            state['settings_error_email'] = 'one@example.com'
+        for theme in ('light', 'dark', 'system'):
+            with closing(keep.attribution_db()) as db, db:
+                db.execute("UPDATE user_profiles SET theme_mode=? WHERE plex_id='7'", (theme,))
+            for action in ('disable', 'remove'):
+                with self.subTest(theme=theme, action=action), patch.object(keep, 'send_email') as mail:
+                    response = self.form('/settings/recipients', action=action, email='ONE@Example.com')
+                    body = response.get_data(as_text=True)
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(response.mimetype, 'text/html')
+                    self.assertEqual(response.headers['Cache-Control'], 'no-store')
+                    self.assertIn(f'data-theme="{theme}"', body)
+                    self.assertIn('class="admin-ui"', body)
+                    self.assertIn('href="/settings/email" class="active" aria-current="page"', body)
+                    self.assertIn('/static/keep-ui.css', body)
+                    self.assertIn('/static/keep-theme.css', body)
+                    self.assertIn('/static/keep-icon.svg?v=' + keep.APP_VERSION, body)
+                    self.assertIn('class="settings-error" role="alert">At least one email recipient must remain enabled', body)
+                    self.assertIn('aria-expanded="true" aria-controls="recipient-editor-1"', body)
+                    self.assertRegex(body, r'id="recipient-editor-1"\s*>')
+                    self.assertRegex(body, r'id="recipient-editor-2"\s+hidden>')
+                    self.assertNotIn('class="subscriptions invalid"', body)
+                    self.assertIn('currentUrl.pathname = "/settings/email"', body)
+                    self.assertEqual(snapshot(), before)
+                    mail.assert_not_called()
+
+    def test_recipient_validation_errors_preserve_context_and_escape_add_input(self):
+        address = 'not-an-address"><script>alert(1)</script>'
+        response = self.form('/settings/recipients', action='add', email=address)
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('class="settings-error" role="alert">Enter a valid email address', body)
+        self.assertIn('value="not-an-address&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"', body)
+        self.assertNotIn('<script>alert(1)</script>', body)
+        self.assertEqual(keep.get_email_recipients(), ['one@example.com'])
+        for action, expected_status in (('enable', 404), ('disable', 404), ('remove', 404), ('invalid', 400)):
+            with self.subTest(action=action):
+                response = self.form('/settings/recipients', action=action, email='missing@example.com')
+                self.assertEqual(response.status_code, expected_status)
+                self.assertIn('class="admin-ui"', response.get_data(as_text=True))
+                self.assertEqual(keep.get_email_recipients(), ['one@example.com'])
+
     def test_disabled_recipient_topics_reflect_preferences_and_are_greyed_out(self):
         self.form('/settings/recipients/preferences', email='one@example.com',
                   collection_id=['1', '6'])

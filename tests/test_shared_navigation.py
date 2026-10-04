@@ -2,10 +2,24 @@ import re
 import tempfile
 import unittest
 from contextlib import closing
+from html.parser import HTMLParser
 from unittest.mock import Mock, patch
 from onboarding import Onboarding, digest
 import test_keep
 keep = test_keep.keep
+
+
+class BrandAssets(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+        self.images = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'link':
+            self.links.append(dict(attrs))
+        elif tag == 'img':
+            self.images.append(dict(attrs))
 
 
 class SharedNavigationTests(unittest.TestCase):
@@ -43,6 +57,21 @@ class SharedNavigationTests(unittest.TestCase):
                 self.assertEqual(page.count('/static/keep-preferences.js?'), 1, path)
                 with self.subTest(path=path):
                     self.assert_menu_groups(page, library=True, owner=True)
+                    assets = BrandAssets()
+                    assets.feed(page)
+                    for attributes, href in (
+                        ({'rel': 'icon', 'type': 'image/svg+xml'}, f'/static/keep-icon.svg?v={keep.APP_VERSION}'),
+                        ({'rel': 'icon', 'type': 'image/png', 'sizes': '32x32'}, f'/static/favicon-32.png?v={keep.APP_VERSION}'),
+                        ({'rel': 'apple-touch-icon', 'sizes': '180x180'}, f'/static/apple-touch-icon.png?v={keep.APP_VERSION}'),
+                        ({'rel': 'manifest'}, '/static/site.webmanifest'),
+                    ):
+                        links = [link.get('href') for link in assets.links
+                                 if all(link.get(key) == value for key, value in attributes.items())]
+                        self.assertEqual(links, [href])
+                    logos = [image['src'] for image in assets.images
+                             if image.get('src', '').startswith('/static/keep-icon.svg')]
+                    self.assertTrue(logos)
+                    self.assertEqual(set(logos), {f'/static/keep-icon.svg?v={keep.APP_VERSION}'})
 
     def test_nonowner_menu_uses_current_local_and_plex_permissions(self):
         with closing(keep.attribution_db()) as db, db:

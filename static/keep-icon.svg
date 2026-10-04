@@ -1,5 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <rect x=".75" y=".75" width="98.5" height="98.5" rx="22" fill="#17191e" stroke="#41454e" stroke-width="1.5"/>
-  <path d="M26 29a3 3 0 0 1 3-3h9v48h-9a3 3 0 0 1-3-3V29Z" fill="#efb34f"/>
-  <path d="M59 26h16L53 49.5 77 74H60L39 52v-5L59 26Z" fill="#efb34f"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+<rect x=".75" y=".75" width="94.5" height="94.5" rx="23" fill="#17191e" stroke="#41454e" stroke-width="1.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" x="12" y="12" width="72" height="72" viewBox="0 0 64 64" fill="none" role="img" aria-labelledby="sleeve-title sleeve-description">
+  <title id="sleeve-title">Keep sleeve mark</title>
+  <desc id="sleeve-description">An outlined media sleeve with a spine that joins both arms of a K.</desc>
+  <g stroke="#efb34f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="11" y="9" width="42" height="46" rx="8"/>
+    <path d="M23 10v44M12 47h40"/>
+    <path d="M42 21 23 32 42 43"/>
+  </g>
+</svg>
+
 </svg>

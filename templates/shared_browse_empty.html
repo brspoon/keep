@@ -1,9 +1,6 @@
 <div id="browse-empty" class="empty browse-empty" role="status"
      data-title="{{ empty_title }}" data-description="{{ empty_description }}"{% if empty_hidden %} hidden{% endif %}>
-  <svg class="browse-empty-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-    <rect x="10" y="9" width="28" height="31" rx="5" stroke="currentColor" stroke-width="2"/>
-    <path d="M18 9v31M30 17l-6 6 6 6M10 34h28" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
+  <img class="browse-empty-icon" src="/static/keep-icon.svg?v={{ app_version }}" width="80" height="80" alt="" aria-hidden="true">
   <h2 data-browse-empty-title>{{ empty_title }}</h2>
   <p data-browse-empty-description>{{ empty_description }}</p>
 </div>

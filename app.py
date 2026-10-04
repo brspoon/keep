@@ -55,6 +55,28 @@ if not APP_VERSION:
 app = Flask(__name__)
 
 
+def branded_error_page(status_code, retry_url='/', is_action=False):
+    """Render recovery UI without invoking DB-backed template context processors."""
+    response = app.response_class(app.jinja_env.get_template('error.html').render(
+        app_version=APP_VERSION, theme_mode=getattr(g, 'keep_theme_mode', 'system'),
+        status_code=status_code, retry_url=retry_url, is_action=is_action), mimetype='text/html')
+    response.status_code = status_code
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+def missing_page(error):
+    if request.path == '/api/v1' or request.path.startswith('/api/v1/'):
+        return api_v1.error_response(404, 'not_found', 'Not Found.')
+    if (request.path == '/api' or request.path.startswith('/api/') or request.is_json
+            or request.accept_mimetypes.best_match(('text/html', 'application/json')) == 'application/json'):
+        response = jsonify(error='Page not found.')
+        response.status_code = 404
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    return branded_error_page(404)
+
+
 @app.errorhandler(500)
 def unexpected_error(error):
     """A safe fallback that does not depend on DB-backed context processors."""
@@ -64,8 +86,7 @@ def unexpected_error(error):
         response = jsonify(error='Something went wrong. Check the latest state before trying again.')
     else:
         retry_url = request.path if request.method == 'GET' and not request.path.startswith('/auth/') else '/'
-        response = app.response_class(app.jinja_env.get_template('error.html').render(
-            app_version=APP_VERSION, retry_url=retry_url, is_action=request.method != 'GET'), mimetype='text/html')
+        return branded_error_page(500, retry_url=retry_url, is_action=request.method != 'GET')
     response.status_code = 500
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -1050,6 +1071,7 @@ def require_keep_auth():
     if invalid:
         session.clear()
         return redirect(url_for("login"))
+    g.keep_theme_mode = profile["theme_mode"]
     if stored_version is None:
         session["plex_user"]["session_version"] = profile["session_version"]
     if user.get("auth_type") == "local":
@@ -1172,10 +1194,7 @@ def render_auth_page(
         <meta name="theme-color" content="#f5a623">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-title" content="Keep">
-        <link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg?v=20260907-2">
-        <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=20260907-2">
-        <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=20260907-2">
-        <link rel="manifest" href="/static/site.webmanifest">
+        {% include 'shared_brand_head.html' %}
         <title>{{ title }} · Keep</title>
         <style>
           :root {
@@ -1230,8 +1249,8 @@ def render_auth_page(
           }
 
           .brand-mark {
-            width: 62px;
-            height: 62px;
+            width: 80px;
+            height: 80px;
             margin: 0 auto 20px;
             display: grid;
             place-items: center;
@@ -1326,7 +1345,7 @@ def render_auth_page(
       </head>
       <body class="auth-ui">
         <main class="login-card">
-          <img class="brand-mark" src="/static/keep-icon.svg?v=20260907-2" alt="Keep" width="52" height="52">
+          <img class="brand-mark" src="/static/keep-icon.svg?v={{ app_version }}" alt="Keep" width="80" height="80">
           <h1>{{ title }}</h1>
           <p class="subtitle">
             {{ message }}
@@ -1421,6 +1440,12 @@ def send_email(to_addresses, subject, html_body, text_body):
 
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")
+    if f'cid:{email_templates.LOGO_CID}' in html_body:
+        # Embed the canonical raster mark so email clients need no remote request.
+        logo = Path(__file__).with_name('static').joinpath('keep-icon-192.png').read_bytes()
+        msg.get_body(preferencelist=('html',)).add_related(
+            logo, maintype='image', subtype='png', cid=f'<{email_templates.LOGO_CID}>',
+            disposition='inline', filename='keep-icon.png')
 
     import ssl
     transport = smtplib.SMTP_SSL if connection_value('SMTP_SECURITY') == 'ssl' else smtplib.SMTP
@@ -1472,10 +1497,7 @@ def render_local_setup_page(profile=None, token="", error=None, complete=False):
     <script src="/static/keep-theme.js?v={{ app_version }}"></script>
     <meta name="referrer" content="no-referrer"><meta name="theme-color" content="#f5a623">
     <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Keep">
-    <link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg?v=20260907-2">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=20260907-2">
-    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=20260907-2">
-    <link rel="manifest" href="/static/site.webmanifest"><title>Set password · Keep</title>
+    {% include 'shared_brand_head.html' %}<title>Set password · Keep</title>
     <style>
       :root{--bg:#090a0d;--surface:rgba(27,29,35,.84);--border:rgba(255,255,255,.09);
         --text:#f5f6f7;--muted:#969ba6;--accent:#f5a623}
@@ -1484,7 +1506,7 @@ def render_local_setup_page(profile=None, token="", error=None, complete=False):
         background:radial-gradient(circle at 15% -10%,rgba(245,166,35,.14),transparent 32rem),var(--bg)}
       main{width:min(440px,100%);padding:36px 34px;border:1px solid var(--border);border-radius:24px;
         background:var(--surface);box-shadow:0 24px 70px rgba(0,0,0,.34)}
-      .mark{width:58px;height:58px;display:grid;place-items:center;border-radius:17px;background:var(--accent);
+      .mark{width:64px;height:64px;display:grid;place-items:center;border-radius:17px;background:var(--accent);
         color:#111;font-size:30px;font-weight:900} h1{margin:22px 0 8px;font-size:30px;letter-spacing:-.04em}
       p{margin:0 0 22px;color:var(--muted);font-size:14px;line-height:1.55}
       form{display:grid;gap:13px} label{color:var(--muted);font-size:12px;font-weight:750}
@@ -1498,7 +1520,7 @@ def render_local_setup_page(profile=None, token="", error=None, complete=False):
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <script defer src="/static/keep-toast.js?v=2.4.6"></script>
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
-<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script></head><body class="setup-ui"><main><img class="mark" src="/static/keep-icon.svg?v=20260907-2" alt="Keep" width="52" height="52">
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script></head><body class="setup-ui"><main><img class="mark" src="/static/keep-icon.svg?v={{ app_version }}" alt="Keep" width="64" height="64">
       {% if complete %}<h1>Password saved</h1><p>Your Keep account is ready.</p>
         <a class="button" href="/">Open Keep</a>
       {% elif profile %}<h1>Choose your password</h1>
@@ -1873,10 +1895,7 @@ def home():
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Keep">
     <title>Keep</title>
-    <link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg?v=20260907-2">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=20260907-2">
-    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=20260907-2">
-    <link rel="manifest" href="/static/site.webmanifest">
+    {% include 'shared_brand_head.html' %}
 
     <style>
         * {
@@ -3990,10 +4009,7 @@ def email_preferences_page():
 <script src="/static/keep-theme.js?v={{ app_version }}"></script>
 <meta name="theme-color" content="#f5a623"><meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Keep">
-<link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg?v=20260907-2">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=20260907-2">
-<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=20260907-2">
-<link rel="manifest" href="/static/site.webmanifest">
+{% include 'shared_brand_head.html' %}
 <title>Preferences · Keep</title><style>
   :root{--bg:#090a0d;--surface:rgba(27,29,35,.84);--border:rgba(255,255,255,.09);
     --text:#f5f6f7;--muted:#969ba6;--accent:#f5a623;--surface2:#121318}
@@ -4536,7 +4552,7 @@ def settings_jobs():
     return response
 
 
-def render_settings_section(section):
+def render_settings_section(section, *, error=None, expanded_recipient='', new_recipient_email=''):
     denied = require_owner()
     if denied:
         return denied
@@ -4653,6 +4669,8 @@ def render_settings_section(section):
     notice = notices.get(session.pop("settings_notice", None))
     settings_error = session.pop("settings_error", None)
     settings_error_email = session.pop("settings_error_email", "")
+    if error:
+        settings_error, settings_error_email, notice = error, '', None
     return render_template_string("""
 <!doctype html>
 <html lang="en" data-theme="{{ theme_mode }}">
@@ -4664,10 +4682,7 @@ def render_settings_section(section):
     <meta name="theme-color" content="#f5a623">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Keep">
-    <link rel="icon" type="image/svg+xml" href="/static/keep-icon.svg?v=20260907-2">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=20260907-2">
-    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=20260907-2">
-    <link rel="manifest" href="/static/site.webmanifest">
+    {% include 'shared_brand_head.html' %}
     <title>{{ section_title }} · Keep Admin</title>
     <style>
         * { box-sizing: border-box; }
@@ -4939,7 +4954,7 @@ def render_settings_section(section):
         <form class="add-form" method="post" action="/settings/recipients">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="action" value="add">
-            <input type="email" name="email" maxlength="254" required placeholder="name@example.com" aria-label="New recipient email">
+            <input type="email" name="email" maxlength="254" required placeholder="name@example.com" aria-label="New recipient email" value="{{ new_recipient_email }}">
             <button type="submit">Add recipient</button>
         </form>
         </div>
@@ -4953,12 +4968,13 @@ def render_settings_section(section):
     <section class="panel admin-card-list">
         <div class="panel-head"><div><h2>Email recipients</h2><p class="help">Enabled recipients receive consolidated Keep emails. At least one must remain enabled.</p></div></div>
         {% for recipient in recipients %}
+        {% set recipient_expanded = recipient.email == settings_error_email or recipient.email == expanded_recipient %}
         <div class="recipient-row">
-                        <button type="button" class="admin-card-header" data-user-toggle aria-expanded="false" aria-controls="recipient-editor-{{ loop.index }}" aria-label="Edit {{ recipient.email }}">
+                        <button type="button" class="admin-card-header" data-user-toggle aria-expanded="{{ 'true' if recipient_expanded else 'false' }}" aria-controls="recipient-editor-{{ loop.index }}" aria-label="{{ 'Close settings for' if recipient_expanded else 'Edit' }} {{ recipient.email }}">
             <span><span class="recipient-address">{{ recipient.email }}</span>
                 <span class="status{% if recipient.enabled %} on{% endif %}">{{ "Enabled" if recipient.enabled else "Disabled" }} · {{ recipient.subscriptions|length }} topics</span></span>
-            <span class="visually-hidden" data-edit-label>Edit</span>{% include "admin_chevron.html" %}</button>
-            <div class="user-editor" id="recipient-editor-{{ loop.index }}" {% if settings_error_email != recipient.email %}hidden{% endif %}>
+            <span class="visually-hidden" data-edit-label>{{ 'Close' if recipient_expanded else 'Edit' }}</span>{% include "admin_chevron.html" %}</button>
+            <div class="user-editor" id="recipient-editor-{{ loop.index }}" {% if not recipient_expanded %}hidden{% endif %}>
             <form data-save-key="recipient-{{ loop.index }}" class="subscriptions{% if not recipient.enabled %} disabled{% endif %}{% if settings_error_email == recipient.email %} invalid{% endif %}" method="post" action="/settings/recipients/preferences" novalidate
                 {% if not recipient.enabled %}aria-disabled="true"{% endif %}>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -5022,6 +5038,10 @@ def render_settings_section(section):
             }, 3500);
         }
         const currentUrl = new URL(window.location.href);
+        {% if request.method == 'POST' %}
+        currentUrl.pathname = {{ admin_active_path|tojson }};
+        window.history.replaceState({}, "", currentUrl);
+        {% endif %}
         if (currentUrl.searchParams.has("saved")) {
             currentUrl.searchParams.delete("saved");
             window.history.replaceState({}, "", currentUrl);
@@ -5065,8 +5085,17 @@ def render_settings_section(section):
         collections=get_collections(), active_recipients=sum(r["enabled"] for r in recipients),
         pending=pending, held=held, due_text=due_text, notice=notice,
         settings_error=settings_error, settings_error_email=settings_error_email,
+        expanded_recipient=expanded_recipient, new_recipient_email=new_recipient_email,
+        admin_active_path=f'/settings/{section}',
         owner_plex_id=owner_id(), email_delivery_enabled=email_enabled(), csrf_token=get_csrf_token(),
         libraries=libraries)
+
+
+def recipient_settings_error(message, address='', status=400, new_recipient_email=''):
+    response = app.make_response((render_settings_section('email', error=message,
+        expanded_recipient=address, new_recipient_email=new_recipient_email), status))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @app.post("/settings/users/<plex_id>")
@@ -5250,7 +5279,9 @@ def save_recipient_settings():
     action = request.form.get("action")
     address = request.form.get("email", "").strip().lower()
     if not valid_email_address(address):
-        return "Enter a valid email address", 400
+        return recipient_settings_error('Enter a valid email address',
+            new_recipient_email=address if action == 'add' else '')
+    validation_error, error_status = None, 400
     with closing(attribution_db()) as db, db:
         db.execute("BEGIN IMMEDIATE")
         if action == "add":
@@ -5259,25 +5290,28 @@ def save_recipient_settings():
             ensure_recipient_subscriptions(db, address)
         elif action == "enable":
             if not db.execute("UPDATE email_recipients SET enabled = 1 WHERE email = ?", (address,)).rowcount:
-                return "Recipient not found", 404
+                validation_error, error_status = 'Recipient not found', 404
         elif action in ("disable", "remove"):
             recipient = db.execute(
                 "SELECT enabled FROM email_recipients WHERE email = ?", (address,)
             ).fetchone()
             if not recipient:
-                return "Recipient not found", 404
-            enabled_count = db.execute(
-                "SELECT COUNT(*) FROM email_recipients WHERE enabled = 1"
-            ).fetchone()[0]
-            if recipient["enabled"] and enabled_count <= 1:
-                return "At least one email recipient must remain enabled", 400
-            if action == "disable":
-                db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?", (address,))
+                validation_error, error_status = 'Recipient not found', 404
             else:
-                db.execute("DELETE FROM email_recipients WHERE email = ?", (address,))
-                db.execute("DELETE FROM recipient_subscriptions WHERE email = ?", (address,))
+                enabled_count = db.execute(
+                    "SELECT COUNT(*) FROM email_recipients WHERE enabled = 1"
+                ).fetchone()[0]
+                if recipient["enabled"] and enabled_count <= 1:
+                    validation_error = 'At least one email recipient must remain enabled'
+                elif action == "disable":
+                    db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?", (address,))
+                else:
+                    db.execute("DELETE FROM email_recipients WHERE email = ?", (address,))
+                    db.execute("DELETE FROM recipient_subscriptions WHERE email = ?", (address,))
         else:
-            return "Invalid recipient action", 400
+            validation_error = 'Invalid recipient action'
+    if validation_error:
+        return recipient_settings_error(validation_error, address, error_status)
     action_words = {"add": "Added", "enable": "Enabled", "disable": "Disabled", "remove": "Removed"}
     log_activity(f"recipient-{action}", f"{action_words[action]} email recipient {address}")
     return redirect_to_settings_with_notice("recipient")
@@ -6173,6 +6207,8 @@ def connection_monitor_worker():
 
 job_store()
 api_v1.ApiV1(sys.modules[__name__])
+# Keep browser recovery branded after the API installs its HTTP error handlers.
+app.register_error_handler(404, missing_page)
 
 if __name__ == "__main__":
     if "--digest-worker" in sys.argv:

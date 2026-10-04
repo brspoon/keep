@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en" data-theme="{{ theme_mode }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/keep-theme.js?v={{ app_version }}"></script>
+{% include 'shared_brand_head.html' %}
 <title>{{ 'Sign in' if mode == 'login' else 'Set up Keep' }} · Keep</title>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <script defer src="/static/keep-toast.js?v=2.4.6"></script>
@@ -8,7 +9,7 @@
 <link rel="stylesheet" href="/static/keep-setup.css?v={{ app_version }}">
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
 </head><body class="admin-ui connections-ui onboarding-ui"><a class="skip-link" href="#main-content">Skip to content</a>
-<main class="page" id="main-content"><header class="topbar"><div class="brand"><img class="mark" src="/static/keep-icon.svg" alt="" width="52" height="52"><h1>{{ 'Sign in to Keep' if mode == 'login' else 'Set up Keep' }}</h1></div></header>
+<main class="page" id="main-content"><header class="topbar"><div class="brand"><img class="mark" src="/static/keep-icon.svg?v={{ app_version }}" alt="" width="64" height="64"><h1>{{ 'Sign in to Keep' if mode == 'login' else 'Set up Keep' }}</h1></div></header>
 {% if message %}<p class="settings-error" role="alert">{{ message }}</p>{% endif %}
 <section class="panel"><div class="panel-head"><div>
 {% if mode == 'bootstrap' %}
