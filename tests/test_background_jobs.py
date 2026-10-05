@@ -1,11 +1,15 @@
+import fcntl
+from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
 import background_jobs
+import connection_monitor
 from connection_settings import ConnectionSettings
 import seerr
 
@@ -259,7 +263,7 @@ class BackgroundJobTests(unittest.TestCase):
         self.assertEqual(row['next_run'], background_jobs.timestamp(995))
         self.assertIsNone(row['duration'])
         self.heartbeat.unlink()
-        self.assertEqual(self.row('seerr-history')['label'], 'Worker unavailable')
+        self.assertEqual(self.row('seerr-history')['label'], 'Unavailable')
 
     def test_seerr_scope_change_clears_old_success_when_the_new_job_fails(self):
         first = seerr.namespace(self.settings.get)
@@ -295,7 +299,561 @@ class BackgroundJobTests(unittest.TestCase):
     def test_failed_probes_do_not_hide_a_missing_worker(self):
         fingerprint = self.connections.connection_fingerprint('radarr', self.settings.get)
         self.connections.record_automatic_check('radarr', fingerprint, False, now=90)
-        self.assertEqual(self.row('probe-radarr')['label'], 'Worker unavailable')
+        self.assertEqual(self.row('probe-radarr')['label'], 'Unavailable')
+
+    def test_manual_requests_are_bounded_coalesced_and_survive_restart(self):
+        for job_id in background_jobs.JOB_IDS:
+            self.assertTrue(self.store.request_run(job_id))
+            self.assertFalse(self.store.request_run(job_id))
+        restarted = background_jobs.Store(self.path)
+        self.assertEqual(set(restarted.pending()), background_jobs.JOB_IDS)
+        with self.assertRaises(ValueError):
+            restarted.request_run('arbitrary-command')
+        restarted.run('queue-cleanup', lambda: 0)
+        self.assertNotIn('queue-cleanup', restarted.pending())
+
+    def test_request_during_execution_remains_after_the_old_completion(self):
+        self.store.request_run('queue-cleanup')
+        first = self.store.pending()['queue-cleanup']
+        def callback():
+            self.assertTrue(self.store.request_run('queue-cleanup'))
+            self.assertFalse(self.store.request_run('queue-cleanup'))
+        self.store.run('queue-cleanup', callback)
+        second = self.store.pending()['queue-cleanup']
+        self.assertNotEqual(first, second)
+        self.store.acknowledge('queue-cleanup', first)
+        self.assertEqual(self.store.pending()['queue-cleanup'], second)
+        self.store.run('queue-cleanup', lambda: None)
+        self.assertNotIn('queue-cleanup', self.store.pending())
+
+    def test_failed_manual_work_and_interrupted_claims_remain_retryable(self):
+        self.store.request_run('reminder-scan')
+        with self.assertRaises(RuntimeError):
+            self.store.run('reminder-scan', Mock(side_effect=RuntimeError('private details')))
+        self.assertIn('reminder-scan', self.store.pending())
+        self.assertFalse(self.store.requested('reminder-scan', first_attempt=True))
+        self.assertIsNotNone(self.store.claim('reminder-scan'))
+        restarted = background_jobs.Store(self.path)
+        restarted.interrupt_running()
+        self.assertTrue(restarted.requested('reminder-scan', first_attempt=True))
+        restarted.run('reminder-scan', lambda: 0)
+        self.assertNotIn('reminder-scan', restarted.pending())
+
+    def test_scoped_request_cannot_run_against_replacement_connection(self):
+        self.alive()
+        first = self.connections.connection_fingerprint('radarr', self.settings.get)
+        self.store.request_run('probe-radarr', scope=first)
+        self.assertTrue(self.row('probe-radarr')['queued'])
+        self.settings['RADARR_API_KEY'] = 'replacement'
+        second = self.connections.connection_fingerprint('radarr', self.settings.get)
+        self.assertFalse(self.row('probe-radarr')['queued'])
+        self.assertFalse(self.store.requested('probe-radarr', first_attempt=True, scope=second))
+        self.assertIsNone(self.store.claim('probe-radarr', scope=second))
+        self.assertTrue(self.store.request_run('probe-radarr', scope=second))
+        self.assertTrue(self.store.requested('probe-radarr', first_attempt=True, scope=second))
+
+    def test_old_worker_snapshot_cannot_erase_replacement_connection_request(self):
+        first = self.connections.connection_fingerprint('radarr', self.settings.get)
+        self.settings['RADARR_API_KEY'] = 'replacement'
+        second = self.connections.connection_fingerprint('radarr', self.settings.get)
+        self.store.request_run('probe-radarr', scope=second)
+        token = self.store.pending()['probe-radarr']
+        self.assertFalse(self.store.requested('probe-radarr', first_attempt=True, scope=first))
+        self.assertIsNone(self.store.claim('probe-radarr', scope=first))
+        self.assertEqual(self.store.pending()['probe-radarr'], token)
+        self.assertEqual(self.store.claim('probe-radarr', scope=second), token)
+        self.store.acknowledge('probe-radarr', token)
+        self.assertNotIn('probe-radarr', self.store.pending())
+
+    def test_frequency_edit_changes_due_time_survives_restart_and_preserves_retry(self):
+        with patch.object(background_jobs.time, 'time', return_value=100):
+            self.store.run('plex-access-sync', lambda: 0, interval=900)
+        self.store.set_interval('plex-access-sync', 300)
+        restarted = background_jobs.Store(self.path)
+        self.assertEqual(restarted.interval('plex-access-sync', 900), 300)
+        self.assertEqual(restarted.records()['plex-access-sync']['next_run'], 400)
+        with patch.object(background_jobs.time, 'time', return_value=399):
+            self.assertFalse(restarted.due('plex-access-sync'))
+        with patch.object(background_jobs.time, 'time', return_value=400):
+            self.assertTrue(restarted.due('plex-access-sync', False))
+            restarted.run('plex-access-sync', lambda: None, interval=300,
+                          result_fn=lambda value: ('failed', 'Connection unavailable'))
+        restarted.set_interval('plex-access-sync', 3600)
+        self.assertEqual(restarted.records()['plex-access-sync']['next_run'], 430)
+        for job_id, interval in (('email-digest', 300), ('plex-access-sync', 1),
+                                 ('plex-access-sync', True)):
+            with self.assertRaises(ValueError):
+                restarted.set_interval(job_id, interval)
+
+    def test_frequency_edit_during_work_is_used_by_completion(self):
+        with patch.object(background_jobs.time, 'time', return_value=100):
+            self.store.run('reminder-scan', lambda: self.store.set_interval('reminder-scan', 3600),
+                           interval=900)
+        self.assertEqual(self.store.records()['reminder-scan']['next_run'], 3700)
+
+    def test_manual_probe_uses_same_callback_and_preserves_retry_and_fingerprint(self):
+        logger = Mock()
+        # Limit this scenario to Radarr so unrelated configured services do no I/O.
+        settings = {'RADARR_URL': 'http://radarr:7878', 'RADARR_API_KEY': 'key'}
+        getter = settings.get
+        fingerprint = self.connections.connection_fingerprint('radarr', getter)
+        self.connections.record_automatic_check('radarr', fingerprint, True, now=100)
+        self.store.set_interval('probe-radarr', 900)
+        self.store.request_run('probe-radarr', scope=fingerprint)
+        with patch.object(background_jobs.time, 'time', return_value=200), \
+             patch.object(connection_monitor, 'probe', side_effect=ValueError('private response')) as check:
+            self.assertFalse(connection_monitor.run_due(self.connections, getter, Mock(), logger, jobs=self.store))
+            check.assert_called_once()
+        self.assertIn('probe-radarr', self.store.pending())
+        with patch.object(background_jobs.time, 'time', return_value=499), \
+             patch.object(connection_monitor, 'probe') as check:
+            connection_monitor.run_due(self.connections, getter, Mock(), logger, jobs=self.store)
+            check.assert_not_called()
+        with patch.object(background_jobs.time, 'time', return_value=500), \
+             patch.object(connection_monitor, 'probe') as check:
+            self.assertTrue(connection_monitor.run_due(self.connections, getter, Mock(), logger, jobs=self.store))
+            check.assert_called_once()
+        self.assertNotIn('probe-radarr', self.store.pending())
+        self.assertEqual(self.store.records()['probe-radarr']['next_run'], 1400)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT next_attempt FROM automatic_connection_checks WHERE service='radarr'").fetchone()[0], 1400)
+
+    def test_seerr_cadence_edit_updates_native_schedule_and_completion(self):
+        store = seerr.Store(self.path)
+        payload = {'users': [], 'requests': []}
+        with patch.object(background_jobs.time, 'time', return_value=100), \
+             patch.object(seerr.Client, 'snapshot', return_value=payload):
+            store.refresh(self.settings.get, automatic=True)
+        self.store.set_interval('seerr-history', 3600)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('SELECT next_attempt FROM seerr_refresh').fetchone()[0], 3700)
+        with patch.object(background_jobs.time, 'time', return_value=3699), \
+             patch.object(seerr.Client, 'snapshot') as fetch:
+            self.assertIsNone(seerr.Store(self.path).refresh(self.settings.get, automatic=True))
+            fetch.assert_not_called()
+        def fetching():
+            self.store.set_interval('seerr-history', 600)
+            return payload
+        with patch.object(background_jobs.time, 'time', return_value=3700), \
+             patch.object(seerr.Client, 'snapshot', side_effect=fetching):
+            store.refresh(self.settings.get, automatic=True)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('SELECT next_attempt FROM seerr_refresh').fetchone()[0], 4300)
+
+    def test_manual_availability_dispatch_preserves_deletion_during_io(self):
+        store = seerr.Store(self.path)
+        self.store.request_run('seerr-availability', scope=seerr.namespace(self.settings.get))
+        def dispatch():
+            store.queue_availability(self.settings.get)
+            return True
+        with patch.object(background_jobs.time, 'time', return_value=100), \
+             patch.object(seerr.Client, 'sync_availability', side_effect=dispatch) as fetch:
+            self.assertTrue(self.store.run('seerr-availability',
+                lambda: store.process_availability(self.settings.get, force=True),
+                scope=seerr.namespace(self.settings.get)))
+            fetch.assert_called_once()
+        self.assertNotIn('seerr-availability', self.store.pending())
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('SELECT generation,due FROM seerr_availability_queue').fetchone(), (2, 130))
+
+    def test_busy_seerr_lock_keeps_manual_request_ready_without_bypassing_native_retry(self):
+        store = seerr.Store(self.path)
+        self.store.request_run('seerr-history')
+        with open(str(self.path) + '.seerr-refresh.lock', 'a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(seerr.RefreshBusy):
+                self.store.run('seerr-history', lambda: store.refresh(self.settings.get))
+        self.assertTrue(self.store.requested('seerr-history', first_attempt=True))
+        with patch.object(background_jobs.time, 'time', return_value=100), \
+             patch.object(seerr.Client, 'snapshot', side_effect=ValueError('private response')):
+            with self.assertRaises(ValueError):
+                self.store.run('seerr-history', lambda: store.refresh(self.settings.get))
+        self.assertFalse(self.store.requested('seerr-history', first_attempt=True))
+        with patch.object(background_jobs.time, 'time', return_value=159), \
+             patch.object(seerr.Client, 'snapshot') as fetch:
+            self.assertIsNone(store.refresh(self.settings.get, automatic=True))
+            fetch.assert_not_called()
+
+    def test_completion_frequency_reads_cannot_race_a_saved_edit(self):
+        """Every final cadence read shares the writer lock with its completion."""
+        self.store.set_interval('reminder-scan', 3600)
+        self.store.set_interval('probe-radarr', 3600)
+        self.store.set_interval('seerr-history', 3600)
+        seerr_store = seerr.Store(self.path)
+        self.store._start('reminder-scan', 'run', 100)
+        original_connect = sqlite3.connect
+        observed = []
+        class Connection:
+            def __init__(self, connection):
+                self.connection = connection
+            def __enter__(self):
+                self.connection.__enter__()
+                return self
+            def __exit__(self, *args):
+                return self.connection.__exit__(*args)
+            def close(self):
+                self.connection.close()
+            def execute(proxy, query, *args):
+                if query.startswith('SELECT interval_seconds'):
+                    locked = proxy.connection.in_transaction
+                    observed.append(locked)
+                    if locked:
+                        # A save cannot commit between this read and its write.
+                        with original_connect(self.path, timeout=0) as writer:
+                            with self.assertRaises(sqlite3.OperationalError):
+                                writer.execute('BEGIN IMMEDIATE')
+                return proxy.connection.execute(query, *args)
+        with patch.object(background_jobs.sqlite3, 'connect',
+                          side_effect=lambda *args, **kwargs: Connection(original_connect(*args, **kwargs))), \
+             patch.object(seerr.Client, 'snapshot', return_value={'users': [], 'requests': []}):
+            self.store._finish('reminder-scan', 'run', 200, 100, 'success', 'Completed', 900)
+            self.connections.record_automatic_check('radarr', 'fingerprint', True, now=200)
+            seerr_store.refresh(self.settings.get)
+        # Seerr's preliminary due check reads freely; all final reads hold locks.
+        self.assertEqual(observed, [True, True, False, True])
+
+    def test_locked_completion_recovers_before_due_without_replaying_manual_work(self):
+        self.store.request_run('plex-access-sync')
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        def completed():
+            writer.execute('BEGIN IMMEDIATE')
+            return 2
+        callback = Mock(side_effect=completed)
+        with patch.object(background_jobs.time, 'time', return_value=100):
+            self.assertEqual(self.store.run('plex-access-sync', callback, interval=900), 2)
+            # Even while the durable completion is blocked, completed work does
+            # not become another forced manual invocation.
+            self.assertFalse(self.store.requested('plex-access-sync'))
+            self.assertFalse(self.store.due('plex-access-sync', True))
+            writer.rollback()
+            self.store.set_interval('plex-access-sync', 3600)
+            self.assertFalse(self.store.due('plex-access-sync', True))
+        callback.assert_called_once()
+        self.assertNotIn('plex-access-sync', self.store.pending())
+        record = self.store.records()['plex-access-sync']
+        self.assertEqual(record['status'], 'success')
+        self.assertEqual(record['finished'], 100)
+        self.assertEqual(record['next_run'], 3700)
+        self.assertFalse(self.store._retry_operations)
+
+    def test_locked_failed_release_recovers_and_retains_retry_without_restart(self):
+        self.store.request_run('reminder-scan')
+        token = self.store.pending()['reminder-scan']
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        def failing():
+            writer.execute('BEGIN IMMEDIATE')
+            raise RuntimeError('synthetic callback failure')
+        with patch.object(background_jobs.time, 'time', return_value=100):
+            with self.assertRaises(RuntimeError):
+                self.store.run('reminder-scan', failing, interval=900)
+            writer.rollback()
+            self.assertFalse(self.store.requested('reminder-scan', first_attempt=True))
+        self.assertEqual(self.store.pending()['reminder-scan'], token)
+        self.assertEqual(self.store.records()['reminder-scan']['next_run'], 130)
+        self.assertEqual(self.store.claim('reminder-scan'), token)
+        self.store._release('reminder-scan', token)
+        self.store.run('reminder-scan', lambda: 0, interval=900)
+        self.assertNotIn('reminder-scan', self.store.pending())
+
+    def test_locked_startup_reset_is_retried_before_manual_claim(self):
+        self.store.request_run('queue-cleanup')
+        token = self.store.claim('queue-cleanup')
+        self.store._start('queue-cleanup', 'old-worker', 1)
+        restarted = background_jobs.Store(self.path)
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        writer.execute('BEGIN IMMEDIATE')
+        restarted.interrupt_running()
+        writer.rollback()
+        self.assertTrue(restarted.requested('queue-cleanup', first_attempt=True))
+        self.assertEqual(restarted.records()['queue-cleanup']['status'], 'interrupted')
+        self.assertFalse(restarted._startup_recovery)
+        self.assertEqual(restarted.claim('queue-cleanup'), token)
+        restarted.acknowledge('queue-cleanup', token)
+        self.assertNotIn('queue-cleanup', restarted.pending())
+
+    def test_failed_claim_settles_only_captured_request_and_keeps_replacement(self):
+        first = self.connections.connection_fingerprint('radarr', self.settings.get)
+        self.store.request_run('probe-radarr', scope=first)
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        writer.execute('BEGIN IMMEDIATE')
+        replacement = 'b' * 64
+        def callback():
+            writer.rollback()
+            external = background_jobs.Store(self.path)
+            external.request_run('probe-radarr', scope=replacement)
+            return True
+        self.store.run('probe-radarr', callback, interval=3600, scope=first)
+        self.assertTrue(self.store.requested('probe-radarr', first_attempt=True, scope=replacement))
+        self.assertFalse(self.store.requested('probe-radarr', scope=first))
+        self.store.run('probe-radarr', lambda: True, interval=3600, scope=replacement)
+        self.assertNotIn('probe-radarr', self.store.pending())
+
+    def test_failed_fresh_claim_does_not_leave_completed_request_as_first_attempt(self):
+        self.store.request_run('seerr-history')
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        writer.execute('BEGIN IMMEDIATE')
+        callback = Mock(side_effect=lambda: writer.rollback())
+        self.store.run('seerr-history', callback, interval=3600)
+        self.assertFalse(self.store.requested('seerr-history', first_attempt=True))
+        callback.assert_called_once()
+        self.assertFalse(self.store.pending())
+        self.assertEqual(self.store.records()['seerr-history']['status'], 'success')
+
+    def test_exclusive_lock_uses_only_request_token_seen_before_callback(self):
+        scope = 'a' * 64
+        self.store.request_run('probe-radarr', scope=scope)
+        self.assertTrue(self.store.requested('probe-radarr', first_attempt=True, scope=scope))
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        writer.execute('BEGIN EXCLUSIVE')
+        callback = Mock(side_effect=lambda: writer.rollback())
+        self.store.run('probe-radarr', callback, interval=3600, scope=scope)
+        callback.assert_called_once()
+        self.assertFalse(self.store.requested('probe-radarr', first_attempt=True, scope=scope))
+        self.assertFalse(self.store.pending())
+
+    def test_cached_request_does_not_cross_scope_when_claim_read_is_locked(self):
+        first, second = 'a' * 64, 'b' * 64
+        self.store.request_run('probe-radarr', scope=first)
+        self.assertTrue(self.store.requested('probe-radarr', first_attempt=True, scope=first))
+        external = background_jobs.Store(self.path)
+        external.request_run('probe-radarr', scope=second)
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        writer.execute('BEGIN EXCLUSIVE')
+        self.store.run('probe-radarr', lambda: writer.rollback(), interval=3600, scope=second)
+        self.assertTrue(self.store.requested('probe-radarr', first_attempt=True, scope=second))
+
+    def test_busy_availability_release_retry_keeps_unstarted_manual_work_ready(self):
+        self.store.request_run('seerr-availability')
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        def busy():
+            writer.execute('BEGIN IMMEDIATE')
+            return None
+        self.store.run('seerr-availability', busy,
+                       result_fn=lambda result: ('failed', 'Connection unavailable'))
+        self.store.retry_unstarted('seerr-availability')
+        writer.rollback()
+        self.assertTrue(self.store.requested('seerr-availability', first_attempt=True))
+
+    def test_shared_store_recovery_does_not_hold_callback_io_or_reset_active_jobs(self):
+        jobs = ('plex-access-sync', 'reminder-scan')
+        for job_id in jobs:
+            self.store.request_run(job_id)
+        entered = threading.Barrier(3)
+        finish = threading.Event()
+        def callback():
+            entered.wait(timeout=5)
+            self.assertTrue(finish.wait(timeout=5))
+            return 0
+        writer = sqlite3.connect(self.path)
+        self.addCleanup(writer.close)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(self.store.run, job_id, callback, interval=900) for job_id in jobs]
+            entered.wait(timeout=5)
+            # Recovery from another thread cannot interrupt jobs doing I/O.
+            self.store.interrupt_running()
+            for job_id in jobs:
+                self.assertEqual(self.store.records()[job_id]['status'], 'running')
+            writer.execute('BEGIN IMMEDIATE')
+            finish.set()
+            for future in futures:
+                self.assertEqual(future.result(timeout=10), 0)
+        writer.rollback()
+        self.assertFalse(self.store.pending())
+        for job_id in jobs:
+            self.assertEqual(self.store.records()[job_id]['status'], 'success')
+        self.assertFalse(self.store._startup_recovery)
+        self.assertFalse(self.store._retry_operations)
+
+    def test_queued_failure_retains_attempt_outcome_for_announcements(self):
+        self.alive()
+        self.store.request_run('plex-access-sync')
+        with patch.object(background_jobs.time, 'time', return_value=90):
+            self.store.run('plex-access-sync', lambda: None,
+                           result_fn=lambda result: ('failed', 'Connection unavailable'))
+        row = self.row('plex-access-sync')
+        self.assertEqual(row['status'], 'queued')
+        self.assertEqual(row['last_attempt_status'], 'failed')
+        self.assertEqual(row['last_run'], background_jobs.timestamp(90))
+        self.store._start('plex-access-sync', 'next-run', 100)
+        self.assertIsNone(self.row('plex-access-sync')['last_attempt_status'])
+
+    def test_newer_native_success_replaces_old_attempt_metadata(self):
+        self.alive()
+        scope = seerr.namespace(self.settings.get)
+        seerr.Store(self.path)
+        with patch.object(background_jobs.time, 'time', return_value=90):
+            self.store.run('seerr-history', lambda: None, scope=scope,
+                           result_fn=lambda result: ('failed', 'Connection unavailable'))
+        with sqlite3.connect(self.path) as db:
+            db.execute('INSERT INTO seerr_cache VALUES (?,?,?,0)', (scope, '{}', 95))
+            db.execute('INSERT INTO seerr_refresh VALUES (?,?,0)', (scope, 995))
+        row = self.row('seerr-history')
+        self.assertEqual(row['last_run'], background_jobs.timestamp(95))
+        self.assertEqual(row['last_attempt_status'], 'success')
+        fingerprint = self.connections.connection_fingerprint('radarr', self.settings.get)
+        self.connections.record_automatic_check('radarr', fingerprint, True, now=95)
+        self.assertEqual(self.row('probe-radarr')['last_attempt_status'], 'success')
+
+    def test_probe_native_write_failure_retries_manual_before_previous_schedule(self):
+        settings = {'RADARR_URL': 'http://radarr:7878', 'RADARR_API_KEY': 'key'}
+        fingerprint = self.connections.connection_fingerprint('radarr', settings.get)
+        self.connections.record_automatic_check('radarr', fingerprint, True, now=100)
+        self.store.request_run('probe-radarr', scope=fingerprint)
+        self.alive(now=200)
+        with patch.object(background_jobs.time, 'time', return_value=200), \
+             patch.object(connection_monitor, 'probe') as probe, \
+             patch.object(self.connections, 'record_automatic_check',
+                          side_effect=sqlite3.OperationalError('synthetic canonical write failure')):
+            self.assertFalse(connection_monitor.run_due(self.connections, settings.get, Mock(), Mock(), jobs=self.store))
+            probe.assert_called_once()
+        self.assertTrue(self.store.requested('probe-radarr', first_attempt=True, scope=fingerprint))
+        row = next(row for row in self.store.snapshot(settings.get, self.connections,
+            heartbeat_path=self.heartbeat, now=200)['jobs'] if row['id'] == 'probe-radarr')
+        self.assertEqual(row['status'], 'queued')
+        self.assertEqual(row['last_attempt_status'], 'failed')
+        self.assertEqual(row['last_run'], background_jobs.timestamp(200))
+        self.assertEqual(row['next_run'], background_jobs.timestamp(230))
+        with patch.object(background_jobs.time, 'time', return_value=240), \
+             patch.object(connection_monitor, 'probe') as probe:
+            self.assertTrue(connection_monitor.run_due(self.connections, settings.get, Mock(), Mock(), jobs=self.store))
+            probe.assert_called_once()
+        self.assertNotIn('probe-radarr', self.store.pending())
+
+    def test_aggregate_retries_unrecorded_probe_without_repeating_initial_force(self):
+        settings = {'RADARR_URL': 'http://radarr:7878', 'RADARR_API_KEY': 'key'}
+        fingerprint = self.connections.connection_fingerprint('radarr', settings.get)
+        self.connections.record_automatic_check('radarr', fingerprint, True, now=100)
+        self.store.request_run('connection-monitor')
+        classifier = lambda passed: ('success', 'Completed') if passed else ('failed', 'Connection unavailable')
+        with patch.object(background_jobs.time, 'time', return_value=200), \
+             patch.object(connection_monitor, 'probe'), \
+             patch.object(self.connections, 'record_automatic_check',
+                          side_effect=sqlite3.OperationalError('synthetic canonical write failure')):
+            self.assertFalse(self.store.run('connection-monitor', lambda: connection_monitor.run_due(
+                self.connections, settings.get, Mock(), Mock(), jobs=self.store, force=True),
+                result_fn=classifier))
+        self.assertFalse(self.store.requested('connection-monitor', first_attempt=True))
+        with patch.object(background_jobs.time, 'time', return_value=240), \
+             patch.object(connection_monitor, 'probe') as probe:
+            self.store.run('connection-monitor', lambda: connection_monitor.run_due(
+                self.connections, settings.get, Mock(), Mock(), jobs=self.store), result_fn=classifier)
+            probe.assert_called_once()
+        self.assertNotIn('connection-monitor', self.store.pending())
+
+    def test_mixed_aggregate_retry_preserves_recorded_failure_backoff(self):
+        settings = {'RADARR_URL': 'http://radarr:7878', 'RADARR_API_KEY': 'radarr-key',
+                    'SONARR_URL': 'http://sonarr:8989', 'SONARR_API_KEY': 'sonarr-key'}
+        for service in ('radarr', 'sonarr'):
+            fingerprint = self.connections.connection_fingerprint(service, settings.get)
+            self.connections.record_automatic_check(service, fingerprint, True, now=100)
+        self.store.request_run('connection-monitor')
+        classifier = lambda passed: ('success', 'Completed') if passed else ('failed', 'Connection unavailable')
+        recorded = self.connections.record_automatic_check
+        def write(service, *args, **kwargs):
+            if service == 'sonarr':
+                raise sqlite3.OperationalError('synthetic canonical write failure')
+            return recorded(service, *args, **kwargs)
+        def initial_probe(service, *args):
+            if service == 'radarr':
+                raise ValueError('synthetic service failure')
+        with patch.object(background_jobs.time, 'time', return_value=200), \
+             patch.object(connection_monitor, 'probe', side_effect=initial_probe), \
+             patch.object(self.connections, 'record_automatic_check', side_effect=write):
+            self.assertFalse(self.store.run('connection-monitor', lambda: connection_monitor.run_due(
+                self.connections, settings.get, Mock(), Mock(), jobs=self.store, force=True),
+                result_fn=classifier))
+        self.assertFalse(self.store.requested('connection-monitor', first_attempt=True))
+        with patch.object(background_jobs.time, 'time', return_value=240), \
+             patch.object(connection_monitor, 'probe') as probe:
+            self.assertFalse(self.store.run('connection-monitor', lambda: connection_monitor.run_due(
+                self.connections, settings.get, Mock(), Mock(), jobs=self.store), result_fn=classifier))
+            self.assertEqual([call.args[0] for call in probe.call_args_list], ['sonarr'])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT failures,next_attempt FROM automatic_connection_checks WHERE service='radarr'").fetchone(), (1, 500))
+        self.assertIn('connection-monitor', self.store.pending())
+        with patch.object(background_jobs.time, 'time', return_value=500), \
+             patch.object(connection_monitor, 'probe') as probe:
+            self.assertTrue(self.store.run('connection-monitor', lambda: connection_monitor.run_due(
+                self.connections, settings.get, Mock(), Mock(), jobs=self.store), result_fn=classifier))
+            self.assertEqual([call.args[0] for call in probe.call_args_list], ['radarr'])
+        self.assertNotIn('connection-monitor', self.store.pending())
+
+    def native_write_failure(self, prefix):
+        original_connect = sqlite3.connect
+        class Connection:
+            def __init__(self, connection):
+                self.connection = connection
+            def __enter__(self):
+                self.connection.__enter__()
+                return self
+            def __exit__(self, *args):
+                return self.connection.__exit__(*args)
+            def close(self):
+                self.connection.close()
+            def execute(self, query, *args):
+                if query.startswith(prefix):
+                    raise sqlite3.OperationalError('synthetic canonical write failure')
+                return self.connection.execute(query, *args)
+        return patch.object(background_jobs.sqlite3, 'connect',
+            side_effect=lambda *args, **kwargs: Connection(original_connect(*args, **kwargs)))
+
+    def test_availability_queue_creation_failure_rearms_without_native_work(self):
+        native = seerr.Store(self.path)
+        scope = seerr.namespace(self.settings.get)
+        self.store.request_run('seerr-availability', scope=scope)
+        with self.native_write_failure('INSERT INTO seerr_availability_queue'), \
+             patch.object(seerr.Client, 'sync_availability') as dispatch:
+            with self.assertRaises(background_jobs.RetryUnstarted):
+                self.store.run('seerr-availability', lambda: native.process_availability(
+                    self.settings.get, force=True), scope=scope)
+            dispatch.assert_not_called()
+        with sqlite3.connect(self.path) as db:
+            self.assertIsNone(db.execute('SELECT scope FROM seerr_availability_queue').fetchone())
+        self.assertTrue(self.store.requested('seerr-availability', first_attempt=True, scope=scope))
+        with patch.object(seerr.Client, 'sync_availability', return_value=True) as dispatch:
+            self.store.run('seerr-availability', lambda: native.process_availability(
+                self.settings.get, force=True), scope=scope)
+            dispatch.assert_called_once()
+        self.assertNotIn('seerr-availability', self.store.pending())
+
+    def test_history_native_write_failure_does_not_wait_for_previous_future_schedule(self):
+        native = seerr.Store(self.path)
+        scope = seerr.namespace(self.settings.get)
+        payload = {'users': [], 'requests': []}
+        with patch.object(background_jobs.time, 'time', return_value=100), \
+             patch.object(seerr.Client, 'snapshot', return_value=payload):
+            native.refresh(self.settings.get)
+        self.store.request_run('seerr-history', scope=scope)
+        with patch.object(background_jobs.time, 'time', return_value=200), \
+             patch.object(seerr.Client, 'snapshot', return_value=payload), \
+             self.native_write_failure('INSERT INTO seerr_cache'):
+            with self.assertRaises(background_jobs.RetryUnstarted):
+                self.store.run('seerr-history', lambda: native.refresh(self.settings.get), scope=scope)
+        self.assertTrue(self.store.requested('seerr-history', first_attempt=True, scope=scope))
+        with patch.object(background_jobs.time, 'time', return_value=240), \
+             patch.object(seerr.Client, 'snapshot', return_value=payload) as fetch:
+            self.store.run('seerr-history', lambda: native.refresh(self.settings.get), scope=scope)
+            fetch.assert_called_once()
+        self.assertNotIn('seerr-history', self.store.pending())
+
+    def test_recovery_state_stays_bounded_while_automatic_callbacks_continue(self):
+        callback = Mock()
+        with patch.object(background_jobs.sqlite3, 'connect',
+                          side_effect=sqlite3.OperationalError('synthetic database failure')):
+            for job_id in background_jobs.JOB_IDS:
+                self.store.run(job_id, callback)
+        self.assertEqual(callback.call_count, len(background_jobs.JOB_IDS))
+        self.assertEqual(set(self.store._retry_operations), background_jobs.JOB_IDS)
+        self.assertEqual(len(self.store.records()), len(background_jobs.JOB_IDS))
+        self.assertFalse(self.store._retry_operations)
 
 
 if __name__ == '__main__':

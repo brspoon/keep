@@ -4544,12 +4544,82 @@ def settings_jobs():
     denied = require_owner()
     if denied:
         return denied
-    snapshot = job_store().snapshot(connection_value, connection_settings,
-        heartbeat_path=DIGEST_WORKER_HEARTBEAT_PATH,
-        plex_interval=max(30, PLEX_ACCESS_SYNC_SECONDS), reminder_interval=REMINDER_SCAN_SECONDS)
-    response = app.make_response(render_template("jobs.html", jobs_snapshot=snapshot))
+    snapshot = jobs_snapshot()
+    if request.args.get('format') == 'json':
+        response = jsonify(snapshot)
+    else:
+        response = app.make_response(render_template("jobs.html", jobs_snapshot=snapshot,
+            notice=session.pop('jobs_notice', None), error=session.pop('jobs_error', None),
+            interval_options=background_jobs.INTERVAL_OPTIONS))
     response.headers['Cache-Control'] = 'no-store'
     return response
+
+
+def jobs_snapshot():
+    return job_store().snapshot(connection_value, connection_settings,
+        heartbeat_path=DIGEST_WORKER_HEARTBEAT_PATH,
+        plex_interval=max(30, PLEX_ACCESS_SYNC_SECONDS), reminder_interval=REMINDER_SCAN_SECONDS)
+
+
+def jobs_action_response(message, status=200, **details):
+    if request.accept_mimetypes.best == 'application/json':
+        response = jsonify({('error' if status >= 400 else 'message'): message, **details})
+        response.status_code = status
+    else:
+        session['jobs_error' if status >= 400 else 'jobs_notice'] = message
+        response = redirect(url_for('settings_jobs'), code=303)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.post('/settings/jobs/<job_id>/run')
+def settings_job_run(job_id):
+    denied = require_owner()
+    if denied:
+        return denied
+    if require_form_csrf():
+        return jobs_action_response('Your session changed. Refresh the page and try again.', 403)
+    try:
+        row = next((row for row in jobs_snapshot()['jobs'] if row['id'] == job_id), None)
+        if row is None:
+            return jobs_action_response('This job does not exist.', 404)
+        if row['queued']:
+            return jobs_action_response(f"{row['title']} is already queued.", 202, last_run=row['last_run'])
+        if not row['can_run']:
+            return jobs_action_response(row['action_reason'] or 'This job cannot run right now.', 409)
+        scope = (seerr.namespace(connection_value) if job_id.startswith('seerr-') else
+            connection_settings.connection_fingerprint(job_id.removeprefix('probe-'), connection_value)
+            if job_id.startswith('probe-') else None)
+        job_store().request_run(job_id, scope=scope)
+    except (sqlite3.Error, OSError):
+        return jobs_action_response('Keep could not queue the job. Try again shortly.', 503)
+    log_activity('job-requested', f"Queued {row['title']}")
+    return jobs_action_response(f"{row['title']} is queued to run shortly.", 202, last_run=row['last_run'])
+
+
+@app.post('/settings/jobs/<job_id>/schedule')
+def settings_job_schedule(job_id):
+    denied = require_owner()
+    if denied:
+        return denied
+    if require_form_csrf():
+        return jobs_action_response('Your session changed. Refresh the page and try again.', 403)
+    try:
+        row = next((row for row in jobs_snapshot()['jobs'] if row['id'] == job_id), None)
+        if row is None:
+            return jobs_action_response('This job does not exist.', 404)
+        if not row['editable']:
+            return jobs_action_response('This job uses a fixed schedule.', 400)
+        value = request.form.get('interval', '')
+        if not re.fullmatch(r'[0-9]{1,5}', value):
+            return jobs_action_response('Choose a frequency from the list.', 400)
+        job_store().set_interval(job_id, int(value))
+    except ValueError:
+        return jobs_action_response('Choose a frequency from the list.', 400)
+    except (sqlite3.Error, OSError):
+        return jobs_action_response('Keep could not save the schedule. Try again shortly.', 503)
+    log_activity('job-schedule-updated', f"Changed {row['title']} to {background_jobs.interval_label(int(value)).lower()}")
+    return jobs_action_response('Schedule saved.')
 
 
 def render_settings_section(section, *, error=None, expanded_recipient='', new_recipient_email=''):
@@ -4591,6 +4661,11 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         recipients = [dict(row) for row in db.execute(
             "SELECT email, enabled FROM email_recipients ORDER BY email COLLATE NOCASE"
         )]
+        recipient_users = {}
+        for user in users:
+            email_key = user["email"].strip().casefold()
+            if email_key:
+                recipient_users.setdefault(email_key, []).append(user)
         subscriptions = db.execute("""SELECT email, collection_id FROM recipient_subscriptions
             WHERE enabled = 1""").fetchall()
         subscription_map = {}
@@ -4599,6 +4674,17 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
                 subscription["collection_id"])
         for recipient in recipients:
             recipient["subscriptions"] = subscription_map.get(recipient["email"].casefold(), set())
+            linked_users = recipient_users.get(recipient["email"].strip().casefold(), [])
+            names = {}
+            search_names = []
+            for user in linked_users:
+                aliases = [user[field].strip() for field in ("full_name", "display_name", "plex_username")
+                           if user[field].strip()]
+                if aliases:
+                    names.setdefault(aliases[0].casefold(), aliases[0])
+                    search_names.extend(aliases)
+            recipient["names"] = list(names.values())
+            recipient["search_text"] = " ".join([recipient["email"], *search_names])
         activity_count = db.execute(
             f"SELECT COUNT(*) FROM activity_log {activity_where}"
         ).fetchone()[0]
@@ -4763,6 +4849,9 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         .recipient-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(360px,2fr) auto;
             align-items:center; gap:18px; }
         .recipient-address { font-weight:700; overflow-wrap:anywhere; }
+        .recipient-name { display:block; font-weight:700; overflow-wrap:anywhere; }
+        .recipient-name + .recipient-address { margin-top:4px; color:var(--muted);
+            font-size:13px; font-weight:400; }
         .status { margin-top:4px; color:var(--muted); font-size:12px; }
         .status.on { color:#69db9b; }
         .status.off { color:#ff9292; }
@@ -4969,9 +5058,10 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         <div class="panel-head"><div><h2>Email recipients</h2><p class="help">Enabled recipients receive consolidated Keep emails. At least one must remain enabled.</p></div></div>
         {% for recipient in recipients %}
         {% set recipient_expanded = recipient.email == settings_error_email or recipient.email == expanded_recipient %}
-        <div class="recipient-row">
-                        <button type="button" class="admin-card-header" data-user-toggle aria-expanded="{{ 'true' if recipient_expanded else 'false' }}" aria-controls="recipient-editor-{{ loop.index }}" aria-label="{{ 'Close settings for' if recipient_expanded else 'Edit' }} {{ recipient.email }}">
-            <span><span class="recipient-address">{{ recipient.email }}</span>
+        {% set recipient_label = (recipient.names|join(', ') ~ ' (' ~ recipient.email ~ ')') if recipient.names else recipient.email %}
+        <div class="recipient-row" data-search-text="{{ recipient.search_text }}">
+                        <button type="button" class="admin-card-header" data-user-toggle data-edit-name="{{ recipient_label }}" aria-expanded="{{ 'true' if recipient_expanded else 'false' }}" aria-controls="recipient-editor-{{ loop.index }}" aria-label="{{ 'Close settings for' if recipient_expanded else 'Edit' }} {{ recipient_label }}">
+            <span>{% if recipient.names %}<span class="recipient-name">{{ recipient.names|join(', ') }}</span>{% endif %}<span class="recipient-address">{{ recipient.email }}</span>
                 <span class="status{% if recipient.enabled %} on{% endif %}">{{ "Enabled" if recipient.enabled else "Disabled" }} · {{ recipient.subscriptions|length }} topics</span></span>
             <span class="visually-hidden" data-edit-label>{{ 'Close' if recipient_expanded else 'Edit' }}</span>{% include "admin_chevron.html" %}</button>
             <div class="user-editor" id="recipient-editor-{{ loop.index }}" {% if not recipient_expanded %}hidden{% endif %}>
@@ -5605,17 +5695,20 @@ def job_store():
 def background_maintenance_once(state):
     """One existing worker pass, with durable, credential-free job results."""
     jobs = job_store()
-    jobs.run('onboarding-cleanup', onboarding.cleanup)
+    run_maintenance_job(jobs, 'onboarding-cleanup', onboarding.cleanup)
     _settings_snapshot.set(connection_settings.snapshot())
-    if time.monotonic() - state['plex_sync'] >= PLEX_ACCESS_SYNC_SECONDS:
-        changed = jobs.run('plex-access-sync', sync_plex_user_access,
-            interval=max(30, PLEX_ACCESS_SYNC_SECONDS) if PLEX_ACCESS_SYNC_SECONDS <= 604800 else None,
+    plex_interval = jobs.interval('plex-access-sync', PLEX_ACCESS_SYNC_SECONDS)
+    if jobs.due('plex-access-sync', time.monotonic() - state['plex_sync'] >= plex_interval):
+        changed = run_maintenance_job(jobs, 'plex-access-sync', sync_plex_user_access,
+            interval=max(30, plex_interval) if plex_interval <= 604800 else None,
             result_fn=lambda count: ('failed', 'Connection unavailable') if count is None
                 else ('success', f'Updated {count} accounts'))
-        state['plex_sync'] = time.monotonic()
+        if changed is not None:
+            state['plex_sync'] = time.monotonic()
         if changed:
             app.logger.warning("Updated Plex access for %s Keep users", changed)
-    expiry = jobs.run('keep-expiry', expire_due_keeps,
+    expiry = run_maintenance_job(jobs, 'keep-expiry', expire_due_keeps,
+        fallback={'released': 0, 'missing': 0, 'failed': 0},
         result_fn=lambda result: ('failed', 'Some Keeps will be retried') if result['failed']
             else ('success', f"Released {result['released']} Keeps"))
     if expiry['released'] or expiry['missing']:
@@ -5623,24 +5716,35 @@ def background_maintenance_once(state):
                            expiry['released'], expiry['missing'])
     if expiry['failed']:
         app.logger.error("Could not process %s temporary keeps; retrying", expiry['failed'])
-    if state['reminder_scan'] is None or time.monotonic() - state['reminder_scan'] >= REMINDER_SCAN_SECONDS:
+    reminder_interval = jobs.interval('reminder-scan', REMINDER_SCAN_SECONDS)
+    if jobs.due('reminder-scan', state['reminder_scan'] is None or
+                time.monotonic() - state['reminder_scan'] >= reminder_interval):
         try:
             queued = jobs.run('reminder-scan', queue_due_reminders,
-                interval=REMINDER_SCAN_SECONDS,
+                interval=reminder_interval,
                 result_fn=lambda count: ('success', f'Queued {count} reminders'))
             state['reminder_scan'] = time.monotonic()
             if queued:
                 app.logger.warning("Queued %s seven-day catch-up reminders", queued)
         except Exception:
             app.logger.error("Seven-day reminder scan failed; retrying in 30 seconds")
-    jobs.run('reminder-reconcile', reconcile_reminder_queue)
-    removed = jobs.run('queue-cleanup', prune_notification_queue,
+    run_maintenance_job(jobs, 'reminder-reconcile', reconcile_reminder_queue)
+    removed = run_maintenance_job(jobs, 'queue-cleanup', prune_notification_queue,
         result_fn=lambda count: ('success', f'Removed {count} titles'))
     if removed:
         app.logger.warning("Removed %s stale titles from the digest queue", removed)
-    result = jobs.run('email-digest', process_digest, result_fn=digest_job_result)
+    result = run_maintenance_job(jobs, 'email-digest', process_digest, result_fn=digest_job_result)
     if result == 'review':
         app.logger.error("Digest delivery requires review; automatic sending paused")
+
+
+def run_maintenance_job(jobs, job_id, callback, *, fallback=None, **options):
+    """A failed job retries next pass while unrelated maintenance continues."""
+    try:
+        return jobs.run(job_id, callback, **options)
+    except Exception:
+        app.logger.error('%s background work failed; retrying in 30 seconds', job_id)
+        return fallback
 
 
 def digest_job_result(state):
@@ -5669,7 +5773,7 @@ def seerr_job_due(kind, getter, now=None):
         if row:
             return now >= row['next_attempt']
         row = db.execute('SELECT updated FROM seerr_cache WHERE scope=?', (scope,)).fetchone()
-        return not row or now >= row['updated'] + seerr.REFRESH_INTERVAL
+        return not row or now >= row['updated'] + job_store().interval('seerr-history', seerr.REFRESH_INTERVAL)
 
 with closing(attribution_db()) as db, db:
     db.execute("BEGIN IMMEDIATE")
@@ -6134,11 +6238,18 @@ def seerr_refresh_worker():
             settings = connection_settings.snapshot()
             getter = lambda key: settings.get(key, '')
             store = seerr_store()
-            availability = (job_store().run('seerr-availability', lambda: store.process_availability(getter),
+            jobs = job_store()
+            force_availability = jobs.requested('seerr-availability', first_attempt=True,
+                                              scope=seerr.namespace(getter))
+            availability = (jobs.run('seerr-availability', lambda: store.process_availability(
+                    getter, **({'force': True} if force_availability else {})),
                 scope=seerr.namespace(getter),
                 result_fn=lambda result: ('success', 'Completed') if result
-                    else ('waiting', 'Waiting for queued work')) if seerr_job_due('availability', getter)
+                    else ('failed', 'Connection unavailable') if jobs.requested('seerr-availability')
+                    else ('waiting', 'Waiting for queued work')) if force_availability or seerr_job_due('availability', getter)
                 else store.process_availability(getter))
+            if availability is None and force_availability:
+                jobs.retry_unstarted('seerr-availability')
             if availability:
                 app.logger.info('Seerr availability sync requested after media deletion')
         except Exception:
@@ -6150,12 +6261,18 @@ def seerr_refresh_worker():
                 fingerprint = connection_settings.connection_fingerprint('seerr', getter)
                 try:
                     store = seerr_store()
-                    refreshed = (job_store().run('seerr-history', lambda: store.refresh(getter, automatic=True),
-                        interval=seerr.REFRESH_INTERVAL,
+                    jobs = job_store()
+                    force_history = jobs.requested('seerr-history', first_attempt=True,
+                                                  scope=seerr.namespace(getter))
+                    refreshed = (jobs.run('seerr-history', lambda: store.refresh(getter, automatic=not force_history),
+                        interval=jobs.interval('seerr-history', seerr.REFRESH_INTERVAL),
                         scope=seerr.namespace(getter),
                         result_fn=lambda result: ('success', 'Completed') if result is not None
+                            else ('failed', 'Connection unavailable') if jobs.requested('seerr-history')
                             else ('waiting', 'Waiting for the next scheduled check'))
-                        if seerr_job_due('history', getter) else store.refresh(getter, automatic=True))
+                        if force_history or seerr_job_due('history', getter) else store.refresh(getter, automatic=True))
+                except (seerr.RefreshBusy, background_jobs.RetryUnstarted):
+                    raise
                 except Exception:
                     before, after = connection_settings.record_automatic_check('seerr', fingerprint, False)
                     if after == 2:
@@ -6198,8 +6315,13 @@ def connection_monitor_worker():
         try:
             settings = connection_settings.snapshot()
             getter = lambda key: settings.get(key, globals().get(key, ''))
-            job_store().run('connection-monitor', lambda:
-                connection_monitor.run_due(connection_settings, getter, test_smtp_connection, app.logger))
+            jobs = job_store()
+            force = jobs.requested('connection-monitor', first_attempt=True)
+            jobs.run('connection-monitor', lambda:
+                connection_monitor.run_due(connection_settings, getter, test_smtp_connection, app.logger,
+                                           jobs=jobs, force=force),
+                     result_fn=lambda passed: ('success', 'Completed') if passed
+                         else ('failed', 'Connection unavailable'))
         except Exception:
             app.logger.warning('Automatic connection checks deferred; retrying')
         time.sleep(30)

@@ -46,8 +46,12 @@ Plex and Maintainerr must already be running and reachable from Keep. Optional c
 
 When email delivery is enabled, viewers can choose which selected Leaving lists they follow and turn their summaries on or off. Keep sends new-entry summaries and reminders when titles have seven days or less remaining; missed updates can make a reminder arrive later. Kept titles are excluded. Preferences also provide system, light, and dark appearance choices.
 
+Under **Admin → Email**, recipient cards show the corresponding account's full name, with a display name or Plex username as a fallback. Search matches email addresses, full names, display names, and Plex usernames. Addresses without an associated account remain independent email recipients.
+
 ## Owner controls and API access
 
-The owner manages accounts, indefinite-Keep and Keep-management permissions, deletion capabilities, library grants, and Seerr account links. Under Admin, the owner also manages selected Maintainerr collections, service connections, and email recipients, and reviews background jobs and activity records.
+The owner manages accounts, indefinite-Keep and Keep-management permissions, deletion capabilities, library grants, and Seerr account links. Under Admin, the owner also manages selected Maintainerr collections, service connections, email recipients, jobs, and activity records.
+
+**Admin → Jobs** shows each job's schedule, next run, and latest result. **Run now** queues an available job to run shortly. **Edit** changes the frequency of Plex account access checks, Leaving reminders, Seerr request history refreshes, and service connection checks. Lifecycle tasks such as temporary Keep expiry, reminder reconciliation, and cleanup keep their fixed schedules. Running email delivery still respects recipient preferences and the digest quiet period; it does not resend completed deliveries.
 
 Only the owner can create and manage scoped API keys. The supported API reads selected Leaving and Kept collections and manages Keep protection. Keys remain subject to current account permissions; they do not grant administration or media-file deletion. See the [API guide](API.md) for endpoints, scopes, expiry, and retry rules.

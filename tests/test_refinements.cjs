@@ -71,3 +71,33 @@ test('admin search shows a clear button and restores all rows and focus',()=>{
   assert.equal(rows[1].hidden,false);
   assert.equal(input.focused,true);
 });
+
+test('email search matches profile names and aliases regardless of case and retains email matches',()=>{
+  const listeners={};
+  const input={value:'',addEventListener:(type,fn)=>listeners['input-'+type]=fn,focus(){}};
+  const clear={hidden:true,addEventListener:(type,fn)=>listeners['clear-'+type]=fn};
+  const status={textContent:''};
+  const rows=[
+    {textContent:'Alex Johnson alex@example.com Enabled',dataset:{searchText:'alex@example.com Alex Johnson AJ alex_plex'},hidden:false},
+    {textContent:'family@example.com Enabled',dataset:{searchText:'family@example.com Bailey Johnson BJ'},hidden:false},
+    {textContent:'standalone@example.com Enabled',hidden:false},
+  ];
+  const wrapper={dataset:{searchRows:'.recipient-row',searchLabel:'email recipients'},
+    querySelector:selector=>selector==='input'?input:selector==='.admin-search-clear'?clear:status};
+  const document={body:{},querySelector:selector=>selector==='.admin-list-search'?wrapper:null,
+    querySelectorAll:selector=>selector==='.recipient-row'?rows:[],getElementById:()=>null,addEventListener(){}};
+  vm.runInNewContext(fs.readFileSync('static/keep-refinements.js','utf8'),{
+    document,window:{addEventListener(){}},MutationObserver:class{observe(){}},Event:class{}});
+  for (const [query,index] of [['JOHNSON',null],[' aj ',0],['ALEX_PLEX',0],['BJ',1],['STANDALONE@EXAMPLE.COM',2]]) {
+    input.value=query;
+    listeners['input-input']();
+    const visible=rows.map((row,i)=>row.hidden?null:i).filter(i=>i!==null);
+    assert.deepEqual(visible,index===null?[0,1]:[index]);
+    assert.equal(status.textContent,index===null?'2 email recipients':'1 email recipient');
+  }
+  input.value='missing name';listeners['input-input']();
+  assert.equal(rows.every(row=>row.hidden),true);
+  assert.match(status.textContent,/No matching email recipients/);
+  listeners['clear-click']();
+  assert.equal(rows.every(row=>!row.hidden),true);
+});

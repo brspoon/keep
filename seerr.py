@@ -182,7 +182,7 @@ class Store:
                        (namespace(getter), time.time() + 30))
         return True
 
-    def process_availability(self, getter):
+    def process_availability(self, getter, *, force=False):
         # A separate cross-process lock prevents duplicate worker dispatches.
         with open(str(self.path) + '.seerr-availability.lock', 'a') as lock:
             try:
@@ -190,10 +190,19 @@ class Store:
             except BlockingIOError:
                 return None
             scope = namespace(getter)
-            with closing(sqlite3.connect(self.path)) as db, db:
-                # Never replay work against a replacement Seerr connection.
-                db.execute('DELETE FROM seerr_availability_queue WHERE scope<>?', (scope,))
-                row = db.execute('SELECT generation,due,failures FROM seerr_availability_queue WHERE scope=?', (scope,)).fetchone()
+            try:
+                with closing(sqlite3.connect(self.path)) as db, db:
+                    # Never replay work against a replacement Seerr connection.
+                    db.execute('DELETE FROM seerr_availability_queue WHERE scope<>?', (scope,))
+                    if force:
+                        if not getter('SEERR_URL') or not getter('SEERR_API_KEY'):
+                            return None
+                        db.execute('''INSERT INTO seerr_availability_queue VALUES (?,1,?,0)
+                            ON CONFLICT(scope) DO UPDATE SET due=excluded.due''', (scope, time.time()))
+                    row = db.execute('SELECT generation,due,failures FROM seerr_availability_queue WHERE scope=?', (scope,)).fetchone()
+            except sqlite3.Error:
+                import background_jobs
+                raise background_jobs.RetryUnstarted('Seerr availability was not queued') from None
             if not row or time.time() < row[1]:
                 return None
             generation, _, failures = row
@@ -221,7 +230,11 @@ class Store:
                 if automatic:
                     return None
                 raise RefreshBusy('A Seerr refresh is already running. Check again shortly.') from None
-            return self._refresh(getter, automatic=automatic)
+            try:
+                return self._refresh(getter, automatic=automatic)
+            except sqlite3.Error:
+                import background_jobs
+                raise background_jobs.RetryUnstarted('Seerr history could not be recorded') from None
 
     def _refresh(self, getter, *, automatic=False):
         if not getter('SEERR_URL') or not getter('SEERR_API_KEY'):
@@ -230,11 +243,12 @@ class Store:
             raise ValueError('Configure Seerr first')
         scope = namespace(getter)
         started = time.time()
+        interval = self.history_interval()
         with closing(sqlite3.connect(self.path)) as db:
             schedule = db.execute('SELECT next_attempt,failures FROM seerr_refresh WHERE scope=?', (scope,)).fetchone()
             previous = db.execute('SELECT updated FROM seerr_cache WHERE scope=?', (scope,)).fetchone()
         if automatic and ((schedule and started < schedule[0]) or
-                          (not schedule and previous and started < previous[0] + REFRESH_INTERVAL)):
+                          (not schedule and previous and started < previous[0] + interval)):
             return None
         try:
             payload = Client(getter).snapshot()
@@ -246,10 +260,25 @@ class Store:
                 db.execute('INSERT OR REPLACE INTO seerr_refresh VALUES (?,?,?)', (scope, retry, failures))
             raise
         with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
             db.execute('INSERT INTO seerr_cache VALUES (?, ?, ?, 0) ON CONFLICT(scope) DO UPDATE SET payload=excluded.payload,updated=excluded.updated,failed=0 WHERE seerr_cache.updated<=excluded.updated',
                        (scope, json.dumps(payload), started))
-            db.execute('INSERT OR REPLACE INTO seerr_refresh VALUES (?,?,0)', (scope, time.time() + REFRESH_INTERVAL))
+            db.execute('INSERT OR REPLACE INTO seerr_refresh VALUES (?,?,0)',
+                       (scope, time.time() + self.history_interval(db)))
         return payload
+
+    def history_interval(self, db=None):
+        import background_jobs
+        try:
+            if db is None:
+                with closing(sqlite3.connect(self.path, timeout=0.25)) as connection:
+                    return self.history_interval(connection)
+            row = db.execute("SELECT interval_seconds FROM background_job_settings WHERE job_id='seerr-history'").fetchone()
+            if row and row[0] in background_jobs.INTERVAL_SECONDS:
+                return row[0]
+        except sqlite3.Error:
+            pass
+        return REFRESH_INTERVAL
 
     def read(self, getter):
         with closing(sqlite3.connect(self.path)) as db:
