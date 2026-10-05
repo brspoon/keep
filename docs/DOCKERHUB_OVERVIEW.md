@@ -49,7 +49,7 @@ Open the printed `/setup` address and enter the setup code supplied by the insta
 
 Follow the [installation and configuration guide](https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md) for setup, manual Compose installation, supported image tags, and HTTPS configuration. Back up your configuration and data before upgrading.
 
-Use an explicit version tag, such as `brspoon/keep:2.22.1`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
+Use an explicit version tag, such as `brspoon/keep:2.23.0`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
 
 ## Integrations and API
 

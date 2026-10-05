@@ -2430,44 +2430,6 @@ def home():
             font-size: 14px;
         }
 
-        .pull-refresh {
-            position: fixed;
-            top: 8px;
-            left: 50%;
-            z-index: 200;
-            transform: translate(-50%, -70px);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 13px;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            background: rgba(20, 21, 25, 0.94);
-            color: var(--muted);
-            backdrop-filter: blur(16px);
-            font-size: 13px;
-            font-weight: 700;
-            transition: transform 160ms ease, color 160ms ease;
-            pointer-events: none;
-        }
-
-        .pull-refresh.visible {
-            transform: translate(-50%, 0);
-        }
-
-        .pull-refresh.ready {
-            color: var(--text);
-        }
-
-        .pull-refresh-icon {
-            display: inline-block;
-            transition: transform 160ms ease;
-        }
-
-        .pull-refresh.ready .pull-refresh-icon {
-            transform: rotate(180deg);
-        }
-
         .toast {
             position: fixed;
             left: 50%;
@@ -2668,7 +2630,6 @@ def home():
 </head>
 
 <body class="library-ui" data-csrf="{{ csrf_token }}">
-<script defer src="/static/keep-pull-refresh.js?v=2.3.1"></script>
 <script defer src="/static/keep-whats-new.js?v={{ app_version }}"></script>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <main class="page" id="main-content" tabindex="-1">
@@ -2877,11 +2838,6 @@ def home():
     <button id="back-to-top" class="back-to-top" type="button" aria-label="Back to top" title="Back to top" disabled>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 11 6-6 6 6M12 5v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
-    <div id="pull-refresh" class="pull-refresh">
-        <span class="pull-refresh-icon">↓</span>
-        <span id="pull-refresh-text">Pull to refresh</span>
-    </div>
-
     <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
         <span class="toast-check">✓</span>
         <span id="toast-message">Protected</span>

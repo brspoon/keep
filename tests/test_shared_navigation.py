@@ -14,17 +14,34 @@ class BrandAssets(HTMLParser):
         super().__init__()
         self.links = []
         self.images = []
+        self.scripts = []
 
     def handle_starttag(self, tag, attrs):
         if tag == 'link':
             self.links.append(dict(attrs))
         elif tag == 'img':
             self.images.append(dict(attrs))
+        elif tag == 'script':
+            self.scripts.append(dict(attrs))
 
 
 class SharedNavigationTests(unittest.TestCase):
     def setUp(self):
         test_keep.KeepTests.setUp(self)
+
+    def assert_refresh_assets(self, page, refresh_url=None):
+        assets = BrandAssets()
+        assets.feed(page)
+        scripts = [script for script in assets.scripts
+                   if 'keep-pull-refresh.js' in script.get('src', '')]
+        self.assertEqual(len(scripts), 1)
+        self.assertEqual(scripts[0]['src'], f'/static/keep-pull-refresh.js?v={keep.APP_VERSION}')
+        self.assertIn('defer', scripts[0])
+        self.assertEqual(scripts[0].get('data-refresh-url'), refresh_url)
+        self.assertEqual([link['href'] for link in assets.links
+                          if 'keep-pull-refresh.css' in link.get('href', '')],
+                         [f'/static/keep-pull-refresh.css?v={keep.APP_VERSION}'])
+        self.assertNotIn('id="pull-refresh"', page)
 
     def assert_menu_groups(self, page, *, library=False, owner=False):
         menu = re.search(r'<div class="user-links".*?</div>', page, re.S).group()
@@ -57,6 +74,7 @@ class SharedNavigationTests(unittest.TestCase):
                 self.assertEqual(page.count('/static/keep-preferences.js?'), 1, path)
                 with self.subTest(path=path):
                     self.assert_menu_groups(page, library=True, owner=True)
+                    self.assert_refresh_assets(page)
                     assets = BrandAssets()
                     assets.feed(page)
                     for attributes, href in (
@@ -72,6 +90,35 @@ class SharedNavigationTests(unittest.TestCase):
                              if image.get('src', '').startswith('/static/keep-icon.svg')]
                     self.assertTrue(logos)
                     self.assertEqual(set(logos), {f'/static/keep-icon.svg?v={keep.APP_VERSION}'})
+
+    def test_public_and_setup_views_include_mobile_refresh(self):
+        missing = self.client.get('/missing-preview-page')
+        self.assertEqual(missing.status_code, 404)
+        self.assert_refresh_assets(missing.get_data(as_text=True))
+        with self.client.session_transaction() as session:
+            session.clear()
+        for path in ('/login', '/auth/plex', '/auth/local/forgot',
+                     '/auth/local/setup/invalid-preview-token'):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertNotEqual(response.status_code, 500)
+                self.assert_refresh_assets(response.get_data(as_text=True))
+        with keep.app.test_request_context('/setup'):
+            self.assert_refresh_assets(keep.render_template('setup.html', mode='bootstrap'))
+            self.assert_refresh_assets(keep.render_template('private_setup_link.html',
+                link='http://keep.example/auth/local/setup/synthetic-token'))
+
+    def test_post_rendered_views_refresh_with_get_without_repeating_the_action(self):
+        cases = (
+            ('/preferences?source=mobile', {'theme_mode': 'invalid'}, 200, '/preferences?source=mobile'),
+            ('/settings/recipients', {'action': 'add', 'email': 'invalid'}, 400, '/settings/email'),
+            ('/auth/local', {'email': 'absent@example.com', 'password': 'synthetic-wrong-password'}, 401, '/'),
+        )
+        for path, data, status, refresh_url in cases:
+            with self.subTest(path=path):
+                response = self.client.post(path, data={'csrf_token': 'test-csrf', **data})
+                self.assertEqual(response.status_code, status)
+                self.assert_refresh_assets(response.get_data(as_text=True), refresh_url)
 
     def test_nonowner_menu_uses_current_local_and_plex_permissions(self):
         with closing(keep.attribution_db()) as db, db:
@@ -165,6 +212,7 @@ class SharedNavigationTests(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('app-header', page)
+        self.assertNotIn('keep-pull-refresh', page)
         self.assertIn('id="dialog-receive-email"', page)
         self.assertIn('id="dialog-email-topics"', page)
 

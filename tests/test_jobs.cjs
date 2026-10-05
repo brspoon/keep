@@ -9,7 +9,12 @@ function deferred() {
   const promise = new Promise(done => { resolve = done; });
   return {promise, resolve};
 }
-function fixture({fetchAvailable = true, modalAvailable = true, currentInterval = 900, initiallyEditable = true, initiallyBusy = false} = {}) {
+function fixture({fetchAvailable = true, modalAvailable = true, currentInterval = 900, initiallyEditable = true, initiallyBusy = false, nextRunOffset = 300000} = {}) {
+  let now = Date.parse('2026-10-05T01:00:00.000Z');
+  class ClockDate extends Date {
+    constructor(...values) { super(...(values.length ? values : [now])); }
+    static now() { return now; }
+  }
   class Element {
     constructor(tag = 'div', content = '') {
       this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.attrs = {};
@@ -47,7 +52,7 @@ function fixture({fetchAvailable = true, modalAvailable = true, currentInterval 
   const row = new Element('article'); row.dataset = {jobId: 'plex-access-sync', interval: String(currentInterval), canRun: String(initiallyEditable && !initiallyBusy), editable: String(initiallyEditable), busy: String(initiallyBusy)};
   for (const [selector, content] of Object.entries({'[data-job-title]': 'Plex account access', '[data-job-status]': 'Completed', '[data-job-result]': 'Completed', '[data-job-schedule]': 'Every 15 minutes', '[data-run-label]': 'Run now', '[data-action-reason]': '', '[data-job-duration]': '0.1 seconds', '[data-last-run]': '', '[data-next-run]': '', '[data-job-announcement]': ''})) row.nodes[selector] = new Element('span', content);
   const pastTime = new Element('time'), nextTime = new Element('time');
-  pastTime.dateTime = new Date(Date.now() - 60000).toISOString(); nextTime.dateTime = new Date(Date.now() + 300000).toISOString();
+  pastTime.dateTime = new Date(now - 60000).toISOString(); nextTime.dateTime = new Date(now + nextRunOffset).toISOString();
   row.dataset.lastAttempt = pastTime.dateTime;
   row.dataset.status = initiallyEditable ? initiallyBusy ? 'running' : 'success' : 'disabled';
   nextTime.setAttribute('data-relative', ''); row.nodes['[data-last-run]'].append(pastTime); row.nodes['[data-next-run]'].append(nextTime);
@@ -84,18 +89,90 @@ function fixture({fetchAvailable = true, modalAvailable = true, currentInterval 
     constructor(form) { this.values = new Map([['csrf_token', 'synthetic-csrf']]); if (form === scheduleForm) this.values.set('interval', interval.value); }
     get(key) { return this.values.get(key); }
   }
-  vm.runInNewContext(source, {document, window, fetch: fetchAvailable ? fetch : undefined, FormData, Intl, Date, Error,
-    setTimeout: (fn, delay) => { const id = ++timerId; if (delay === 0) queueMicrotask(fn); else timers.set(id, fn); return id; }, clearTimeout: id => timers.delete(id)});
+  vm.runInNewContext(source, {document, window, fetch: fetchAvailable ? fetch : undefined, FormData, Intl, Date: ClockDate, Error,
+    setTimeout: (fn, delay) => { const id = ++timerId; if (delay === 0) queueMicrotask(fn); else timers.set(id, {fn, delay}); return id; }, clearTimeout: id => timers.delete(id)});
   return {row, runForm, runButton, edit, fallback, fallbackSelect, fallbackSave, dialog, scheduleForm, interval, cancel, save, feedback, error, ids, document, window, calls,
     pastTime, nextTime, setJob: values => { job = {...job, ...values}; }, setPost: handler => { postHandler = handler; }, setGet: handler => { getHandler = handler; },
-    async poll() { const [id, fn] = timers.entries().next().value; timers.delete(id); await fn(); }};
+    now: () => now, advance: ms => { now += ms; }, timerDelays: () => Array.from(timers.values(), timer => timer.delay),
+    async tick(ms = 1000) { now += ms; const [id, {fn}] = Array.from(timers).find(([, timer]) => timer.delay <= 1000); timers.delete(id); await fn(); },
+    async poll() { const [id, {fn}] = Array.from(timers).find(([, timer]) => timer.delay > 1000); timers.delete(id); await fn(); }};
 }
 
 test('dates are readable locally and next execution includes a relative time and exact timestamp', () => {
   const f = fixture();
   assert.doesNotMatch(f.pastTime.textContent, /T\d\d:/);
-  assert.match(f.nextTime.textContent, /in 5 minutes/);
+  assert.equal(f.nextTime.textContent, 'in 5m 0s');
   assert.ok(f.nextTime.title);
+});
+
+test('next-run countdown ticks each second and catches up after delayed timers without polling or announcements', async () => {
+  const f = fixture(), timestamp = f.nextTime.title;
+  await f.tick();
+  assert.equal(f.nextTime.textContent, 'in 4m 59s');
+  assert.equal(f.nextTime.attrs['aria-label'], 'in 4 minutes, 59 seconds');
+  await f.tick(9000);
+  assert.equal(f.nextTime.textContent, 'in 4m 50s');
+  assert.equal(f.nextTime.title, timestamp);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.row.nodes['[data-job-announcement]'].textWrites.length, 0);
+  assert.deepEqual(f.timerDelays().sort((a, b) => a - b), [1000, 15000]);
+});
+
+test('countdown follows confirmed schedule timestamps and stops changing unavailable schedules', async () => {
+  const f = fixture();
+  await f.tick();
+  f.setJob({next_run: new Date(f.now() + 7000).toISOString()});
+  await f.poll();
+  assert.equal(f.nextTime.textContent, 'in 7s');
+  await f.tick();
+  assert.equal(f.nextTime.textContent, 'in 6s');
+  f.setJob({next_run: null}); await f.poll();
+  await f.tick();
+  assert.equal(f.row.nodes['[data-next-run]'].textContent, '—');
+  f.setJob({next_run: 'invalid'}); await f.poll(); await f.tick();
+  assert.equal(f.row.nodes['[data-next-run]'].textContent, '—');
+  f.setJob({next_run: new Date(f.now() + 4000).toISOString()}); await f.poll(); await f.tick();
+  assert.equal(f.row.nodes['[data-next-run]'].querySelector('time').textContent, 'in 3s');
+});
+
+test('countdown crosses day, hour and minute boundaries and holds at Due now', async () => {
+  const f = fixture({nextRunOffset: 86401000});
+  assert.equal(f.nextTime.textContent, 'in 1d 0h 0m 1s');
+  await f.tick(); assert.equal(f.nextTime.textContent, 'in 1d 0h 0m 0s');
+  await f.tick(); assert.equal(f.nextTime.textContent, 'in 23h 59m 59s');
+  await f.tick(86337000); assert.equal(f.nextTime.textContent, 'in 1m 2s');
+  await f.tick(3000); assert.equal(f.nextTime.textContent, 'in 59s');
+  await f.tick(59000); assert.equal(f.nextTime.textContent, 'Due now');
+  assert.equal(f.nextTime.attrs['aria-label'], 'Due now');
+  await f.tick(30000); assert.equal(f.nextTime.textContent, 'Due now');
+});
+
+test('hidden pages pause countdowns and restored pages resume one timer with the elapsed time', async () => {
+  const f = fixture();
+  f.document.hidden = true; await f.document.fire('visibilitychange');
+  assert.deepEqual(f.timerDelays(), [15000]);
+  f.advance(20000);
+  assert.equal(f.nextTime.textContent, 'in 5m 0s');
+  f.document.hidden = false; await f.document.fire('visibilitychange');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.nextTime.textContent, 'in 4m 40s');
+  assert.deepEqual(f.timerDelays().sort((a, b) => a - b), [1000, 15000]);
+  await f.window.fire('pagehide');
+  assert.deepEqual(f.timerDelays(), []);
+  f.advance(9000); await f.window.fire('pageshow');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.nextTime.textContent, 'in 4m 31s');
+  assert.deepEqual(f.timerDelays().sort((a, b) => a - b), [1000, 15000]);
+  await f.window.fire('pageshow');
+  assert.deepEqual(f.timerDelays().sort((a, b) => a - b), [1000, 15000]);
+});
+
+test('countdown remains live when only native form submission is available', async () => {
+  const f = fixture({fetchAvailable: false});
+  await f.tick(); assert.equal(f.nextTime.textContent, 'in 4m 59s');
+  assert.deepEqual(f.timerDelays(), [1000]);
+  f.document.hidden = true; await f.document.fire('visibilitychange');
+  assert.deepEqual(f.timerDelays(), []);
 });
 
 test('Run now sends CSRF once, prevents duplicates and follows queued work to completion', async () => {
@@ -167,12 +244,15 @@ test('saving sends the selected frequency, guards dismissal while pending, and c
   assert.equal(f.calls[0].options.body.get('csrf_token'), 'synthetic-csrf');
   const escape = await f.dialog.fire('cancel'); assert.equal(escape.prevented, true);
   await f.cancel.fire('click'); assert.equal(f.dialog.open, true);
-  f.setJob({interval: 3600, schedule: 'Every hour'});
+  f.setJob({interval: 3600, schedule: 'Every hour', next_run: new Date(f.now() + 3600000).toISOString()});
   post.resolve({ok: true, json: async () => ({message: 'Frequency saved.'})});
   await pending;
   assert.equal(f.dialog.open, false); assert.equal(f.feedback.textContent, 'Frequency saved.');
   assert.equal(f.row.nodes['[data-job-schedule]'].textContent, 'Every hour');
   assert.equal(f.interval.disabled, false); assert.equal(f.save.disabled, false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.nextTime.textContent, 'in 1h 0m 0s');
+  await f.tick(); assert.equal(f.nextTime.textContent, 'in 59m 59s');
 });
 
 test('a rejected schedule preserves the edit and keeps its error inside the dialog', async () => {

@@ -18,6 +18,13 @@ test('dirty forms protect leaving, valid native submission releases protection',
   const f=fixture();f.field.value='New';let blocked=false;f.handlers.beforeunload({preventDefault(){blocked=true;}});assert.equal(blocked,true);
   f.handlers.submit({target:f.form});blocked=false;f.handlers.beforeunload({preventDefault(){blocked=true;}});assert.equal(blocked,false);
 });
+test('shared refresh guard follows saved form snapshots and clears on reversion or submission',()=>{
+  const f=fixture();assert.equal(f.window.keepHasUnsavedChanges(),false);
+  f.field.value='New';assert.equal(f.window.keepHasUnsavedChanges(),true);
+  f.field.value='Alex';assert.equal(f.window.keepHasUnsavedChanges(),false);
+  f.field.value='New';f.handlers.submit({target:f.form});
+  assert.equal(f.window.keepHasUnsavedChanges(),false);
+});
 test('connection tests require confirmation when edits differ from saved settings',()=>{
   const f=fixture();f.form.dataset.savedTest='true';f.field.value='New';let prevented=false;
   f.window.confirm=()=>false;

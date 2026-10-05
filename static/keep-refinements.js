@@ -4,6 +4,7 @@
   const snapshot = form => JSON.stringify([...form.elements].filter(el => el.name && !['submit', 'hidden', 'button'].includes(el.type)).map(el => [el.name, el.dataset?.revealedSaved === 'true' ? '' : el.value, el.checked]));
   const dirty = form => tracked.has(form) && snapshot(form) !== tracked.get(form);
   const changedForms = () => [...tracked.keys()].filter(form => form.isConnected && dirty(form));
+  window.keepHasUnsavedChanges = () => changedForms().length > 0;
   const prompt = document.getElementById('unsaved-dialog');
   let pending = null;
   let opener = null;
