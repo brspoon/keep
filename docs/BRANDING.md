@@ -21,7 +21,7 @@ Email headers use a white surface and dark text in light mode, with a charcoal s
 
 [generate_brand_icons.cjs](../scripts/generate_brand_icons.cjs) renders every PNG from its vector source and refreshes the canonical logo embedded in both preview compositions. Sharp **0.35.4** is developer tooling only; it is not an application or container dependency. The social preview and banner use Arial with Helvetica and sans-serif fallbacks; matching fonts are needed for byte-identical text rendering on another machine.
 
-From the repository root, with Node.js and Sharp 0.35.4 available:
+From the repository root, with Node.js 24 LTS and Sharp 0.35.4 available:
 
 ```sh
 node scripts/generate_brand_icons.cjs

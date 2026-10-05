@@ -53,7 +53,7 @@ jobs:
         run: |
           docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace keep-ci python -B -c "import pathlib, unittest; loader=unittest.TestLoader(); suite=unittest.TestSuite(loader.discover('tests', pattern=p.name) for p in sorted(pathlib.Path('tests').glob('test_*.py')) if p.name not in ('test_deploy.py', 'test_install_launcher.py')); result=unittest.TextTestRunner(verbosity=1).run(suite); raise SystemExit(not result.wasSuccessful())"
       - name: Test JavaScript
-        run: docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace node:22-alpine node --test tests/test_*.cjs
+        run: docker run --rm --network none -v "$PWD:/workspace:ro" -w /workspace node:24-alpine node --test tests/test_*.cjs
       - name: Verify packaged version
         env:
           VERSION: ${{ steps.release.outputs.version }}

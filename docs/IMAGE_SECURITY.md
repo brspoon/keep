@@ -72,8 +72,9 @@ The runtime applies the exact Python 3.14 backport hunks from
 to `shutil.py` and `tempfile.py` for CVE-2026-12345. The new probe exercises
 permission recovery while a fixture directory is replaced with a symbolic link,
 then checks that the sibling fixture retains its contents, inode and permissions.
-The original eight probes remain required. The backport is still under upstream
-review; its use requires review against the actual native candidate evidence.
+The original eight probes remain required. Use of this pinned backport requires
+review against the actual native candidate evidence and the current upstream
+advisory; the pinned commit alone does not establish upstream acceptance.
 
 Keep also applies its separately identified `keep-tempfile-bound-permission-reset-v1`
 guard. Permission recovery requires an open directory descriptor and a safe

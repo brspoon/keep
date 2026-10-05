@@ -68,10 +68,21 @@ docker compose run --rm --no-deps --entrypoint python \
 The command must report that it created and integrity-checked the backup. Keep
 the exact image reference, private environment file, and Compose overrides with
 the recovery point. Verify the backup's existence, owner, mode 0600, and integrity
-before restarting:
+before restarting. On Linux:
 
 ```sh
 sudo stat -c '%U:%G %a %n' "$BACKUP_DIR/keep-2026-10-01.sqlite3"
+```
+
+On macOS:
+
+```sh
+sudo stat -f '%Su:%Sg %Lp %N' "$BACKUP_DIR/keep-2026-10-01.sqlite3"
+```
+
+Then restart both services:
+
+```sh
 docker compose start keep-app keep-digest
 docker compose ps
 ```

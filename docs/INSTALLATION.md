@@ -401,8 +401,8 @@ connection fields described above. TLS uses `ssl` internally
   deletion capabilities. Do not mount media into Keep. Active Keeps block deletion.
 - Seerr provides request history, stable account matching and requester-scoped
   deletion checks. Local accounts require explicit owner links. The worker imports
-  history after configuration and every 15 minutes after success; history becomes
-  stale after 24 hours. Successful deletions queue a Seerr availability-sync job.
+  history after configuration and every 15 minutes after success by default;
+  history becomes stale after 24 hours. Successful deletions queue a Seerr availability-sync job.
   See [Seerr setup and deletion policy](seerr-attribution.md).
 - Tautulli supplies qualifying watch history and watched thresholds. A forecast
   requires verifiable Plex/playback data and supported current Maintainerr rules;
@@ -410,10 +410,13 @@ connection fields described above. TLS uses `ssl` internally
 - SMTP enables invitations, resets and Leaving summaries. A successful SMTP probe
   proves connection/TLS/authentication, not sender acceptance or inbox delivery.
 
-Keep's `keep-digest` worker also performs read-only background connection checks:
-Maintainerr every 15 minutes; Plex, Radarr, Sonarr and Tautulli hourly; enabled SMTP
-daily. Failures retry after five minutes. Seerr's own scheduled refresh supplies
-its health state. Connections shows pending, healthy, retrying, overdue and repeated
+Keep's `keep-digest` worker also performs read-only background connection checks.
+The default frequencies are Maintainerr every 15 minutes; Plex, Radarr, Sonarr and
+Tautulli hourly; and enabled SMTP daily. The owner can change these frequencies,
+Plex account access checks, Seerr history refreshes, and Leaving reminder scans
+under **Admin → Jobs**. Connection-probe failures retry after five minutes;
+Seerr history refreshes use their separate backoff. Seerr's scheduled refresh
+supplies its health state. Connections shows pending, healthy, retrying, overdue and repeated
 failure states. A manual Test always uses saved settings and gives temporary toast
 feedback; it does not save typed changes or prove continuous service health. If a
 form has unsaved edits, Keep asks before running the test and explains that the
@@ -472,7 +475,8 @@ never send mail in the HTTP request. Its timer can combine several collections
 without a collection name. Keep resolves those title IDs against the currently
 configured, active collections in the worker.
 
-The email worker also scans those collections on startup and every 15 minutes.
+The email worker also scans those collections on startup and every 15 minutes by
+default. The owner can change the Leaving reminders frequency under **Admin → Jobs**.
 Active, unprotected titles with a known future deadline within seven days are
 queued even if the original webhook was missed. Kept or removed titles are
 excluded. Unknown dates or retention never create guessed reminders. The normal
