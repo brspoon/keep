@@ -93,10 +93,10 @@ bytes in the source archive, without interpreting their unsafe test members.
 Other archives still undergo normal traversal and bounds checks.
 
 Use the adjacent checksum file before inspecting an archive. For example, for
-release 2.22.0:
+release 2.22.1:
 
 ```sh
-sha256sum -c keep-2.22.0-source-materials-amd64.tar.gz.sha256
+sha256sum -c keep-2.22.1-source-materials-amd64.tar.gz.sha256
 ```
 
 Use `shasum -a 256` on macOS and compare its output to the checksum file.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.22.1 — 2026-10-05
+
+- Use Node.js 24 LTS for JavaScript tests in contributor and native image validation.
+- Correct development and operator guidance for pull-request checks, configurable job frequencies, API media fields, backup verification, and registry recovery.
+- Document the required branch naming convention and immutable future GitHub release assets.
+- Align the versioned installers, Compose image, and installation examples with 2.22.1.
+
 ## 2.22.0 — 2026-10-04
 
 - Add Run now controls, queued and running feedback, and frequency editing for recurring account, reminder, Seerr history, and connection jobs.

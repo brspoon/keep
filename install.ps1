@@ -53,7 +53,7 @@ try {
     Set-Acl -LiteralPath $temporary -AclObject $acl
     # MaximumRedirection=0 rejects redirects. Python runs only after a successful,
     # complete HTTPS download; a failed transfer is removed in the finally block.
-    $download = Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/brspoon/keep/2.22.0/scripts/install_keep.py' `
+    $download = Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/brspoon/keep/2.22.1/scripts/install_keep.py' `
         -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 120 -OutFile $installerPath -PassThru -ErrorAction Stop
     if ($download.StatusCode -ne 200) { throw 'Keep installer download returned an unexpected status.' }
     & $python.Source @pythonPrefix $installerPath --start @installerArguments
