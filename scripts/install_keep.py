@@ -31,7 +31,7 @@ IMAGE_RE = re.compile(
     r"^(?:[A-Za-z0-9._-]+(?::[0-9]+)?/)?[A-Za-z0-9._/-]+"
     r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}|@sha256:[a-fA-F0-9]{64})$"
 )
-RELEASE_VERSION = "2.21.6"
+RELEASE_VERSION = "2.22.0"
 RELEASE_BASE = f"https://raw.githubusercontent.com/brspoon/keep/{RELEASE_VERSION}/"
 MANAGED_KEYS = ("KEEP_URL", "FLASK_SECRET_KEY", "KEEP_WEBHOOK_SECRET", "KEEP_IMAGE",
                 "KEEP_TRANSPORT_MODE", "KEEP_BIND_ADDRESS", "KEEP_PORT")

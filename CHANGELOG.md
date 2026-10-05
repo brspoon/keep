@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.22.0 — 2026-10-04
+
+- Add Run now controls, queued and running feedback, and frequency editing for recurring account, reminder, Seerr history, and connection jobs.
+- Preserve manual requests and job frequencies across restarts, recover job status after temporary database write failures, and announce completed or failed attempts to screen readers.
+- Remove the background worker status bar from Jobs and keep schedule, next run, and recent results beside each job.
+- Show matching user names for email recipients and include their names in Email page searches.
+
 ## 2.21.6 — 2026-10-04
 
 - Adopt the gold media-case Keep logo across the app, setup and admin pages, empty states, browser and mobile icons, emails, and repository branding.

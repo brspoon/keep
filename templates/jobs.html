@@ -15,27 +15,60 @@
 <a class="skip-link" href="#main-content">Skip to content</a>
 <main class="page" id="main-content" tabindex="-1">
 {% include 'shared_header.html' %}
-<div class="page-heading"><h2>Jobs</h2><p class="subtitle">Background work and scheduled connection checks.</p></div>
+<div class="page-heading"><h2>Jobs</h2><p class="subtitle">Run scheduled tasks and choose how often they check for work.</p></div>
 {% include 'shared_admin_tabs.html' %}
-<section class="jobs-worker" aria-labelledby="worker-heading">
-  <h3 id="worker-heading">Background worker</h3>
-  <span class="job-status job-status-{{ jobs_snapshot.worker.kind }}">{{ jobs_snapshot.worker.label }}</span>
-  {% if jobs_snapshot.worker.checked_at %}<p>Last seen <time datetime="{{ jobs_snapshot.worker.checked_at }}">{{ jobs_snapshot.worker.checked_at }}</time></p>{% else %}<p>No heartbeat recorded yet.</p>{% endif %}
-</section>
+<p id="jobs-feedback" class="jobs-feedback{% if error %} is-error{% endif %}" role="status" aria-live="polite" aria-atomic="true" {% if not notice and not error %}hidden{% endif %}>{{ error or notice or '' }}</p>
 <div class="jobs-list">
-<div class="job-columns" aria-hidden="true"><span>Job</span><span>Status</span><span>Last run</span><span>Next check</span><span>Schedule</span><span>Duration</span></div>
-{% for job in jobs_snapshot.jobs %}
-<article class="job-row" aria-labelledby="job-{{ job.id }}">
-  <div class="job-summary"><h3 id="job-{{ job.id }}">{{ job.title }}</h3><p class="job-description">{{ job.description }}</p>{% if job.result not in ('Completed', 'No recorded run') %}<p class="job-result">{{ job.result }}</p>{% endif %}</div>
-  <span class="job-status job-status-{{ job.status }}">{{ job.label }}</span>
-  <dl class="job-details">
-    <div><dt>Last run</dt><dd>{% if job.last_run %}<time datetime="{{ job.last_run }}">{{ job.last_run }}</time>{% else %}Not recorded{% endif %}</dd></div>
-    <div><dt>Next check</dt><dd>{% if job.next_run %}<time datetime="{{ job.next_run }}">{{ job.next_run }}</time>{% else %}—{% endif %}</dd></div>
-    <div><dt>Schedule</dt><dd>{{ job.schedule }}</dd></div>
-    <div><dt>Duration</dt><dd>{{ job.duration or '—' }}</dd></div>
-  </dl>
-</article>
-{% endfor %}
+  <div class="job-columns" aria-hidden="true"><span>Job</span><span>Last run</span><span>Next run</span><span>Frequency</span><span class="job-actions-heading">Actions</span></div>
+  {% for job in jobs_snapshot.jobs %}
+  <article class="job-row" aria-labelledby="job-{{ job.id }}" data-job-id="{{ job.id }}" data-interval="{{ job.interval or '' }}" data-can-run="{{ 'true' if job.can_run else 'false' }}" data-editable="{{ 'true' if job.editable else 'false' }}" data-busy="{{ 'true' if job.queued or job.status == 'running' else 'false' }}" data-status="{{ job.status }}" data-last-attempt="{{ job.last_run or '' }}">
+    <div class="job-summary">
+      <div class="job-title-line"><h3 id="job-{{ job.id }}" data-job-title>{{ job.title }}</h3><span class="job-status job-status-{{ job.status }}" data-job-status>{{ job.label }}</span></div>
+      <p class="job-description">{{ job.description }}</p>
+      <p class="job-result" data-job-result {% if job.result in ('Completed', 'No recorded run') %}hidden{% endif %}>{{ job.result }}</p>
+      <span class="visually-hidden" data-job-announcement role="status" aria-live="polite" aria-atomic="true"></span>
+    </div>
+    <dl class="job-details">
+      <div><dt>Last run</dt><dd><span data-last-run>{% if job.last_run %}<time datetime="{{ job.last_run }}">{{ job.last_run }}</time>{% else %}Not run yet{% endif %}</span><small data-job-duration {% if not job.duration %}hidden{% endif %}>{{ job.duration or '' }}</small></dd></div>
+      <div><dt>Next run</dt><dd data-next-run>{% if job.next_run %}<time datetime="{{ job.next_run }}" data-relative>{{ job.next_run }}</time>{% else %}—{% endif %}</dd></div>
+      <div><dt>Frequency</dt><dd data-job-schedule>{{ job.schedule }}</dd></div>
+    </dl>
+    <div class="job-actions">
+      <div class="job-action-buttons">
+        {% if job.interval_options %}<button type="button" class="job-button job-edit secondary" data-edit-job aria-haspopup="dialog" aria-controls="job-schedule-dialog" aria-label="Edit frequency for {{ job.title }}" hidden {% if not job.editable %}disabled{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 4 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"/></svg><span>Edit</span></button>{% endif %}
+        <form method="post" action="/settings/jobs/{{ job.id }}/run" data-run-job>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="job-button job-run" {% if not job.can_run %}disabled{% endif %} aria-label="Run {{ job.title }} now" aria-describedby="job-reason-{{ job.id }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 4 12 8-12 8z"/></svg><span data-run-label>{{ 'Queued' if job.queued else 'Running' if job.status == 'running' else 'Run now' }}</span></button>
+        </form>
+      </div>
+      <p id="job-reason-{{ job.id }}" class="job-action-reason" data-action-reason {% if not job.action_reason %}hidden{% endif %}>{{ job.action_reason or '' }}</p>
+      {% if job.interval_options %}
+      <details class="job-schedule-fallback" data-schedule-fallback {% if not job.editable %}hidden{% endif %}>
+        <summary>Edit frequency</summary>
+        <form method="post" action="/settings/jobs/{{ job.id }}/schedule" data-schedule-job>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="job-interval-{{ job.id }}">New frequency</label>
+          <select name="interval" id="job-interval-{{ job.id }}" required {% if not job.editable %}disabled{% endif %}>
+            {% for option in job.interval_options or interval_options %}<option value="{{ option.seconds }}" {% if option.seconds == job.interval %}selected{% endif %}>{{ option.label }}</option>{% endfor %}
+          </select>
+          <button type="submit" class="job-button" {% if not job.editable %}disabled{% endif %}>Save changes</button>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
 </div>
+<p class="jobs-note">Run now performs one check. Existing email quiet periods, reminder rules and deletion safeguards still apply.</p>
 </main>
+<dialog id="job-schedule-dialog" class="welcome-dialog job-schedule-dialog" aria-labelledby="job-schedule-title" aria-describedby="job-schedule-description">
+  <form method="post" id="job-schedule-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="job-dialog-heading"><span class="job-dialog-eyebrow">Job frequency</span><h2 id="job-schedule-title">Edit job</h2><p id="job-schedule-description">Choose how often this job checks for work. The new frequency applies to its next scheduled run.</p></div>
+    <div class="job-frequency-current"><span>Current frequency</span><strong id="job-current-frequency"></strong></div>
+    <div class="job-frequency-field"><label for="job-interval">New frequency</label><select id="job-interval" name="interval" required>{% for option in interval_options %}<option value="{{ option.seconds }}">{{ option.label }}</option>{% endfor %}</select></div>
+    <p id="job-schedule-error" class="job-schedule-error" role="alert" hidden></p>
+    <div class="job-dialog-actions"><button type="button" class="job-button secondary" data-cancel-schedule>Cancel</button><button type="submit" class="job-button" id="job-save-schedule">Save changes</button></div>
+  </form>
+</dialog>
 </body></html>

@@ -32,7 +32,9 @@
     list.id = `${panel.id}-list`;
     list.setAttribute('role', 'listbox');
     panel.append(search, list);
-    document.body.append(panel);
+    // A select inside a native dialog must keep its popup in the same top layer.
+    const dialog = select.closest('dialog');
+    (dialog || document.body).append(panel);
     trigger.setAttribute('role', 'combobox');
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-controls', list.id);
@@ -174,6 +176,7 @@
     }
     const control = {select, trigger, panel, sync, close, position};
     controls.add(control);
+    dialog?.addEventListener('close', () => close());
     trigger.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); panel.hidden ? open() : close(); });
     trigger.addEventListener('keydown', keydown);
     search.addEventListener('keydown', keydown);

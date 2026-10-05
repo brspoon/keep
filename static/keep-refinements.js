@@ -112,7 +112,11 @@
       const query = input.value.trim().toLocaleLowerCase();
       clear.hidden = !input.value;
       let count = 0;
-      rows.forEach(row => { row.hidden = !row.textContent.toLocaleLowerCase().includes(query); if (!row.hidden) count++; });
+      rows.forEach(row => {
+        const text = `${row.dataset?.searchText || ''} ${row.textContent}`.toLocaleLowerCase();
+        row.hidden = !text.includes(query);
+        if (!row.hidden) count++;
+      });
       status.textContent = count ? `${count} ${count === 1 ? label.replace(/s$/, '') : label}`
         : query ? `No matching ${label}. Try a different name or email, or clear your search.`
         : `0 ${label}`;

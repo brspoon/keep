@@ -198,20 +198,49 @@ class ConnectionSettings:
         if not self.configured(service, getter):
             return False
         now = time.time() if now is None else now
+        fingerprint = self.connection_fingerprint(service, getter)
         with closing(sqlite3.connect(self.path)) as db:
-            row = db.execute('SELECT fingerprint,next_attempt FROM automatic_connection_checks WHERE service=?',
+            row = db.execute('SELECT fingerprint,checked,next_attempt FROM automatic_connection_checks WHERE service=?',
                              (service,)).fetchone()
-        return not row or row[0] != self.connection_fingerprint(service, getter) or now >= row[1]
+            if not row or row[0] != fingerprint or now >= row[2]:
+                return True
+            try:
+                observed = db.execute('''SELECT scope,started,next_run FROM background_jobs
+                    WHERE job_id=? AND status='failed' ''', ('probe-' + service,)).fetchone()
+            except sqlite3.OperationalError:
+                # Older installs may not have job observations yet.
+                return False
+        # A failed native write leaves an older canonical schedule. Retry only
+        # that probe; genuine recorded failures keep their native backoff.
+        return bool(observed and observed[0] == fingerprint and row[1] < observed[1] and
+                    observed[2] is not None and now >= observed[2])
+
+    def automatic_interval(self, service, db=None):
+        """Use a saved Jobs cadence; older databases retain the service default."""
+        import background_jobs
+        try:
+            if db is None:
+                with closing(sqlite3.connect(self.path, timeout=0.25)) as connection:
+                    return self.automatic_interval(service, connection)
+            row = db.execute('SELECT interval_seconds FROM background_job_settings WHERE job_id=?',
+                             ('probe-' + service,)).fetchone()
+            if row and row[0] in background_jobs.INTERVAL_SECONDS:
+                return row[0]
+        except sqlite3.Error:
+            pass
+        return AUTO_INTERVALS[service]
 
     def record_automatic_check(self, service, fingerprint, passed, now=None):
         now = time.time() if now is None else now
         with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
             previous = db.execute('SELECT fingerprint,last_success,failures FROM automatic_connection_checks WHERE service=?',
                                   (service,)).fetchone()
             matching = previous and previous[0] == fingerprint
             last_success = now if passed else (previous[1] if matching else None)
             failures = 0 if passed else (previous[2] if matching else 0) + 1
-            next_attempt = now + (AUTO_INTERVALS[service] if passed else min(300, AUTO_INTERVALS[service]))
+            interval = self.automatic_interval(service, db)
+            next_attempt = now + (interval if passed else min(300, interval))
             db.execute('INSERT OR REPLACE INTO automatic_connection_checks VALUES (?,?,?,?,?,?)',
                        (service, fingerprint, now, last_success, failures, next_attempt))
         return (previous[2] if matching else 0), failures
@@ -232,7 +261,7 @@ class ConnectionSettings:
             else:
                 _, checked, last_success, failures, next_attempt = checks[service]
                 tested = datetime.fromtimestamp(checked, timezone.utc)
-                overdue = now > next_attempt + max(90, AUTO_INTERVALS[service] / 2)
+                overdue = now > next_attempt + max(90, self.automatic_interval(service) / 2)
                 if failures >= 2:
                     kind, label, detail = 'error', 'Needs attention', 'Repeated automatic checks failed; the service may be unavailable.'
                 elif overdue:

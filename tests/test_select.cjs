@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync('static/keep-select.js', 'utf8');
-function fixture(texts=['30 days','90 days','365 days','Never expires'], {disabled=false, disabledOptions=[], grouped=false}={}) {
+function fixture(texts=['30 days','90 days','365 days','Never expires'], {disabled=false, disabledOptions=[], grouped=false, inDialog=false}={}) {
   class Element {
     constructor(tag='div') { this.tagName=tag.toUpperCase(); this.children=[]; this.dataset={}; this.attrs={}; this.listeners={}; this.hidden=false; this.style={}; this.textContent=''; this.isConnected=true;
       const classes=new Set(); this.classList={add:v=>classes.add(v),toggle:(v,on)=>on?classes.add(v):classes.delete(v)}; }
@@ -19,14 +19,15 @@ function fixture(texts=['30 days','90 days','365 days','Never expires'], {disabl
     dispatchEvent(e) { e.target ||= this; (this.listeners[e.type] || []).forEach(fn=>fn(e)); return true; }
     focus() { document.activeElement=this; }
     scrollIntoView() {}
-    closest() { return null; }
+    closest(selector) { return selector === 'dialog' ? modal : null; }
     contains(node) { return this===node || this.children.some(c=>c.contains(node)); }
     querySelectorAll(selector) { return this.children.filter(c=>selector==='select'?c.tagName==='SELECT':c.className==='keep-select-group'); }
     getBoundingClientRect() { return {left:290,top:100,bottom:146,width:112}; }
   }
-  const document=new Element(), body=new Element('body'), select=new Element('select'), form=new Element('form');
+  const document=new Element(), body=new Element('body'), select=new Element('select'), form=new Element('form'), modal=inDialog ? new Element('dialog') : null;
   document.body=body; document.createElement=tag=>new Element(tag); document.getElementById=()=>null; document.querySelectorAll=()=>[select];
-  body.append(select); select.form=form; select.name='expiry'; select.labels=[]; select.disabled=disabled; select.required=false; select.validity={valid:true}; select.size=0;
+  if(modal) { body.append(modal); modal.append(select); } else body.append(select);
+  select.form=form; select.name='expiry'; select.labels=[]; select.disabled=disabled; select.required=false; select.validity={valid:true}; select.size=0;
   select.options=texts.map((text,i)=> { const option=new Element('option'); option.textContent=text; option.value=String(i); option.disabled=disabledOptions.includes(i); option.parentElement=grouped && i===2 ? {tagName:'OPTGROUP',label:'Unavailable',disabled:true} : select; return option; });
   let selected=1;
   Object.defineProperty(select,'selectedIndex',{get:()=>selected,set:v=>{selected=v;}});
@@ -37,9 +38,9 @@ function fixture(texts=['30 days','90 days','365 days','Never expires'], {disabl
   class MutationObserver { constructor(callback) { this.callback=callback; observers.push(this); } observe() {} }
   class Event { constructor(type,props={}) { this.type=type; Object.assign(this,props); } }
   vm.runInNewContext(source,{document,window,MutationObserver,Event,Date,setInterval:fn=>{poll=fn;},setTimeout:fn=>timers.push(fn)});
-  const wrapper=body.children.find(c=>c.className==='keep-select'), trigger=wrapper.children[1], panel=body.children.find(c=>c.className==='keep-select-panel'), search=panel.children[0], list=panel.children[1];
+  const parent=modal || body, wrapper=parent.children.find(c=>c.className==='keep-select'), trigger=wrapper.children[1], panel=parent.children.find(c=>c.className==='keep-select-panel'), search=panel.children[0], list=panel.children[1];
   const fire=(node,type,props={})=>{const event={type,target:node,preventDefault(){this.prevented=true;},stopPropagation(){},...props}; node.dispatchEvent(event); return event;};
-  return {select,trigger,panel,search,list,form,document,fire,poll:()=>poll(),flush:()=>timers.splice(0).forEach(fn=>fn()),observers};
+  return {select,trigger,panel,search,list,form,document,modal,body,fire,poll:()=>poll(),flush:()=>timers.splice(0).forEach(fn=>fn()),observers};
 }
 test('enhancement retains enabled native form value and displays text safely',()=>{
   const f=fixture(['<img src=x onerror=alert(1)>','90 days']);
@@ -87,4 +88,22 @@ test('large lists search and keyboard commit while Tab, outside click and outsid
   f.fire(f.trigger,'click'); f.fire(f.search,'keydown',{key:'Tab'}); assert.equal(f.panel.hidden,true); assert.equal(f.document.activeElement,f.trigger);
   f.fire(f.trigger,'click'); f.fire(f.document,'pointerdown',{target:f.form}); assert.equal(f.panel.hidden,true);
   f.fire(f.trigger,'click'); f.fire(f.document,'focusin',{target:f.form}); assert.equal(f.panel.hidden,true);
+});
+test('dialog selects keep their popup in the modal, support keyboard and click selection, and close with the dialog',()=>{
+  const f=fixture(undefined,{inDialog:true});
+  assert.equal(f.panel.parentElement,f.modal);
+  assert.equal(f.body.children.includes(f.panel),false);
+  f.fire(f.trigger,'click');
+  assert.equal(f.panel.hidden,false);
+  assert.equal(f.panel.style.left,'127px');
+  f.fire(f.list.children[3],'click');
+  assert.equal(f.select.selectedIndex,3); assert.equal(f.panel.hidden,true);
+  f.fire(f.trigger,'keydown',{key:'ArrowDown'});
+  f.fire(f.trigger,'keydown',{key:'Home'});
+  f.fire(f.trigger,'keydown',{key:'Enter'});
+  assert.equal(f.select.selectedIndex,0);
+  f.fire(f.trigger,'click'); f.fire(f.trigger,'keydown',{key:'Escape'});
+  assert.equal(f.panel.hidden,true);
+  f.fire(f.trigger,'click'); f.fire(f.modal,'close');
+  assert.equal(f.panel.hidden,true); assert.equal(f.trigger.attrs['aria-expanded'],'false');
 });
