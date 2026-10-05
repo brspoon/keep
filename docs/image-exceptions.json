@@ -1,7 +1,7 @@
 {
   "base": "sha256:7b9528fefc51c9d3753ccd25dcf1dea9dd327e7c2f8bef89cd2cf3b34f847408",
   "expires": "2026-10-07",
-  "approval": "Maintainer-authorized release-readiness remediation: eight previously reviewed fixes plus the temporary-directory correction and Keep local permission-reset guard reviewed on 2026-10-03. Only exact reviewed packages with all nine successful native probes are accepted; every other finding blocks.",
+  "approval": "Reviewed fixes for the pinned base packages, including the Python temporary-directory correction and Keep permission-reset guard. Accept only the exact package versions listed below with all nine native runtime probes passing; block all other findings.",
   "reviewed_sources": {
     "Dockerfile": "14c65f5feb49a8853d1bb14856f4c696dab9119c9b5d014951e6e6db818d5146",
     "scripts/inspect_candidate.py": "28d160073d2c142e863f708941a044e772739eedbfda13bcb0289bbfd7e3388f",

@@ -42,7 +42,7 @@ class RegistryTransferTests(unittest.TestCase):
                 transfer.checked_digest(value)
 
     def test_feature_branch_refused_before_registry(self):
-        with patch.dict(os.environ, GITHUB_EVENT_NAME='push', GITHUB_REF='refs/heads/brspoon/test', KEEP_DEV_CONFIRMATION='release-stable'), patch.object(transfer, 'hub') as hub:
+        with patch.dict(os.environ, GITHUB_EVENT_NAME='push', GITHUB_REF='refs/heads/feature/test', KEEP_DEV_CONFIRMATION='release-stable'), patch.object(transfer, 'hub') as hub:
             with self.assertRaises(ValueError):
                 transfer.execute('stage', 'amd64')
             hub.assert_not_called()

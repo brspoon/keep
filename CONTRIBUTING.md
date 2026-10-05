@@ -5,7 +5,6 @@ Thanks for helping improve Keep. The project is for self-hosters running Keep wi
 ## Before opening a change
 
 - Check existing issues and the [changelog](CHANGELOG.md) for related work.
-- Use `brspoon/<short-description>` for change branches in this repository.
 - For behavior changes, describe the user impact and include focused tests. Use synthetic examples; never use household data, private artwork, real service responses, credentials, database files, or production logs.
 - Keep changes scoped. Do not add network-dependent tests or contact production services from tests.
 - For source and dependency changes, preserve applicable notices and update the relevant source/notice inventory. See [source distribution](docs/SOURCE_DISTRIBUTION.md) and its [source acquisition instructions](docs/SOURCE_DISTRIBUTION.md#matching-the-container).

@@ -18,7 +18,7 @@ or recovery works end to end.
 
 Build development images locally. The active release workflow tests native amd64
 and arm64 images, Compose, non-root runtime, durable web/worker startup and security
-policy. Build test images locally rather than publishing development tags.
+policy. Local development does not require publishing to the project's registry.
 See [release policy](RELEASE_POLICY.md) and [image security](IMAGE_SECURITY.md).
 
 For UI checks, use an isolated preview with synthetic credentials and media.

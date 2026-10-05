@@ -37,9 +37,9 @@ def delete_transfer_tag(path, token):
     except urllib.error.HTTPError as error:
         if error.code != 403:
             raise
-        # CI deliberately has only read/write credentials. Cleanup is a separate
-        # lifecycle gate performed with the host's existing retention credential.
-        print('::warning::Temporary tag retained; host-side authorized cleanup required: ' + path)
+        # CI deliberately has only read/write credentials. A maintainer can
+        # remove the temporary tag with a separate deletion-capable credential.
+        print('::warning::Temporary tag retained; maintainer registry cleanup required: ' + path)
         return False
     return True
 

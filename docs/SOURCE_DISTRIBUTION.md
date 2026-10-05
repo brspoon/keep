@@ -93,10 +93,10 @@ bytes in the source archive, without interpreting their unsafe test members.
 Other archives still undergo normal traversal and bounds checks.
 
 Use the adjacent checksum file before inspecting an archive. For example, for
-release 2.23.0:
+release 2.23.1:
 
 ```sh
-sha256sum -c keep-2.23.0-source-materials-amd64.tar.gz.sha256
+sha256sum -c keep-2.23.1-source-materials-amd64.tar.gz.sha256
 ```
 
 Use `shasum -a 256` on macOS and compare its output to the checksum file.
@@ -160,10 +160,9 @@ inventory and verified provenance/signature evidence. The automatically generate
 and image-configuration digests, source archive names/hashes and original native
 run. It is prepared before stable promotion and does not bind the final
 multi-platform index digest. Record that published index and its verified native
-children in a separate final-delivery receipt, together with the exact source
-assets and deployment evidence. Verify uploaded asset sizes and SHA-256 digests
-against the local files before recording delivery; the generated JSON alone does
-not establish final index publication or host deployment.
+children alongside the exact source asset names and hashes. Verify uploaded asset
+sizes and SHA-256 digests against the local files; the generated JSON alone does
+not establish final index publication or successful source asset delivery.
 
 ## Component licenses and redistribution
 
@@ -243,13 +242,10 @@ verification evidence, even after its container tags are removed or its security
 support ends. Source-release assets have no automated deletion policy. Preserve
 the local copies outside disposable worktrees and retain their accompanying
 notices. Routine CI log retention does not limit durable release-asset retention.
-The [seven-tag registry policy](REGISTRY_RETENTION.md) controls container tags only.
-Its persistent obsolete-manifest backlog and explicitly reviewed initial seed
-do not authorize source-asset removal. Host post-deployment cleanup runs separately
-from CI publication and preserves matching sources even when an obsolete image
-index or native child is deleted. Unknown/custom references remain protected;
-the absence of a supported arbitrary-untagged inventory API is not evidence that
-all unlisted objects are safe to remove.
+Removing a container tag, image index or native manifest does not authorize
+removing the corresponding source archives, notices, checksums or original
+verification evidence. Keep those materials available for every distributed
+release independently of registry cleanup.
 
 ## Release delivery
 

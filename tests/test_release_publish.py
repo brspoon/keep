@@ -33,14 +33,14 @@ class ReleasePublishTests(unittest.TestCase):
     def test_pushes_and_invalid_inputs_never_contact_registry(self):
         cases = [
             {'GITHUB_EVENT_NAME': 'push', 'GITHUB_REF': 'refs/heads/main'},
-            {'GITHUB_EVENT_NAME': 'push', 'GITHUB_REF': 'refs/heads/brspoon/test'},
+            {'GITHUB_EVENT_NAME': 'push', 'GITHUB_REF': 'refs/heads/feature/test'},
             {'KEEP_RELEASE_PUBLISH': 'false'},
             {'KEEP_RELEASE_PUBLISH': ''},
             {'KEEP_RELEASE_PUBLISH': None},
             {'KEEP_RELEASE_CONFIRMATION': ''},
             {'KEEP_RELEASE_CONFIRMATION': None},
             {'KEEP_RELEASE_CONFIRMATION': 'private-dev-only'},
-            {'GITHUB_REF': 'refs/heads/brspoon/test'},
+            {'GITHUB_REF': 'refs/heads/feature/test'},
         ]
         for changes in cases:
             with self.subTest(changes=changes), patch.dict(os.environ, ENV):
@@ -198,7 +198,7 @@ class ReleasePublishTests(unittest.TestCase):
                 self.assertNotIn(['docker', 'push', 'example/keep:stable'], calls)
 
     def test_release_refuses_wrong_ref_or_confirmation_before_registry(self):
-        for changes in ({'GITHUB_REF': 'refs/heads/brspoon/test'},
+        for changes in ({'GITHUB_REF': 'refs/heads/feature/test'},
                         {'KEEP_RELEASE_CONFIRMATION': 'private-dev-only'}):
             with patch.dict(os.environ, {**ENV, **changes}), patch.object(publisher, 'hub') as hub:
                 with self.assertRaises(ValueError):
@@ -248,7 +248,7 @@ class ReleaseEligibilityTests(unittest.TestCase):
                 release_needed.release_needed('example/keep', '2.0.2', SHA, 'test', 'test')
 
     def test_no_push_can_use_release_guard(self):
-        for ref in ('refs/heads/main', 'refs/heads/brspoon/test'):
+        for ref in ('refs/heads/main', 'refs/heads/feature/test'):
             with patch.dict(os.environ, {**ENV, 'GITHUB_EVENT_NAME': 'push', 'GITHUB_REF': ref}):
                 with self.assertRaises(ValueError):
                     publisher.require_manual_dispatch(True)

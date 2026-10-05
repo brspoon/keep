@@ -54,9 +54,9 @@ Approved images then pass through temporary run-and-attempt-specific registry ta
 the publication job receives immutable digests, validates source/runtime identity,
 and promotes stable only after both architecture jobs succeed. After publication,
 CI attempts to remove only its temporary tags, not their shared image manifests. If the CI
-token lacks delete permission, it emits an explicit cleanup warning; the operator
-removes those exact tags using the host's separate retention credential after
-verifying their digests. Never broaden the CI token merely for tag cleanup.
+token lacks delete permission, it emits an explicit cleanup warning. A maintainer
+can remove those exact tags with a separate deletion-capable credential after
+verifying their digests and references. Never broaden the CI token merely for tag cleanup.
 A passing gate is not a guarantee of no undiscovered
 vulnerabilities.
 
