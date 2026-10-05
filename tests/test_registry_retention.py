@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -550,18 +551,68 @@ class RetentionTests(unittest.TestCase):
                 retention.production(root)
             docker.assert_not_called()
 
-    def test_recovery_accepts_sqlite_pair_rollback_images_and_current_nas_config(self):
+    def test_recovery_accepts_verified_records_without_local_docker_rollback_images(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'app'; root.mkdir()
             backup = Path(directory) / 'nas'
             receipt, _ = recovery_fixture(root, backup)
-            images = [digest(901), digest(902)]
-            with patch.object(retention, 'docker', return_value=json.dumps([{'Id': value} for value in images])):
+            with patch.object(retention, 'docker', side_effect=subprocess.CalledProcessError(
+                    1, ['docker', 'image', 'inspect', digest(901), digest(902)])) as docker:
                 self.assertIsNone(retention.recovery(root, receipt))
+            docker.assert_not_called()
+
+    def test_production_accepts_verified_recovery_with_only_current_image_available(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'app'; root.mkdir()
+            receipt, _ = recovery_fixture(root, Path(directory) / 'nas')
+            (root / '.registry-state/deployed.json').write_text(json.dumps(receipt))
+            container = {'Image': receipt['image'],
+                         'State': {'Status': 'running', 'Health': {'Status': 'healthy'}},
+                         'Config': {'Labels': {'org.opencontainers.image.version': receipt['version'],
+                                             'org.opencontainers.image.revision': receipt['revision']}}}
+
+            def current_image_only(*args):
+                if args == ('inspect', 'fixture-app', 'fixture-digest'):
+                    return json.dumps([container, container])
+                if args == ('image', 'inspect', receipt['image']):
+                    return json.dumps([{'RepoDigests': ['brspoon/keep@' + digest(50)]}])
+                if args[:2] == ('exec', 'fixture-app'):
+                    return ''
+                raise subprocess.CalledProcessError(1, ['docker', *args])
+
+            with patch.object(retention, 'docker', side_effect=current_image_only) as docker:
+                live = retention.production(root)
+            self.assertEqual(live['version'], receipt['version'])
+            self.assertEqual(live['registry_digests'], [digest(50)])
+            inspections = [call.args for call in docker.call_args_list
+                           if call.args[:2] == ('image', 'inspect')]
+            self.assertEqual(inspections, [('image', 'inspect', receipt['image'])])
+
+    def test_recovery_holds_for_missing_or_malformed_previous_image_identities(self):
+        metadata = [({}, 'Paired rollback image identities')]
+        metadata += [({'previous': value}, 'Paired rollback image identities')
+                     for value in (None, {}, digest(901), [], [digest(901)],
+                                   [digest(901), digest(902), digest(903)])]
+        invalid_identities = (None, 901, {}, '', 'sha256:' + 'a' * 63,
+                              'sha256:' + 'a' * 65, 'sha256:' + 'g' * 64,
+                              'sha512:' + 'a' * 64, digest(901) + '\n')
+        metadata += [({'previous': pair}, 'Incomplete registry digest metadata')
+                     for value in invalid_identities
+                     for pair in ([value, digest(902)], [digest(901), value])]
+        for value, reason in metadata:
+            with self.subTest(metadata=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / 'app'; root.mkdir()
+                receipt, _ = recovery_fixture(root, Path(directory) / 'nas')
+                (Path(receipt['recovery']) / 'images.json').write_text(json.dumps(value))
+                with patch.object(retention, 'docker', side_effect=subprocess.CalledProcessError(
+                        1, ['docker', 'image', 'inspect'])) as docker:
+                    with self.assertRaisesRegex(retention.Hold, reason):
+                        retention.recovery(root, receipt)
+                docker.assert_not_called()
 
     def test_recovery_holds_for_missing_mismatched_or_corrupt_local_receipts(self):
         cases = ('missing_directory', 'mismatched_receipt', 'corrupt_database', 'corrupt_local_config_archive',
-                 'missing_database', 'missing_paired_images')
+                 'missing_database', 'missing_image_metadata', 'missing_receipt', 'missing_local_config_archive')
         for case in cases:
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / 'app'; root.mkdir()
@@ -579,9 +630,17 @@ class RetentionTests(unittest.TestCase):
                     (record / 'configuration.tgz').write_bytes(b'not a gzip archive')
                 elif case == 'missing_database':
                     (record / 'database.sqlite3').unlink()
-                with patch.object(retention, 'docker', return_value=json.dumps([{'Id': digest(901)}])):
+                elif case == 'missing_image_metadata':
+                    (record / 'images.json').unlink()
+                elif case == 'missing_receipt':
+                    (record / 'deployed.json').unlink()
+                elif case == 'missing_local_config_archive':
+                    (record / 'configuration.tgz').unlink()
+                with patch.object(retention, 'docker', side_effect=subprocess.CalledProcessError(
+                        1, ['docker', 'image', 'inspect'])) as docker:
                     with self.assertRaises(retention.Hold):
                         retention.recovery(root, receipt)
+                docker.assert_not_called()
 
     def test_recovery_holds_for_missing_stale_or_mismatched_nas_config_backup(self):
         cases = ('missing', 'stale', 'mismatched_config')
@@ -597,10 +656,11 @@ class RetentionTests(unittest.TestCase):
                     os.utime(archive, (old, old))
                 else:
                     (root / 'compose.yml').write_text('changed deployment config\n')
-                with patch.object(retention, 'docker', return_value=json.dumps(
-                            [{'Id': digest(901)}, {'Id': digest(902)}])):
+                with patch.object(retention, 'docker', side_effect=subprocess.CalledProcessError(
+                        1, ['docker', 'image', 'inspect'])) as docker:
                     with self.assertRaises(retention.Hold):
                         retention.recovery(root, receipt)
+                docker.assert_not_called()
 
     def test_reviewed_artifact_file_accepts_only_exact_terminal_attempts(self):
         rows, _ = scenario()
