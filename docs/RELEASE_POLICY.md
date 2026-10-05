@@ -70,6 +70,12 @@ checked-in review policy and its expiry; scanners are not rerun.
 After verification, finalize the version draft as a normal GitHub release,
 preserving all assets. Candidate storage remains unpublished. A draft is temporary
 staging, not a release for users to install.
+GitHub release immutability is enabled for future releases. Attach and verify every
+source, checksum, notice and evidence asset before publishing the version draft:
+publication locks its assets and source tag. Assets cannot be added, replaced or
+deleted afterward; corrections require a new release. Release titles and notes
+remain editable. Releases published before this setting was enabled are not
+retroactively locked. See [GitHub's immutable-release guidance](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
 For a public release, finalized notes, source archives, notices, checksums and
 image tags must be accessible without authentication. Source delivery requirements
 are described in [source distribution](SOURCE_DISTRIBUTION.md).

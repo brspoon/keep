@@ -1,6 +1,6 @@
 # Development testing
 
-Use Python 3.14 and Node.js 22. From the repository root:
+Use Python 3.14 and [Node.js 24 LTS](https://nodejs.org/en/about/previous-releases). Node.js runs the JavaScript tests and optional branding tools; the application runtime uses Python. From the repository root:
 
 ```sh
 python3.14 -m venv .venv
@@ -62,17 +62,21 @@ Every pull request and main push runs the Python and JavaScript suites in the
 errors. This job has read-only repository permissions and no registry or publishing
 credentials. The independent Windows installer check runs for every pull request.
 
-External-fork pull requests do not run the native image, vendor-provenance,
-vulnerability-scan, source-acquisition, or image privacy gates. Trusted
-same-repository pull requests and main pushes run those checks on both architectures.
-Do not expose repository secrets to fork code.
+Pull requests from forks and from this repository do not run the native image,
+vendor-provenance, vulnerability-scan, source-acquisition, or image privacy gates.
+After merging to main, changes requiring native validation run those checks on
+both architectures. Allowlisted prose and screenshots can skip native validation
+only when the current version is already published; uncertain classification and
+unpublished versions require full validation. Do not expose repository secrets
+to pull-request code.
 
 The stable `required-checks` result is the main branch's required merge check. It
 always evaluates completed prerequisites, including failures and cancellations:
-Windows and contributor tests must pass, and trusted contributions must also pass
-both native architecture gates. Fork contributions must leave the native job
-skipped. Manual release dispatches retain their separate publication prerequisites;
-they do not use this merge check.
+Change classification, Windows and contributor tests must pass. All pull requests
+must leave the native jobs skipped. Main pushes must also pass candidate preparation
+and both native architecture gates when the classification requires them; otherwise
+those jobs must be skipped. Manual release dispatches retain their separate
+publication prerequisites; they do not use this merge check.
 
 Use results for the exact source revision being reviewed. For documentation edits,
 check diffs, relative links and consistency with the implementation. Files copied

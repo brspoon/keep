@@ -40,9 +40,11 @@ deployment lock holds cleanup.
 Before deletion, the script checks live SQLite integrity, the retained local
 recovery receipt, database and configuration archive, recorded image identities,
 and a full NAS backup from the past 48 hours covering the current environment and
-Compose files. Local rollback Docker images may be removed after a healthy
-deployment; their absence does not block registry retention. Retained preceding
-release indexes and their native manifests remain protected in the registry.
+Compose files. Preserve local rollback Docker images and `.deploy-backups`
+recovery directories. The registry-retention tool does not remove them, and its
+recovery check verifies recorded rollback identities without requiring those
+images to be present locally. Retained preceding release indexes and their
+native manifests remain protected in the registry.
 These checks establish that recovery materials are present and consistent; the
 separate isolated restore trial establishes that the tested recovery procedure
 works.
@@ -136,7 +138,7 @@ backup. Retention still compares those saved files with the current deployment.
 The only optional field is `minimum_release`, a semantic version such as
 `"2.0.0"`. It must not exceed the verified production version. Omitting it keeps
 the two preceding releases without a baseline. A baseline change requires a new
-review of any pending cleanup plan using `--replace-stale`.
+review of any pending cleanup plan using `--execute --replace-stale-pending`.
 
 The state directory must be owned by the executing user with mode `0700`, and
 the configuration must be a regular owner-owned file with mode `0600`.

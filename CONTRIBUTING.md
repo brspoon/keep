@@ -5,6 +5,7 @@ Thanks for helping improve Keep. The project is for self-hosters running Keep wi
 ## Before opening a change
 
 - Check existing issues and the [changelog](CHANGELOG.md) for related work.
+- Use `brspoon/<short-description>` for change branches in this repository.
 - For behavior changes, describe the user impact and include focused tests. Use synthetic examples; never use household data, private artwork, real service responses, credentials, database files, or production logs.
 - Keep changes scoped. Do not add network-dependent tests or contact production services from tests.
 - For source and dependency changes, preserve applicable notices and update the relevant source/notice inventory. See [source distribution](docs/SOURCE_DISTRIBUTION.md) and its [source acquisition instructions](docs/SOURCE_DISTRIBUTION.md#matching-the-container).
@@ -13,7 +14,7 @@ Thanks for helping improve Keep. The project is for self-hosters running Keep wi
 
 ## Local development
 
-Use Python 3.14 and Node.js 22. From a clean checkout:
+Use Python 3.14 and [Node.js 24 LTS](https://nodejs.org/en/about/previous-releases). Node.js runs the JavaScript tests and optional branding tools; the application runtime uses Python. From a clean checkout:
 
 ```sh
 python3.14 -m venv .venv
@@ -29,7 +30,7 @@ The tests use temporary databases, synthetic data, and mocked service calls. The
 
 Explain the problem, the resulting behavior, and how you validated it. Call out migrations, configuration changes, permission changes, and any limits that operators need to know.
 
-Every pull request runs the Python, JavaScript, and Windows installer tests with read-only permissions and no repository secrets. The required `required-checks` result verifies that all applicable checks passed; a failed or cancelled prerequisite blocks merging.
+Every pull request runs the Python, JavaScript, and Windows installer tests with read-only permissions and no repository secrets. Native image jobs run after merging to main. The required `required-checks` result verifies that all applicable checks passed; a failed or cancelled prerequisite blocks merging.
 
 After merging, main builds and fully validates the amd64 and arm64 images once, including security, installation, recovery, and matching-source checks. Allowlisted prose and screenshot changes can skip native validation when the current version is already published. Fast checks still run, and the Actions summary explains the decision. Changes to application, build, installation, test, license, security, source-verification or unknown inputs receive full native validation; an unpublished version always needs fresh validation of the exact commit.
 

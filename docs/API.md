@@ -14,7 +14,7 @@ Revoked keys can be removed from the key list. Removal deletes the credential an
 
 Send the secret in the `Authorization` header. Never place credentials in a URL, query string, source control, or logs. Use HTTPS in normal deployments and keep the secret in a protected credential store.
 
-Keys issued to non-owner accounts in older releases retain their existing authorization rules. Non-owner Plex accounts need a positive server-access verification within the last 24 hours. The worker normally refreshes observed accounts every 15 minutes; accounts omitted from Plex's access feeds must sign in with Plex again before that verification expires. Feed absence revokes previously observed accounts; an upstream outage cannot renew access. Expired verification blocks browser sessions and API keys even if the worker is unavailable. Fresh verification after expiry changes the account's credential version and invalidates its older keys. Local accounts and the installation owner retain their separate authorization rules.
+Keys issued to non-owner accounts in older releases retain their existing authorization rules. Non-owner Plex accounts need a positive server-access verification within the last 24 hours. The worker refreshes observed accounts every 15 minutes by default; the owner can change this frequency under **Admin → Jobs**. Accounts omitted from Plex's access feeds must sign in with Plex again before that verification expires. Feed absence revokes previously observed accounts; an upstream outage cannot renew access. Expired verification blocks browser sessions and API keys even if the worker is unavailable. Fresh verification after expiry changes the account's credential version and invalidates its older keys. Local accounts and the installation owner retain their separate authorization rules.
 
 ```http
 Authorization: Bearer keep_<secret>
@@ -34,7 +34,7 @@ No CORS access is enabled by default. Browser clients should use the Keep web ap
 
 A `media_id` is a positive Plex media ID represented as a decimal string with at most 20 digits. A `collection_id` is a positive integer no greater than 999,999,999. A Keep `id` combines both values as `collection_id:media_id`, for example `1:42`.
 
-Media reads contain only the documented allowlisted fields: media ID, collection ID, title, year, normalized type, and state. They do not contain raw Maintainerr records, provider IDs, paths, or other upstream properties.
+Media reads contain only the documented allowlisted fields: media ID, collection ID, title, year, media type, and state. The type comes from Maintainerr, is limited to 30 characters, and defaults to `unknown` when absent. These reads do not contain raw Maintainerr records, provider IDs, paths, or other upstream properties.
 
 A Keep record contains its composite ID, collection and media IDs, duration, expiry and extension availability, and whether the current account owns it. Accounts see their own Keeps. An account with the current Keep-manager or owner permission may also see and manage other Keeps. `PATCH` and `DELETE` apply the same current authorization check. Indefinite duration additionally requires the account's current indefinite-Keep permission.
 

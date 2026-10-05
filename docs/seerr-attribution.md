@@ -13,8 +13,10 @@ it does not prove that the request caused a download.
    requests and users.
 3. Refresh request history from the Seerr connection card. The `keep-digest`
    worker also imports history after configuration, on its next 30-second check,
-   then every 15 minutes after a successful refresh. History becomes stale after
-   24 hours. A web-only installation supports manual refresh.
+   then every 15 minutes after a successful refresh by default. The owner can
+   change the frequency under **Admin → Jobs**. History becomes stale after
+   24 hours regardless of the chosen frequency. A web-only installation supports
+   manual refresh.
 4. Plex accounts match by stable Plex ID. The owner can separately link local
    Keep accounts to Seerr accounts. Links are saved as a validated atomic batch;
    duplicate or conflicting matches stay unlinked. Changing the Seerr connection
