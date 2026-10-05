@@ -38,11 +38,14 @@ the running release. A newer staged version, pending/failed deployment, or a bus
 deployment lock holds cleanup.
 
 Before deletion, the script checks live SQLite integrity, the retained local
-recovery receipt, database and configuration archive, paired local rollback
-images, and a full NAS backup from the past 48 hours covering the current
-environment and Compose files. These checks establish that recovery materials
-are present and consistent; the separate isolated restore trial establishes
-that the tested recovery procedure works.
+recovery receipt, database and configuration archive, recorded image identities,
+and a full NAS backup from the past 48 hours covering the current environment and
+Compose files. Local rollback Docker images may be removed after a healthy
+deployment; their absence does not block registry retention. Retained preceding
+release indexes and their native manifests remain protected in the registry.
+These checks establish that recovery materials are present and consistent; the
+separate isolated restore trial establishes that the tested recovery procedure
+works.
 
 Every write rechecks health and registry references. Build aliases are removed
 before obsolete version tags, then only manifests with no remaining references

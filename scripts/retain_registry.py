@@ -482,10 +482,10 @@ def recovery(root, receipt, configuration=None):
     previous = json.loads((record / 'images.json').read_text()).get('previous')
     if not isinstance(previous, list) or len(previous) != 2:
         raise Hold('Paired rollback image identities are missing')
-    previous = [digest(image) for image in previous]
-    available = json.loads(docker('image', 'inspect', *previous))
-    if len(available) != 2 or [image.get('Id') for image in available] != previous:
-        raise Hold('Recorded paired local rollback images are unavailable')
+    # The deployment record retains image identities after local rollback images
+    # are discarded. Registry retention protects the prior release indexes.
+    for image in previous:
+        digest(image)
     archives = sorted(Path(configuration['backup_directory']).glob(configuration['backup_pattern']))
     if not archives:
         raise Hold('Full NAS backup is missing')
