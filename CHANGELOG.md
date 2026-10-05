@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.23.1 — 2026-10-05
+
+- Clarify that Leaving updates follow Maintainerr's configured rule schedule.
+- Remove installation-specific maintenance tools and contributor branch restrictions from the public repository.
+
 ## 2.23.0 — 2026-10-05
 
 - Count down the next run time on Jobs in real time.

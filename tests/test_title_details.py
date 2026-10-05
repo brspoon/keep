@@ -20,7 +20,7 @@ class TitleDetailsTests(unittest.TestCase):
                                    keep_status='Not kept', history={'freshness': 'current',
                                    'label': 'No request recorded', 'state': ''})
         self.assertIn('May qualify for Leaving in about 1 year and 4 months', html)
-        self.assertIn('Keep checks daily', html)
+        self.assertIn('after the next scheduled rule check', html)
         self.assertNotIn('next rule check', html)
 
     def test_missing_watch_history_has_plain_language_explanation(self):
