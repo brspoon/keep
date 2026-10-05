@@ -1,4 +1,7 @@
 # Credentials and local configuration
+/AGENTS.md
+/.agents/
+/.codex/
 .env
 .env.*
 !.env.example

@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--image', required=True)
     parser.add_argument('--version', required=True)
     parser.add_argument('--revision', required=True)
-    parser.add_argument('--visibility', choices=('private', 'public'), default='private')
+    parser.add_argument('--visibility', choices=('private', 'public'), default='public')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     if args.execute:

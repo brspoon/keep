@@ -180,9 +180,8 @@ LAN HTTP. Check that `py -3 --version` or `python --version` reports Python 3.9
 or newer; a Microsoft Store shortcut alone is not a working Python installation.
 
 If the download returns 404 or the image pull is denied, check the release tag
-and your access to GitHub or Docker Hub. A restricted image requires an
-authorized Docker Hub account and `docker login`. For testing an unpublished
-candidate from an authorized source checkout, use the appropriate Python command:
+and your connection to GitHub or Docker Hub. Keep's published releases and images
+are public. To test the installer from a local source checkout, use:
 
 ```sh
 python3 scripts/install_keep.py --start --source-directory .

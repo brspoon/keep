@@ -37,8 +37,7 @@ Main pushes never publish an image, even when `VERSION` changes. Both native
 jobs must pass, the tested source commit must still be current main, and the
 publisher may use only their retained tested images. The manual workflow restores
 and verifies the original files; it does not build, rescan or repeat the long native
-tests. Publication supports private
-or public repositories without changing either repository's visibility.
+tests. Published Keep releases and images are public.
 
 Version and commit tags are immutable. The publisher verifies the native child
 digests in the multi-platform indexes and promotes mutable `stable` last.
@@ -76,7 +75,7 @@ publication locks its assets and source tag. Assets cannot be added, replaced or
 deleted afterward; corrections require a new release. Release titles and notes
 remain editable. Releases published before this setting was enabled are not
 retroactively locked. See [GitHub's immutable-release guidance](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
-For a public release, finalized notes, source archives, notices, checksums and
+Finalized release notes, source archives, notices, checksums and
 image tags must be accessible without authentication. Source delivery requirements
 are described in [source distribution](SOURCE_DISTRIBUTION.md).
 
@@ -134,25 +133,23 @@ plan. The local command `python3 scripts/validation_retention.py` also defaults 
 an inventory and requires authenticated read access to drafts. Deletion is
 restricted to the trusted retention workflow on current main.
 
-## Deployment and registry cleanup
+## Upgrades and registry retention
 
 Publication does not restart an installation. Operators upgrade both Keep
 services together after backing up their data and deployment configuration.
-Portable Compose does not install automatic upgrade, backup, or registry-cleanup
+Portable Compose does not install automatic upgrade or backup
 schedules. See [upgrades](MIGRATION.md) and [backup and restore](PORTABLE_BACKUP.md).
 
-The maintainer's [registry retention policy](REGISTRY_RETENTION.md) keeps up to seven
-tags after a verified deployment: `stable`, the current version, its commit tag,
-that commit's amd64 and arm64 tags, and up to two preceding versions for rollback.
-These typically refer to three image indexes and six native child manifests.
-Only the latest stable release receives fixes; the preceding versions are
-recovery aids. Unknown custom references and active or unreviewed build artifacts
-remain protected.
+Only the latest stable release receives fixes. Older release images retained for
+rollback are recovery aids, as described in [supported versions](../SUPPORT.md).
+Container tag retention does not limit retention of matching source archives,
+notices, checksums or original verification evidence.
 
-Registry cleanup uses separate credentials from image publication. Ordinary Keep
-installations need neither. The maintainer's cleanup tooling checks release and
-build identities before removal; unavailable information protects the affected
-objects. See [registry retention](REGISTRY_RETENTION.md).
+Before removing temporary registry artifacts, verify their exact tags, digests
+and references. Preserve image indexes and native manifests referenced by retained
+tags, and leave active or unrecognized build artifacts intact. CI removes only its
+own temporary publication tags; see [image security](IMAGE_SECURITY.md) for its
+credential boundaries.
 
 ## Before announcing a release
 
@@ -166,9 +163,8 @@ Maintainers should verify the release before announcing availability:
 - Review repository history, release files, workflow logs and image layers for
   credentials, private data and internal operational records before exposing them.
 - Verify branch protections, release/tag permissions and publication credential
-  scope. Repository and registry visibility changes remain a separate maintainer
-  decision; the workflow does not change them.
-- Enable GitHub private vulnerability reporting when the repository is public.
+  scope.
+- Keep GitHub private vulnerability reporting enabled.
   Test the form and maintainer notification with a non-maintainer account before
   accepting external reports. If unavailable, configure and test a confidential
   reporting channel before announcement; never solicit vulnerability details in

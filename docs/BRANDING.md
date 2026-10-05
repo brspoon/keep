@@ -1,6 +1,6 @@
 # Keep branding
 
-Keep uses the approved sleeve mark in gold (`#efb34f`) on a charcoal tile (`#17191e`). Use the same tile in light mode, dark mode, and email. The canonical vector is [keep-icon.svg](../static/keep-icon.svg); preserve its geometry, color, and proportions.
+Keep uses a sleeve mark in gold (`#efb34f`) on a charcoal tile (`#17191e`). Use the same tile in light mode, dark mode, and email. The canonical vector is [keep-icon.svg](../static/keep-icon.svg); preserve its geometry, color, and proportions.
 
 Email headers use a white surface and dark text in light mode, with a charcoal surface and light text in dark mode. The logo tile itself keeps the same colors in both.
 

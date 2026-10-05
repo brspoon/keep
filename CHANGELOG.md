@@ -7,10 +7,8 @@
 
 ## 2.22.1 — 2026-10-05
 
-- Use Node.js 24 LTS for JavaScript tests in contributor and native image validation.
-- Correct development and operator guidance for pull-request checks, configurable job frequencies, API media fields, backup verification, and registry recovery.
-- Document the required branch naming convention and immutable future GitHub release assets.
-- Align the versioned installers, Compose image, and installation examples with 2.22.1.
+- Clarify configurable job schedules, API media fields, and backup verification on Linux and macOS.
+- Make source archives and checksums immutable for future GitHub releases.
 
 ## 2.22.0 — 2026-10-04
 
@@ -38,17 +36,9 @@
 
 ## 2.21.4 — 2026-10-03
 
-- Replace backtracking email validation with a bounded linear check shared by local accounts, recipients, and personal preferences, retaining the existing address policy.
-- Build mobile activity-filter navigation from a fixed local path and encoded filter values so DOM values cannot become executable or external URLs.
-- Clarify that recovery-trial credentials are synthetic API bearers, with SHA-256 lookup hashes matching the production API; account passwords continue to use Argon2.
-- Align the installer, launchers, Compose image and installation guides with 2.21.4; check the actual checkout bundle and versioned entrypoints before native image validation.
-
-- Build and fully validate both native images once for each main commit that requires native validation, retaining the exact images, matching sources and original evidence for approved publication.
-- Publish retained images without rebuilding or repeating native tests; reject missing, expired, altered or wrong-commit validation records before promotion.
-- Keep pull-request checks read-only and preserve per-architecture evidence when retrying failed native jobs.
-- Skip native image validation for allowlisted documentation and screenshot changes only when the current version is already published; keep fast checks and exact-commit publication requirements.
-- Download independent OS and Python package sources with up to four workers while preserving every checksum, signature, architecture and source-coverage check.
-- Clean up superseded validation drafts and their temporary indexes after main validation completes, protecting current-main candidates, the latest usable build and active validation/publication runs.
+- Use a bounded email-address check for local accounts, recipients, and preferences.
+- Harden mobile Activity filter links against unsafe URLs.
+- Clarify recovery credentials and update versioned installation examples.
 
 ## 2.21.3 — 2026-10-03
 
@@ -62,4 +52,4 @@
 ## 2.21.2 — 2026-10-03
 
 - Apply the Python 3.14 temporary-directory correction and additional permission-recovery guards; verify that cleanup preserves files outside the temporary tree.
-- Simplify contribution and confidential security-reporting guidance, remove internal deployment journals, and keep host-specific retention settings in private configuration.
+- Simplify contribution and confidential security-reporting guidance.
