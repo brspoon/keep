@@ -225,8 +225,6 @@ html[data-appearance="light"] .faq-search-field:focus-within { border-color:var(
 html[data-appearance="light"] .appearance-choices .choice:has(:checked) { border-color:var(--option-accent-border); }
 html[data-appearance="light"] .keep-duration-option:not(:disabled):hover { border-color:var(--option-accent-border); }
 html[data-appearance="light"] .keep-duration-option.is-current { color:var(--text); }
-html[data-appearance="light"] .library-ui .pull-refresh { background:var(--surface); color:var(--muted); border-color:var(--border); box-shadow:0 4px 16px #25324826; }
-html[data-appearance="light"] .library-ui .pull-refresh.ready { color:var(--accent-ink); border-color:var(--option-accent-border); }
 
 /* Poster overlays share one high-contrast treatment in both appearances. */
 .library-ui :is(.keeper-badge, .days-left-badge, .keep-policy-badge.indefinite, .library-status-badge) {

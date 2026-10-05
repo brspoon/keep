@@ -50,7 +50,7 @@ main() (
     installer_status=$(curl --fail --silent --show-error --proto '=https' \
         --connect-timeout 15 --max-time 120 --write-out '%{http_code}' \
         --output "$installer_tmp/install_keep.py" \
-        'https://raw.githubusercontent.com/brspoon/keep/2.22.1/scripts/install_keep.py')
+        'https://raw.githubusercontent.com/brspoon/keep/2.23.0/scripts/install_keep.py')
     [ "$installer_status" = '200' ] || { printf '%s\n' 'Keep installer download returned an unexpected status.' >&2; exit 1; }
     python3 "$installer_tmp/install_keep.py" --start "$@"
 )

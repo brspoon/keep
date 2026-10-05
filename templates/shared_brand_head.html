@@ -2,3 +2,5 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v={{ app_version }}">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v={{ app_version }}">
 <link rel="manifest" href="/static/site.webmanifest">
+<link rel="stylesheet" href="/static/keep-pull-refresh.css?v={{ app_version }}">
+<script defer src="/static/keep-pull-refresh.js?v={{ app_version }}"{% if request.method != 'GET' %} data-refresh-url="{{ request.full_path if request.url_rule and 'GET' in request.url_rule.methods else admin_active_path|default(retry_url|default('/', true), true) }}"{% endif %}></script>

@@ -1,7 +1,6 @@
 (() => {
   'use strict';
   const format = new Intl.DateTimeFormat(undefined, {dateStyle: 'medium', timeStyle: 'short'});
-  const relative = new Intl.RelativeTimeFormat(undefined, {numeric: 'auto'});
   const rows = new Map(Array.from(document.querySelectorAll('[data-job-id]'), row => [row.dataset.jobId, row]));
   const feedback = document.getElementById('jobs-feedback');
   const dialog = document.getElementById('job-schedule-dialog');
@@ -11,7 +10,7 @@
   const scheduleError = document.getElementById('job-schedule-error');
   const save = document.getElementById('job-save-schedule');
   const cancel = dialog?.querySelector('[data-cancel-schedule]');
-  let selectedRow = null, opener = null, saving = false, refreshing = false, stopped = false, timer, mutationVersion = 0;
+  let selectedRow = null, opener = null, saving = false, refreshing = false, stopped = false, timer, countdownTimer, mutationVersion = 0;
   const statuses = new Set(['success', 'failed', 'review', 'stale', 'waiting', 'disabled', 'running', 'queued', 'interrupted']);
   const terminalStatuses = new Set(['success', 'failed', 'review', 'waiting', 'interrupted', 'disabled', 'stale']);
   const announcementVersions = new WeakMap();
@@ -19,16 +18,26 @@
   function text(node, value) {
     if (node && node.textContent !== String(value || '')) node.textContent = String(value || '');
   }
-  function relativeTime(date) {
-    const seconds = Math.ceil((date.getTime() - Date.now()) / 1000);
+  function relativeTime(date, compact = true) {
+    let seconds = Math.ceil((date.getTime() - Date.now()) / 1000);
     if (seconds <= 0) return 'Due now';
-    const [unit, divisor] = seconds < 60 ? ['second', 1] : seconds < 3600 ? ['minute', 60] : seconds < 86400 ? ['hour', 3600] : ['day', 86400];
-    return relative.format(Math.ceil(seconds / divisor), unit);
+    const parts = [];
+    for (const [short, unit, divisor] of [['d', 'day', 86400], ['h', 'hour', 3600], ['m', 'minute', 60], ['s', 'second', 1]]) {
+      const value = Math.floor(seconds / divisor);
+      if (value || parts.length || short === 's') parts.push(compact ? `${value}${short}` : `${value} ${unit}${value === 1 ? '' : 's'}`);
+      seconds %= divisor;
+    }
+    return `in ${parts.join(compact ? ' ' : ', ')}`;
+  }
+  function formatCountdown(element, date) {
+    text(element, relativeTime(date));
+    element.setAttribute('aria-label', relativeTime(date, false));
   }
   function formatTime(element) {
     const date = new Date(element.dateTime);
     if (Number.isNaN(date.getTime())) return;
-    text(element, element.hasAttribute('data-relative') ? relativeTime(date) : format.format(date));
+    if (element.hasAttribute('data-relative')) formatCountdown(element, date);
+    else text(element, format.format(date));
     element.title = date.toLocaleString(undefined, {timeZoneName: 'short'});
   }
   function updateTime(container, value, fallback, isRelative = false) {
@@ -41,6 +50,21 @@
     element.dateTime = value;
     if (isRelative) element.setAttribute('data-relative', '');
     formatTime(element);
+  }
+  function updateCountdowns() {
+    rows.forEach(row => {
+      const element = row.querySelector('[data-next-run]')?.querySelector('time');
+      if (!element) return;
+      const date = new Date(element.dateTime);
+      if (!Number.isNaN(date.getTime())) formatCountdown(element, date);
+    });
+  }
+  function planCountdown() {
+    clearTimeout(countdownTimer);
+    if (stopped || document.hidden || !rows.size) return;
+    updateCountdowns();
+    // Derive every tick from the scheduled timestamp so delayed timers catch up.
+    countdownTimer = setTimeout(planCountdown, 1000 - Date.now() % 1000);
   }
   function notify(message, failed = false) {
     if (!feedback) return;
@@ -168,7 +192,20 @@
   }
 
   document.querySelectorAll('.jobs-ui time[datetime]').forEach(formatTime);
-  if (!rows.size || !feedback || typeof fetch !== 'function') return;
+  const canRefresh = rows.size && feedback && typeof fetch === 'function';
+  document.addEventListener('visibilitychange', () => {
+    planCountdown();
+    if (!document.hidden && canRefresh) void refresh();
+  });
+  window.addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); clearTimeout(countdownTimer); });
+  window.addEventListener('pageshow', () => {
+    if (stopped) {
+      stopped = false; planCountdown();
+      if (canRefresh) void refresh();
+    }
+  });
+  if (rows.size) planCountdown();
+  if (!canRefresh) return;
   rows.forEach(row => {
     const form = row.querySelector('[data-run-job]');
     form?.addEventListener('submit', async event => {
@@ -242,8 +279,5 @@
       }
     });
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
-  window.addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); });
-  window.addEventListener('pageshow', () => { if (stopped) { stopped = false; void refresh(); } });
   planRefresh();
 })();
