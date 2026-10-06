@@ -1,9 +1,20 @@
 name: Native Keep architecture gates
 on:
   workflow_call:
+    inputs:
+      qualification:
+        type: boolean
+        default: false
+      prepare_notices:
+        type: boolean
+        default: true
 jobs:
   image:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (inputs.qualification && github.event_name == 'workflow_dispatch' &&
+       github.repository == 'brspoon/keep' &&
+       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/brspoon/')))
     name: image (${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -31,6 +42,7 @@ jobs:
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build the image to test with temporary registry credentials
+        id: build
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -77,11 +89,13 @@ jobs:
       - name: Exercise one-command installation and owner-preserving reruns
         run: python3 scripts/installer_container_trial.py --candidate-image keep-ci:latest --evidence installer-trial-${{ matrix.arch }}.json
       - name: Capture verified vendor evidence and Scout assessment
+        id: provenance
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: python3 scripts/inspect_candidate.py
       - name: Inventory installed notices and inspect every image layer
+        id: inventory
         env:
           KEEP_PRIVATE_IMAGE_MARKERS: ${{ secrets.KEEP_PRIVATE_IMAGE_MARKERS }}
         run: |
@@ -95,7 +109,9 @@ jobs:
         run: sh scripts/scan_image.sh keep-ci candidate-${{ matrix.arch }}.json --report-only
       - name: Verify all nine runtime security fixes in the tested image
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/python_security_checks.py --report > candidate-regression-${{ matrix.arch }}.json
-      - name: Accept only the nine verified-fixed findings and block all others
+      - name: Verify default Expat and OpenSSL library loading
+        run: docker run --rm --network none --read-only -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/runtime_dependency_checks.py --report > candidate-dependencies-${{ matrix.arch }}.json
+      - name: Accept only reviewed fixed findings and block all others
         run: python3 scripts/review_image.py ${{ matrix.arch }}
       - name: Retain full scan and review evidence
         if: always()
@@ -103,16 +119,34 @@ jobs:
       - name: Verify Zstandard source-layer decoder is available
         run: zstd --version
       - name: Obtain verified base source materials and license notices
+        id: base_sources
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.provenance.outcome == 'success' && steps.inventory.outcome == 'success' && (inputs.qualification || success()) }}
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: set -o pipefail; python3 scripts/collect_image_sources.py --download --output source-materials | tee source-acquisition-base-${{ matrix.arch }}.log
       - name: Obtain matching sources for every installed OS package
+        id: package_sources
+        if: ${{ !cancelled() && steps.base_sources.outcome == 'success' && (inputs.qualification || success()) }}
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: set -o pipefail; python3 scripts/collect_package_sources.py --map docs/os-package-sources.json --architecture ${{ matrix.arch }} --output source-materials/packages | tee source-acquisition-packages-${{ matrix.arch }}.log
+        run: set -o pipefail; python3 scripts/collect_package_sources.py --map docs/os-package-sources.json --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --output source-materials/packages | tee source-acquisition-packages-${{ matrix.arch }}.log
+      - name: Verify rebuilt source distribution without retaining images
+        if: ${{ inputs.qualification && !inputs.prepare_notices && !cancelled() && steps.package_sources.outcome == 'success' }}
+        run: |
+          set -o pipefail
+          python3 scripts/build_distribution_bundle.py --sources source-materials --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --output distribution | tee source-distribution-${{ matrix.arch }}.log
+          python3 - <<'PY'
+          import json, pathlib, sys
+          sys.path.insert(0, 'scripts')
+          from release_materials import bundle
+          _, proof = bundle('${{ matrix.arch }}', verify_files=True)
+          pathlib.Path('distribution/source-bundle-${{ matrix.arch }}.json').write_text(json.dumps(proof, sort_keys=True) + '\n')
+          print('Every corresponding-source member and rebuilt runtime notice verified.')
+          PY
       - name: Package sources and notices for the exact tested runtime
+        if: ${{ !inputs.qualification }}
         run: |
           set -o pipefail
           test -s candidate-notices-${{ matrix.arch }}.json
@@ -120,12 +154,33 @@ jobs:
           cd distribution
           sha256sum --check keep-${{ steps.release.outputs.version }}-source-materials-${{ matrix.arch }}.tar.gz.sha256
       - name: Print source bundle manifest and compact summary
+        if: ${{ !inputs.qualification }}
         run: python3 scripts/release_materials.py report ${{ matrix.arch }}
+      - name: Prepare checked source notices for review
+        if: ${{ inputs.qualification && inputs.prepare_notices && !cancelled() && steps.package_sources.outcome == 'success' }}
+        run: python3 scripts/build_distribution_bundle.py --sources source-materials --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --prepare-notices --output notice-preparation
+      - name: Retain small qualification records and notice bytes
+        if: ${{ inputs.qualification && always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runtime-qualification-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            notice-preparation/os-notices/
+            notice-preparation/notice-inputs/
+            notice-preparation/NOTICE-PREPARATION.json
+            distribution/source-bundle-${{ matrix.arch }}.json
+            candidate-*${{ matrix.arch }}.json
+            portable-recovery-${{ matrix.arch }}.json
+            installer-trial-${{ matrix.arch }}.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Retain exact tested image, sources and original evidence
+        if: ${{ !inputs.qualification }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/validated_build.py retain ${{ matrix.arch }}
       - name: Retain immutable validation index
+        if: ${{ !inputs.qualification }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: validated-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}

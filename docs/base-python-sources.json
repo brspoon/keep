@@ -48,13 +48,13 @@
   ],
   "package": {
     "apk_sha256": {
-      "amd64": "3c0f87ca054b3880b1e13e9666566a349966ffc26b89dc32ccbf7d84f1a8a0c0",
-      "arm64": "539ef075e671a6e2695000b75df4b19a6f718c630a1668c7c05818ef67e66443"
+      "amd64": "a6fa39d2a124caa7d96a092009e19ef6c5244cc11fce070f5728c9030c25f5b8",
+      "arm64": "1cf58f70edd7eb9a939d66c0853a17e85009173c44ea0d19e6340f708cc3f9f4"
     },
-    "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+    "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
     "name": "python-3.14",
     "origin": "python-3.14",
-    "version": "3.14.7-r1"
+    "version": "3.14.7-r2"
   },
   "required_distlib_build_sources": [
     "PC/launcher.c",

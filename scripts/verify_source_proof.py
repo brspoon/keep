@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 
 
-BASE_DIGEST = 'sha256:7b9528fefc51c9d3753ccd25dcf1dea9dd327e7c2f8bef89cd2cf3b34f847408'
+BASE_DIGEST = 'sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7'
 KEY_SHA256 = '1d02bbccf149283ae6288d96264dcad3fb23ee1911d90324a48eab28e4cb8a5f'
 PREDICATE = 'https://docker.com/dhi/source/v0.1'
 SIGNATURE_TYPE = 'application/vnd.dev.cosign.artifact.sig.v1+json'

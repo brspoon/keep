@@ -1,11 +1,20 @@
 name: Review vendor runtime candidate
 on:
   workflow_dispatch:
+    inputs:
+      qualification:
+        type: boolean
+        default: false
+        description: Test both native Keep images and prepare checked notices without publishing or retaining images
+      prepare_notices:
+        type: boolean
+        default: true
+        description: Prepare notice inputs; disable after committing notices to verify the rebuilt source archive
 permissions:
   contents: read
 jobs:
   review:
-    if: github.repository == 'brspoon/keep' && github.ref == 'refs/heads/main'
+    if: ${{ !inputs.qualification && github.repository == 'brspoon/keep' && github.ref == 'refs/heads/main' }}
     strategy:
       fail-fast: false
       matrix:
@@ -122,3 +131,10 @@ jobs:
           path: vendor-review/${{ matrix.arch }}/
           if-no-files-found: warn
           retention-days: 7
+  qualification:
+    if: ${{ inputs.qualification && github.repository == 'brspoon/keep' }}
+    uses: ./.github/workflows/native-image.yml
+    with:
+      qualification: true
+      prepare_notices: ${{ inputs.prepare_notices }}
+    secrets: inherit

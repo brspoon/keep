@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Retain checked IANA 2026c data and its complete public build inputs.
+"""Retain checked IANA 2026d data and its complete public build inputs.
 
 Docker's published timezone package-image tag is reused across IANA releases.
-This source-only fallback retains the exact 2026c release and pinned recipe
+This source-only fallback retains the exact 2026d release and pinned recipe
 inputs without inventing an unavailable historical provider OCI digest. No
 downloaded recipe is executed and no package binary is redistributed here.
 """
@@ -15,25 +15,25 @@ import re
 import tarfile
 
 
-RECIPE_REVISION = 'a399ba8b3297ee5f29c05f9a1d2068743eaae797'
+RECIPE_REVISION = '9e9430e130d3d81a50eac18e1827be6ff13340ce'
 RECIPE_PATH = 'package/apk/main/tzdata/alpine-3.24/2025.yaml'
 RECIPE_URL = f'https://raw.githubusercontent.com/docker-hardened-images/catalog/{RECIPE_REVISION}/{RECIPE_PATH}'
-RECIPE_SHA256 = '89b635b656749b62f535c5e8ce887eec1e31e5558700ad7b3eda72e8fadb42a5'
-APORTS_COMMIT = 'abde3c23ae79b9d3b7bf1a089076703ccda73875'
+RECIPE_SHA256 = 'fa6dfbafc10da5a0df2b4b5b5ffd1fe291764741f9922180b9ea966ce2159ee7'
+APORTS_COMMIT = 'a19caf9fe771707618d4d9e4fa2dd9db8155b461'
 APORTS_URL = f'https://github.com/alpinelinux/aports/archive/{APORTS_COMMIT}.tar.gz'
-APORTS_SHA256 = '2608485df3d15023b18c97022f5d3d1a9b8189120e0b8d5567fe8cee1d999b8f'
-APKBUILD_SHA256 = 'f5b07ef538adab90964624e7a3df7d0b144ce31b0387f360bb3e6c9b480b33d1'
+APORTS_SHA256 = 'feda99888af8a5ffa4b17a52d0e642788bb0ba6f9d6b52730dd35b3a1f7b28b5'
+APKBUILD_SHA256 = '19902c11c0e94d52b002034b41cb63332905ea397d23af4cd33d0fa7eaa3a14a'
 LGPL_URL = 'https://www.gnu.org/licenses/old-licenses/lgpl-2.0.txt'
 LGPL_SHA256 = 'cc535c21133c895b56b374c8a1dc1eb948d99003ed2b47372069456b62f42b24'
 LGPL_PATH = Path(__file__).resolve().parents[1] / 'docs/licenses/os' / (LGPL_SHA256 + '.txt')
 SOURCE_INPUTS = {
-    'tzcode2026c.tar.gz': {
-        'url': 'https://www.iana.org/time-zones/repository/releases/tzcode2026c.tar.gz',
-        'sha512': 'ad1aadf26b9aaca487a4f780d7a8ebf1d7383472ce587b06cb63852d4eb030dbd190b537e393e75d59530318581e9d3f492ff5f97bbac78f548d0755c4f7257f',
+    'tzcode2026d.tar.gz': {
+        'url': 'https://www.iana.org/time-zones/repository/releases/tzcode2026d.tar.gz',
+        'sha512': '42d4b37549a35893187851187cae93c811928f808c24ac0003bf0b782837d0934f2f7da7e93a0417273c7e0a66f79e9d512290ae4811cb73a7d02b62b3f0fed1',
     },
-    'tzdata2026c.tar.gz': {
-        'url': 'https://www.iana.org/time-zones/repository/releases/tzdata2026c.tar.gz',
-        'sha512': 'e0b4b7044b66fbc27bc21d13d18063abcdf78ab58d5ba5fd64bd1a88d86e9d495f45add4d8e65bb6c40249f9c94ca29b72c8ebba8d0e4c468f2965ac77932ef0',
+    'tzdata2026d.tar.gz': {
+        'url': 'https://www.iana.org/time-zones/repository/releases/tzdata2026d.tar.gz',
+        'sha512': '1a27de5af50bbc28a2f64c506ab3678b09d9e5ab6c118f39eb38bb823aa8f57069bf5e465848e71df8274c6b8bcd0fc736a88107e5792d816a1db5d867cbc219',
     },
     'posixtz-0.5.tar.xz': {
         'url': 'https://dev.alpinelinux.org/archive/posixtz/posixtz-0.5.tar.xz',
@@ -91,7 +91,7 @@ def read_member(body, name):
 
 
 def recipe_identity(recipe):
-    for key, value in {'pkgname': 'tzdata', 'pkgver': '2026c', '_ptzver': '0.5', 'pkgrel': '0'}.items():
+    for key, value in {'pkgname': 'tzdata', 'pkgver': '2026d', '_ptzver': '0.5', 'pkgrel': '0'}.items():
         if re.findall(r'^' + re.escape(key) + r'=([^\n]+)$', recipe, re.M) != [value]:
             raise ValueError('Timezone APKBUILD version identity mismatch')
     blocks = re.findall(r'^sha512sums="\n([^\"]+)"$', recipe, re.M)
@@ -111,12 +111,12 @@ def recipe_identity(recipe):
 def collect_sources(package_spec, architecture, output_root, fetch=download):
     """Retain checked public source inputs; make the missing OCI binding explicit."""
     packages = package_spec.get('packages', [])
-    if (package_spec.get('origin') != 'tzdata' or package_spec.get('version') != '2026c-r0'
+    if (package_spec.get('origin') != 'tzdata' or package_spec.get('version') != '2026d-r0'
             or architecture not in {'amd64', 'arm64'} or len(packages) != 1):
-        raise ValueError('Fallback only covers the installed 2026c timezone data package')
+        raise ValueError('Fallback only covers the installed 2026d timezone data package')
     package = packages[0]
     binary = package.get('binaries', {}).get(architecture, {})
-    if (package.get('name') != 'tzdata' or package.get('version') != '2026c-r0'
+    if (package.get('name') != 'tzdata' or package.get('version') != '2026d-r0'
             or package.get('license') != 'Public-Domain'
             or not re.fullmatch(r'[a-f0-9]{64}', binary.get('sha256', ''))):
         raise ValueError('Timezone package identity or recorded binary digest mismatch')
@@ -142,16 +142,16 @@ def collect_sources(package_spec, architecture, output_root, fetch=download):
         return record
 
     provider_recipe = checked(fetch(RECIPE_URL), 'sha256', RECIPE_SHA256, 'DHI timezone recipe')
-    for literal in ('image: dhi.io/pkg-tzdata', '  VERSION: 2026c', '  COMMIT_SHA: ' + APORTS_COMMIT):
+    for literal in ('image: dhi.io/pkg-tzdata', '  VERSION: 2026d', '  COMMIT_SHA: ' + APORTS_COMMIT):
         if literal not in provider_recipe.decode('utf-8').splitlines():
             raise ValueError('Pinned DHI timezone recipe identity mismatch')
-    retain('dhi-tzdata-2026c.yaml', provider_recipe, RECIPE_URL, 'pinned-provider-build-recipe')
+    retain('dhi-tzdata-2026d.yaml', provider_recipe, RECIPE_URL, 'pinned-provider-build-recipe')
     recipes = checked(fetch(APORTS_URL), 'sha256', APORTS_SHA256, 'Complete Alpine recipe archive')
     apkbuild = checked(read_member(recipes, f'aports-{APORTS_COMMIT}/main/tzdata/APKBUILD'),
                        'sha256', APKBUILD_SHA256, 'Timezone APKBUILD')
     recipe_identity(apkbuild.decode('utf-8'))
     retain(f'aports-{APORTS_COMMIT}.tar.gz', recipes, APORTS_URL, 'complete-alpine-build-recipes')
-    retain('tzdata-2026c-APKBUILD', apkbuild, APORTS_URL, 'matching-apk-build-script')
+    retain('tzdata-2026d-APKBUILD', apkbuild, APORTS_URL, 'matching-apk-build-script')
     for name, checksum in PATCH_INPUTS.items():
         patch = checked(read_member(recipes, f'aports-{APORTS_COMMIT}/main/tzdata/{name}'),
                         'sha512', checksum, 'Timezone build patch')
@@ -160,13 +160,13 @@ def collect_sources(package_spec, architecture, output_root, fetch=download):
         body = checked(fetch(source['url']), 'sha512', source['sha512'], 'Timezone source')
         retain(name, body, source['url'], 'upstream-source')
         if name.startswith(('tzdata', 'tzcode')):
-            if read_member(body, 'version').strip() != b'2026c':
+            if read_member(body, 'version').strip() != b'2026d':
                 raise ValueError('IANA archive version does not match installed timezone data')
             retain(name.split('.')[0] + '-LICENSE', read_member(body, 'LICENSE'),
                    source['url'], 'upstream-notice')
             if name.startswith('tzcode'):
                 for member in ('date.c', 'newstrftime.3', 'strftime.c'):
-                    retain('tzcode2026c-BSD-' + member, read_member(body, member),
+                    retain('tzcode2026d-BSD-' + member, read_member(body, member),
                            source['url'], 'upstream-bsd-attribution-source')
         else:
             retain('posixtz-0.5-COPYRIGHT.c', read_member(body, 'posixtz-0.5/posixtz.c'),
@@ -175,15 +175,15 @@ def collect_sources(package_spec, architecture, output_root, fetch=download):
     lgpl_record.update({'acquisition': 'verified-repository-notice',
                         'repository_path': f'docs/licenses/os/{LGPL_SHA256}.txt'})
     manifest = {
-        'schema': 1, 'origin': 'tzdata', 'version': '2026c-r0', 'architecture': architecture,
+        'schema': 1, 'origin': 'tzdata', 'version': '2026d-r0', 'architecture': architecture,
         'provider_oci_binding': False,
         'binding_method': 'IANA release version and source checksums in the pinned public provider/Alpine recipes; no historical provider OCI digest inferred.',
-        'package_input': {'name': 'tzdata', 'version': '2026c-r0', 'license': 'Public-Domain',
+        'package_input': {'name': 'tzdata', 'version': '2026d-r0', 'license': 'Public-Domain',
                           'binary_sha256': binary['sha256'], 'binary_url': binary.get('url'),
                           'installed_build_commit': package.get('build_commit')},
         'recipe_revision': RECIPE_REVISION, 'aports_commit': APORTS_COMMIT,
         'files': records,
-        'coverage': 'Matching IANA 2026c timezone source data and complete public build recipe/patch inputs. BSD exceptions and LGPL POSIXtz build-source notices are retained; POSIXtz utilities are not claimed to be installed in the runtime image.',
+        'coverage': 'Matching IANA 2026d timezone source data and complete public build recipe/patch inputs. BSD exceptions and LGPL POSIXtz build-source notices are retained; POSIXtz utilities are not claimed to be installed in the runtime image.',
     }
     (root / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest

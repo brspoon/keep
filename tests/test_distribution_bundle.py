@@ -329,6 +329,187 @@ class NoarchBundleTests(unittest.TestCase):
                 bundle.retain_output_groups(self.root, self.root / mutation, origin, modified, 'amd64')
 
 
+class NoticeInputRetentionTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.inputs = self.root / 'checked-package-notices'
+        self.inputs.mkdir()
+        self.bodies = [b'Copyright Fixture Authors. Complete permission terms.\n',
+                       b'/* Copyright Other Authors. Permission is granted. */\n']
+        proof = {'origin': 'fixture', 'version': '1-r0', 'architecture': 'amd64',
+                 'proof_architecture': 'arm64', 'for_packages': ['fixture-data'],
+                 'native_image_digest': 'sha256:' + 'a' * 64,
+                 'source_image_digest': None, 'provider_oci_binding': True,
+                 'binding_method': 'signed-build-provenance',
+                 'source_manifest_sha256': 'b' * 64,
+                 'signed_statement_sha256': {'slsa': 'c' * 64, 'scout': 'd' * 64}}
+        self.report = {**proof, 'schema': 1, 'success': True, 'notices': []}
+        for number, body in enumerate(self.bodies):
+            digest = hashlib.sha256(body).hexdigest()
+            name = 'notices/' + digest + '.txt'
+            target = self.inputs / name
+            target.parent.mkdir(exist_ok=True)
+            target.write_bytes(body)
+            self.report['notices'].append({'notice_file': name, 'sha256': digest,
+                'bytes': len(body), 'encoding': 'utf-8', 'path': 'source/' + str(number),
+                'discovery': 'complete-leading-legal-comment' if number else 'notice-file',
+                'provenance': proof})
+        self.write_report()
+
+    def write_report(self):
+        body = (json.dumps(self.report, indent=3) + '\n\n').encode()
+        (self.inputs / 'package-material-inventory.json').write_bytes(body)
+        return body
+
+    def test_retained_bytes_include_unselected_headers_and_replay_explicit_merge(self):
+        from package_source_notices import merge_notice_bundles
+        inventory = (self.inputs / 'package-material-inventory.json').read_bytes()
+        (self.inputs / 'source.tar.gz').write_bytes(b'archive must stay outside notice inputs')
+        (self.inputs / 'binary.apk').write_bytes(b'binary must stay outside notice inputs')
+        output = self.root / 'notice-inputs'
+        result = bundle.retain_notice_inputs([self.inputs, self.inputs], output, 'amd64')
+        self.assertEqual(len(result['bundles']), 1)
+        self.assertEqual(result['notice_files'], 2)
+        retained = output / result['bundles'][0]['directory']
+        self.assertEqual((retained / 'package-material-inventory.json').read_bytes(), inventory)
+        self.assertEqual(result['bundles'][0]['inventory_sha256'], hashlib.sha256(inventory).hexdigest())
+        self.assertEqual(result['bundles'][0]['inventory_bytes'], len(inventory))
+        for notice, body in zip(self.report['notices'], self.bodies):
+            self.assertEqual((retained / notice['notice_file']).read_bytes(), body)
+        self.assertFalse((retained / 'source.tar.gz').exists())
+        self.assertFalse((retained / 'binary.apk').exists())
+        default = merge_notice_bundles([retained], self.root / 'default-merge')
+        self.assertEqual(len(default['notices']), 1)
+        explicit = merge_notice_bundles([retained], self.root / 'explicit-merge',
+                                       selected_comment_paths=['source/1'])
+        self.assertEqual(len(explicit['notices']), 2)
+        proof = explicit['notices'][1]['provenance'][0]
+        self.assertEqual(proof['architecture'], 'amd64')
+        self.assertEqual(proof['proof_architecture'], 'arm64')
+        self.assertEqual(proof['signed_statement_sha256'], self.report['signed_statement_sha256'])
+
+    def test_large_full_inventory_retains_exact_bytes_without_relaxing_other_metadata(self):
+        # Preserve a full inventory larger than ordinary metadata, including
+        # insignificant whitespace that must not be rewritten during retention.
+        inventory = self.write_report() + b' ' * (32 * 1024 * 1024)
+        (self.inputs / 'package-material-inventory.json').write_bytes(inventory)
+        with self.assertRaisesRegex(ValueError, 'Source metadata exceeds size limit'):
+            bundle.read_json(self.inputs, 'package-material-inventory.json')
+        output = self.root / 'large-notice-inputs'
+        result = bundle.retain_notice_inputs([self.inputs], output, 'amd64')
+        retained = output / result['bundles'][0]['directory'] / 'package-material-inventory.json'
+        self.assertEqual(retained.read_bytes(), inventory)
+        self.assertEqual(result['bundles'][0]['inventory_bytes'], len(inventory))
+        self.assertEqual(result['bundles'][0]['inventory_sha256'], hashlib.sha256(inventory).hexdigest())
+
+    def test_full_notice_inventory_limit_rejects_oversize_before_reading(self):
+        path = self.inputs / 'package-material-inventory.json'
+        with path.open('wb') as stream:
+            stream.truncate(bundle.MAX_NOTICE_INVENTORY + 1)
+        with patch.object(Path, 'open') as opened:
+            with self.assertRaisesRegex(ValueError, 'Package notice inventory exceeds size limit'):
+                bundle.read_notice_inventory(self.inputs)
+        opened.assert_not_called()
+
+    def test_full_notice_inventory_growth_still_has_a_bounded_read(self):
+        inventory_path = unittest.mock.Mock()
+        inventory_path.stat.return_value.st_size = 1
+        stream = unittest.mock.Mock(wraps=io.BytesIO(b' ' * 257))
+        manager = unittest.mock.MagicMock()
+        manager.__enter__.return_value = stream
+        inventory_path.open.return_value = manager
+        with patch.object(bundle, 'MAX_NOTICE_INVENTORY', 256), \
+                patch.object(bundle, 'regular', return_value=inventory_path):
+            with self.assertRaisesRegex(ValueError, 'Package notice inventory exceeds size limit'):
+                bundle.read_notice_inventory(self.inputs)
+        inventory_path.open.assert_called_once_with('rb')
+        stream.read.assert_called_once_with(257)
+
+    def test_unselected_header_hash_and_length_are_rechecked(self):
+        notice = self.report['notices'][1]
+        path = self.inputs / notice['notice_file']
+        for number, body in enumerate([b'x' * notice['bytes'], self.bodies[1] + b'truncated']):
+            path.write_bytes(body)
+            with self.subTest(mutation=number), self.assertRaisesRegex(ValueError, 'checksum or size'):
+                bundle.retain_notice_inputs([self.inputs], self.root / ('changed-' + str(number)), 'amd64')
+
+    def test_missing_unselected_header_is_rejected(self):
+        (self.inputs / self.report['notices'][1]['notice_file']).unlink()
+        with self.assertRaisesRegex(ValueError, 'input is missing'):
+            bundle.retain_notice_inputs([self.inputs], self.root / 'missing', 'amd64')
+
+    def test_unsafe_paths_and_linked_notice_inputs_are_rejected(self):
+        original = self.report['notices'][1]['notice_file']
+        self.report['notices'][1]['notice_file'] = '../escape.txt'
+        self.write_report()
+        with self.assertRaisesRegex(ValueError, 'Unsafe'):
+            bundle.retain_notice_inputs([self.inputs], self.root / 'unsafe', 'amd64')
+        self.report['notices'][1]['notice_file'] = original
+        self.write_report()
+        path = self.inputs / original
+        path.unlink()
+        path.symlink_to(self.inputs / self.report['notices'][0]['notice_file'])
+        with self.assertRaisesRegex(ValueError, 'symlinks'):
+            bundle.retain_notice_inputs([self.inputs], self.root / 'linked', 'amd64')
+
+    def test_incomplete_or_other_native_inventory_is_rejected(self):
+        original = copy.deepcopy(self.report)
+        for number, mutation in enumerate([{'schema': 2}, {'success': False},
+                                           {'architecture': 'arm64'}, {'notices': []}]):
+            self.report = {**original, **mutation}
+            self.write_report()
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'checked native inventory'):
+                bundle.retain_notice_inputs([self.inputs], self.root / ('invalid-' + str(number)), 'amd64')
+
+    def test_binary_or_empty_body_and_linked_output_are_rejected(self):
+        for number, body in enumerate([b'\x7fELF\x00binary', b'BZhcompressed', b' \n']):
+            digest = hashlib.sha256(body).hexdigest()
+            notice = self.report['notices'][1]
+            notice.update(notice_file='notices/' + digest + '.txt', sha256=digest, bytes=len(body))
+            (self.inputs / notice['notice_file']).write_bytes(body)
+            self.write_report()
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, 'readable text'):
+                bundle.retain_notice_inputs([self.inputs], self.root / ('binary-' + str(number)), 'amd64')
+        output = self.root / 'linked-output'
+        output.symlink_to(self.inputs, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'empty safe output'):
+            bundle.retain_notice_inputs([self.inputs], output, 'amd64')
+
+    def test_prepare_notices_exports_replay_inputs_without_automatic_header_selection(self):
+        fixture_root = self.root / 'keep'
+        bundle.write_json(fixture_root / 'docs/distribution-sources.json', {})
+        bundle.write_json(fixture_root / 'docs/os-package-sources.json',
+                          {'origins': [], 'original_base_origins': []})
+        inventory = self.root / 'candidate.json'
+        bundle.write_json(inventory, {})
+        source = self.root / 'sources'
+        output = self.root / 'preparation'
+
+        def packages(_source, destination, *_args, **_kwargs):
+            shutil.copytree(self.inputs, destination / 'fixture')
+            return []
+
+        def original(_source, destination, *_args, **_kwargs):
+            bundle.write_json(destination / 'base-provenance.json', {})
+            return {}
+
+        with patch.object(bundle, 'check_runtime', return_value={}), \
+                patch.object(bundle, 'retain_packages', side_effect=packages), \
+                patch.object(bundle, 'retain_original_base', side_effect=original):
+            report = bundle.prepare_notices(source, 'amd64', inventory, output, root=fixture_root)
+        self.assertEqual(report['notice_inputs_directory'], 'notice-inputs')
+        self.assertEqual(report['notice_input_bundles'], 1)
+        self.assertEqual(report['notice_input_files'], 2)
+        self.assertEqual(report['notices'], 1)
+        manifest = bundle.read_json(output / 'os-notices', 'manifest.json')
+        self.assertEqual(manifest['selected_source_comments'], [])
+        index = bundle.read_json(output / 'notice-inputs', 'index.json')
+        retained = output / 'notice-inputs' / index['bundles'][0]['directory']
+        self.assertEqual(bundle.read_json(retained, 'package-material-inventory.json'), self.report)
+
+
 class RuntimeNoticeBundleTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -336,22 +517,52 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.directory = self.root / 'docs/licenses/os'
         self.directory.mkdir(parents=True)
-        self.lock = {'origins': [{'origin': 'fixture', 'version': '1-r0'}]}
+        self.lock = {'origins': [{'origin': 'fixture', 'version': '1-r0'}],
+                     'original_base_origins': [{'origin': 'expat', 'version': '2.8.5-r0'}]}
         body = b'Copyright Fixture Authors. Complete permission and license notice.'
         name = hashlib.sha256(body).hexdigest() + '.txt'
         (self.directory / name).write_bytes(body)
         self.manifest = {'schema': 1, 'ready_for_runtime_distribution': True, 'notices': [
             {'notice_file': name, 'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body),
              'provenance': [{'origin': 'fixture', 'version': '1-r0', 'architecture': 'amd64'},
-                            {'origin': 'expat-original-base', 'version': '2.8.4-r0', 'architecture': 'amd64'}]}]}
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+                            {'origin': 'expat-original-base', 'version': '2.8.5-r0', 'architecture': 'amd64'}]}]}
         self.inventory = {'notices': [{'path': '/app/licenses/os/' + name,
                                        'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body)}]}
+        self.write_manifest(self.manifest)
+
+    def write_manifest(self, manifest):
+        bundle.write_json(self.directory / 'manifest.json', manifest)
+        body = (self.directory / 'manifest.json').read_bytes()
+        self.inventory['notices'] = [row for row in self.inventory['notices']
+                                     if row['path'] != '/app/licenses/os/manifest.json']
+        self.inventory['notices'].append({'path': '/app/licenses/os/manifest.json',
+                                         'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body)})
 
     def test_committed_notice_union_and_candidate_bytes_cover_original_layers(self):
         result = bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
         self.assertEqual(result['origins'], 2)
         self.assertTrue(result['runtime_bytes_verified'])
+        self.assertEqual(result['manifest_sha256'], self.inventory['notices'][-1]['sha256'])
+
+    def test_missing_or_changed_installed_notice_manifest_is_rejected(self):
+        for mutation in ('missing', 'hash', 'size'):
+            inventory = copy.deepcopy(self.inventory)
+            if mutation == 'missing':
+                inventory['notices'].pop()
+            elif mutation == 'hash':
+                inventory['notices'][-1]['sha256'] = 'f' * 64
+            else:
+                inventory['notices'][-1]['bytes'] += 1
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'exact committed OS notice manifest bytes'):
+                bundle.check_runtime_notices(self.root, inventory, self.lock, 'amd64')
+
+    def test_installed_manifest_must_match_original_bytes_not_reserialized_json(self):
+        path = self.directory / 'manifest.json'
+        original = path.read_bytes()
+        path.write_bytes(original + b'\n')
+        self.assertEqual(json.loads(path.read_bytes()), self.manifest)
+        with self.assertRaisesRegex(ValueError, 'exact committed OS notice manifest bytes'):
+            bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
 
     def test_missing_runtime_notice_and_changed_notice_bytes_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'runtime lacks'):
@@ -369,7 +580,7 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
                 modified['notices'][0]['provenance'][0]['architecture'] = 'arm64'
             else:
                 modified['notices'][0]['provenance'].pop()
-            bundle.write_json(self.directory / 'manifest.json', modified)
+            self.write_manifest(modified)
             with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'every reviewed OS origin'):
                 bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
 
@@ -377,18 +588,18 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
         self.lock['origins'].append({'origin': 'python-3.14', 'version': '3.14.7-r1'})
         self.manifest['notices'][0]['provenance'].append(
             {'origin': 'python-3.14', 'version': '3.14.7-r1', 'architecture': 'amd64'})
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         with self.assertRaisesRegex(ValueError, 'every reviewed OS origin'):
             bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
         self.manifest['notices'][0]['provenance'].append(
             {'origin': 'python-3.14-ensurepip', 'version': '3.14.7-r1', 'architecture': 'amd64'})
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         self.assertEqual(bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')['origins'], 4)
 
     def test_actual_source_notice_bytes_and_attribution_must_be_committed(self):
         for provenance in self.manifest['notices'][0]['provenance']:
             provenance['source_path'] = 'sources/source.tar.gz!package/COPYING'
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         actual = copy.deepcopy(self.manifest)
         bundle.check_generated_notices(self.root, actual, 'amd64')
         for mutation in ('hash', 'source_path', 'ready'):
@@ -402,15 +613,63 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 bundle.check_generated_notices(self.root, changed, 'amd64')
 
+    def test_complete_generated_proof_matches_exact_committed_attribution(self):
+        proof = self.manifest['notices'][0]['provenance'][0]
+        proof.update(source_path='sources/archive.tar.gz!fixture/COPYING', schema=1,
+            provider_oci_binding=True, binding_method='signed-build-provenance',
+            source_image_digest=None, source_manifest_sha256='a' * 64,
+            native_image_digest='sha256:' + 'b' * 64, proof_architecture='arm64',
+            for_packages=['fixture-data'], discovery='notice-file',
+            signed_statement_sha256={'slsa': 'c' * 64, 'scout': 'd' * 64})
+        self.write_manifest(self.manifest)
+        actual = copy.deepcopy(self.manifest)
+        original = copy.deepcopy(actual)
+        bundle.check_generated_notices(self.root, actual, 'amd64')
+        self.assertEqual(actual, original)
+        mutations = {
+            'source_manifest_sha256': 'e' * 64,
+            'native_image_digest': 'sha256:' + 'e' * 64,
+            'source_image_digest': 'sha256:' + 'e' * 64,
+            'provider_oci_binding': False,
+            'binding_method': 'unsigned-source-only',
+            'proof_architecture': 'amd64',
+            'for_packages': ['unreviewed-data'],
+            'discovery': 'complete-leading-legal-comment',
+            'signed_statement_sha256': {'slsa': 'e' * 64, 'scout': 'd' * 64},
+            'schema': True,
+        }
+        for field, value in mutations.items():
+            changed = copy.deepcopy(actual)
+            changed['notices'][0]['provenance'][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'differs from committed runtime provenance'):
+                bundle.check_generated_notices(self.root, changed, 'amd64')
+        for mutation in ('missing', 'added'):
+            changed = copy.deepcopy(actual)
+            if mutation == 'missing':
+                del changed['notices'][0]['provenance'][0]['source_manifest_sha256']
+            else:
+                changed['notices'][0]['provenance'][0]['license_source_url'] = 'https://example.org/unreviewed-license'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'differs from committed runtime provenance'):
+                bundle.check_generated_notices(self.root, changed, 'amd64')
+
+    def test_generated_attribution_must_have_requested_native_architecture(self):
+        actual = copy.deepcopy(self.manifest)
+        actual['notices'][0]['provenance'][0]['architecture'] = 'arm64'
+        # Even a byte-for-byte committed attribution from another native image
+        # cannot satisfy this architecture's source qualification.
+        self.write_manifest(actual)
+        with self.assertRaisesRegex(ValueError, 'wrong native architecture'):
+            bundle.check_generated_notices(self.root, actual, 'amd64')
+
     def test_source_comment_review_is_architecture_bound_and_explicit(self):
         provenance = self.manifest['notices'][0]['provenance'][0]
         provenance.update(source_path='sources/archive.tar.gz!package/source.c',
                           discovery='complete-leading-legal-comment')
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         with self.assertRaisesRegex(ValueError, 'explicit committed review'):
             bundle.reviewed_notice_comments(self.root, 'amd64')
         self.manifest['selected_source_comments'] = [provenance['source_path']]
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         self.assertEqual(bundle.reviewed_notice_comments(self.root, 'amd64'), [provenance['source_path']])
         self.assertEqual(bundle.reviewed_notice_comments(self.root, 'arm64'), [])
 
@@ -438,8 +697,7 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'differs from its signed native statement'):
                     bundle.verify_base_provenance(root, os_lock, 'amd64')
 
-    def test_expat_cached_sources_do_not_replace_ensurepip_source_fetcher(self):
-        import alpine_distribution_sources
+    def test_original_package_retention_does_not_replace_ensurepip_source_fetcher(self):
         import base_python_distribution_sources
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -448,16 +706,18 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
             native = 'sha256:' + 'a' * 64
             apk = b'original Python APK fixture'
             apk_sha = hashlib.sha256(apk).hexdigest()
-            source_body = b'pinned original Expat archive'
-            source_url = 'https://example.org/expat.tar.gz'
-            (source / 'expat.tar.gz').write_bytes(source_body)
-            manifest = {'files': [{'path': 'expat.tar.gz', 'url': source_url, 'role': 'upstream-source',
-                'sha256': hashlib.sha256(source_body).hexdigest(), 'bytes': len(source_body)}]}
+            package = {'name': 'libexpat', 'version': '2.8.5-r0',
+                       'license': 'MIT', 'build_commit': 'c' * 40,
+                       'binaries': {'amd64': {'url': 'https://dhi.io/expat.apk', 'sha256': 'd' * 64}}}
+            original = {'origin': 'expat', 'version': '2.8.5-r0', 'packages': [package]}
             provenance = {'predicateType': 'https://slsa.dev/provenance/v1',
-                          'subject': [{'digest': {'sha256': native.split(':')[1]}}]}
-            bundle.write_json(source / 'manifest.json', manifest)
+                          'subject': [{'digest': {'sha256': native.split(':')[1]}}],
+                          'predicate': {'buildDefinition': {'resolvedDependencies': [
+                              {'uri': 'https://dhi.io/expat.apk', 'digest': {'sha256': 'd' * 64}}]}}}
             bundle.write_json(source / 'base-provenance.json', provenance)
-            bundle.write_json(source / 'base-runtime-inventory.json', {})
+            bundle.write_json(source / 'base-runtime-inventory.json', {'os_packages': [
+                {'name': 'libexpat', 'version': '2.8.5-r0', 'license': 'MIT',
+                 'origin': 'expat', 'build_commit': 'c' * 40}]})
             bundle.write_json(repo / 'docs/base-python-sources.json', {'package': {'apk_sha256': {'amd64': apk_sha}}})
             proof = {'source_image_digest': 'sha256:' + 'b' * 64, 'native_image_digest': native}
 
@@ -466,10 +726,6 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
                 (output / 'python.apk').write_bytes(apk)
                 return {'files': [{'type': 'file', 'source_path': 'opt/docker/materials/python.apk',
                                   'path': 'python.apk', 'sha256': apk_sha}]}
-
-            def original_expat(provenance, output, *, fetch, base_inventory):
-                self.assertEqual(fetch(source_url), source_body)
-                return manifest
 
             fetched = []
             def python_fetch(url):
@@ -481,15 +737,17 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
                 self.assertEqual(fetch('https://pypi.org/pypi/distlib/0.4.2/json'), b'ensurepip source release')
                 return {'source_packages': [], 'wheels': [], 'native_resources': [], 'native_build_sources': []}
 
-            os_lock = {'base_index': 'dhi.io/python@' + bundle.BASE_DIGEST, 'base_native_digests': {'amd64': native}}
+            os_lock = {'base_index': 'dhi.io/python@' + bundle.BASE_DIGEST, 'base_native_digests': {'amd64': native},
+                       'original_base_origins': [original]}
             with patch.object(bundle, 'verify_source_proof', return_value=proof), \
                     patch.object(bundle, 'verify_base_provenance', return_value=(provenance, proof)), \
                     patch.object(bundle, 'copy_proof'), patch.object(bundle, 'copy_attestation_proof'), \
                     patch.object(bundle, 'retain_materials', side_effect=retain), patch.object(bundle, 'omit_apk_materials'), \
-                    patch.object(alpine_distribution_sources, 'collect_sources', side_effect=original_expat), \
+                    patch.object(bundle, 'retain_packages', return_value=[]) as packages, \
                     patch.object(base_python_distribution_sources, 'collect_sources', side_effect=original_python):
                 bundle.retain_original_base(source, root / 'curated', os_lock, 'amd64', root=repo, fetch=python_fetch)
             self.assertEqual(fetched, ['https://pypi.org/pypi/distlib/0.4.2/json'])
+            self.assertEqual(packages.call_args.args[0], source / 'original-base-packages')
 
 
 class MatchingSourceDownloadTests(unittest.TestCase):
@@ -527,6 +785,7 @@ class CommittedKeepSourceTests(unittest.TestCase):
         self.output = Path(self.temp.name) / 'sources'
         self.files = ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
             'scripts/build_patched_zlib.py', 'scripts/patch_python_runtime.py',
+            'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
             'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
             'docs/distribution-sources.json', 'docs/os-package-sources.json',
             'docs/aports-source-lock.json', 'docs/base-python-sources.json', 'app.py')
@@ -683,3 +942,44 @@ class SignedBuildSourceBundleTests(unittest.TestCase):
                 patch.object(bundle, 'copy_attestation_proof'), patch.object(preferred, 'ROOT', self.root):
             with self.assertRaisesRegex(ValueError, 'No valid original Docker signature'):
                 bundle.retain_packages(source, self.root / 'curated', {'origins': [origin]}, 'amd64')
+
+
+class OriginalPackageBindingTests(unittest.TestCase):
+    def fixture(self):
+        package = {'name': 'libexpat', 'version': '2.8.5-r0', 'build_commit': 'a' * 40,
+                   'license': 'MIT', 'binaries': {'amd64': {'url': 'https://dhi.io/exact.apk',
+                                                         'sha256': 'b' * 64}}}
+        origin = {'origin': 'expat', 'version': package['version'], 'packages': [package]}
+        inventory = {'os_packages': [{'name': package['name'], 'version': package['version'],
+                     'build_commit': package['build_commit'], 'license': 'MIT', 'origin': 'expat'}]}
+        provenance = {'predicate': {'buildDefinition': {'resolvedDependencies': [
+            {'uri': package['binaries']['amd64']['url'], 'digest': {'sha256': 'b' * 64}}]}}}
+        return [origin], inventory, provenance
+
+    def test_original_bytes_remain_bound_after_runtime_replacement(self):
+        origins, inventory, provenance = self.fixture()
+        bundle.bind_original_packages(origins, inventory, provenance, 'amd64')
+        for field, changed in (('version', '2.9.0-r0'), ('build_commit', 'c' * 40),
+                               ('license', 'Unknown'), ('origin', 'other')):
+            altered = copy.deepcopy(inventory)
+            altered['os_packages'][0][field] = changed
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'inventory identity mismatch'):
+                bundle.bind_original_packages(origins, altered, provenance, 'amd64')
+
+    def test_original_signed_apk_hash_and_uniqueness_are_mandatory(self):
+        origins, inventory, provenance = self.fixture()
+        for mutation in ('hash', 'uri', 'duplicate', 'missing'):
+            altered = copy.deepcopy(provenance)
+            rows = altered['predicate']['buildDefinition']['resolvedDependencies']
+            if mutation == 'hash':
+                rows[0]['digest']['sha256'] = 'c' * 64
+            elif mutation == 'uri':
+                rows[0]['uri'] += '.changed'
+            elif mutation == 'duplicate':
+                rows.append(copy.deepcopy(rows[0]))
+            else:
+                rows.clear()
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'signed provenance'):
+                bundle.bind_original_packages(origins, inventory, altered, 'amd64')
+        with self.assertRaisesRegex(ValueError, 'Duplicate overwritten'):
+            bundle.bind_original_packages(origins + origins, inventory, provenance, 'amd64')

@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import release_materials as materials
 import registry_transfer
 import review_image
+from tests.native_dependency_fixture import dependency_report
 
 
 def tar_bytes(entries):
@@ -213,9 +214,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 for name in [*materials.evidence_names(arch), f'portable-recovery-{arch}.json',
                              f'installer-trial-{arch}.json', f'source-bundle-{arch}.json']}
             reports = self.security_reports(arch, policy, matches)
-            if review_changes and arch == 'amd64':
+            if review_changes:
                 for name, changes in review_changes.items():
-                    reports[name].update(changes)
+                    if name in reports:
+                        reports[name].update(changes)
             evidence_payloads.update({name: (json.dumps(body, indent=3) + '\r\n').encode()
                                       for name, body in reports.items()})
             if validation:
@@ -281,6 +283,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
 
     def security_reports(self, arch, policy, matches=None):
         return {
+            f'candidate-dependencies-{arch}.json': dependency_report(arch),
             f'candidate-{arch}.json': {'matches': matches or []},
             f'candidate-scout-{arch}.json': {'runs': [{'results': []}]},
             f'candidate-regression-{arch}.json': {
@@ -1057,6 +1060,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
                             ('scout', f'candidate-scout-{arch}.json'),
                             ('evidence', f'candidate-regression-{arch}.json'),
                             ('provenance', f'candidate-provenance-{arch}.json'),
+                            ('dependencies', f'candidate-dependencies-{arch}.json'),
                         ):
                             self.assertEqual(held[arch][key], json.load(package.extractfile(prefix + report_name)))
                         # The producer's review is retained even though the current
@@ -1068,29 +1072,30 @@ class ReleaseMaterialsTests(unittest.TestCase):
     def test_readback_clean_scan_passes_after_deadline_with_empty_or_unused_exceptions(self):
         for empty in (False, True):
             with self.subTest(empty_exceptions=empty):
-                self.assert_readback_security_review(day=datetime.date(2026, 10, 8), empty_exceptions=empty)
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 21), empty_exceptions=empty)
 
     def test_readback_needed_exception_passes_on_deadline_and_blocks_afterward(self):
         matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
-        self.assert_readback_security_review(day=datetime.date(2026, 10, 7), matches=matches)
-        self.assert_readback_security_review(day=datetime.date(2026, 10, 8), matches=matches,
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        self.assert_readback_security_review(day=datetime.date(2026, 10, 20), matches=matches)
+        self.assert_readback_security_review(day=datetime.date(2026, 10, 21), matches=matches,
                                             expected_error='exception_expired')
 
     def test_readback_unknown_or_mismatched_findings_cannot_use_original_approval(self):
         match = {'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}
+                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}
         for section, field, value, reason in (
             ('vulnerability', 'id', 'CVE-unknown', 'unmatched_finding'),
             ('vulnerability', 'severity', 'High', 'exception_mismatch'),
             ('artifact', 'name', 'other-python', 'exception_mismatch'),
+            ('artifact', 'version', '3.14.7-r1', 'exception_mismatch'),
             ('artifact', 'version', '3.14.8-r0', 'exception_mismatch'),
             ('artifact', 'type', 'python', 'exception_mismatch'),
         ):
             changed = copy.deepcopy(match)
             changed[section][field] = value
             with self.subTest(field=field):
-                self.assert_readback_security_review(day=datetime.date(2026, 10, 7),
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 20),
                                                     matches=[changed], expected_error=reason)
 
     def test_readback_rejects_incomplete_scans_runtime_failure_and_bad_base_provenance(self):
@@ -1113,6 +1118,17 @@ class ReleaseMaterialsTests(unittest.TestCase):
     def test_readback_rejects_changed_reviewed_source_hash(self):
         self.assert_readback_security_review(day=datetime.date(2026, 10, 8), source_change=True,
                                             expected_error='verified-fixed review must be refreshed')
+
+    def test_readback_rechecks_original_dependency_report_before_promotion(self):
+        for changes, message in (
+            ({'candidate-dependencies-amd64.json': {'success': False, 'failures': 1}},
+             'failed native dependency qualification'),
+            ({'candidate-dependencies-arm64.json': {'expat_source_manifest_sha256': '0' * 64}},
+             'source or install manifest differs'),
+        ):
+            with self.subTest(changes=changes):
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 8),
+                    review_changes=changes, expected_error=message)
 
     def test_aggregate_emits_both_digests_only_after_asset_and_tag_checks(self):
         rows, bodies = self.verify_fixture()
@@ -1305,17 +1321,22 @@ class ReleaseMaterialsTests(unittest.TestCase):
         self.assert_current_review_promotion(day=datetime.date(2026, 10, 8), empty_exceptions=True)
 
     def test_archive_unused_expired_exceptions_do_not_block_promotion(self):
-        self.assert_current_review_promotion(day=datetime.date(2026, 10, 8))
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 21))
 
     def test_archive_needed_exception_passes_on_review_deadline(self):
         matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
-        self.assert_current_review_promotion(day=datetime.date(2026, 10, 7), matches=matches)
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 20), matches=matches)
 
     def test_archive_expired_needed_exception_blocks_without_changing_original_evidence(self):
         matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 21), matches=matches, blocked=True)
+
+    def test_archive_old_python_revision_blocks_without_changing_original_evidence(self):
+        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
                     'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
-        self.assert_current_review_promotion(day=datetime.date(2026, 10, 8), matches=matches, blocked=True)
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 20), matches=matches, blocked=True)
 
     def test_archive_retains_original_main_provenance_and_review_bytes(self):
         import validated_build

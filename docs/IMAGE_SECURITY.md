@@ -19,7 +19,7 @@ architecture's security-evidence groups. After all applicable gates pass, the
 original report bytes are saved with the tested image in an unpublished
 main-validation draft. A small immutable Actions index binds those reports to
 their producing run and attempt, independently of log retention. A failed
-security run supplies log-derived findings, without a retained promotion archive;
+main security run supplies log-derived findings, without a retained promotion archive;
 reformatted log contents do not prove original report byte identity. Large
 evidence and source archives stay out of Actions artifact storage.
 The checksum-verified Scout executable also captures
@@ -35,13 +35,16 @@ reviewed synthetic examples remain visible in its evidence. See
 requirements. Layer heuristics do not certify arbitrary
 secrets absent. Build-generated dependency bytecode is omitted; runtime source
 and notices remain, with bytecode writes already disabled by the runtime environment.
-The pinned Python base's Expat 2.8.4 package is affected by
-CVE-2026-93990. The image upgrades Expat and libexpat to Alpine's signed
-2.8.5-r0 packages during the build. BuildKit mounts the temporary package manager
-and its library read-only; neither tool is copied into any final image layer.
-The Python base's exact signed provenance check remains in place. The
-unsuppressed Scout and Grype scans still block any new finding; no Expat
-exception was added.
+The reviewed newer DHI base supplies OpenSSL `3.5.9-r0`. The image upgrades
+its Expat `2.8.5-r0` packages to Alpine's signed `2.9.0-r0` APKs with exact hashes
+for both architectures. Installation checks the pinned public keys and package
+signatures without networking or repository updates. BuildKit mounts the APKs,
+keys and package manager read-only; those inputs do not enter a final image layer.
+A separate native dependency report verifies ordinary `pyexpat` and `ssl` imports,
+functional XML/TLS checks and the mapped libraries' canonical paths, file
+identities and hashes. Expat's loaded bytes must match its signed APK. This
+report is retained with the original evidence and rechecked during promotion.
+No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
 evidence, verify the actual runtime package identities, and package versioned
 source/notice archives with SHA-256 manifests before transferring an image.
@@ -79,7 +82,7 @@ candidate.
 
 Each exception records its reviewed scope and evidence in
 docs/image-exceptions.json, with `review.approval`, `review.deadline` and
-`review.remove_when` describing the inherited approval, deadline and removal
+`review.remove_when` describing the current approval, deadline and removal
 condition. Approval remains limited to the exact
 finding ID, severity, package type, package name and installed version, with the
 reviewed source hashes, pinned base provenance and all required runtime probes.
@@ -108,10 +111,12 @@ daily and on manual dispatch with read-only repository access, no dependency
 installation, registry credentials, image build or publication. These notices
 allow reviews to begin ahead of a deadline without blocking a clean candidate.
 
-The existing approvals still end on October 7, 2026. Correcting deadline handling
-does not make a candidate that needs those exceptions eligible on October 8.
-Such a candidate needs proven dependency replacements or a new explicit security
-review before release.
+The October 6 review covers seven Python `3.14.7-r2` findings and the patched
+zlib `1.3.2-r0` finding through October 20, 2026 UTC, inclusive. Each entry records
+its review date. Earlier `3.14.7-r1` approvals do not carry forward to other package
+versions. A finding that still needs one of these exceptions on October 21 blocks
+validation and promotion; it requires a proven replacement or a new explicit
+security review. Correcting deadline handling alone never renews an approval.
 
 ## zlib delivery correction
 
@@ -139,9 +144,10 @@ amd64 and arm64 builds, signed provenance, all nine runtime checks with the
 strengthened zlib probe, Scout and Grype scans, matching-source and license
 evidence, and installation and recovery checks before release.
 
-Release remains blocked pending that evidence and an explicit review of the
-corrected source hashes and any needed exceptions. No exception deadline has
-been extended; the existing October 7, 2026 deadlines remain in force.
+At that stage, release remained blocked pending complete native evidence and an
+explicit review of the corrected source hashes and any needed exceptions. The
+October 6 review below records the completed replacement evidence and renewed
+exact scopes; successful current-main validation remains required before release.
 The runtime correction requires a new release version; the previously published
 image cannot be replaced under its immutable version tag.
 
@@ -177,30 +183,70 @@ the pinned Docker key and index.
 Both native inventories contain Python `3.14.7-r2`, OpenSSL `3.5.9-r0` and
 Expat `2.8.5-r0`. The authenticated package installation failed on both
 architectures: the configured vendor repositories offer `expat` and `libexpat`
-at `2.8.5-r0`, which cannot satisfy the exact `2.9.0-r0` requirement. Earlier
-anonymous DHI requests returned HTTP 403, and the examined official Alpine
-`2.9.0-r0` package URLs returned HTTP 404. No verified replacement package is
-available through either examined route.
+at `2.8.5-r0`, which cannot satisfy the exact `2.9.0-r0` requirement. Alpine subsequently published signed `2.9.0-r0` packages for both architectures
+in its edge repository. The replacement recipe pins those four APK hashes and
+trust keys, retaining their complete matching source/build/license inputs.
+Package verification also checks all XML symbols required by the reviewed
+Python extensions; native installation and ordinary library loading remain
+mandatory. The newer base's Python, OpenSSL, CA certificate, timezone and xz
+source records are updated together. The original DHI Expat layer retains its
+own signed package-source coverage.
 
-A replacement release needs verified Expat `2.9.0` packages on both
-architectures, complete final-image scans and runtime checks, and matching
-source/license materials. The newer base also changes CA certificates, timezone
-data and xz; update their source records together with Python and OpenSSL.
-Retain the cleanup and zlib defenses until replacement fixes are proven.
-Any needed Python `3.14.7-r2` exception requires explicit review of that new
-package tuple. Building an Expat replacement from verified upstream sources
-requires a truthful package version and corresponding build/source evidence;
-replacing library bytes while retaining the old package metadata does not remove
-the scanner findings or qualify an additional exception.
+Python `3.14.8` alone does not replace every reviewed fix: the inspected upstream
+release and DHI package still lack the temporary-directory cleanup correction.
+The DHI package additionally carries a tar-link correction absent from the
+upstream release. Retain cleanup, permission-reset and zlib defenses until
+verified replacements supply them. Existing Python `3.14.7-r1` approvals did not
+cover findings for `3.14.7-r2`. The completed review below approves only the seven
+exact replacement tuples and the existing patched zlib tuple through October 20.
 
-**Review vendor runtime candidate** is a manual, main-only workflow that checks
-the exact documented candidate index, Docker signatures, both native image
-subjects and source statements, then tries the signed Expat `2.9.0-r0` packages
-on native amd64 and arm64. It retains original vendor evidence and inventories
-using the existing scoped registry credential in temporary configuration.
-Its result is an assessment, not release approval. A replacement must still
-pass complete Keep validation and matching-source/license checks. No exception
-deadline or finding scope has changed.
+**Review vendor runtime candidate** retains its read-only main vendor assessment.
+Its optional `qualification` input also builds and tests both native Keep images
+on a maintainer branch, obtains checked sources and prepares small notice records
+for review. This mode neither publishes nor retains images for promotion.
+Original scanner reports and full notice inputs remain in its small seven-day
+artifact, including source headers that need explicit attribution selection.
+Security findings still fail the job; independent source preparation can finish
+so matching notices can be committed and checked in a rebuilt candidate. Only
+successful complete current-main validation can supply promotion images.
+Disable `prepare_notices` after committing the checked notice union to verify
+the rebuilt images' notices and complete source archives without retaining
+images or enabling publication.
+
+The replacement images in native qualification
+[37499120809](https://github.com/brspoon/keep/actions/runs/37499120809) passed all
+nine security probes and verified normal loading of Expat `2.9.0` and OpenSSL
+`3.5.9` on both architectures. Scout reported zero findings; Grype reported the
+seven Python findings at `3.14.7-r2` and the patched zlib finding. No OpenSSL or
+Expat exception is needed. At that time, the Python findings blocked because the
+approvals covered `3.14.7-r1`, not the replacement revision.
+
+Source acquisition in
+[37501921315](https://github.com/brspoon/keep/actions/runs/37501921315) completed
+for all 18 installed OS origins on both architectures. Notice preparation then
+exceeded a metadata size limit on the complete GCC inventory. The preparation
+helper now uses a separate bounded inventory reader while preserving exact input
+bytes. The subsequent native run
+[37504275731](https://github.com/brspoon/keep/actions/runs/37504275731) completed
+source acquisition and notice preparation on both architectures, with all nine
+security probes passing. Its retained notice inputs reproduce the committed
+124-text union after explicit copyright-header selection and the checked POSIXtz
+license supplement. Native qualification
+[37508957671](https://github.com/brspoon/keep/actions/runs/37508957671) then verified
+the rebuilt installed notice manifest, all 124 complete notice texts, all 458
+source attributions and every member of both source archives. Both architectures
+passed all nine security probes, ordinary dependency loading, installation and
+recovery checks. Grype reported the same eight findings and Scout reported none;
+both jobs failed only the finding gate under the earlier r1 approvals.
+
+The October 6 verified-fixed review now covers only those seven exact Python
+`3.14.7-r2` findings and patched zlib `1.3.2-r0`, through October 20 UTC. Six Python
+fixes are present in the verified base sources; Keep still supplies the cleanup
+correction, permission guard and corrected zlib library. No unfixed finding,
+additional finding ID or broader package/severity match is accepted. The original
+qualification reports remain unchanged. New current-main validation must pass
+every gate before its retained images and sources can be selected for separately
+approved publication.
 
 ## Replacing patched dependencies
 
@@ -264,9 +310,9 @@ Scout/Grype scans and the nine runtime probes could not be run in this assessmen
 No patch or exception was removed. A base change still requires coordinated
 updates to `Dockerfile`, `inspect_candidate.py`, base/package source locks,
 source hashes and original Expat-layer materials, followed by new native evidence.
-The new Python package version cannot use the old version's exception approval.
-If final scans still need any October 7 exception afterward, a new explicit
-security review remains required.
+At that assessment stage, the new Python package version could not use the old
+version's exception approval. Findings needing an original October 7 exception
+afterward required the new explicit review recorded above.
 
 ### Upstream and alternative-base blockers
 
@@ -277,8 +323,14 @@ findings, but the original zlib probe did not verify the library used by Python.
 These reports remain tied to the original image. Being within the October 7
 deadlines does not authorize that image or prove the correction. The changed
 recipe and probe source bindings require fresh corrected candidate evidence and
-review; needed exceptions still block after their deadlines. The
-`CVE-2026-4360` policy entry is unused by those reports.
+review; needed exceptions still block after their deadlines.
+
+The unused `CVE-2026-4360` exception has been removed. The verified Python
+`3.14.7-r2` packages contain the hardlink-target filtering fix from `5e0ef3f`.
+Both native architectures passed its regression probe, and their original
+unsuppressed Grype and Scout reports contain no finding for it. All nine runtime
+probes and exact Python source assertions remain required; a future finding for
+this retired exception blocks as unmatched.
 
 As of October 5, the Python 3.14 directory-cleanup
 [backport PR](https://github.com/python/cpython/pull/158430) remains open and
@@ -334,7 +386,10 @@ notices together. Remove a patch or exception only after its replacement passes
 source inspection, all required native probes and complete unsuppressed scans on
 both architectures. Retain Keep's cleanup guard until equivalent behavior is
 proven. Dependency-update proposals must pass the same coordinated review.
-No base migration or exception removal has been validated yet.
+The October 6 qualification and review above record the verified replacement
+libraries, individual exception removal and eight renewed exact scopes. Remaining
+Python and zlib findings still require their reviewed fixes, complete native
+evidence and a valid per-entry deadline.
 
 ## Directory cleanup
 

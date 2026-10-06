@@ -80,6 +80,21 @@ including for unused expired exceptions. They do not approve additional risk or
 replace native image validation. See [image security](IMAGE_SECURITY.md) for
 deadline behavior and dependency replacement requirements.
 
+Maintainers can use **Review vendor runtime candidate** with `qualification`
+enabled to test both native images and prepare checked notice bytes on a
+maintainer branch. It has read-only repository access and never retains a
+promotion image. Failed security review still fails qualification, while checked
+source preparation can produce reviewable notice records. Commit the verified
+notice union, rebuild, and complete normal main validation before publication.
+The seven-day qualification artifact retains original scanner and runtime
+reports, installation and recovery proofs, plus checked notice inputs including
+source headers awaiting selection.
+It contains no image or source archives and cannot authorize promotion.
+After committing the checked notice union, disable `prepare_notices` for a
+second qualification run. This rebuilds both images and verifies every source
+archive member and installed notice. Only its small source manifest is retained;
+image eligibility still requires successful complete main validation.
+
 After verification, finalize the version draft as a normal GitHub release,
 preserving all assets. Candidate storage remains unpublished. A draft is temporary
 staging, not a release for users to install.

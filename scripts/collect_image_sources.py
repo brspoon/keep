@@ -131,8 +131,17 @@ def main():
                     '-v', str(inventory_script) + ':/source-inventory.py:ro', BASE,
                     'python', '-B', '/source-inventory.py', '--runtime'], env=env)
                 (destination / 'base-runtime-inventory.json').write_bytes(original_inventory)
-                from alpine_distribution_sources import collect_sources as collect_alpine
-                collect_alpine(provenance, destination, base_inventory=json.loads(original_inventory))
+                # Overwritten base files still ship in lower OCI layers. Keep
+                # their exact DHI package output and signed source proof too.
+                from collect_package_sources import Registry, collect_packages
+                lock = json.loads((Path(__file__).resolve().parents[1] /
+                                   'docs/os-package-sources.json').read_bytes())
+                original_lock = {**lock, 'origins': lock['original_base_origins']}
+                original = collect_packages(original_lock, arch,
+                    destination / 'original-base-packages', Registry(regctl, cosign, key, env),
+                    base_provenance=provenance, runtime_inventory=json.loads(original_inventory))
+                if not original['success']:
+                    raise ValueError('Overwritten base package source acquisition is incomplete')
                 subprocess.run([str(regctl), 'image', 'copy', reference,
                                 'ocidir://' + str((destination / 'dhi-source-proof-oci').resolve())
                                 + ':attestation', '--referrers'], env=env, check=True)

@@ -4,13 +4,13 @@
     "amd64",
     "arm64"
   ],
-  "base_index": "dhi.io/python@sha256:7b9528fefc51c9d3753ccd25dcf1dea9dd327e7c2f8bef89cd2cf3b34f847408",
+  "base_index": "dhi.io/python@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
   "base_native_digests": {
-    "amd64": "sha256:b1f35cef0a3f43c7f377e75de003da89f0a8518ddc3805a5f94db9bd460246f1",
-    "arm64": "sha256:f38997c3b22744780d20cf7749649535d63fc9a167def975af9d4c1eb4aab605"
+    "amd64": "sha256:fa220ee7ebeadd3e4d68f5fecb73dd29b69622684ce130157e59fd9811cbeb80",
+    "arm64": "sha256:233127fc1adc0748f183e2341864e6c3caa2c9855819657c26b4a49c50fd7f06"
   },
   "source_predicate_type": "https://docker.com/dhi/source/v0.1",
-  "description": "Reviewed public Docker package-image tags and pinned recipes for 17 DHI base origins plus upgraded DHI Expat 2.8.5. Registry tags are discovery pointers: verify the native image subject and signature, and match each APK binary SHA256 before accepting corresponding-source materials. Original Alpine Expat 2.8.4 is covered separately in the base-layer bundle.",
+  "description": "Reviewed package-image discovery references and immutable recipes for the pinned DHI runtime and installed replacement packages. Verify native subjects and signatures and match exact APK SHA256 values before accepting corresponding sources. Original base Expat is retained separately in original_base_origins.",
   "origins": [
     {
       "origin": "alpine-baselayout",
@@ -106,37 +106,37 @@
     },
     {
       "origin": "ca-certificates",
-      "version": "20260611-r0",
+      "version": "20260909-r0",
       "image": "dhi.io/pkg-ca-certificates",
-      "tag": "20260611-r0-alpine3.24",
-      "reference": "dhi.io/pkg-ca-certificates:20260611-r0-alpine3.24",
+      "tag": "20260909-r0-alpine3.24",
+      "reference": "dhi.io/pkg-ca-certificates:20260909-r0-alpine3.24",
       "predicate_image_name": "dhi/pkg-ca-certificates",
       "recipe": {
         "path": "package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
-        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
-        "sha256": "9367833f2f22547ea6c47835b49813f0dcf0cd39356058d1714746b765e42827",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
-        "upstream_commit": "e41cbd2ae991adfe8df298ba8e8e777e90bd0e03"
+        "revision": "5d3e23f77ef27db33e9a47f9aa4c7a0505e7c4db",
+        "sha256": "66256602cabc01815f39d45dabd0f5b2ad7ff294d6e0b4febb21c3091fc8f13c",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/5d3e23f77ef27db33e9a47f9aa4c7a0505e7c4db/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
+        "upstream_commit": "eb7078df3a16d666e8f7723f94bb92e00d4b9236"
       },
       "declared_tags": [
-        "20260611-alpine3.24",
-        "20260611-r0-alpine3.24"
+        "20260909-alpine3.24",
+        "20260909-r0-alpine3.24"
       ],
       "mutable_tag_reused_across_upstream_versions": false,
       "packages": [
         {
           "name": "ca-certificates-bundle",
-          "version": "20260611-r0",
+          "version": "20260909-r0",
           "license": "MPL-2.0 AND MIT",
-          "build_commit": "1f115f951460dfe0686a3811df250e0fe949f63a",
+          "build_commit": "25117bb82813f731be8ea998cd8b6eb676a8b27d",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-bundle-20260611-r0.apk",
-              "sha256": "5be2e420cc1ed6d0c2f041ab65c30c41a463f038b75cfcacb42dca594027733c"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-bundle-20260909-r0.apk",
+              "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20260611-r0.apk",
-              "sha256": "5be2e420cc1ed6d0c2f041ab65c30c41a463f038b75cfcacb42dca594027733c"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20260909-r0.apk",
+              "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
             }
           }
         }
@@ -144,53 +144,67 @@
     },
     {
       "origin": "expat",
-      "version": "2.8.5-r0",
-      "image": "dhi.io/pkg-expat",
-      "tag": "2.8.5-r0-alpine3.24",
-      "reference": "dhi.io/pkg-expat:2.8.5-r0-alpine3.24",
-      "predicate_image_name": "dhi/pkg-expat",
+      "version": "2.9.0-r0",
+      "source_method": "alpine-signed-expat-v1",
       "recipe": {
-        "path": "package/apk/main/expat/alpine-3.24/2.yaml",
-        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
-        "sha256": "f5758eef26e4ae5578735037ba39fa8a5e9194ccb628d55d1f53181b53a5de12",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/expat/alpine-3.24/2.yaml",
-        "upstream_commit": "41a9605db84bb52cd65c6349e5e087c2c7fe9efb"
+        "path": "main/expat/APKBUILD",
+        "revision": "46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88",
+        "url": "https://raw.githubusercontent.com/alpinelinux/aports/46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD",
+        "sha256": "40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5",
+        "archive_url": "https://github.com/alpinelinux/aports/archive/46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88.tar.gz",
+        "archive_sha256": "0b1b0728f3251b9e06f96d31117b36f38f9a1da4b62b21cc8df11bba1e90f3bc"
       },
-      "declared_tags": [
-        "2.8.5-alpine3.24",
-        "2.8.5-r0-alpine3.24"
-      ],
-      "mutable_tag_reused_across_upstream_versions": false,
+      "source": {
+        "url": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz",
+        "sha256": "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051",
+        "sha512": "677b5a39ea47aa238813412061eefba0ff2e819597efee69452eab7fd63b1387537eda0dfd4e5891b938be202dc87df4b5115bdae75c6b81643ac2363bb99b34",
+        "signature_url": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz.asc",
+        "signature_sha256": "d1f5832ac46a9f92492ee15ceb50bc1bb2c8d590e5932ccf931cf7e8de1adf4a",
+        "license_path": "expat-2.9.0/COPYING",
+        "license_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87"
+      },
+      "signing_keys": {
+        "amd64": {
+          "name": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+          "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+        },
+        "arm64": {
+          "name": "alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+          "sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+        }
+      },
       "packages": [
         {
           "name": "expat",
-          "version": "2.8.5-r0",
+          "version": "2.9.0-r0",
           "license": "MIT",
-          "build_commit": "19eef88fb758145d1245e7ad33a360b9e0cc62d0",
+          "build_commit": "46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/expat-2.8.5-r0.apk",
-              "sha256": "57a44e22b36e6a8e1d8b4ca1eb6c0d46e84df67c2464ec76869fea526a52da38"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/expat-2.9.0-r0.apk",
+              "sha256": "bc0f3cd4b150b40fdd6556204a310b22b81a73d0e75f90009256cde14b43de94"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/expat-2.8.5-r0.apk",
-              "sha256": "1988363034a883de1564365eb09def335acb8922fc81e57507af6642ca7c31c7"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/expat-2.9.0-r0.apk",
+              "sha256": "814367b2eb920b9ad1ac32a74cec81bcb0a25aa320c112d09098f5a3ef38a5b0"
             }
           }
         },
         {
           "name": "libexpat",
-          "version": "2.8.5-r0",
+          "version": "2.9.0-r0",
           "license": "MIT",
-          "build_commit": "19eef88fb758145d1245e7ad33a360b9e0cc62d0",
+          "build_commit": "46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk",
-              "sha256": "42b8146ab5a5ac7a78690a4280f9751284cdba25ecbff66776ad8d6b2237f512"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/libexpat-2.9.0-r0.apk",
+              "sha256": "fd4bd715c769df8ffaa55819f765adec28bd9aa35638876285d6c3d0ff7adea3"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libexpat-2.8.5-r0.apk",
-              "sha256": "ca2ec23fee97d4f53ea437bb0cdc2239da9fc5df2ca58e162f41ac14cb81089a"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/libexpat-2.9.0-r0.apk",
+              "sha256": "bab7910aaf12e590bea815290e6c33f2e4fd40f7450285b21a1e8ee06333d6cc"
             }
           }
         }
@@ -493,158 +507,158 @@
     },
     {
       "origin": "openssl",
-      "version": "3.5.8-r1",
+      "version": "3.5.9-r0",
       "image": "dhi.io/pkg-openssl",
-      "tag": "3.5.8-r1-alpine3.24",
-      "reference": "dhi.io/pkg-openssl:3.5.8-r1-alpine3.24",
+      "tag": "3.5.9-r0-alpine3.24",
+      "reference": "dhi.io/pkg-openssl:3.5.9-r0-alpine3.24",
       "predicate_image_name": "dhi/pkg-openssl",
       "recipe": {
         "path": "package/apk/main/openssl/alpine-3.24/3.yaml",
-        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
-        "sha256": "cadcc3b4df5d02c882ed47a6735c53fb2776eb1c2165f72aaeb060cdb8486009",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/openssl/alpine-3.24/3.yaml",
+        "revision": "a4d552587e85e8c20a2b28523adab64c804893ee",
+        "sha256": "9636e0fa53edd2d8a992ce8ce22cd5e60c67a292e265a5360ffdb382f5ec7cd1",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a4d552587e85e8c20a2b28523adab64c804893ee/package/apk/main/openssl/alpine-3.24/3.yaml",
         "upstream_commit": "013edf8b29199933e8ea34dde460b5584b979042"
       },
       "declared_tags": [
-        "3.5.8-alpine3.24",
-        "3.5.8-r1-alpine3.24"
+        "3.5.9-alpine3.24",
+        "3.5.9-r0-alpine3.24"
       ],
       "mutable_tag_reused_across_upstream_versions": false,
       "packages": [
         {
           "name": "libcrypto3",
-          "version": "3.5.8-r1",
+          "version": "3.5.9-r0",
           "license": "Apache-2.0",
-          "build_commit": "d3f8b2dac722561e110c4525a5b69ef232ad7835",
+          "build_commit": "a5ef7ba4aeb961c591312c4301e602c12415c359",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libcrypto3-3.5.8-r1.apk",
-              "sha256": "0dbd1b982bc01f2b9f439c7a79ec970cdb7aabb75d0138014bd84af4b8522b3d"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libcrypto3-3.5.9-r0.apk",
+              "sha256": "07fae6d097cd5fdac4030132eae0e8e67badbfe09d34bd424ceee06e40031a0a"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libcrypto3-3.5.8-r1.apk",
-              "sha256": "1804ac0ae31b9bafa6c4bcac4e93fdf9889eeab7dbaea0f3851b6a28874ce7d3"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libcrypto3-3.5.9-r0.apk",
+              "sha256": "fca6c3f158efbca06d6e67e8aa2508247fb114a714b937f41bed50ed66baae39"
             }
           }
         },
         {
           "name": "libssl3",
-          "version": "3.5.8-r1",
+          "version": "3.5.9-r0",
           "license": "Apache-2.0",
-          "build_commit": "d3f8b2dac722561e110c4525a5b69ef232ad7835",
+          "build_commit": "a5ef7ba4aeb961c591312c4301e602c12415c359",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libssl3-3.5.8-r1.apk",
-              "sha256": "f25fcbae10bd1c9ae5721ef24fbda6c9b6cedcd3ef3c9bf50285ab38d45bd72b"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libssl3-3.5.9-r0.apk",
+              "sha256": "f4ca34c5001929b036a2b01d07a127a72e51dd547a04e34d36eff68606b65019"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libssl3-3.5.8-r1.apk",
-              "sha256": "7cc11b858a839c1f30d317bc3007adabc068f4e29d1cd1a0a48b78e7c05a97bf"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libssl3-3.5.9-r0.apk",
+              "sha256": "c279b37023917c6f75ccd08a8e207fec210be86a04258994b54ca41f266ab9c2"
             }
           }
         },
         {
           "name": "openssl",
-          "version": "3.5.8-r1",
+          "version": "3.5.9-r0",
           "license": "Apache-2.0",
-          "build_commit": "d3f8b2dac722561e110c4525a5b69ef232ad7835",
+          "build_commit": "a5ef7ba4aeb961c591312c4301e602c12415c359",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/openssl-3.5.8-r1.apk",
-              "sha256": "0fecb7a6a5d64defa8eee69f0c743ddd7bf3ebb69296bc03b6b66b25f67283de"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/openssl-3.5.9-r0.apk",
+              "sha256": "9dc0ed3c4c1e22b64ad5bd46b776124c950d113a52b1e4f31502ab461da37f62"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/openssl-3.5.8-r1.apk",
-              "sha256": "f94ae69b3fc26a107b89fec4d8eef5818f0a7a66dc5e2806441e2c8097586294"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/openssl-3.5.9-r0.apk",
+              "sha256": "8e4df88cb2c303b7fbe66b0774de891715f4241ee86962e84b07605042ea2425"
             }
           }
         }
       ],
       "candidate_references": [
-        "dhi.io/pkg-openssl:3.5.8-alpine3.24"
+        "dhi.io/pkg-openssl:3.5.9-alpine3.24"
       ]
     },
     {
       "origin": "python-3.14",
-      "version": "3.14.7-r1",
+      "version": "3.14.7-r2",
       "image": "dhi.io/pkg-python",
-      "tag": "3.14.7-r1-apk-alpine3.24",
-      "reference": "dhi.io/pkg-python:3.14.7-r1-apk-alpine3.24",
+      "tag": "3.14.7-r2-apk-alpine3.24",
+      "reference": "dhi.io/pkg-python:3.14.7-r2-apk-alpine3.24",
       "predicate_image_name": "dhi/pkg-python",
       "recipe": {
         "path": "package/apk/main/python/alpine-3.24/3.14.yaml",
-        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
-        "sha256": "ea3a135a37c899e2e6f89fddc2d4c6b58a309e1c956afe53b2374e67cf45c47b",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/python/alpine-3.24/3.14.yaml",
+        "revision": "196770f064617d465f42873ff54e63443e7116e2",
+        "sha256": "7ee882c6744b5b41e4c8c49369c48e733ea53b6802f41616bd9e54cb54ba0b8c",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/196770f064617d465f42873ff54e63443e7116e2/package/apk/main/python/alpine-3.24/3.14.yaml",
         "upstream_commit": null
       },
       "declared_tags": [
         "3.14.7-apk-alpine3.24",
-        "3.14.7-r1-apk-alpine3.24"
+        "3.14.7-r2-apk-alpine3.24"
       ],
       "mutable_tag_reused_across_upstream_versions": false,
       "packages": [
         {
           "name": "pyc-3.14",
-          "version": "3.14.7-r1",
+          "version": "3.14.7-r2",
           "license": "PSF-2.0",
-          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/pyc-3.14-3.14.7-r1.apk",
-              "sha256": "3be600f4ec12f448daeb041de7c32c58f7969cfd863517789b22b1ca4d6d563a"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/pyc-3.14-3.14.7-r2.apk",
+              "sha256": "bed27c92cc82d13e9c9c8bc2e21e521941f05a6f62cce1fc311daabda002293f"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/pyc-3.14-3.14.7-r1.apk",
-              "sha256": "3be600f4ec12f448daeb041de7c32c58f7969cfd863517789b22b1ca4d6d563a"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/pyc-3.14-3.14.7-r2.apk",
+              "sha256": "bed27c92cc82d13e9c9c8bc2e21e521941f05a6f62cce1fc311daabda002293f"
             }
           }
         },
         {
           "name": "python-3.14",
-          "version": "3.14.7-r1",
+          "version": "3.14.7-r2",
           "license": "PSF-2.0",
-          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-3.14.7-r1.apk",
-              "sha256": "3c0f87ca054b3880b1e13e9666566a349966ffc26b89dc32ccbf7d84f1a8a0c0"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-3.14.7-r2.apk",
+              "sha256": "a6fa39d2a124caa7d96a092009e19ef6c5244cc11fce070f5728c9030c25f5b8"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-3.14.7-r1.apk",
-              "sha256": "539ef075e671a6e2695000b75df4b19a6f718c630a1668c7c05818ef67e66443"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-3.14.7-r2.apk",
+              "sha256": "1cf58f70edd7eb9a939d66c0853a17e85009173c44ea0d19e6340f708cc3f9f4"
             }
           }
         },
         {
           "name": "python-3.14-pyc",
-          "version": "3.14.7-r1",
+          "version": "3.14.7-r2",
           "license": "PSF-2.0",
-          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pyc-3.14.7-r1.apk",
-              "sha256": "4f44def1cf940f14a05b1a9120ebac88f1e6009ac6f4d090484a7c2b6e537c40"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pyc-3.14.7-r2.apk",
+              "sha256": "31691c74b71414c9ca47f4bcd6988744e9d73d226483eb3dd6364d1afec87e2f"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pyc-3.14.7-r1.apk",
-              "sha256": "4f44def1cf940f14a05b1a9120ebac88f1e6009ac6f4d090484a7c2b6e537c40"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pyc-3.14.7-r2.apk",
+              "sha256": "31691c74b71414c9ca47f4bcd6988744e9d73d226483eb3dd6364d1afec87e2f"
             }
           }
         },
         {
           "name": "python-3.14-pycache-pyc0",
-          "version": "3.14.7-r1",
+          "version": "3.14.7-r2",
           "license": "PSF-2.0",
-          "build_commit": "c44659f492dc99a2b13bfd5fe79c0b7f826e3711",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pycache-pyc0-3.14.7-r1.apk",
-              "sha256": "2ba7360563a3b11c09bca41131dd352629372a9c237e91921beb673b66f3a4d5"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
+              "sha256": "2ae0fa8b98962df49349a1e17af8a8cbfd64b836c7f1e0e5752bd8b9baf7e07b"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.7-r1.apk",
-              "sha256": "064c486acd278794f2c1df1b63cd9f642cfba4f58d51eddda39da6ef5ad8703c"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
+              "sha256": "bbc45b775c3ae8e364c9104854f7dba9d5b2bffbb78a6436f5745a0c8b47e230"
             }
           }
         }
@@ -728,17 +742,17 @@
     },
     {
       "origin": "tzdata",
-      "version": "2026c-r0",
+      "version": "2026d-r0",
       "image": "dhi.io/pkg-tzdata",
       "tag": "2026-r0-alpine3.24",
       "reference": "dhi.io/pkg-tzdata:2026-r0-alpine3.24",
       "predicate_image_name": "dhi/pkg-tzdata",
       "recipe": {
         "path": "package/apk/main/tzdata/alpine-3.24/2025.yaml",
-        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
-        "sha256": "89b635b656749b62f535c5e8ce887eec1e31e5558700ad7b3eda72e8fadb42a5",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/tzdata/alpine-3.24/2025.yaml",
-        "upstream_commit": "abde3c23ae79b9d3b7bf1a089076703ccda73875"
+        "revision": "9e9430e130d3d81a50eac18e1827be6ff13340ce",
+        "sha256": "fa6dfbafc10da5a0df2b4b5b5ffd1fe291764741f9922180b9ea966ce2159ee7",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/9e9430e130d3d81a50eac18e1827be6ff13340ce/package/apk/main/tzdata/alpine-3.24/2025.yaml",
+        "upstream_commit": "a19caf9fe771707618d4d9e4fa2dd9db8155b461"
       },
       "declared_tags": [
         "2026-alpine3.24",
@@ -748,22 +762,22 @@
       "packages": [
         {
           "name": "tzdata",
-          "version": "2026c-r0",
+          "version": "2026d-r0",
           "license": "Public-Domain",
-          "build_commit": "b1321d88e892b1f6120205f863ddba65108a930d",
+          "build_commit": "f65ae8b6e1ba0c5787ed342c79a230156610c564",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/tzdata-2026c-r0.apk",
-              "sha256": "7ec22b28aa068c4fd1f902db3f2deb67d12a1b20a36c3d0820f52814efab2e9f"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/tzdata-2026d-r0.apk",
+              "sha256": "010f00b86c87c7a5847014473501bf68c6ce6df8d4cb2872586bac4446d60f70"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/tzdata-2026c-r0.apk",
-              "sha256": "7ec22b28aa068c4fd1f902db3f2deb67d12a1b20a36c3d0820f52814efab2e9f"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/tzdata-2026d-r0.apk",
+              "sha256": "010f00b86c87c7a5847014473501bf68c6ce6df8d4cb2872586bac4446d60f70"
             }
           }
         }
       ],
-      "tag_note": "The published 2026-r0 tag is reused across 2026b, 2026c and 2026d. Require binary SHA256 matching; the tag alone does not identify 2026c."
+      "tag_note": "The published 2026-r0 tag is reused across 2026b, 2026c and 2026d. Require binary SHA256 matching; the tag alone does not identify 2026d."
     },
     {
       "origin": "util-linux",
@@ -805,37 +819,37 @@
     },
     {
       "origin": "xz",
-      "version": "5.8.3-r0",
+      "version": "5.8.4-r0",
       "image": "dhi.io/pkg-xz",
-      "tag": "5.8.3-r0-alpine3.24",
-      "reference": "dhi.io/pkg-xz:5.8.3-r0-alpine3.24",
+      "tag": "5.8.4-r0-alpine3.24",
+      "reference": "dhi.io/pkg-xz:5.8.4-r0-alpine3.24",
       "predicate_image_name": "dhi/pkg-xz",
       "recipe": {
         "path": "package/apk/main/xz/alpine-3.24/5.yaml",
-        "revision": "a399ba8b3297ee5f29c05f9a1d2068743eaae797",
-        "sha256": "277349e25c0d0ac3bfdac48cacd072edd15c9daaeb600f53b13bbb5754f06961",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/a399ba8b3297ee5f29c05f9a1d2068743eaae797/package/apk/main/xz/alpine-3.24/5.yaml",
-        "upstream_commit": "ce9944f1daadb681dd6f0f81a06e9cce97127377"
+        "revision": "05f102262601737845a8c3ce11a3e942e01bb119",
+        "sha256": "6bb7e417db9c61f1b106e436b16eec1738a16b317b875b3aa834cf6edcecdfdf",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/05f102262601737845a8c3ce11a3e942e01bb119/package/apk/main/xz/alpine-3.24/5.yaml",
+        "upstream_commit": "0c088d609f9fe69eedd6b4c7f4b99cdad847c20a"
       },
       "declared_tags": [
-        "5.8.3-alpine3.24",
-        "5.8.3-r0-alpine3.24"
+        "5.8.4-alpine3.24",
+        "5.8.4-r0-alpine3.24"
       ],
       "mutable_tag_reused_across_upstream_versions": false,
       "packages": [
         {
           "name": "xz-libs",
-          "version": "5.8.3-r0",
+          "version": "5.8.4-r0",
           "license": "GPL-2.0-or-later AND 0BSD AND Public-Domain AND LGPL-2.1-or-later",
-          "build_commit": "47910f83ced1872ae27b08a763a16b1f4e56d960",
+          "build_commit": "14a21a0ea998b8f28071bfadd8ea2982c0a5d8ad",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/xz-libs-5.8.3-r0.apk",
-              "sha256": "0806b0ad95a1b7add2f59a31670f1a62a6424d9a7bb2487b2cb631340b734046"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/xz-libs-5.8.4-r0.apk",
+              "sha256": "643058c68b62b9144dabc3d493babc7c544c5c5da2db2e279bb590bef97528c8"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/xz-libs-5.8.3-r0.apk",
-              "sha256": "f24baabf06d19cf75e2f3ba4d49ea037ca994f66b9d10ffdc137cc1275272e83"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/xz-libs-5.8.4-r0.apk",
+              "sha256": "5815b10c2f789aab9d1b4731bdad0e03356d6631a62ae050e3f7ebce916bf366"
             }
           }
         }
@@ -874,6 +888,62 @@
             "arm64": {
               "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/zlib-1.3.2-r0.apk",
               "sha256": "fe41875d7371df6f2a299e687efec66418d91b3e94bf76498206e635c5d38bb0"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "original_base_origins": [
+    {
+      "origin": "expat",
+      "version": "2.8.5-r0",
+      "image": "dhi.io/pkg-expat",
+      "tag": "2.8.5-r0-alpine3.24",
+      "reference": "dhi.io/pkg-expat:2.8.5-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-expat",
+      "recipe": {
+        "path": "package/apk/main/expat/alpine-3.24/2.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "f5758eef26e4ae5578735037ba39fa8a5e9194ccb628d55d1f53181b53a5de12",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/expat/alpine-3.24/2.yaml",
+        "upstream_commit": "41a9605db84bb52cd65c6349e5e087c2c7fe9efb"
+      },
+      "declared_tags": [
+        "2.8.5-alpine3.24",
+        "2.8.5-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "expat",
+          "version": "2.8.5-r0",
+          "license": "MIT",
+          "build_commit": "19eef88fb758145d1245e7ad33a360b9e0cc62d0",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/expat-2.8.5-r0.apk",
+              "sha256": "57a44e22b36e6a8e1d8b4ca1eb6c0d46e84df67c2464ec76869fea526a52da38"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/expat-2.8.5-r0.apk",
+              "sha256": "1988363034a883de1564365eb09def335acb8922fc81e57507af6642ca7c31c7"
+            }
+          }
+        },
+        {
+          "name": "libexpat",
+          "version": "2.8.5-r0",
+          "license": "MIT",
+          "build_commit": "19eef88fb758145d1245e7ad33a360b9e0cc62d0",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libexpat-2.8.5-r0.apk",
+              "sha256": "42b8146ab5a5ac7a78690a4280f9751284cdba25ecbff66776ad8d6b2237f512"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libexpat-2.8.5-r0.apk",
+              "sha256": "ca2ec23fee97d4f53ea437bb0cdc2239da9fc5df2ca58e162f41ac14cb81089a"
             }
           }
         }

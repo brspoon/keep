@@ -35,41 +35,43 @@ class OpenSSLSourceTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.license = b'Copyright OpenSSL authors\nFull Apache-2.0 license terms\n'
         self.upstream = archive({
-            'openssl-3.5.8/LICENSE.txt': self.license,
-            'openssl-3.5.8/AUTHORS.md': b'OpenSSL authors\n',
-            'openssl-3.5.8/VERSION.dat': b'MAJOR=3\nMINOR=5\nPATCH=8\n',
-            'openssl-3.5.8/crypto/source.c': b'int preferred_source;\n'})
+            'openssl-3.5.9/LICENSE.txt': self.license,
+            'openssl-3.5.9/AUTHORS.md': b'OpenSSL authors\n',
+            'openssl-3.5.9/VERSION.dat': b'MAJOR=3\nMINOR=5\nPATCH=9\n',
+            'openssl-3.5.9/crypto/source.c': b'int preferred_source;\n'})
         self.build_patch = b'--- a/source.c\n+++ b/source.c\n'
         self.apkbuild = (f'pkgname=openssl\npkgver=3.5.8\npkgrel=0\nlicense="Apache-2.0"\n'
             'source="https://github.com/openssl/openssl/releases/download/openssl-$pkgver/openssl-$pkgver.tar.gz\n'
             '\tauxv.patch\n\t"\nsha512sums="\n'
-            f'{digest(self.upstream, "sha512")}  openssl-3.5.8.tar.gz\n'
+            f'{sources.ORIGINAL_SOURCE_SHA512}  openssl-3.5.8.tar.gz\n'
             f'{digest(self.build_patch, "sha512")}  auxv.patch\n"\n').encode()
         prefix = f'aports-{sources.APORTS_COMMIT}/main/openssl/'
         self.aports = archive({prefix + 'APKBUILD': self.apkbuild,
             prefix + 'auxv.patch': self.build_patch,
             prefix + 'openssl-fips.post-install': b'#!/bin/sh\nexit 0\n'})
         self.provider = ('image: dhi.io/pkg-openssl\nvars:\n'
-            f'  COMMIT_SHA: {sources.APORTS_COMMIT}\n  VERSION: 3.5.8\n'
-            '  REL: "1"\n  _REL: "0"\n  EXTRA_PATCHES: "false"\n').encode()
+            f'  COMMIT_SHA: {sources.APORTS_COMMIT}\n  VERSION: 3.5.9\n'
+            '  _VERSION: 3.5.8\n  REL: "0"\n  _REL: "0"\n  EXTRA_PATCHES: "false"\n'
+            '        - uses: abuild/bump@v1\n            rel: 0\n'
+            '            version: 3.5.9\n            command: checksum\n').encode()
         constants = {'RECIPE_SHA256': digest(self.provider),
             'APORTS_SHA256': digest(self.aports), 'APKBUILD_SHA256': digest(self.apkbuild),
             'SOURCE_SHA256': digest(self.upstream), 'SOURCE_SHA512': digest(self.upstream, 'sha512'),
             'PATCH_SHA512': digest(self.build_patch, 'sha512'), 'LICENSE_SHA256': digest(self.license)}
         self.constants = patch.multiple(sources, **constants)
         self.constants.start()
-        self.spec = {'origin': 'openssl', 'version': '3.5.8-r1',
+        self.spec = {'origin': 'openssl', 'version': '3.5.9-r0',
             'recipe': {'path': sources.RECIPE_PATH, 'revision': sources.RECIPE_REVISION,
                        'sha256': sources.RECIPE_SHA256, 'upstream_commit': sources.APORTS_COMMIT},
             'packages': []}
         dependencies, installed = [], []
         for number, name in enumerate(('openssl', 'libcrypto3', 'libssl3'), 1):
             binary = {'url': 'https://dhi.io/apk/' + name + '.apk', 'sha256': str(number) * 64}
-            self.spec['packages'].append({'name': name, 'version': '3.5.8-r1',
+            self.spec['packages'].append({'name': name, 'version': '3.5.9-r0',
                 'license': 'Apache-2.0', 'build_commit': sources.BUILD_COMMIT,
                 'binaries': {'amd64': binary, 'arm64': binary}})
             dependencies.append({'uri': binary['url'], 'digest': {'sha256': binary['sha256']}})
-            installed.append({'name': name, 'version': '3.5.8-r1', 'origin': 'openssl',
+            installed.append({'name': name, 'version': '3.5.9-r0', 'origin': 'openssl',
                 'license': 'Apache-2.0', 'build_commit': sources.BUILD_COMMIT})
         self.provenance = {'predicateType': 'https://slsa.dev/provenance/v1',
             'subject': [{'digest': {'sha256': sources.NATIVE_DIGESTS['amd64'].split(':')[1]}}],
@@ -119,6 +121,25 @@ class OpenSSLSourceTests(unittest.TestCase):
     def test_provider_recipe_is_immutable(self):
         self.downloads[sources.RECIPE_URL] += b'# altered\n'
         with self.assertRaisesRegex(ValueError, 'recipe.*checksum'):
+            self.collect()
+
+    def test_provider_bump_and_checksum_steps_cannot_be_omitted(self):
+        self.downloads[sources.RECIPE_URL] = self.provider.replace(
+            b'            command: checksum\n', b'')
+        with patch.object(sources, 'RECIPE_SHA256', digest(self.downloads[sources.RECIPE_URL])):
+            self.spec['recipe']['sha256'] = sources.RECIPE_SHA256
+            with self.assertRaisesRegex(ValueError, 'declarations changed'):
+                self.collect()
+
+    def test_original_recipe_checksum_cannot_be_replaced_by_bumped_source_checksum(self):
+        rewritten = self.apkbuild.replace(sources.ORIGINAL_SOURCE_SHA512.encode(),
+                                         sources.SOURCE_SHA512.encode())
+        with self.assertRaisesRegex(ValueError, 'source checksum mismatch'):
+            sources.recipe_identity(rewritten)
+
+    def test_old_installed_version_cannot_use_new_source_reconstruction(self):
+        self.spec['version'] = '3.5.8-r1'
+        with self.assertRaisesRegex(ValueError, 'exact reviewed OpenSSL packages'):
             self.collect()
 
     def test_missing_build_patch_cannot_pass(self):

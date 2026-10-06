@@ -27,6 +27,7 @@ from verify_source_proof import BASE_DIGEST, PREDICATE, ProofLayout, digest, ver
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_DOWNLOAD = 64 * 1024 * 1024
+MAX_NOTICE_INVENTORY = 64 * 1024 * 1024
 
 
 def fetch_source(url):
@@ -71,6 +72,22 @@ def read_json(root, name):
     if path.stat().st_size > 32 * 1024 * 1024:
         raise ValueError('Source metadata exceeds size limit')
     return json.loads(path.read_bytes())
+
+
+def read_notice_inventory(directory):
+    """Read a bounded full package inventory and preserve its exact bytes.
+
+    Compiler inventories include every preferred-source file and legal header,
+    so they can exceed the smaller limit for ordinary source metadata.
+    """
+    path = regular(directory, 'package-material-inventory.json')
+    if path.stat().st_size > MAX_NOTICE_INVENTORY:
+        raise ValueError('Package notice inventory exceeds size limit')
+    with path.open('rb') as stream:
+        body = stream.read(MAX_NOTICE_INVENTORY + 1)
+    if len(body) > MAX_NOTICE_INVENTORY:
+        raise ValueError('Package notice inventory exceeds size limit')
+    return json.loads(body), body
 
 
 def write_json(path, value):
@@ -167,7 +184,8 @@ def check_runtime_notices(root, inventory, os_lock, arch):
     if manifest.get('schema') != 1 or manifest.get('ready_for_runtime_distribution') is not True:
         raise ValueError('Committed OS notices are incomplete for runtime distribution')
     expected = {row['origin']: row['version'] for row in os_lock['origins']}
-    expected['expat-original-base'] = '2.8.4-r0'
+    expected.update({row['origin'] + '-original-base': row['version']
+                     for row in os_lock.get('original_base_origins', [])})
     python = [row for row in os_lock['origins'] if row['origin'] == 'python-3.14']
     if python:
         expected['python-3.14-ensurepip'] = python[0]['version']
@@ -192,8 +210,14 @@ def check_runtime_notices(root, inventory, os_lock, arch):
                 covered.add(origin)
     if covered != set(expected):
         raise ValueError('Committed runtime notices do not cover every reviewed OS origin and original Expat')
+    manifest_path = regular(directory, 'manifest.json')
+    manifest_sha256 = file_sha(manifest_path)
+    runtime_manifest = installed.get('/app/licenses/os/manifest.json')
+    if (not runtime_manifest or runtime_manifest.get('sha256') != manifest_sha256
+            or runtime_manifest.get('bytes') != manifest_path.stat().st_size):
+        raise ValueError('Candidate runtime lacks the exact committed OS notice manifest bytes')
     return {'origins': len(covered), 'notices': len(seen), 'runtime_bytes_verified': True,
-            'manifest_sha256': file_sha(directory / 'manifest.json')}
+            'manifest_sha256': manifest_sha256}
 
 
 def copy_proof(source, destination, arch, proof):
@@ -507,6 +531,33 @@ def retain_openssl(source, destination, origin, result, arch, *, base_source, os
         'native_base_attestation_digest': base_proof['attestation_digest'], 'files': len(checked['files'])}
 
 
+def retain_alpine_expat(source, destination, origin, result, arch, runtime_inventory):
+    """Replay signed Alpine APK/source verification against original downloads."""
+    from alpine_expat_sources import collect_sources
+    if (origin.get('source_method') != 'alpine-signed-expat-v1'
+            or result.get('binding_method') != 'signed-alpine-packages'
+            or result.get('provider_oci_binding') is not False
+            or result.get('signature_verified') is not True
+            or result.get('apk_binary_match_verified') is not True
+            or runtime_inventory is None
+            or result.get('public_sources') != {'directory': 'alpine-expat-sources',
+                                                'manifest': 'manifest.json'}):
+        raise ValueError('Require the exact signed Alpine Expat source acquisition')
+    original = Path(source) / 'alpine-expat-sources'
+    manifest = read_json(original, 'manifest.json')
+    fetch = cached_manifest_fetch(original, manifest, {
+        'alpine-signing-key', 'signed-alpine-binary-evidence',
+        'complete-alpine-build-recipes', 'upstream-source', 'upstream-detached-signature'})
+    checked = collect_sources(origin, arch, runtime_inventory, destination, fetch=fetch)
+    if checked != manifest:
+        raise ValueError('Alpine Expat sources differ from checked signed package inputs')
+    return {'origin': origin['origin'], 'version': origin['version'],
+            'provider_oci_binding': False, 'binding_method': checked['binding_method'],
+            'signature_verified': True, 'apk_binary_match_verified': True,
+            'source_manifest_sha256': checked['source_manifest_sha256'],
+            'files': len(checked['files'])}
+
+
 def retain_packages(source, destination, os_lock, arch, *, material_inspector=None,
                     base_source=None, runtime_inventory=None):
     source, destination = Path(source), Path(destination)
@@ -524,7 +575,10 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
         target = destination / name
         copy_file(package_root, 'acquisition.json', target / 'acquisition.json')
         if result.get('provider_oci_binding') is False:
-            if name == 'openssl' and base_source is not None and runtime_inventory is not None:
+            if origin.get('source_method') == 'alpine-signed-expat-v1':
+                coverage.append(retain_alpine_expat(package_root, target / 'public-sources',
+                    origin, result, arch, runtime_inventory))
+            elif name == 'openssl' and base_source is not None and runtime_inventory is not None:
                 coverage.append(retain_openssl(package_root, target / 'public-sources', origin, result, arch,
                     base_source=base_source, os_lock=os_lock, runtime_inventory=runtime_inventory))
             else:
@@ -598,9 +652,31 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
     return coverage
 
 
+def bind_original_packages(origins, inventory, provenance, arch):
+    """Bind overwritten package records to signed APK hashes and base metadata."""
+    materials = provenance['predicate']['buildDefinition']['resolvedDependencies']
+    rows = inventory.get('os_packages', [])
+    names = set()
+    for origin in origins:
+        expected_packages(origin, arch)
+        for package in origin['packages']:
+            name = package['name']
+            if name in names:
+                raise ValueError('Duplicate overwritten base package')
+            names.add(name)
+            installed = [row for row in rows if row.get('name') == name]
+            if (len(installed) != 1 or any(installed[0].get(key) != value for key, value in
+                    {'version': package['version'], 'origin': origin['origin'],
+                     'build_commit': package['build_commit'], 'license': package['license']}.items())):
+                raise ValueError('Overwritten base package inventory identity mismatch')
+            binary = package['binaries'][arch]
+            matches = [row for row in materials if row.get('uri') == binary['url']]
+            if len(matches) != 1 or matches[0].get('digest', {}).get('sha256') != binary['sha256']:
+                raise ValueError('Overwritten base APK differs from signed provenance')
+
+
 def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch=fetch_source):
-    """Keep pinned image proof and revalidate the overwritten Alpine package."""
-    from alpine_distribution_sources import collect_sources as collect_original_expat
+    """Keep pinned image proof and sources for every overwritten base package."""
     proof = verify_source_proof(source, arch, expected_native_digest=os_lock['base_native_digests'][arch])
     if os_lock['base_index'].split('@')[1] != BASE_DIGEST:
         raise ValueError('OS map differs from pinned original image')
@@ -614,12 +690,15 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
     copy_file(source, 'base-provenance.json', destination / 'base-provenance.json')
     copy_attestation_proof(Path(source) / 'base-build-provenance', destination / 'build-provenance', base_proof)
     copy_file(source, 'base-runtime-inventory.json', destination / 'base-runtime-inventory.json')
-    manifest = read_json(source, 'manifest.json')
-    expat_fetch = cached_manifest_fetch(source, manifest, {'complete-alpine-build-recipes', 'upstream-source'})
-    checked = collect_original_expat(provenance, destination / 'original-expat', fetch=expat_fetch,
-                                    base_inventory=read_json(source, 'base-runtime-inventory.json'))
-    if checked != manifest:
-        raise ValueError('Original Alpine expat source manifest differs from checked inputs')
+    original_inventory = read_json(source, 'base-runtime-inventory.json')
+    original_origins = os_lock.get('original_base_origins')
+    if (not isinstance(original_origins, list) or len(original_origins) != 1
+            or original_origins[0].get('origin') != 'expat'):
+        raise ValueError('Require the reviewed overwritten Expat base source identity')
+    bind_original_packages(original_origins, original_inventory, provenance, arch)
+    original_coverage = retain_packages(Path(source) / 'original-base-packages',
+        destination / 'packages', {**os_lock, 'origins': original_origins}, arch,
+        base_source=source, runtime_inventory=original_inventory)
     # The base source image describes image assembly. Its APK blobs add no
     # preferred sources beyond the package images above; keep just its recipes
     # and provenance, retaining omitted material identities in the manifest.
@@ -636,7 +715,8 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
         destination / 'ensurepip', lock=base_python_lock, fetch=fetch)
     omit_apk_materials(materials, retained)
     return {'native_image_digest': proof['native_image_digest'], 'source_image_digest': proof['source_image_digest'],
-            'signature_verified': True, 'original_expat_version': '2.8.4-r0',
+            'signature_verified': True, 'original_expat_version': original_origins[0]['version'],
+            'original_package_sources': original_coverage,
             'original_ensurepip': {'source_packages': len(base_python['source_packages']),
                 'matched_python_modules': sum(len(row['matched_python_modules']) for row in base_python['wheels']),
                 'native_resources': len(base_python['native_resources']),
@@ -644,14 +724,78 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
             'provenance_verification': 'Original native-base build provenance and source-reference signatures reverified offline.'}
 
 
-def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selected_comment_paths=()):
+def retain_notice_inputs(bundles, output_dir, architecture):
+    """Keep exact checked inventories and all notice texts for explicit review.
+
+    These inputs can replay merge_notice_bundles after download. They contain
+    no source archives, and retaining a header does not select it for runtime.
+    """
+    from package_source_notices import check_file
+    output = Path(output_dir)
+    if (architecture not in {'amd64', 'arm64'} or output.is_symlink()
+            or output.exists() and any(output.iterdir())):
+        raise ValueError('Notice inputs require a native architecture and empty safe output')
+    output.mkdir(parents=True, exist_ok=True)
+    records = []
+    for number, directory in enumerate(sorted({Path(path) for path in bundles})):
+        report, inventory_bytes = read_notice_inventory(directory)
+        if (report.get('schema') != 1 or report.get('success') is not True
+                or report.get('architecture') != architecture
+                or not isinstance(report.get('notices'), list) or not report['notices']):
+            raise ValueError('Notice inputs require a complete checked native inventory')
+        relative = f'bundles/{number:04d}'
+        target = output / relative
+        target.mkdir(parents=True)
+        (target / 'package-material-inventory.json').write_bytes(inventory_bytes)
+        retained = set()
+        for notice in report['notices']:
+            name = safe_name(notice['notice_file'])
+            if PurePosixPath(name).name != notice['sha256'] + '.txt':
+                raise ValueError('Notice input must use its checked text digest filename')
+            source = regular(directory, name)
+            check_file(source, notice)
+            body = source.read_bytes()
+            if (len(body) != notice['bytes']
+                    or hashlib.sha256(body).hexdigest() != notice['sha256']):
+                raise ValueError('Notice input changed during retention')
+            if (notice.get('encoding') not in {'utf-8', 'latin-1'} or b'\x00' in body
+                    or body.startswith((b'\x7fELF', b'\x1f\x8b', b'\xfd7zXZ\x00', b'BZh', b'PK\x03\x04'))):
+                raise ValueError('Notice input must be a complete readable text')
+            if not body.decode(notice['encoding']).strip():
+                raise ValueError('Notice input must be a complete readable text')
+            destination = target / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(body)
+            retained.add(name)
+        records.append({'directory': relative, 'origin': report['origin'],
+            'version': report['version'], 'architecture': architecture,
+            'inventory_sha256': hashlib.sha256(inventory_bytes).hexdigest(),
+            'inventory_bytes': len(inventory_bytes), 'notice_records': len(report['notices']),
+            'notice_files': len(retained)})
+    result = {'format': 'keep-runtime-notice-inputs-v1', 'architecture': architecture,
+              'bundles': records, 'notice_files': sum(row['notice_files'] for row in records)}
+    write_json(output / 'index.json', result)
+    return result
+
+
+def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selected_comment_paths=(),
+                        retain_inputs=False):
     """Create the reusable notices-only union, including checked public inputs."""
     from package_source_notices import import_public_notices, merge_notice_bundles
     stage = Path(stage)
     public = stage / 'public-notices'
     provenance = read_json(stage / 'original-base', 'base-provenance.json')
-    import_public_notices(stage / 'original-base/original-expat', public / 'original-expat',
-                          origin='expat-original-base', architecture=arch, base_provenance=provenance)
+    # Label overwritten packages separately from their installed replacements.
+    # The original signed statements and source bytes remain untouched.
+    for path in sorted((stage / 'original-base/packages').rglob('package-material-inventory.json')):
+        report, _ = read_notice_inventory(path.parent)
+        if report['origin'] not in {row['origin'] for row in os_lock['original_base_origins']}:
+            raise ValueError('Unreviewed original base notice origin')
+        origin = report['origin'] + '-original-base'
+        report['origin'] = origin
+        for notice in report['notices']:
+            notice['provenance']['origin'] = origin
+        write_json(path, report)
     timezone = stage / 'os-packages/tzdata/public-sources'
     if timezone.exists():
         origins = [row for row in os_lock['origins'] if row['origin'] == 'tzdata']
@@ -662,7 +806,14 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
         origins = [row for row in os_lock['origins'] if row['origin'] == 'openssl']
         import_public_notices(openssl, public / 'openssl', origin='openssl', architecture=arch,
             package_spec=origins[0], base_provenance=provenance, runtime_inventory=runtime_inventory)
+    expat = stage / 'os-packages/expat/public-sources'
+    if expat.exists():
+        origins = [row for row in os_lock['origins'] if row['origin'] == 'expat']
+        import_public_notices(expat, public / 'expat', origin='expat', architecture=arch,
+            package_spec=origins[0], runtime_inventory=runtime_inventory)
     bundles = sorted({path.parent for path in stage.rglob('package-material-inventory.json')})
+    if retain_inputs:
+        retain_notice_inputs(bundles, stage / 'notice-inputs', arch)
     return merge_notice_bundles(bundles, stage / 'os-notices', selected_comment_paths=selected_comment_paths)
 
 
@@ -693,9 +844,12 @@ def check_generated_notices(root, generated, arch):
         if match is None or match.get('bytes') != notice['bytes']:
             raise ValueError('Actual preferred-source notice is missing from committed runtime notices')
         for provenance in notice['provenance']:
-            identity = (provenance['origin'], provenance['version'], arch, provenance['source_path'])
-            if not any((row.get('origin'), row.get('version'), row.get('architecture'), row.get('source_path')) == identity
-                       for row in match['provenance']):
+            if not isinstance(provenance, dict) or provenance.get('architecture') != arch:
+                raise ValueError('Actual source notice attribution has the wrong native architecture')
+            # Compare the complete JSON attribution, including proof metadata
+            # and value types. A shared notice text does not transfer its proof.
+            attribution = json.dumps(provenance, sort_keys=True)
+            if not any(json.dumps(row, sort_keys=True) == attribution for row in match['provenance']):
                 raise ValueError('Actual source notice attribution differs from committed runtime provenance')
 
 
@@ -745,6 +899,7 @@ def keep_source(root, destination):
         subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=root, stdout=stream, check=True)
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
                      'scripts/build_patched_zlib.py', 'scripts/patch_python_runtime.py',
+                     'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
                      'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
                      'docs/distribution-sources.json', 'docs/os-package-sources.json',
                      'docs/aports-source-lock.json', 'docs/base-python-sources.json'):
@@ -852,10 +1007,13 @@ def prepare_notices(sources, architecture, runtime_inventory, output, *, root=RO
     coverage = retain_packages(package_root, output / 'os-packages', os_lock, architecture,
         material_inspector=material_inspector, base_source=source, runtime_inventory=inventory)
     base = retain_original_base(source, output / 'original-base', os_lock, architecture, root=root, fetch=fetch)
-    notices = consolidate_notices(output, os_lock, architecture, inventory)
+    notices = consolidate_notices(output, os_lock, architecture, inventory, retain_inputs=True)
+    notice_inputs = read_json(output / 'notice-inputs', 'index.json')
     report = {'format': 'keep-runtime-notice-preparation-v1', 'architecture': architecture,
         'runtime': counts, 'os_origins': coverage, 'original_base': base,
         'notices': len(notices['notices']), 'notice_directory': 'os-notices',
+        'notice_inputs_directory': 'notice-inputs', 'notice_input_bundles': len(notice_inputs['bundles']),
+        'notice_input_files': notice_inputs['notice_files'],
         'ready_for_runtime_distribution': notices['ready_for_runtime_distribution'],
         'origins_needing_explicit_attribution': notices['origins_needing_explicit_attribution'],
         'limitations': 'Source and notice preparation only; final archive additionally requires committed notices verified in a rebuilt candidate and clean committed Keep source.'}

@@ -65,7 +65,7 @@ class ReleasePublishTests(unittest.TestCase):
                  patch.object(materials, 'api', return_value=rows) as assets, \
                  patch.object(materials, 'asset_body', side_effect=asset_body), \
                  patch.object(materials, 'verify_durable_validation'), \
-                 patch.object(review_image, 'current_day', return_value=day or datetime.date(2026, 10, 7)):
+                 patch.object(review_image, 'current_day', return_value=day or datetime.date(2026, 10, 20)):
                 yield fixture.root, downloads
             draft.assert_called_once_with(fixture.VERSION)
             assets.assert_called_once_with('/releases/88/assets?per_page=100')
@@ -277,39 +277,49 @@ class ReleasePublishTests(unittest.TestCase):
 
     def needed_exception(self):
         return [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
+                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
 
     def test_clean_publication_with_empty_or_unused_expired_exceptions_passes(self):
         for empty in (False, True):
             calls = []
             with self.subTest(empty_exceptions=empty), self.publication_fixture(
-                    calls, empty_exceptions=empty, day=datetime.date(2026, 10, 8)) as (artifacts, _evidence):
+                    calls, empty_exceptions=empty, day=datetime.date(2026, 10, 21)) as (artifacts, _evidence):
                 publisher.execute('example/keep', SHA, artifacts, release=True)
             self.assertIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
 
     def test_needed_exception_passes_publication_on_deadline(self):
         calls = []
         with self.publication_fixture(calls, matches=self.needed_exception(),
-                                      day=datetime.date(2026, 10, 7)) as (artifacts, _evidence):
+                                      day=datetime.date(2026, 10, 20)) as (artifacts, _evidence):
             publisher.execute('example/keep', SHA, artifacts, release=True)
         self.assertIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
 
     def test_expired_needed_exception_blocks_before_any_publication(self):
         calls = []
         with self.publication_fixture(calls, matches=self.needed_exception(),
-                                      day=datetime.date(2026, 10, 8)) as (artifacts, _evidence):
+                                      day=datetime.date(2026, 10, 21)) as (artifacts, _evidence):
             with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
+
+    def test_old_python_revision_blocks_before_any_publication(self):
+        calls = []
+        matches = self.needed_exception()
+        matches[0]['artifact']['version'] = '3.14.7-r1'
+        with self.publication_fixture(calls, matches=matches,
+                                      day=datetime.date(2026, 10, 20)) as (artifacts, _evidence):
+            with self.assertRaisesRegex(ValueError, 'exception_mismatch'):
                 publisher.execute('example/keep', SHA, artifacts, release=True)
         self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
 
     def test_crossing_utc_deadline_blocks_stable_immediately_before_push(self):
         calls = []
-        day = datetime.date(2026, 10, 7)
+        day = datetime.date(2026, 10, 20)
 
         def cross_deadline(command):
             nonlocal day
             if command[1:3] == ['manifest', 'create'] and command[3] == 'example/keep:stable':
-                day = datetime.date(2026, 10, 8)
+                day = datetime.date(2026, 10, 21)
 
         with self.publication_fixture(calls, matches=self.needed_exception(),
                                       before_command=cross_deadline) as (artifacts, _evidence), \
@@ -322,12 +332,12 @@ class ReleasePublishTests(unittest.TestCase):
 
     def test_crossing_deadline_before_native_push_is_also_blocked(self):
         calls = []
-        day = datetime.date(2026, 10, 7)
+        day = datetime.date(2026, 10, 20)
 
         def cross_deadline(command):
             nonlocal day
             if command[1] == 'tag':
-                day = datetime.date(2026, 10, 8)
+                day = datetime.date(2026, 10, 21)
 
         with self.publication_fixture(calls, matches=self.needed_exception(),
                                       before_command=cross_deadline) as (artifacts, _evidence), \

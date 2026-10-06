@@ -414,7 +414,7 @@ def discover_openssl_candidates(origin, registry, root):
     tags = registry.tags(origin['image'])
     accepted = sorted(tag for tag in tags if isinstance(tag, str)
                       and re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}', tag)
-                      and tag.startswith('3.5.8') and 'alpine3.24' in tag)
+                      and tag.startswith('3.5.9') and 'alpine3.24' in tag)
     result = {'repository': origin['image'], 'tags': tags, 'accepted_candidate_tags': accepted}
     (root / 'registry-tag-listing.json').write_text(json.dumps(redacted(result), indent=2) + '\n')
     return [origin['image'] + ':' + tag for tag in accepted]
@@ -517,7 +517,7 @@ def discover_origin(origin, architecture, destination, registry):
         except ACQUISITION_ERRORS as error:
             attempts.append({'reference': reference, 'error': type(error).__name__ + ': ' + str(error),
                              'registry_reference_not_found': registry_not_found(error)})
-            if (origin['origin'] == 'openssl' and origin['version'] == '3.5.8-r1' and not discovered
+            if (origin['origin'] == 'openssl' and origin['version'] == '3.5.9-r0' and not discovered
                     and len(attempts) == declared_count
                     and all(row['registry_reference_not_found'] for row in attempts)):
                 discovered = True
@@ -536,6 +536,21 @@ def discover_origin(origin, architecture, destination, registry):
 
 
 def acquire_origin(origin, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None):
+    if origin.get('source_method') == 'alpine-signed-expat-v1':
+        from alpine_expat_sources import collect_sources
+        if runtime_inventory is None:
+            raise ValueError('Signed Alpine Expat sources require the actual candidate inventory')
+        root = Path(destination)
+        root.mkdir(parents=True, exist_ok=True)
+        manifest = collect_sources(origin, architecture, runtime_inventory,
+                                   root / 'alpine-expat-sources')
+        result = {'origin': origin['origin'], 'version': origin['version'],
+                  'architecture': architecture, 'success': True,
+                  'provider_oci_binding': False, 'signature_verified': True,
+                  'apk_binary_match_verified': True, 'binding_method': manifest['binding_method'],
+                  'public_sources': {'directory': 'alpine-expat-sources', 'manifest': 'manifest.json'}}
+        (root / 'acquisition.json').write_text(json.dumps(result, indent=2) + '\n')
+        return result
     origin_name = origin.get('origin', '')
     repository = origin.get('image', '')
     source_name = origin.get('predicate_image_name', '')
@@ -601,7 +616,7 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
             attempts.append({'reference': reference, 'error': type(error).__name__ + ': ' + str(error),
                              'failure_kind': 'apk-binary-mismatch' if binary_mismatch
                                 else 'registry-reference-not-found' if registry_not_found(error) else 'acquisition-error'})
-            if (origin_name == 'openssl' and origin['version'] == '3.5.8-r1' and not tags_discovered
+            if (origin_name == 'openssl' and origin['version'] == '3.5.9-r0' and not tags_discovered
                     and len(attempts) == declared_candidates
                     and all(attempt['failure_kind'] == 'registry-reference-not-found' for attempt in attempts)):
                 tags_discovered = True
@@ -616,7 +631,7 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
     # The reviewed timezone tag is reused for 2026b/c/d. This narrowly scoped
     # source-only path does not invent a historical provider image or rescue a
     # signature failure after finding matching APK bytes.
-    if (origin_name == 'tzdata' and origin['version'] == '2026c-r0'
+    if (origin_name == 'tzdata' and origin['version'] == '2026d-r0'
             and origin.get('mutable_tag_reused_across_upstream_versions') is True
             and binary_mismatch_seen and not matching_output_seen):
         try:
@@ -631,10 +646,10 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
             (root / 'acquisition.json').write_text(json.dumps(redacted(result), indent=2) + '\n')
             return result
         except ACQUISITION_ERRORS as error:
-            attempts.append({'reference': 'reviewed-public-IANA-2026c-source-inputs',
+            attempts.append({'reference': 'reviewed-public-IANA-2026d-source-inputs',
                              'failure_kind': 'public-source-fallback-error',
                              'error': type(error).__name__ + ': ' + str(error)})
-    if (origin_name == 'openssl' and origin['version'] == '3.5.8-r1' and attempts
+    if (origin_name == 'openssl' and origin['version'] == '3.5.9-r0' and attempts
             and all(row['failure_kind'] == 'registry-reference-not-found'
                     or (row['failure_kind'] == 'registry-tag-list-error'
                         and row.get('registry_reference_not_found') is True) for row in attempts)):
@@ -652,7 +667,7 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
             (root / 'acquisition.json').write_text(json.dumps(redacted(result), indent=2) + '\n')
             return result
         except ACQUISITION_ERRORS as error:
-            attempts.append({'reference': 'reviewed-public-OpenSSL-3.5.8-source-inputs',
+            attempts.append({'reference': 'reviewed-public-OpenSSL-3.5.9-source-inputs',
                              'failure_kind': 'public-source-fallback-error',
                              'error': type(error).__name__ + ': ' + str(error)})
     result = {'origin': origin_name, 'version': origin['version'], 'architecture': architecture,

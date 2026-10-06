@@ -284,8 +284,8 @@ class PackageSourceTests(unittest.TestCase):
         self.assertIn('ARM source signature missing', result['candidate_failures'][0]['error'])
 
     def test_registry_tag_discovery_retains_listing_and_uses_only_existing_reviewed_family(self):
-        tags = ['latest', '3.5.8-r1-alpine3.24-fips', '3.5.8-alpine3.24',
-                '3.5.9-r0-alpine3.24', '3.5.8-r1-alpine3.23', '../unsafe-alpine3.24']
+        tags = ['latest', '3.5.9-r0-alpine3.24-fips', '3.5.9-alpine3.24',
+                '3.6.0-r0-alpine3.24', '3.5.9-r0-alpine3.23', '../unsafe-alpine3.24']
 
         class Listing:
             def tags(self, repository):
@@ -293,8 +293,8 @@ class PackageSourceTests(unittest.TestCase):
 
         result = collection.discover_openssl_candidates({'image': 'dhi.io/pkg-openssl'},
                                                         Listing(), self.root)
-        self.assertEqual(result, ['dhi.io/pkg-openssl:3.5.8-alpine3.24',
-                                 'dhi.io/pkg-openssl:3.5.8-r1-alpine3.24-fips'])
+        self.assertEqual(result, ['dhi.io/pkg-openssl:3.5.9-alpine3.24',
+                                 'dhi.io/pkg-openssl:3.5.9-r0-alpine3.24-fips'])
         retained = json.loads((self.root / 'registry-tag-listing.json').read_text())
         self.assertEqual(retained['tags'], tags)
 
@@ -305,24 +305,24 @@ class PackageSourceTests(unittest.TestCase):
         class MissingThenCandidate:
             def manifest(self, reference):
                 seen.append(reference)
-                if reference.endswith(':3.5.8-r1-alpine3.24'):
+                if reference.endswith(':3.5.9-r0-alpine3.24'):
                     raise subprocess.CalledProcessError(1, 'regctl', stderr=b'404 not found')
                 return (test.layout / 'blobs' / 'sha256' / test.native.split(':')[1]).read_bytes()
 
             def tags(self, repository):
-                return ['3.5.8-alpine3.24']
+                return ['3.5.9-alpine3.24']
 
             def copy(self, reference, destination):
                 shutil.copytree(test.layout, destination)
 
-        origin = {'origin': 'openssl', 'version': '3.5.8-r1', 'image': 'dhi.io/pkg-openssl',
-                  'reference': 'dhi.io/pkg-openssl:3.5.8-r1-alpine3.24',
+        origin = {'origin': 'openssl', 'version': '3.5.9-r0', 'image': 'dhi.io/pkg-openssl',
+                  'reference': 'dhi.io/pkg-openssl:3.5.9-r0-alpine3.24',
                   'predicate_image_name': 'dhi/pkg-openssl', 'packages': [
-                      {'name': 'libcrypto3', 'version': '3.5.8-r1',
+                      {'name': 'libcrypto3', 'version': '3.5.9-r0',
                        'binaries': {'amd64': {'sha256': '0' * 64}}}]}
         result = collection.acquire_origin(origin, 'amd64', self.root / 'openssl', MissingThenCandidate())
         self.assertFalse(result['success'])
-        self.assertEqual(seen, [origin['reference'], 'dhi.io/pkg-openssl:3.5.8-alpine3.24'])
+        self.assertEqual(seen, [origin['reference'], 'dhi.io/pkg-openssl:3.5.9-alpine3.24'])
         self.assertEqual(result['candidate_failures'][-1]['failure_kind'], 'apk-binary-mismatch')
 
     def test_authentication_failure_does_not_trigger_registry_tag_discovery(self):
@@ -466,10 +466,10 @@ class PackageSourceTests(unittest.TestCase):
         self.assertEqual(calls[0][2:4], (slsa, scout))
 
     def test_openssl_public_reconstruction_requires_proven_repo_absence_and_base_inputs(self):
-        origin = {'origin': 'openssl', 'version': '3.5.8-r1', 'image': 'dhi.io/pkg-openssl',
-                  'reference': 'dhi.io/pkg-openssl:3.5.8-r1-alpine3.24',
+        origin = {'origin': 'openssl', 'version': '3.5.9-r0', 'image': 'dhi.io/pkg-openssl',
+                  'reference': 'dhi.io/pkg-openssl:3.5.9-r0-alpine3.24',
                   'predicate_image_name': 'dhi/pkg-openssl', 'packages': [
-                      {'name': 'libcrypto3', 'version': '3.5.8-r1',
+                      {'name': 'libcrypto3', 'version': '3.5.9-r0',
                        'binaries': {'amd64': {'sha256': '0' * 64}}}]}
 
         class AbsentRepository:
@@ -493,10 +493,10 @@ class PackageSourceTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_openssl_authentication_failure_cannot_trigger_public_reconstruction(self):
-        origin = {'origin': 'openssl', 'version': '3.5.8-r1', 'image': 'dhi.io/pkg-openssl',
-                  'reference': 'dhi.io/pkg-openssl:3.5.8-r1-alpine3.24',
+        origin = {'origin': 'openssl', 'version': '3.5.9-r0', 'image': 'dhi.io/pkg-openssl',
+                  'reference': 'dhi.io/pkg-openssl:3.5.9-r0-alpine3.24',
                   'predicate_image_name': 'dhi/pkg-openssl', 'packages': [
-                      {'name': 'libcrypto3', 'version': '3.5.8-r1',
+                      {'name': 'libcrypto3', 'version': '3.5.9-r0',
                        'binaries': {'amd64': {'sha256': '0' * 64}}}]}
         registry = self.fallback_registry(manifest_error=
             subprocess.CalledProcessError(1, 'regctl', stderr=b'401 unauthorized'))
@@ -653,11 +653,11 @@ class PackageSourceTests(unittest.TestCase):
         self.assertTrue(self.match()['all_apks_matched'])
 
     def fallback_origin(self, name='tzdata', *, expected=None, mutable=True):
-        return {'origin': name, 'version': '2026c-r0', 'image': 'dhi.io/pkg-' + name,
+        return {'origin': name, 'version': '2026d-r0', 'image': 'dhi.io/pkg-' + name,
                 'reference': 'dhi.io/pkg-' + name + ':2026-r0-alpine3.24',
                 'predicate_image_name': 'dhi/pkg-' + name,
                 'mutable_tag_reused_across_upstream_versions': mutable,
-                'packages': [{'name': name, 'version': '2026c-r0',
+                'packages': [{'name': name, 'version': '2026d-r0',
                               'binaries': {'amd64': {'sha256': expected or '0' * 64}}}]}
 
     def fallback_registry(self, *, manifest_error=None):
@@ -679,7 +679,7 @@ class PackageSourceTests(unittest.TestCase):
 
     def test_timezone_public_sources_only_after_proven_mutable_tag_binary_mismatch(self):
         fallback = {'provider_oci_binding': False, 'binding_method': 'checked IANA release and pinned recipes',
-                    'files': [{'path': 'tzdata2026c.tar.gz', 'sha256': 'a' * 64}]}
+                    'files': [{'path': 'tzdata2026d.tar.gz', 'sha256': 'a' * 64}]}
         origin = self.fallback_origin()
         with patch.object(collection, 'collect_timezone_sources', return_value=fallback) as helper:
             result = collection.acquire_origin(origin, 'amd64', self.root / 'tzdata', self.fallback_registry())

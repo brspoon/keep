@@ -8,6 +8,7 @@ build inputs. A source image digest or an APK wrapper alone is not coverage.
 It never extracts archive paths or follows source links, and executes no source.
 """
 import argparse
+import copy
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -37,10 +38,21 @@ MPL2_PATH = 'docs/licenses/MPL-2.0.txt'
 MPL2_SHA256 = 'fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85'
 MPL2_BYTES = 16726
 MPL2_SOURCE_URL = 'https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt'
-CA_CERTDATA_NOTICE = ('sources/ca-certificates-20260611.tar.bz2!'
-                     'ca-certificates-20260611/certdata.txt#leading-comment')
+CA_CERTDATA_NOTICE = ('sources/ca-certificates-20260909.tar.bz2!'
+                     'ca-certificates-20260909/certdata.txt#leading-comment')
 CA_CERTDATA_NOTICE_SHA256 = '6f3d0ca739e01730cb2314a8302be79cb23a5956d7770dc3de37bc4b4db79df1'
-CA_SOURCE_SHA256 = '32ca73f2e81e2b88dc614f12e1ee04a82b1ec5a8e29d9f359ddf8905a0afcbb0'
+CA_SOURCE_SHA256 = 'dc460c535f3833432be4e561d214a5fe816b05ede5a2ade64787e501671cd082'
+POSIXTZ_ARCHIVE_PATH = 'sources/posixtz-0.5.tar.xz'
+POSIXTZ_ARCHIVE_SHA256 = 'e0a79e0922be2da686a1888d79cd253baaf81c2f30b4378fbbcf9ff9d632aab5'
+POSIXTZ_ARCHIVE_BYTES = 3976
+POSIXTZ_SOURCE_PATH = POSIXTZ_ARCHIVE_PATH + '!posixtz-0.5/posixtz.c'
+POSIXTZ_NOTICE_PATH = POSIXTZ_SOURCE_PATH + '#leading-comment'
+POSIXTZ_NOTICE_SHA256 = 'f775a360815c449e48982f11df29b559df0d140e4dd679fd50d4fdb3a3f28a86'
+POSIXTZ_NOTICE_BYTES = 217
+LGPL2_SHA256 = 'cc535c21133c895b56b374c8a1dc1eb948d99003ed2b47372069456b62f42b24'
+LGPL2_PATH = 'docs/licenses/os/' + LGPL2_SHA256 + '.txt'
+LGPL2_BYTES = 25270
+LGPL2_SOURCE_URL = 'https://www.gnu.org/licenses/old-licenses/lgpl-2.0.txt'
 
 
 def checked_path(root, relative):
@@ -72,6 +84,76 @@ def check_file(path, record):
             hasher.update(chunk)
     if count != expected_size or hasher.hexdigest() != expected:
         raise ValueError('Retained material checksum or size mismatch')
+
+
+def supplement_posixtz_license(report, *, license_bytes, header_bytes):
+    """Return a derived inventory with checked full terms for this exact source.
+
+    The caller first verifies the producer's source/proof and notice bytes. This
+    pure transformation preserves them; the GNU text has independent public
+    provenance and is not claimed to appear in the provider-signed materials.
+    """
+    if (not isinstance(report, dict) or report.get('schema') != 1
+            or report.get('origin') != 'tzdata' or report.get('version') != '2026d-r0'
+            or report.get('architecture') not in {'amd64', 'arm64'}
+            or report.get('success') is not True
+            or report.get('provider_oci_binding') is not True
+            or report.get('binding_method') != 'signed-build-provenance'):
+        raise ValueError('POSIX timezone license requires the reviewed signed tzdata 2026d inventory')
+    retained = report.get('retained_files', [])
+    archives = [row for row in retained if row.get('path') == POSIXTZ_ARCHIVE_PATH]
+    if (len(archives) != 1 or archives[0].get('source_path') != POSIXTZ_ARCHIVE_PATH
+            or archives[0].get('sha256') != POSIXTZ_ARCHIVE_SHA256
+            or archives[0].get('bytes') != POSIXTZ_ARCHIVE_BYTES):
+        raise ValueError('POSIX timezone license requires the exact retained source archive')
+    sources = [row for row in report.get('readable_source_files', [])
+               if row.get('path') == POSIXTZ_SOURCE_PATH]
+    if len(sources) != 1:
+        raise ValueError('POSIX timezone license requires the exact readable preferred source')
+    headers = [row for row in report.get('notices', []) if row.get('path') == POSIXTZ_NOTICE_PATH]
+    if (len(headers) != 1 or headers[0].get('sha256') != POSIXTZ_NOTICE_SHA256
+            or headers[0].get('bytes') != POSIXTZ_NOTICE_BYTES
+            or headers[0].get('encoding') != 'utf-8'
+            or headers[0].get('discovery') != 'complete-leading-legal-comment'
+            or headers[0].get('notice_file') != 'notices/' + POSIXTZ_NOTICE_SHA256 + '.txt'
+            or not isinstance(header_bytes, bytes) or len(header_bytes) != POSIXTZ_NOTICE_BYTES
+            or hashlib.sha256(header_bytes).hexdigest() != POSIXTZ_NOTICE_SHA256):
+        raise ValueError('POSIX timezone license requires the complete checked LGPL source header')
+    header = headers[0]
+    proof = header.get('provenance')
+    proof_fields = ('schema', 'origin', 'version', 'architecture', 'provider_oci_binding',
+                    'binding_method', 'source_image_digest', 'native_image_digest',
+                    'source_manifest_sha256', 'signed_statement_sha256')
+    if (not isinstance(proof, dict) or any(key not in report or proof.get(key) != report[key]
+                                          for key in proof_fields)
+            or any(proof.get(key) != report[key] for key in ('proof_architecture', 'for_packages')
+                   if key in report)):
+        raise ValueError('POSIX timezone header differs from the original signed source provenance')
+    if (not isinstance(license_bytes, bytes) or len(license_bytes) != LGPL2_BYTES
+            or hashlib.sha256(license_bytes).hexdigest() != LGPL2_SHA256):
+        raise ValueError('POSIX timezone full LGPL license checksum or size mismatch')
+    supplemental = {'path': 'supplemental/GNU-LGPL-2.0-only',
+        'notice_file': 'notices/' + LGPL2_SHA256 + '.txt', 'sha256': LGPL2_SHA256,
+        'bytes': LGPL2_BYTES, 'encoding': 'utf-8',
+        'discovery': 'reviewed-posixtz-full-license-supplement',
+        'license_source_url': LGPL2_SOURCE_URL,
+        'recipe_license_evidence': [{'path': POSIXTZ_NOTICE_PATH,
+                                    'sha256': POSIXTZ_NOTICE_SHA256, 'bytes': POSIXTZ_NOTICE_BYTES}],
+        'provenance': {**copy.deepcopy(proof), 'license_text_provider_signature_verified': False}}
+    result = copy.deepcopy(report)
+    existing = [row for row in result['notices'] if row.get('path') == supplemental['path']]
+    if existing:
+        if len(existing) != 1 or existing[0] != supplemental:
+            raise ValueError('POSIX timezone full-license supplement differs from the checked derivation')
+    else:
+        result['notices'].append(supplemental)
+    result['standalone_notice_count'] = sum(row.get('discovery') != 'complete-leading-legal-comment'
+                                             for row in result['notices'])
+    result['reviewable_comment_count'] = sum(row.get('discovery') == 'complete-leading-legal-comment'
+                                             for row in result['notices'])
+    result['requires_runtime_comment_selection'] = all(
+        row.get('discovery') == 'complete-leading-legal-comment' for row in result['notices'])
+    return result
 
 
 def readable(prefix):
@@ -408,10 +490,10 @@ def _inspect_records(root, output_dir, *, origin, version, architecture,
             'recipe_license_evidence': baselayout_recipes})
     certdata_notices = [row for row in notices if row['path'] == CA_CERTDATA_NOTICE
                         and row['sha256'] == CA_CERTDATA_NOTICE_SHA256]
-    if (origin == 'ca-certificates' and version == '20260611-r0'
+    if (origin == 'ca-certificates' and version == '20260909-r0'
             and any(row['sha256'] == CA_SOURCE_SHA256 for row in retained)
             and certdata_notices and any(row['path'].endswith(
-                '!ca-certificates-20260611/certdata.txt') for row in sources)):
+                '!ca-certificates-20260909/certdata.txt') for row in sources)):
         # The matching certificate source carries MPL2's exhibit notice, not
         # the full terms. Reuse Mozilla's complete checked primary text only
         # after that exact release's readable source and notice are present.
@@ -462,6 +544,19 @@ def _inspect_records(root, output_dir, *, origin, version, architecture,
         'preserved_archive_fixtures': inventory.archive_fixtures,
         'warnings': warnings, 'links_not_followed': inventory.links_skipped,
         'limitations': 'Caller verifies original package APK and OCI signature binding before retention. This module checks retained file hashes and inventories readable source/build inputs; filename and leading-comment discovery is evidence for review, not legal certification.'}
+    if origin == 'tzdata' and version == '2026d-r0':
+        header_path = checked_path(output, 'notices/' + POSIXTZ_NOTICE_SHA256 + '.txt')
+        license_path = checked_path(ROOT, LGPL2_PATH)
+        with license_path.open('rb') as stream:
+            license_bytes = stream.read(LGPL2_BYTES + 1)
+        with header_path.open('rb') as stream:
+            header_bytes = stream.read(POSIXTZ_NOTICE_BYTES + 1)
+        report = supplement_posixtz_license(report, license_bytes=license_bytes,
+                                           header_bytes=header_bytes)
+        target = output / 'notices' / (LGPL2_SHA256 + '.txt')
+        if target.parent.is_symlink() or target.is_symlink():
+            raise ValueError('Unsafe supplemental LGPL2 notice destination')
+        target.write_bytes(license_bytes)
     (output / 'package-material-inventory.json').write_text(json.dumps(report, indent=2) + '\n')
     return report
 
@@ -546,7 +641,9 @@ Only explicitly reviewed attribution headers are copied from source code.
     records = manifest.get('files', [])
     paths, downloads = set(), {}
     download_roles = {'complete-alpine-build-recipes', 'upstream-source',
-                      'pinned-provider-build-recipe', 'upstream-lgpl-license'}
+                      'pinned-provider-build-recipe', 'upstream-lgpl-license',
+                      'alpine-signing-key', 'signed-alpine-binary-evidence',
+                      'upstream-detached-signature'}
     for record in records:
         relative = safe_name(record.get('path', ''))
         if relative in paths:
@@ -590,6 +687,15 @@ Only explicitly reviewed attribution headers are copied from source code.
             verified = collect_sources(base_provenance, directory, fetch=fetch, base_inventory=inventory)
             selected_header_roles = set()
             binding_method = 'Pinned original Alpine package build commit, complete recipes and checked source archive; caller verifies native base provenance.'
+        elif origin == 'expat':
+            from alpine_expat_sources import collect_sources
+            if package_spec is None:
+                raise ValueError('Alpine Expat notices require the reviewed package source map')
+            if runtime_inventory is None:
+                runtime_inventory = json.loads(checked_path(source, 'runtime-expat-identity.json').read_bytes())
+            verified = collect_sources(package_spec, architecture, runtime_inventory, directory, fetch=fetch)
+            selected_header_roles = set()
+            binding_method = verified['binding_method']
         elif origin == 'openssl':
             from openssl_distribution_sources import collect_sources
             if package_spec is None or base_provenance is None:
@@ -601,7 +707,7 @@ Only explicitly reviewed attribution headers are copied from source code.
             selected_header_roles = set()
             binding_method = verified['binding_method']
         else:
-            raise ValueError('Only reviewed timezone, OpenSSL and original Alpine Expat notice imports are supported')
+            raise ValueError('Only reviewed timezone, OpenSSL and Expat notice imports are supported')
         # Coverage wording is descriptive and may improve without changing an
         # input. Every file, checksum, role and source identity must still match.
         ignored = {'coverage'}

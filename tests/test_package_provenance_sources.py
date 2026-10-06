@@ -8,7 +8,8 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import package_provenance_sources as sources
@@ -68,10 +69,10 @@ class PreferredSourceTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def collect(self, slsa=None, scout=None):
+    def collect(self, slsa=None, scout=None, fetch=None, output='output'):
         with patch.object(sources, 'ROOT', self.root):
             return sources.collect_sources(self.spec, 'amd64', slsa or self.slsa,
-                scout or self.scout, self.root / 'output', fetch=self.downloads.__getitem__)
+                scout or self.scout, self.root / output, fetch=fetch or self.downloads.__getitem__)
 
     def test_complete_source_archive_and_indirect_patch_retained(self):
         result = self.collect()
@@ -143,14 +144,97 @@ class PreferredSourceTests(unittest.TestCase):
         record = next(row for row in result['files'] if row['role'] == 'signed-upstream-source')
         self.assertEqual(record['declared_url'], self.source_url)
         self.assertEqual(record['url'], mirror_url)
+        self.assertEqual(record['retrieval_method'],
+                         'reviewed-historical-mirror-identical-to-signed-material-hash')
+        self.assertNotIn('retrieval_url', record)
 
     def test_mirror_cannot_change_signed_source_identity(self):
-        row = {'origin': 'example', 'version': '2.0-r0',
+        approved = {'origin': 'example', 'version': '1.0-r0',
                'url': 'https://mirror.example.org/source',
                'sha256': hashlib.sha256(self.source).hexdigest()}
+        for field, value in [('origin', 'other'), ('version', '2.0-r0'), ('sha256', 'f' * 64)]:
+            row = dict(approved, **{field: value})
+            fetch = Mock(side_effect=self.downloads.__getitem__)
+            with self.subTest(field=field), patch.object(sources, 'SOURCE_MIRRORS', {self.source_url: row}):
+                with self.assertRaisesRegex(ValueError, 'mirror differs'):
+                    self.collect(fetch=fetch, output='output-' + field)
+            fetch.assert_called_once_with(self.public_url)
+
+    def test_official_source_cache_records_exact_bytes_and_replays_offline(self):
+        mirror_url = 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz'
+        row = {'origin': 'example', 'version': '1.0-r0', 'url': mirror_url,
+               'sha256': hashlib.sha256(self.source).hexdigest(),
+               'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE}
+        self.downloads[mirror_url] = self.source
+        del self.downloads[self.source_url]
+        fetch = Mock(side_effect=self.downloads.__getitem__)
+        with patch.object(sources, 'SOURCE_MIRRORS', {self.source_url: row}):
+            result = self.collect(fetch=fetch)
+            record = next(value for value in result['files'] if value['role'] == 'signed-upstream-source')
+            self.assertEqual(record['declared_url'], self.source_url)
+            self.assertEqual(record['retrieval_url'], mirror_url)
+            self.assertEqual(record['url'], mirror_url)
+            self.assertEqual(record['retrieval_method'], sources.OFFICIAL_ALPINE_SOURCE_CACHE)
+            self.assertEqual(record['sha256'], hashlib.sha256(self.source).hexdigest())
+            self.assertEqual(record['bytes'], len(self.source))
+            self.assertEqual((self.root / 'output' / record['path']).read_bytes(), self.source)
+            self.assertNotIn(self.source_url, [call.args[0] for call in fetch.call_args_list])
+            cache = {value['url']: (self.root / 'output' / value['path']).read_bytes()
+                     for value in result['files'] if value['role'] in {
+                         'signed-upstream-source', 'pinned-provider-build-recipe',
+                         'complete-alpine-build-recipes'}}
+            replayed = self.collect(fetch=cache.__getitem__, output='replayed')
+        self.assertEqual(replayed, result)
+
+    def test_wrong_mirrored_bytes_are_rejected_against_signed_digest(self):
+        mirror_url = 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz'
+        row = {'origin': 'example', 'version': '1.0-r0', 'url': mirror_url,
+               'sha256': hashlib.sha256(self.source).hexdigest(),
+               'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE}
+        self.downloads[mirror_url] = self.source + b'corrupted'
+        fetch = Mock(side_effect=self.downloads.__getitem__)
+        with patch.object(sources, 'SOURCE_MIRRORS', {self.source_url: row}):
+            with self.assertRaisesRegex(ValueError, 'Signed preferred source sha256 mismatch'):
+                self.collect(fetch=fetch)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [self.public_url, mirror_url])
+        self.assertFalse((self.root / 'output/sources/example-1.0.tar.gz').exists())
+
+    def test_changed_signed_material_hash_is_not_accepted_by_source_cache(self):
+        row = {'origin': 'example', 'version': '1.0-r0',
+               'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz',
+               'sha256': hashlib.sha256(self.source).hexdigest(),
+               'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE}
+        self.slsa['predicate']['materials'][0]['digest']['sha256'] = 'd' * 64
+        fetch = Mock(side_effect=self.downloads.__getitem__)
         with patch.object(sources, 'SOURCE_MIRRORS', {self.source_url: row}):
             with self.assertRaisesRegex(ValueError, 'mirror differs'):
-                self.collect()
+                self.collect(fetch=fetch)
+        fetch.assert_called_once_with(self.public_url)
+
+    def test_unlisted_declared_source_url_does_not_use_source_cache(self):
+        row = {'origin': 'example', 'version': '1.0-r0',
+               'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz',
+               'sha256': hashlib.sha256(self.source).hexdigest(),
+               'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE}
+        del self.downloads[self.source_url]
+        fetch = Mock(side_effect=self.downloads.__getitem__)
+        with patch.object(sources, 'SOURCE_MIRRORS', {self.source_url + '.unreviewed': row}):
+            with self.assertRaises(KeyError):
+                self.collect(fetch=fetch)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [self.public_url, self.source_url])
+
+    def test_permanent_source_cache_error_is_not_rerouted_or_retried(self):
+        mirror_url = 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz'
+        row = {'origin': 'example', 'version': '1.0-r0', 'url': mirror_url,
+               'sha256': hashlib.sha256(self.source).hexdigest(),
+               'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE}
+        error = urllib.error.HTTPError(mirror_url, 418, 'blocked', {}, None)
+        fetch = Mock(side_effect=[self.recipe.encode(), error])
+        with patch.object(sources, 'SOURCE_MIRRORS', {self.source_url: row}):
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                self.collect(fetch=fetch)
+        self.assertIs(raised.exception, error)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [self.public_url, mirror_url])
 
 
 if __name__ == '__main__':
