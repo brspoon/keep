@@ -30,11 +30,11 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "Exact upstream CPython commit 16dea1e887ec7dfbed735beedd476b21dcc91a79 is applied by scripts/python_security_patches.json; the link-fallback probe in scripts/python_security_checks.py verifies that skipped filter decisions are honored.",
+      "evidence": "Exact upstream CPython commit fb2f0bbc3b35264f09cc2cb2934b7987527a6bc2 is applied by scripts/python_security_patches.json; the link-fallback probe in scripts/python_security_checks.py verifies that skipped filter decisions are honored.",
       "review": {
         "approval": "Inherited verified-fixed approval for CVE-2026-87910 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
         "deadline": "2026-10-07",
-        "remove_when": "Remove only after verified replacement Python sources include 16dea1e887ec7dfbed735beedd476b21dcc91a79 or a proven equivalent, the corresponding runtime regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update patch inputs, source materials and evidence together."
+        "remove_when": "Remove only after verified replacement Python sources include fb2f0bbc3b35264f09cc2cb2934b7987527a6bc2 or a proven equivalent, the corresponding runtime regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update patch inputs, source materials and evidence together."
       }
     },
     "CVE-2026-17084": {
