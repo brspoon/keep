@@ -41,11 +41,11 @@ class TimezoneSourcesTests(unittest.TestCase):
         self.output = Path(self.temporary.name) / 'sources'
         self.notice = b'IANA data is public domain; named BSD exceptions remain.'
         self.sources = {
-            'tzcode2026c.tar.gz': archive([('version', b'2026c\n'), ('LICENSE', self.notice),
+            'tzcode2026d.tar.gz': archive([('version', b'2026d\n'), ('LICENSE', self.notice),
                                           ('date.c', b'BSD attribution date source'),
                                           ('newstrftime.3', b'BSD attribution manual'),
                                           ('strftime.c', b'BSD attribution strftime source')]),
-            'tzdata2026c.tar.gz': archive([('version', b'2026c\n'), ('LICENSE', self.notice)]),
+            'tzdata2026d.tar.gz': archive([('version', b'2026d\n'), ('LICENSE', self.notice)]),
             'posixtz-0.5.tar.xz': archive([('posixtz-0.5/posixtz.c', b'Copyright POSIXtz authors. LGPL2 or later.')]),
         }
         self.inputs = {name: {**review.SOURCE_INPUTS[name], 'sha512': hashlib.sha512(body).hexdigest()}
@@ -53,14 +53,14 @@ class TimezoneSourcesTests(unittest.TestCase):
         self.patches = {name: ('patch ' + name).encode() for name in review.PATCH_INPUTS}
         patch_hashes = {name: hashlib.sha512(body).hexdigest() for name, body in self.patches.items()}
         checksums = {name: row['sha512'] for name, row in self.inputs.items()} | patch_hashes
-        self.apkbuild = ('pkgname=tzdata\npkgver=2026c\n_ptzver=0.5\npkgrel=0\nsha512sums="\n' +
+        self.apkbuild = ('pkgname=tzdata\npkgver=2026d\n_ptzver=0.5\npkgrel=0\nsha512sums="\n' +
                          '\n'.join(value + '  ' + name for name, value in checksums.items()) + '\n"\n').encode()
         entries = [(f'aports-{review.APORTS_COMMIT}/main/tzdata/APKBUILD', self.apkbuild)]
         entries += [(f'aports-{review.APORTS_COMMIT}/main/tzdata/{name}', body)
                     for name, body in self.patches.items()]
         entries.append((f'aports-{review.APORTS_COMMIT}/scripts/build.sh', b'other complete build inputs'))
         self.aports = archive(entries)
-        self.recipe = ('image: dhi.io/pkg-tzdata\nvars:\n  VERSION: 2026c\n  COMMIT_SHA: ' + review.APORTS_COMMIT + '\n').encode()
+        self.recipe = ('image: dhi.io/pkg-tzdata\nvars:\n  VERSION: 2026d\n  COMMIT_SHA: ' + review.APORTS_COMMIT + '\n').encode()
         self.lgpl = b'GNU LIBRARY GENERAL PUBLIC LICENSE Version2 June1991.'
         self.lgpl_path = Path(self.temporary.name) / 'licenses' / (hashlib.sha256(self.lgpl).hexdigest() + '.txt')
         self.lgpl_path.parent.mkdir()
@@ -76,10 +76,10 @@ class TimezoneSourcesTests(unittest.TestCase):
         self.addCleanup(active.stop)
         self.downloads = {review.RECIPE_URL: self.recipe, review.APORTS_URL: self.aports}
         self.downloads.update({self.inputs[name]['url']: body for name, body in self.sources.items()})
-        self.row = {'origin': 'tzdata', 'version': '2026c-r0',
+        self.row = {'origin': 'tzdata', 'version': '2026d-r0',
                     'recipe': {'path': review.RECIPE_PATH, 'revision': review.RECIPE_REVISION,
                                'sha256': review.RECIPE_SHA256, 'upstream_commit': review.APORTS_COMMIT},
-                    'packages': [{'name': 'tzdata', 'version': '2026c-r0', 'license': 'Public-Domain',
+                    'packages': [{'name': 'tzdata', 'version': '2026d-r0', 'license': 'Public-Domain',
                                   'build_commit': 'provider-recorded-commit',
                                   'binaries': {'amd64': {'sha256': 'a' * 64, 'url': 'https://dhi.io/recorded.apk'}}}]}
 
@@ -90,11 +90,11 @@ class TimezoneSourcesTests(unittest.TestCase):
         result = self.collect()
         self.assertFalse(result['provider_oci_binding'])
         self.assertEqual(result['package_input']['binary_sha256'], 'a' * 64)
-        self.assertEqual((self.output / 'tzdata2026c-LICENSE').read_bytes(), self.notice)
+        self.assertEqual((self.output / 'tzdata2026d-LICENSE').read_bytes(), self.notice)
         self.assertEqual((self.output / 'posixtz-LGPL-2.0.txt').read_bytes(), self.lgpl)
-        self.assertTrue((self.output / 'tzcode2026c-BSD-date.c').is_file())
-        self.assertTrue((self.output / 'tzcode2026c-BSD-newstrftime.3').is_file())
-        self.assertTrue((self.output / 'tzcode2026c-BSD-strftime.c').is_file())
+        self.assertTrue((self.output / 'tzcode2026d-BSD-date.c').is_file())
+        self.assertTrue((self.output / 'tzcode2026d-BSD-newstrftime.3').is_file())
+        self.assertTrue((self.output / 'tzcode2026d-BSD-strftime.c').is_file())
         self.assertEqual((self.output / f'aports-{review.APORTS_COMMIT}.tar.gz').read_bytes(), self.aports)
         self.assertEqual(sum(row['role'] == 'matching-build-patch' for row in result['files']), 2)
         self.assertFalse(any(row['path'].endswith('.apk') for row in result['files']))
@@ -150,7 +150,7 @@ class TimezoneSourcesTests(unittest.TestCase):
         self.assertFalse((self.output / 'manifest.json').exists())
 
     def test_rejects_download_checksum_mismatch(self):
-        self.downloads[self.inputs['tzdata2026c.tar.gz']['url']] = b'tampered sources'
+        self.downloads[self.inputs['tzdata2026d.tar.gz']['url']] = b'tampered sources'
         with self.assertRaisesRegex(ValueError, 'sha512 checksum mismatch'):
             self.collect()
         self.assertFalse((self.output / 'manifest.json').exists())
@@ -172,9 +172,9 @@ class TimezoneSourcesTests(unittest.TestCase):
         self.assertEqual((self.output / f'aports-{review.APORTS_COMMIT}.tar.gz').read_bytes(), self.aports)
 
     def test_rejects_wrong_iana_release_even_if_blob_checksum_is_updated(self):
-        body = archive([('version', b'2026d\n'), ('LICENSE', self.notice)])
-        self.downloads[self.inputs['tzdata2026c.tar.gz']['url']] = body
-        self.inputs['tzdata2026c.tar.gz']['sha512'] = hashlib.sha512(body).hexdigest()
+        body = archive([('version', b'2026c\n'), ('LICENSE', self.notice)])
+        self.downloads[self.inputs['tzdata2026d.tar.gz']['url']] = body
+        self.inputs['tzdata2026d.tar.gz']['sha512'] = hashlib.sha512(body).hexdigest()
         with self.assertRaisesRegex(ValueError, 'source checksum mismatch'):
             self.collect()
 
@@ -189,10 +189,10 @@ class TimezoneSourcesTests(unittest.TestCase):
             self.collect()
 
     def test_rejects_other_installed_version_and_binary_digest(self):
-        self.row['version'] = '2026d-r0'
+        self.row['version'] = '2026c-r0'
         with self.assertRaisesRegex(ValueError, 'Fallback only covers'):
             self.collect()
-        self.row['version'] = '2026c-r0'
+        self.row['version'] = '2026d-r0'
         self.row['packages'][0]['binaries']['amd64']['sha256'] = 'not a digest'
         with self.assertRaisesRegex(ValueError, 'binary digest mismatch'):
             self.collect()

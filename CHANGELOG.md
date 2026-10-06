@@ -4,6 +4,7 @@
 
 - Ensure the container uses the patched zlib library for normal Python operations.
 - Update the container's Werkzeug dependency to 3.1.9.
+- Update the container base and replace OpenSSL and Expat with fixed releases.
 - Allow clean image scans to pass when expired security exceptions are unused; continue blocking findings that need an expired exception.
 
 ## 2.23.1 — 2026-10-05

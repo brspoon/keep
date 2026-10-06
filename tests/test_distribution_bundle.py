@@ -336,14 +336,15 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.directory = self.root / 'docs/licenses/os'
         self.directory.mkdir(parents=True)
-        self.lock = {'origins': [{'origin': 'fixture', 'version': '1-r0'}]}
+        self.lock = {'origins': [{'origin': 'fixture', 'version': '1-r0'}],
+                     'original_base_origins': [{'origin': 'expat', 'version': '2.8.5-r0'}]}
         body = b'Copyright Fixture Authors. Complete permission and license notice.'
         name = hashlib.sha256(body).hexdigest() + '.txt'
         (self.directory / name).write_bytes(body)
         self.manifest = {'schema': 1, 'ready_for_runtime_distribution': True, 'notices': [
             {'notice_file': name, 'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body),
              'provenance': [{'origin': 'fixture', 'version': '1-r0', 'architecture': 'amd64'},
-                            {'origin': 'expat-original-base', 'version': '2.8.4-r0', 'architecture': 'amd64'}]}]}
+                            {'origin': 'expat-original-base', 'version': '2.8.5-r0', 'architecture': 'amd64'}]}]}
         bundle.write_json(self.directory / 'manifest.json', self.manifest)
         self.inventory = {'notices': [{'path': '/app/licenses/os/' + name,
                                        'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body)}]}
@@ -438,8 +439,7 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'differs from its signed native statement'):
                     bundle.verify_base_provenance(root, os_lock, 'amd64')
 
-    def test_expat_cached_sources_do_not_replace_ensurepip_source_fetcher(self):
-        import alpine_distribution_sources
+    def test_original_package_retention_does_not_replace_ensurepip_source_fetcher(self):
         import base_python_distribution_sources
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -448,16 +448,18 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
             native = 'sha256:' + 'a' * 64
             apk = b'original Python APK fixture'
             apk_sha = hashlib.sha256(apk).hexdigest()
-            source_body = b'pinned original Expat archive'
-            source_url = 'https://example.org/expat.tar.gz'
-            (source / 'expat.tar.gz').write_bytes(source_body)
-            manifest = {'files': [{'path': 'expat.tar.gz', 'url': source_url, 'role': 'upstream-source',
-                'sha256': hashlib.sha256(source_body).hexdigest(), 'bytes': len(source_body)}]}
+            package = {'name': 'libexpat', 'version': '2.8.5-r0',
+                       'license': 'MIT', 'build_commit': 'c' * 40,
+                       'binaries': {'amd64': {'url': 'https://dhi.io/expat.apk', 'sha256': 'd' * 64}}}
+            original = {'origin': 'expat', 'version': '2.8.5-r0', 'packages': [package]}
             provenance = {'predicateType': 'https://slsa.dev/provenance/v1',
-                          'subject': [{'digest': {'sha256': native.split(':')[1]}}]}
-            bundle.write_json(source / 'manifest.json', manifest)
+                          'subject': [{'digest': {'sha256': native.split(':')[1]}}],
+                          'predicate': {'buildDefinition': {'resolvedDependencies': [
+                              {'uri': 'https://dhi.io/expat.apk', 'digest': {'sha256': 'd' * 64}}]}}}
             bundle.write_json(source / 'base-provenance.json', provenance)
-            bundle.write_json(source / 'base-runtime-inventory.json', {})
+            bundle.write_json(source / 'base-runtime-inventory.json', {'os_packages': [
+                {'name': 'libexpat', 'version': '2.8.5-r0', 'license': 'MIT',
+                 'origin': 'expat', 'build_commit': 'c' * 40}]})
             bundle.write_json(repo / 'docs/base-python-sources.json', {'package': {'apk_sha256': {'amd64': apk_sha}}})
             proof = {'source_image_digest': 'sha256:' + 'b' * 64, 'native_image_digest': native}
 
@@ -466,10 +468,6 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
                 (output / 'python.apk').write_bytes(apk)
                 return {'files': [{'type': 'file', 'source_path': 'opt/docker/materials/python.apk',
                                   'path': 'python.apk', 'sha256': apk_sha}]}
-
-            def original_expat(provenance, output, *, fetch, base_inventory):
-                self.assertEqual(fetch(source_url), source_body)
-                return manifest
 
             fetched = []
             def python_fetch(url):
@@ -481,15 +479,17 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
                 self.assertEqual(fetch('https://pypi.org/pypi/distlib/0.4.2/json'), b'ensurepip source release')
                 return {'source_packages': [], 'wheels': [], 'native_resources': [], 'native_build_sources': []}
 
-            os_lock = {'base_index': 'dhi.io/python@' + bundle.BASE_DIGEST, 'base_native_digests': {'amd64': native}}
+            os_lock = {'base_index': 'dhi.io/python@' + bundle.BASE_DIGEST, 'base_native_digests': {'amd64': native},
+                       'original_base_origins': [original]}
             with patch.object(bundle, 'verify_source_proof', return_value=proof), \
                     patch.object(bundle, 'verify_base_provenance', return_value=(provenance, proof)), \
                     patch.object(bundle, 'copy_proof'), patch.object(bundle, 'copy_attestation_proof'), \
                     patch.object(bundle, 'retain_materials', side_effect=retain), patch.object(bundle, 'omit_apk_materials'), \
-                    patch.object(alpine_distribution_sources, 'collect_sources', side_effect=original_expat), \
+                    patch.object(bundle, 'retain_packages', return_value=[]) as packages, \
                     patch.object(base_python_distribution_sources, 'collect_sources', side_effect=original_python):
                 bundle.retain_original_base(source, root / 'curated', os_lock, 'amd64', root=repo, fetch=python_fetch)
             self.assertEqual(fetched, ['https://pypi.org/pypi/distlib/0.4.2/json'])
+            self.assertEqual(packages.call_args.args[0], source / 'original-base-packages')
 
 
 class MatchingSourceDownloadTests(unittest.TestCase):
@@ -527,6 +527,7 @@ class CommittedKeepSourceTests(unittest.TestCase):
         self.output = Path(self.temp.name) / 'sources'
         self.files = ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
             'scripts/build_patched_zlib.py', 'scripts/patch_python_runtime.py',
+            'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
             'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
             'docs/distribution-sources.json', 'docs/os-package-sources.json',
             'docs/aports-source-lock.json', 'docs/base-python-sources.json', 'app.py')
@@ -683,3 +684,44 @@ class SignedBuildSourceBundleTests(unittest.TestCase):
                 patch.object(bundle, 'copy_attestation_proof'), patch.object(preferred, 'ROOT', self.root):
             with self.assertRaisesRegex(ValueError, 'No valid original Docker signature'):
                 bundle.retain_packages(source, self.root / 'curated', {'origins': [origin]}, 'amd64')
+
+
+class OriginalPackageBindingTests(unittest.TestCase):
+    def fixture(self):
+        package = {'name': 'libexpat', 'version': '2.8.5-r0', 'build_commit': 'a' * 40,
+                   'license': 'MIT', 'binaries': {'amd64': {'url': 'https://dhi.io/exact.apk',
+                                                         'sha256': 'b' * 64}}}
+        origin = {'origin': 'expat', 'version': package['version'], 'packages': [package]}
+        inventory = {'os_packages': [{'name': package['name'], 'version': package['version'],
+                     'build_commit': package['build_commit'], 'license': 'MIT', 'origin': 'expat'}]}
+        provenance = {'predicate': {'buildDefinition': {'resolvedDependencies': [
+            {'uri': package['binaries']['amd64']['url'], 'digest': {'sha256': 'b' * 64}}]}}}
+        return [origin], inventory, provenance
+
+    def test_original_bytes_remain_bound_after_runtime_replacement(self):
+        origins, inventory, provenance = self.fixture()
+        bundle.bind_original_packages(origins, inventory, provenance, 'amd64')
+        for field, changed in (('version', '2.9.0-r0'), ('build_commit', 'c' * 40),
+                               ('license', 'Unknown'), ('origin', 'other')):
+            altered = copy.deepcopy(inventory)
+            altered['os_packages'][0][field] = changed
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'inventory identity mismatch'):
+                bundle.bind_original_packages(origins, altered, provenance, 'amd64')
+
+    def test_original_signed_apk_hash_and_uniqueness_are_mandatory(self):
+        origins, inventory, provenance = self.fixture()
+        for mutation in ('hash', 'uri', 'duplicate', 'missing'):
+            altered = copy.deepcopy(provenance)
+            rows = altered['predicate']['buildDefinition']['resolvedDependencies']
+            if mutation == 'hash':
+                rows[0]['digest']['sha256'] = 'c' * 64
+            elif mutation == 'uri':
+                rows[0]['uri'] += '.changed'
+            elif mutation == 'duplicate':
+                rows.append(copy.deepcopy(rows[0]))
+            else:
+                rows.clear()
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'signed provenance'):
+                bundle.bind_original_packages(origins, inventory, altered, 'amd64')
+        with self.assertRaisesRegex(ValueError, 'Duplicate overwritten'):
+            bundle.bind_original_packages(origins + origins, inventory, provenance, 'amd64')

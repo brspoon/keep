@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import review_image
 from review_image import assess, deadline_warnings, review_candidate
 from inspect_candidate import DIRECT
+from native_dependency_fixture import dependency_report
 
 
 class ImageReviewTests(unittest.TestCase):
@@ -56,6 +57,10 @@ class ImageReviewTests(unittest.TestCase):
 
     def test_changed_severity_blocks(self):
         self.report['matches'][0]['vulnerability']['severity'] = 'High'
+        self.assertEqual(self.result()['blocked'][0]['reason'], 'exception_mismatch')
+
+    def test_new_vendor_revision_does_not_inherit_an_old_package_approval(self):
+        self.report['matches'][0]['artifact']['version'] = '3.14.7-r2'
         self.assertEqual(self.result()['blocked'][0]['reason'], 'exception_mismatch')
 
     def test_regression_failure_or_wrong_arch_rejected(self):
@@ -204,6 +209,7 @@ class CandidateReviewTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes((ROOT / name).read_bytes())
         for arch in DIRECT:
+            self.write(f'candidate-dependencies-{arch}.json', dependency_report(arch))
             self.write(f'candidate-{arch}.json', {'matches': []})
             self.write(f'candidate-scout-{arch}.json', {'runs': [{'results': []}]})
             self.write(f'candidate-provenance-{arch}.json', {
@@ -218,6 +224,23 @@ class CandidateReviewTests(unittest.TestCase):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(record))
+
+    def test_clean_scan_still_requires_original_dependency_qualification(self):
+        for arch in DIRECT:
+            path = self.root / f'candidate-dependencies-{arch}.json'
+            record = json.loads(path.read_bytes())
+            for mutation in ('failed', 'hash', 'architecture'):
+                changed = copy.deepcopy(record)
+                if mutation == 'failed':
+                    changed.update(success=False, failures=1)
+                elif mutation == 'hash':
+                    changed['loaded_libraries']['expat']['sha256'] = '0' * 64
+                else:
+                    changed['arch'] = 'unreviewed'
+                self.write(path.name, changed)
+                with self.subTest(arch=arch, mutation=mutation), self.assertRaises(ValueError):
+                    review_candidate(arch, self.root, datetime.date(2026, 10, 8))
+            self.write(path.name, record)
 
     def test_clean_candidate_requires_valid_source_hashes_on_both_architectures(self):
         for name in self.policy['reviewed_sources']:

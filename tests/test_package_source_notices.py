@@ -429,11 +429,11 @@ class PackageNoticeTests(unittest.TestCase):
         self.assertFalse(report['success'])
         self.assertTrue(all(row['sha256'] != GPL2_SHA256 for row in report['notices']))
 
-    def ca_certificates(self, *, version='20260611-r0', matching_source=True):
+    def ca_certificates(self, *, version='20260909-r0', matching_source=True):
         comment = b'# This source is subject to Mozilla Public License v2.0.\n# Copyright Authors.\n\n'
-        name = 'sources/ca-certificates-20260611.tar.bz2'
-        data = archive({'ca-certificates-20260611/certdata.txt': comment + b'BEGINDATA\n',
-                        'ca-certificates-20260611/Makefile': b'all: certdata.txt\n'})
+        name = 'sources/ca-certificates-20260909.tar.bz2'
+        data = archive({'ca-certificates-20260909/certdata.txt': comment + b'BEGINDATA\n',
+                        'ca-certificates-20260909/Makefile': b'all: certdata.txt\n'})
         record = self.add(name, data)
         old = self.materials / record['path']; dest = self.materials / name
         dest.parent.mkdir(parents=True, exist_ok=True); old.rename(dest);record['path']=name
@@ -449,12 +449,12 @@ class PackageNoticeTests(unittest.TestCase):
         self.assertTrue(report['success'])
         full = next(row for row in report['notices'] if row['sha256'] == MPL2_SHA256)
         self.assertEqual(full['recipe_license_evidence'][0]['path'],
-            'sources/ca-certificates-20260611.tar.bz2!ca-certificates-20260611/certdata.txt#leading-comment')
+            'sources/ca-certificates-20260909.tar.bz2!ca-certificates-20260909/certdata.txt#leading-comment')
         merged = merge_notice_bundles([self.root / 'ca-notices'], self.root / 'ca-runtime')
         self.assertEqual(merged['notices'][0]['provenance'][0]['origin'], 'ca-certificates')
 
     def test_ca_mpl_supplement_cannot_apply_to_another_version(self):
-        report = self.ca_certificates(version='20260612-r0')
+        report = self.ca_certificates(version='20260611-r0')
         self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
 
     def test_ca_mpl_supplement_cannot_apply_to_another_source_archive(self):

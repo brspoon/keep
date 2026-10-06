@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import release_materials as materials
 import registry_transfer
 import review_image
+from native_dependency_fixture import dependency_report
 
 
 def tar_bytes(entries):
@@ -213,9 +214,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 for name in [*materials.evidence_names(arch), f'portable-recovery-{arch}.json',
                              f'installer-trial-{arch}.json', f'source-bundle-{arch}.json']}
             reports = self.security_reports(arch, policy, matches)
-            if review_changes and arch == 'amd64':
+            if review_changes:
                 for name, changes in review_changes.items():
-                    reports[name].update(changes)
+                    if name in reports:
+                        reports[name].update(changes)
             evidence_payloads.update({name: (json.dumps(body, indent=3) + '\r\n').encode()
                                       for name, body in reports.items()})
             if validation:
@@ -281,6 +283,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
 
     def security_reports(self, arch, policy, matches=None):
         return {
+            f'candidate-dependencies-{arch}.json': dependency_report(arch),
             f'candidate-{arch}.json': {'matches': matches or []},
             f'candidate-scout-{arch}.json': {'runs': [{'results': []}]},
             f'candidate-regression-{arch}.json': {
@@ -1057,6 +1060,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
                             ('scout', f'candidate-scout-{arch}.json'),
                             ('evidence', f'candidate-regression-{arch}.json'),
                             ('provenance', f'candidate-provenance-{arch}.json'),
+                            ('dependencies', f'candidate-dependencies-{arch}.json'),
                         ):
                             self.assertEqual(held[arch][key], json.load(package.extractfile(prefix + report_name)))
                         # The producer's review is retained even though the current
@@ -1113,6 +1117,17 @@ class ReleaseMaterialsTests(unittest.TestCase):
     def test_readback_rejects_changed_reviewed_source_hash(self):
         self.assert_readback_security_review(day=datetime.date(2026, 10, 8), source_change=True,
                                             expected_error='verified-fixed review must be refreshed')
+
+    def test_readback_rechecks_original_dependency_report_before_promotion(self):
+        for changes, message in (
+            ({'candidate-dependencies-amd64.json': {'success': False, 'failures': 1}},
+             'failed native dependency qualification'),
+            ({'candidate-dependencies-arm64.json': {'expat_source_manifest_sha256': '0' * 64}},
+             'source or install manifest differs'),
+        ):
+            with self.subTest(changes=changes):
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 8),
+                    review_changes=changes, expected_error=message)
 
     def test_aggregate_emits_both_digests_only_after_asset_and_tag_checks(self):
         rows, bodies = self.verify_fixture()

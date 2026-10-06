@@ -54,6 +54,7 @@ NATIVE_STEPS = (
     'Inventory installed notices and inspect every image layer',
     'Scan candidate without suppressions',
     'Verify all nine runtime security fixes in the tested image',
+    'Verify default Expat and OpenSSL library loading',
     'Accept only the nine verified-fixed findings and block all others',
     'Obtain verified base source materials and license notices',
     'Obtain matching sources for every installed OS package',

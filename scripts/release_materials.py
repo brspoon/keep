@@ -31,7 +31,7 @@ HASH = re.compile(r'[0-9a-f]{64}\Z')
 
 def evidence_names(arch):
     reports = [f'candidate-{arch}.json'] + [f'candidate-{kind}-{arch}.json' for kind in
-               ('layers', 'notices', 'provenance', 'regression', 'review', 'sbom', 'scout', 'signature')]
+               ('dependencies', 'layers', 'notices', 'provenance', 'regression', 'review', 'sbom', 'scout', 'signature')]
     sources = [f'source-{kind}-{arch}.log' for kind in
                ('acquisition-base', 'acquisition-packages', 'distribution')]
     return reports + sources
@@ -513,6 +513,7 @@ def verify_identities(version, release, digests=None, *, security_reviews=None):
                     f'candidate-scout-{arch}.json': 'scout',
                     f'candidate-regression-{arch}.json': 'evidence',
                     f'candidate-provenance-{arch}.json': 'provenance',
+                    f'candidate-dependencies-{arch}.json': 'dependencies',
                 }
                 original_reviews[arch] = {}
                 for record in identity['evidence']:

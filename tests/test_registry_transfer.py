@@ -118,7 +118,7 @@ class RegistryTransferTests(unittest.TestCase):
         return workflow, {match.group(1): body[match.start():matches[index + 1].start() if index + 1 < len(matches) else len(body)]
                           for index, match in enumerate(matches)}
 
-    def test_pr_checks_are_read_only_and_only_main_builds_native_images(self):
+    def test_pr_checks_are_read_only_and_main_builds_retained_native_images(self):
         workflow, jobs = self.workflow_jobs()
         self.assertNotIn('pull_request_target', workflow)
         self.assertNotIn('continue-on-error', workflow)
@@ -147,8 +147,27 @@ class RegistryTransferTests(unittest.TestCase):
         self.assertIn('queue: max\n  cancel-in-progress: false', workflow)
         self.assertIn('scripts/validated_build.py prepare', jobs['prepare-candidate'])
         native = Path('.github/workflows/native-image.yml').read_text()
-        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", native)
+        self.assertIn("github.event_name == 'push' && github.ref == 'refs/heads/main'", native)
         self.assertIn('name: image (${{ matrix.arch }})', native)
+
+    def test_manual_qualification_cannot_retain_or_publish_an_image(self):
+        native = Path('.github/workflows/native-image.yml').read_text()
+        caller = Path('.github/workflows/runtime-base-review.yml').read_text()
+        self.assertIn("github.event_name == 'workflow_dispatch'", native)
+        self.assertIn("github.repository == 'brspoon/keep'", native)
+        self.assertIn("startsWith(github.ref, 'refs/heads/brspoon/')", native)
+        self.assertIn('contents: read', caller)
+        self.assertNotIn('contents: write', caller)
+        self.assertIn('qualification: true', caller)
+        for name in ('Retain exact tested image, sources and original evidence',
+                     'Retain immutable validation index',
+                     'Package sources and notices for the exact tested runtime'):
+            block = native.split('      - name: ' + name + '\n', 1)[1].split('      - name:', 1)[0]
+            self.assertIn('if: ${{ !inputs.qualification }}', block)
+        for command in ('docker push', 'registry_transfer.py stage', 'publish_release: true'):
+            self.assertNotIn(command, caller + native)
+        self.assertIn('--prepare-notices', native)
+        self.assertIn('runtime-qualification-${{ matrix.arch }}-${{ github.run_id }}', native)
 
     def test_native_checks_all_precede_retention_and_upload_only_small_index(self):
         native = Path('.github/workflows/native-image.yml').read_text()

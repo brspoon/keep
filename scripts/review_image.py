@@ -129,7 +129,8 @@ def reviewed_policy(root=Path('.')):
     return policy
 
 
-def review_reports(arch, report, scout, evidence, provenance, root=Path('.'), today=None):
+def review_reports(arch, report, scout, evidence, provenance, root=Path('.'), today=None,
+                   *, dependencies=None):
     """Reassess original report objects without modifying retained evidence."""
     policy = reviewed_policy(root)
     if arch not in DIRECT:
@@ -141,6 +142,8 @@ def review_reports(arch, report, scout, evidence, provenance, root=Path('.'), to
                        and subject['digest'].get('sha256') == DIRECT[arch][0]
                        for subject in provenance['subject'])):
         raise ValueError('Base provenance does not cover the reviewed native image')
+    from runtime_dependency_checks import validate_report
+    validate_report(dependencies, arch, root=root)
     return assess(report, scout, evidence, policy, arch, today)
 
 
@@ -152,6 +155,7 @@ def review_candidate(arch, root=Path('.'), today=None):
         json.loads((root / f'candidate-regression-{arch}.json').read_text()),
         json.loads((root / f'candidate-provenance-{arch}.json').read_text()),
         root, today,
+        dependencies=json.loads((root / f'candidate-dependencies-{arch}.json').read_bytes()),
     )
 
 

@@ -1,14 +1,17 @@
 {
-  "base": "sha256:7b9528fefc51c9d3753ccd25dcf1dea9dd327e7c2f8bef89cd2cf3b34f847408",
-  "approval": "Reviewed fixes for the pinned base packages, including the Python temporary-directory correction and Keep permission-reset guard. Accept only the exact package versions listed below with all nine native runtime probes passing; block all other findings.",
+  "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
+  "approval": "Retain only the existing verified-fixed approvals for the exact package versions listed below and their October 7 deadlines. Replacement packages still require complete native provenance, source-integrity and runtime verification; an unmatched finding remains blocked.",
   "reviewed_sources": {
-    "Dockerfile": "ecde567a28269f20949cd0ac2c3da83ed29b2859366c21f35e8fecd64a7cd76b",
-    "scripts/inspect_candidate.py": "28d160073d2c142e863f708941a044e772739eedbfda13bcb0289bbfd7e3388f",
+    "Dockerfile": "2ddc2631ba7679ee101672be7bef4f968358fd75aa2487ac053327ebb9ca14e5",
+    "scripts/inspect_candidate.py": "b891ac18d88d613b790902c904c9d5fbe4ce5c4c71a7c578079b250392ecd397",
     "requirements.txt": "26a92d0b3e6ce4a03b950fdd007e549e716ef45a10cb73220b9207581824ea6c",
     "scripts/python_security_patches.json": "81d8119bbc903e70a921a7a26e780b55c8f318d6ddd77aee24567fda01e700ff",
     "scripts/patch_python_runtime.py": "ac173c04c32674c4b14a3d40ff091ef97793cc5460d124866111f27f83e09316",
     "scripts/python_security_checks.py": "5e0c2b188129f93539e5d26f51e3fde659f1184754082ad4ffffe38c0500fb3f",
-    "scripts/build_patched_zlib.py": "f4678605a699b6ef5836c333b9e6794aa0bb2a6c99d9d723ecb2f5a974193682"
+    "scripts/build_patched_zlib.py": "f4678605a699b6ef5836c333b9e6794aa0bb2a6c99d9d723ecb2f5a974193682",
+    "scripts/alpine_expat_sources.py": "3071513ad18bb712499e494f27fbad596ecebda810072b0e58519c2088e719cb",
+    "scripts/runtime_dependency_checks.py": "fe537b5d7002a28e11c455c2419a6b90e183926536975c30ca012afa956091e5",
+    "docs/os-package-sources.json": "345b878f721ad66240e1e11789c081c472fd4b1257b59635f05270db23f80659"
   },
   "exceptions": {
     "CVE-2026-85091": {

@@ -37,10 +37,10 @@ MPL2_PATH = 'docs/licenses/MPL-2.0.txt'
 MPL2_SHA256 = 'fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85'
 MPL2_BYTES = 16726
 MPL2_SOURCE_URL = 'https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt'
-CA_CERTDATA_NOTICE = ('sources/ca-certificates-20260611.tar.bz2!'
-                     'ca-certificates-20260611/certdata.txt#leading-comment')
+CA_CERTDATA_NOTICE = ('sources/ca-certificates-20260909.tar.bz2!'
+                     'ca-certificates-20260909/certdata.txt#leading-comment')
 CA_CERTDATA_NOTICE_SHA256 = '6f3d0ca739e01730cb2314a8302be79cb23a5956d7770dc3de37bc4b4db79df1'
-CA_SOURCE_SHA256 = '32ca73f2e81e2b88dc614f12e1ee04a82b1ec5a8e29d9f359ddf8905a0afcbb0'
+CA_SOURCE_SHA256 = 'dc460c535f3833432be4e561d214a5fe816b05ede5a2ade64787e501671cd082'
 
 
 def checked_path(root, relative):
@@ -408,10 +408,10 @@ def _inspect_records(root, output_dir, *, origin, version, architecture,
             'recipe_license_evidence': baselayout_recipes})
     certdata_notices = [row for row in notices if row['path'] == CA_CERTDATA_NOTICE
                         and row['sha256'] == CA_CERTDATA_NOTICE_SHA256]
-    if (origin == 'ca-certificates' and version == '20260611-r0'
+    if (origin == 'ca-certificates' and version == '20260909-r0'
             and any(row['sha256'] == CA_SOURCE_SHA256 for row in retained)
             and certdata_notices and any(row['path'].endswith(
-                '!ca-certificates-20260611/certdata.txt') for row in sources)):
+                '!ca-certificates-20260909/certdata.txt') for row in sources)):
         # The matching certificate source carries MPL2's exhibit notice, not
         # the full terms. Reuse Mozilla's complete checked primary text only
         # after that exact release's readable source and notice are present.
@@ -546,7 +546,9 @@ Only explicitly reviewed attribution headers are copied from source code.
     records = manifest.get('files', [])
     paths, downloads = set(), {}
     download_roles = {'complete-alpine-build-recipes', 'upstream-source',
-                      'pinned-provider-build-recipe', 'upstream-lgpl-license'}
+                      'pinned-provider-build-recipe', 'upstream-lgpl-license',
+                      'alpine-signing-key', 'signed-alpine-binary-evidence',
+                      'upstream-detached-signature'}
     for record in records:
         relative = safe_name(record.get('path', ''))
         if relative in paths:
@@ -590,6 +592,15 @@ Only explicitly reviewed attribution headers are copied from source code.
             verified = collect_sources(base_provenance, directory, fetch=fetch, base_inventory=inventory)
             selected_header_roles = set()
             binding_method = 'Pinned original Alpine package build commit, complete recipes and checked source archive; caller verifies native base provenance.'
+        elif origin == 'expat':
+            from alpine_expat_sources import collect_sources
+            if package_spec is None:
+                raise ValueError('Alpine Expat notices require the reviewed package source map')
+            if runtime_inventory is None:
+                runtime_inventory = json.loads(checked_path(source, 'runtime-expat-identity.json').read_bytes())
+            verified = collect_sources(package_spec, architecture, runtime_inventory, directory, fetch=fetch)
+            selected_header_roles = set()
+            binding_method = verified['binding_method']
         elif origin == 'openssl':
             from openssl_distribution_sources import collect_sources
             if package_spec is None or base_provenance is None:
@@ -601,7 +612,7 @@ Only explicitly reviewed attribution headers are copied from source code.
             selected_header_roles = set()
             binding_method = verified['binding_method']
         else:
-            raise ValueError('Only reviewed timezone, OpenSSL and original Alpine Expat notice imports are supported')
+            raise ValueError('Only reviewed timezone, OpenSSL and Expat notice imports are supported')
         # Coverage wording is descriptive and may improve without changing an
         # input. Every file, checksum, role and source identity must still match.
         ignored = {'coverage'}

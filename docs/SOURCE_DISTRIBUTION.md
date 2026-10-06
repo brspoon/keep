@@ -43,8 +43,9 @@ identifiers are not interchangeable. The image-level source collection contains
 assembly inputs, so package-level sources are collected separately.
 
 The source map covers 18 origins and 29 installed OS packages. The original
-Expat 2.8.4 in an earlier image layer is covered separately from the upgraded
-2.8.5 package. Keep's exact Python patches and modified zlib 1.3.2 sources are
+DHI Expat 2.8.5 in an earlier image layer retains its exact APK hashes,
+native-base material binding and signed package sources separately from the
+installed Alpine 2.9.0 packages. Keep's exact Python patches and modified zlib 1.3.2 sources are
 also included. The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
 against their embedded libffi 3.4.6 source and wheel build recipe; this is
@@ -56,7 +57,7 @@ matched to its complete source distribution and C/build inputs. Their full
 notices and vendored attribution accompany these materials.
 
 Docker's timezone package tag is reused across IANA releases. If it no longer
-matches the recorded 2026c APK, a narrowly scoped fallback obtains IANA 2026c,
+matches the recorded 2026d APK, a narrowly scoped fallback obtains IANA 2026d,
 the pinned provider and Alpine recipes, all checksum-verified source inputs and
 patches, and their notices. The report explicitly records that no historical
 provider OCI binding was established. It does not substitute this fallback for
@@ -68,13 +69,24 @@ source manifest keeps the original GNU URL and records that the verified notice
 was acquired from the repository; missing, changed or oversized notice files
 still block collection.
 
-The reviewed OpenSSL 3.5.8-r1 package repository returns no published image or
-package attestation. A separate narrow reconstruction checks the actual APK
+If the reviewed OpenSSL 3.5.9-r0 package repository has no retrievable image or
+package attestation, a separate narrow reconstruction checks the actual APK
 identities against the signed pinned base provenance and runtime inventory,
 then retains the matching pinned public provider/Alpine recipes, every patch,
 and checksum-verified OpenSSL source. Its report explicitly records the absence
 of a signed package build or source-image binding. This method does not rescue
 a signature failure or an unrelated missing package.
+
+The Expat replacement uses Alpine's signed `2.9.0-r0` APKs, independently
+pinned for amd64 and arm64. The installer checks each APK and official key hash,
+its RSA signature, signed metadata and payload hash, exact library bytes and
+SONAME alias. It installs only these files with networking disabled and the
+pinned public keys; the temporary APKs, keys and installation tools are mounted
+without entering a final image layer. Source collection retains the original
+APKs and key, complete immutable aports context, checksum-matching upstream
+source and full MIT notice. It records Alpine package verification without a
+Docker package-build or source-image attestation claim. The upstream detached
+signature is retained without claiming separate OpenPGP verification.
 
 ## Contents and verification
 
@@ -171,7 +183,7 @@ not establish final index publication or successful source asset delivery.
 | `keep-ci` | Image wrapper. Keep's own source is MIT; component licenses still apply. |
 | DHI `python` | Base-image wrapper, not an additional unlicensed Python distribution. The installed CPython records identify PSF-2.0 and Keep bundles the complete Python license. This does not cover all libraries in that base. |
 | `jinja2` 3.1.6 | BSD-3-Clause, verified against its retained wheel notice and the [upstream release license](https://github.com/pallets/jinja/blob/3.1.6/LICENSE.txt). |
-| `tzdata` 2026c-r0 | Installed package declares Public-Domain. [IANA's versioned license](https://data.iana.org/time-zones/tzdb-2026c/LICENSE) places the data in the public domain and names BSD exceptions for three code files; those exceptions must be considered if code is redistributed. |
+| `tzdata` 2026d-r0 | Installed package declares Public-Domain. [IANA's versioned license](https://data.iana.org/time-zones/tzdb-2026d/LICENSE) places the data in the public domain and names BSD exceptions for three code files; those exceptions must be considered if code is redistributed. |
 
 The scanner's broad origin license expressions sometimes use `OR` where the
 installed APK metadata uses `AND`, notably CA certificates, GCC and xz. Do not

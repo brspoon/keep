@@ -35,13 +35,16 @@ reviewed synthetic examples remain visible in its evidence. See
 requirements. Layer heuristics do not certify arbitrary
 secrets absent. Build-generated dependency bytecode is omitted; runtime source
 and notices remain, with bytecode writes already disabled by the runtime environment.
-The pinned Python base's Expat 2.8.4 package is affected by
-CVE-2026-93990. The image upgrades Expat and libexpat to Alpine's signed
-2.8.5-r0 packages during the build. BuildKit mounts the temporary package manager
-and its library read-only; neither tool is copied into any final image layer.
-The Python base's exact signed provenance check remains in place. The
-unsuppressed Scout and Grype scans still block any new finding; no Expat
-exception was added.
+The reviewed newer DHI base supplies OpenSSL `3.5.9-r0`. The image upgrades
+its Expat `2.8.5-r0` packages to Alpine's signed `2.9.0-r0` APKs with exact hashes
+for both architectures. Installation checks the pinned public keys and package
+signatures without networking or repository updates. BuildKit mounts the APKs,
+keys and package manager read-only; those inputs do not enter a final image layer.
+A separate native dependency report verifies ordinary `pyexpat` and `ssl` imports,
+functional XML/TLS checks and the mapped libraries' canonical paths, file
+identities and hashes. Expat's loaded bytes must match its signed APK. This
+report is retained with the original evidence and rechecked during promotion.
+No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
 evidence, verify the actual runtime package identities, and package versioned
 source/notice archives with SHA-256 manifests before transferring an image.
@@ -177,30 +180,30 @@ the pinned Docker key and index.
 Both native inventories contain Python `3.14.7-r2`, OpenSSL `3.5.9-r0` and
 Expat `2.8.5-r0`. The authenticated package installation failed on both
 architectures: the configured vendor repositories offer `expat` and `libexpat`
-at `2.8.5-r0`, which cannot satisfy the exact `2.9.0-r0` requirement. Earlier
-anonymous DHI requests returned HTTP 403, and the examined official Alpine
-`2.9.0-r0` package URLs returned HTTP 404. No verified replacement package is
-available through either examined route.
+at `2.8.5-r0`, which cannot satisfy the exact `2.9.0-r0` requirement. Alpine subsequently published signed `2.9.0-r0` packages for both architectures
+in its edge repository. The replacement recipe pins those four APK hashes and
+trust keys, retaining their complete matching source/build/license inputs.
+Package verification also checks all XML symbols required by the reviewed
+Python extensions; native installation and ordinary library loading remain
+mandatory. The newer base's Python, OpenSSL, CA certificate, timezone and xz
+source records are updated together. The original DHI Expat layer retains its
+own signed package-source coverage.
 
-A replacement release needs verified Expat `2.9.0` packages on both
-architectures, complete final-image scans and runtime checks, and matching
-source/license materials. The newer base also changes CA certificates, timezone
-data and xz; update their source records together with Python and OpenSSL.
-Retain the cleanup and zlib defenses until replacement fixes are proven.
-Any needed Python `3.14.7-r2` exception requires explicit review of that new
-package tuple. Building an Expat replacement from verified upstream sources
-requires a truthful package version and corresponding build/source evidence;
-replacing library bytes while retaining the old package metadata does not remove
-the scanner findings or qualify an additional exception.
+Python `3.14.8` alone does not replace every reviewed fix: the inspected upstream
+release and DHI package still lack the temporary-directory cleanup correction.
+The DHI package additionally carries a tar-link correction absent from the
+upstream release. Retain cleanup, permission-reset and zlib defenses until
+verified replacements supply them. Existing Python `3.14.7-r1` approvals do not
+cover findings for `3.14.7-r2`; those findings remain blocked pending explicit
+review. No exception deadline or finding scope has changed.
 
-**Review vendor runtime candidate** is a manual, main-only workflow that checks
-the exact documented candidate index, Docker signatures, both native image
-subjects and source statements, then tries the signed Expat `2.9.0-r0` packages
-on native amd64 and arm64. It retains original vendor evidence and inventories
-using the existing scoped registry credential in temporary configuration.
-Its result is an assessment, not release approval. A replacement must still
-pass complete Keep validation and matching-source/license checks. No exception
-deadline or finding scope has changed.
+**Review vendor runtime candidate** retains its read-only main vendor assessment.
+Its optional `qualification` input also builds and tests both native Keep images
+on a maintainer branch, obtains checked sources and prepares small notice records
+for review. This mode neither publishes nor retains images for promotion.
+Security findings still fail the job; independent source preparation can finish
+so matching notices can be committed and checked in a rebuilt candidate. Only
+successful complete current-main validation can supply promotion images.
 
 ## Replacing patched dependencies
 
