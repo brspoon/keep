@@ -195,7 +195,7 @@ The DHI package additionally carries a tar-link correction absent from the
 upstream release. Retain cleanup, permission-reset and zlib defenses until
 verified replacements supply them. Existing Python `3.14.7-r1` approvals do not
 cover findings for `3.14.7-r2`; those findings remain blocked pending explicit
-review. No exception deadline or finding scope has changed.
+review. The remaining approval scopes and deadlines are unchanged.
 
 **Review vendor runtime candidate** retains its read-only main vendor assessment.
 Its optional `qualification` input also builds and tests both native Keep images
@@ -223,9 +223,15 @@ Source acquisition in
 for all 18 installed OS origins on both architectures. Notice preparation then
 exceeded a metadata size limit on the complete GCC inventory. The preparation
 helper now uses a separate bounded inventory reader while preserving exact input
-bytes. Final qualification still requires a complete native notice union,
-rebuilt runtime notices and verified source archives. These partial results do
-not authorize promotion or renew the remaining October 7 approvals.
+bytes. The subsequent native run
+[37504275731](https://github.com/brspoon/keep/actions/runs/37504275731) completed
+source acquisition and notice preparation on both architectures, with all nine
+security probes passing. Its retained notice inputs reproduce the committed
+124-text union after explicit copyright-header selection and the checked POSIXtz
+license supplement. A fresh rebuild must verify the installed notice manifest,
+complete source attribution and every source-archive member. These engineering
+checks do not authorize promotion or renew the remaining October 7 approvals;
+the seven Python findings still require approval for the replacement revision.
 
 ## Replacing patched dependencies
 

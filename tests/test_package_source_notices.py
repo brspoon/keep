@@ -1,6 +1,8 @@
+import copy
 import hashlib
 import io
 import json
+import lzma
 from pathlib import Path
 import sys
 import tarfile
@@ -12,10 +14,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from package_source_notices import inspect_package_materials, merge_notice_bundles
 from package_source_notices import GPL2_SHA256, MPL2_SHA256, import_public_notices, leading_notice
 from package_source_notices import inspect_build_provenance_sources
+import package_source_notices as notices
 
 
 SOURCE_DIGEST = 'sha256:' + 'a' * 64
 LICENSE = b'Full copyright and permission notice\nPermission is hereby granted to use this software.\n'
+POSIXTZ_HEADER = (b'/* ripped from uclibc \n*\n'
+    b'* Copyright (C) 2010 Denys Vlasenko <vda.linux@googlemail.com>\n'
+    b'* Copyright (C) 2011 Natanael Copa <ncopa@alpinelinux.org>\n*\n'
+    b'* GNU Library General Public License (LGPL) version 2 or later.\n*\n*/')
 
 
 def archive(files, compressed=True):
@@ -460,6 +467,177 @@ class PackageNoticeTests(unittest.TestCase):
     def test_ca_mpl_supplement_cannot_apply_to_another_source_archive(self):
         report = self.ca_certificates(matching_source=False)
         self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
+
+
+class PosixTimezoneLicenseTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.license = (notices.ROOT / notices.LGPL2_PATH).read_bytes()
+        self.proof = {'schema': 1, 'origin': 'tzdata', 'version': '2026d-r0',
+            'architecture': 'amd64', 'provider_oci_binding': True,
+            'binding_method': 'signed-build-provenance', 'source_image_digest': None,
+            'native_image_digest': SOURCE_DIGEST, 'source_manifest_sha256': 'b' * 64,
+            'signed_statement_sha256': {'slsa': 'c' * 64, 'scout': 'd' * 64},
+            'proof_architecture': 'amd64', 'for_packages': ['tzdata']}
+        self.report = {**copy.deepcopy(self.proof), 'success': True,
+            'retained_files': [{'path': notices.POSIXTZ_ARCHIVE_PATH,
+                'source_path': notices.POSIXTZ_ARCHIVE_PATH,
+                'sha256': notices.POSIXTZ_ARCHIVE_SHA256, 'bytes': notices.POSIXTZ_ARCHIVE_BYTES}],
+            'readable_source_files': [{'path': notices.POSIXTZ_SOURCE_PATH, 'bytes': 1575}],
+            'notices': [{'path': notices.POSIXTZ_NOTICE_PATH,
+                'notice_file': 'notices/' + notices.POSIXTZ_NOTICE_SHA256 + '.txt',
+                'sha256': notices.POSIXTZ_NOTICE_SHA256, 'bytes': notices.POSIXTZ_NOTICE_BYTES,
+                'encoding': 'utf-8', 'discovery': 'complete-leading-legal-comment',
+                'provenance': copy.deepcopy(self.proof)}],
+            'standalone_notice_count': 0, 'reviewable_comment_count': 1,
+            'requires_runtime_comment_selection': True}
+
+    def supplement(self, report=None, **kwargs):
+        return notices.supplement_posixtz_license(report if report is not None else self.report,
+            license_bytes=kwargs.get('license_bytes', self.license),
+            header_bytes=kwargs.get('header_bytes', POSIXTZ_HEADER))
+
+    def test_exact_checked_full_license_is_derived_without_changing_original_proofs(self):
+        original = copy.deepcopy(self.report)
+        result = self.supplement()
+        self.assertEqual(self.report, original)
+        self.assertEqual(result['notices'][0], original['notices'][0])
+        for key in self.proof:
+            self.assertEqual(result[key], original[key])
+        self.assertEqual(result['retained_files'], original['retained_files'])
+        self.assertEqual(result['readable_source_files'], original['readable_source_files'])
+        supplemental = result['notices'][-1]
+        self.assertEqual(supplemental['license_source_url'], notices.LGPL2_SOURCE_URL)
+        self.assertEqual(supplemental['recipe_license_evidence'], [{
+            'path': notices.POSIXTZ_NOTICE_PATH, 'sha256': notices.POSIXTZ_NOTICE_SHA256,
+            'bytes': notices.POSIXTZ_NOTICE_BYTES}])
+        self.assertEqual(supplemental['provenance'], {
+            **self.proof, 'license_text_provider_signature_verified': False})
+        self.assertEqual(result['standalone_notice_count'], 1)
+        self.assertEqual(result['reviewable_comment_count'], 1)
+        self.assertFalse(result['requires_runtime_comment_selection'])
+        self.assertEqual(self.supplement(result), result)
+
+    def test_public_license_provenance_survives_runtime_notice_merge(self):
+        result = self.supplement()
+        directory = self.root / 'derived'
+        (directory / 'notices').mkdir(parents=True)
+        for row, body in zip(result['notices'], (POSIXTZ_HEADER, self.license)):
+            (directory / row['notice_file']).write_bytes(body)
+        (directory / 'package-material-inventory.json').write_text(json.dumps(result))
+        merged = merge_notice_bundles([directory], self.root / 'runtime')
+        self.assertTrue(merged['ready_for_runtime_distribution'])
+        self.assertEqual(len(merged['notices']), 1)
+        provenance = merged['notices'][0]['provenance'][0]
+        self.assertFalse(provenance['license_text_provider_signature_verified'])
+        self.assertEqual(provenance['license_source_url'], notices.LGPL2_SOURCE_URL)
+        self.assertEqual(provenance['source_manifest_sha256'], self.proof['source_manifest_sha256'])
+        self.assertEqual(provenance['signed_statement_sha256'], self.proof['signed_statement_sha256'])
+
+    def test_other_package_version_or_incomplete_unsigned_inventory_is_rejected(self):
+        for field, value in [('origin', 'other'), ('version', '2026c-r0'),
+                             ('architecture', 'unknown'), ('success', False),
+                             ('provider_oci_binding', False), ('binding_method', 'unsigned-source')]:
+            report = copy.deepcopy(self.report)
+            report[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'reviewed signed tzdata 2026d'):
+                self.supplement(report)
+
+    def test_missing_duplicate_or_changed_source_archive_is_rejected(self):
+        for mutation in ('missing', 'duplicate', 'path', 'source_path', 'hash', 'size'):
+            report = copy.deepcopy(self.report)
+            if mutation == 'missing':
+                report['retained_files'] = []
+            elif mutation == 'duplicate':
+                report['retained_files'] *= 2
+            elif mutation == 'hash':
+                report['retained_files'][0]['sha256'] = 'f' * 64
+            elif mutation == 'size':
+                report['retained_files'][0]['bytes'] += 1
+            else:
+                report['retained_files'][0][mutation] = 'sources/another.tar.xz'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'exact retained source archive'):
+                self.supplement(report)
+
+    def test_missing_or_changed_readable_preferred_source_is_rejected(self):
+        for mutation in ('missing', 'duplicate', 'path'):
+            report = copy.deepcopy(self.report)
+            if mutation == 'missing':
+                report['readable_source_files'] = []
+            elif mutation == 'duplicate':
+                report['readable_source_files'] *= 2
+            else:
+                report['readable_source_files'][0]['path'] = 'sources/other/source.c'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'exact readable preferred source'):
+                self.supplement(report)
+
+    def test_full_header_record_and_actual_bytes_are_mandatory(self):
+        for mutation in ('missing', 'duplicate', 'hash', 'size', 'discovery', 'encoding', 'notice_file'):
+            report = copy.deepcopy(self.report)
+            if mutation == 'missing':
+                report['notices'] = []
+            elif mutation == 'duplicate':
+                report['notices'] *= 2
+            else:
+                field, value = {
+                    'hash': ('sha256', 'f' * 64), 'size': ('bytes', 216),
+                    'discovery': ('discovery', 'notice-file'), 'encoding': ('encoding', 'latin-1'),
+                    'notice_file': ('notice_file', '../unreviewed.txt')}[mutation]
+                report['notices'][0][field] = value
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'complete checked LGPL source header'):
+                self.supplement(report)
+        for body in (None, POSIXTZ_HEADER[:-1], b'x' + POSIXTZ_HEADER[1:]):
+            with self.subTest(body_type=type(body).__name__), self.assertRaisesRegex(ValueError, 'complete checked LGPL source header'):
+                self.supplement(header_bytes=body)
+
+    def test_header_cannot_change_original_source_or_signed_proof_identity(self):
+        for field, value in [('version', '2026c-r0'), ('architecture', 'arm64'),
+                             ('source_manifest_sha256', 'f' * 64), ('native_image_digest', 'sha256:' + 'f' * 64),
+                             ('signed_statement_sha256', {'slsa': 'f' * 64, 'scout': 'd' * 64}),
+                             ('proof_architecture', 'arm64'), ('for_packages', ['other'])]:
+            report = copy.deepcopy(self.report)
+            report['notices'][0]['provenance'][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'original signed source provenance'):
+                self.supplement(report)
+
+    def test_missing_truncated_or_changed_full_license_is_rejected(self):
+        for body in (None, self.license[:-1], b'x' + self.license[1:]):
+            with self.subTest(body_type=type(body).__name__), self.assertRaisesRegex(ValueError, 'full LGPL license checksum or size'):
+                self.supplement(license_bytes=body)
+
+    def test_existing_license_supplement_cannot_have_a_different_derivation(self):
+        report = self.supplement()
+        report['notices'][-1]['provenance']['license_text_provider_signature_verified'] = True
+        with self.assertRaisesRegex(ValueError, 'supplement differs from the checked derivation'):
+            self.supplement(report)
+
+    def test_fresh_signed_source_collection_uses_the_same_checked_supplement(self):
+        source = lzma.compress(archive({'posixtz-0.5/posixtz.c': POSIXTZ_HEADER + b'\nint source;\n',
+                                       'posixtz-0.5/Makefile': b'all: posixtz.c\n'}, compressed=False))
+        directory = self.root / 'preferred'
+        (directory / 'sources').mkdir(parents=True)
+        (directory / notices.POSIXTZ_ARCHIVE_PATH).write_bytes(source)
+        record = {'path': notices.POSIXTZ_ARCHIVE_PATH, 'source_path': notices.POSIXTZ_ARCHIVE_PATH,
+                  'sha256': hashlib.sha256(source).hexdigest(), 'bytes': len(source), 'role': 'signed-upstream-source'}
+        manifest = {key: value for key, value in self.proof.items()
+                    if key not in ('source_manifest_sha256', 'proof_architecture', 'for_packages')}
+        manifest['files'] = [record]
+        body = json.dumps(manifest).encode()
+        (directory / 'manifest.json').write_bytes(body)
+        output = self.root / 'fresh-notices'
+        with patch.multiple(notices, POSIXTZ_ARCHIVE_SHA256=record['sha256'], POSIXTZ_ARCHIVE_BYTES=record['bytes']), \
+                patch.object(notices, 'supplement_posixtz_license', wraps=notices.supplement_posixtz_license) as helper:
+            report = inspect_build_provenance_sources(directory, output, origin='tzdata', version='2026d-r0',
+                architecture='amd64', native_image_digest=SOURCE_DIGEST,
+                source_manifest_sha256=hashlib.sha256(body).hexdigest())
+        helper.assert_called_once()
+        self.assertTrue(report['success'])
+        supplemental = next(row for row in report['notices'] if row['sha256'] == notices.LGPL2_SHA256)
+        self.assertEqual((output / supplemental['notice_file']).read_bytes(), self.license)
+        self.assertFalse(supplemental['provenance']['license_text_provider_signature_verified'])
+        self.assertEqual(report['source_manifest_sha256'], hashlib.sha256(body).hexdigest())
 
 
 if __name__ == '__main__':

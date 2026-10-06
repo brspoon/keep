@@ -170,6 +170,8 @@ jobs:
             notice-preparation/NOTICE-PREPARATION.json
             distribution/source-bundle-${{ matrix.arch }}.json
             candidate-*${{ matrix.arch }}.json
+            portable-recovery-${{ matrix.arch }}.json
+            installer-trial-${{ matrix.arch }}.json
           if-no-files-found: warn
           retention-days: 7
       - name: Retain exact tested image, sources and original evidence

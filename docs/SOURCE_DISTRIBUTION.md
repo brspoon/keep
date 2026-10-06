@@ -70,9 +70,12 @@ a missing signature or mismatched binary of another package.
 The complete GNU LGPL 2.0 notice for the retained POSIXtz build source is read
 from its committed `docs/licenses/os` file and checked against the same reviewed
 SHA-256 before collection. This avoids a repeated GNU website download. The
-source manifest keeps the original GNU URL and records that the verified notice
+notice evidence keeps the original GNU URL and records that the verified notice
 was acquired from the repository; missing, changed or oversized notice files
-still block collection.
+still block collection. Signed package sources retain the same complete terms
+only after the exact POSIXtz archive and its LGPL header have been verified.
+Their original package signatures and source identities remain in the notice
+provenance.
 
 If the reviewed OpenSSL 3.5.9-r0 package repository has no retrievable image or
 package attestation, a separate narrow reconstruction checks the actual APK
@@ -123,7 +126,7 @@ needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
 container. The prepared runtime union contains 124 complete notice texts
 (814,844 bytes), covering all 20 current and earlier-layer origins on both
-architectures, including 20 explicitly reviewed source copyright headers.
+architectures, including 24 explicitly reviewed source copyright headers.
 The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated
 notice's complete native source attribution against the committed provenance.

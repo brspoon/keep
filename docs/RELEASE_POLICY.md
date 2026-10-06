@@ -87,7 +87,8 @@ promotion image. Failed security review still fails qualification, while checked
 source preparation can produce reviewable notice records. Commit the verified
 notice union, rebuild, and complete normal main validation before publication.
 The seven-day qualification artifact retains original scanner and runtime
-reports, plus checked notice inputs including source headers awaiting selection.
+reports, installation and recovery proofs, plus checked notice inputs including
+source headers awaiting selection.
 It contains no image or source archives and cannot authorize promotion.
 After committing the checked notice union, disable `prepare_notices` for a
 second qualification run. This rebuilds both images and verifies every source

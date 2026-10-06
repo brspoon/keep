@@ -8,7 +8,8 @@ the dependency notices or the matching source bundle.
 provenance inventory that maps each retained notice to its package and source
 path, including original Expat and bundled pip/wheel notices from earlier layers.
 The inventory explicitly records reviewed source copyright headers, including
-CA certificates, SQLite, GCC runtime libraries, libuuid and musl subcomponents.
+CA certificates, SQLite, GCC runtime libraries, libuuid and musl subcomponents,
+plus IANA's BSD exceptions and the POSIXtz build source's LGPL attribution.
 Standalone upstream license texts remain complete. The native image copies this
 directory to `/app/licenses/os`. See
 [source distribution](../SOURCE_DISTRIBUTION.md) for the versioned source,
