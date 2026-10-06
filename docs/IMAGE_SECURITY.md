@@ -82,7 +82,7 @@ candidate.
 
 Each exception records its reviewed scope and evidence in
 docs/image-exceptions.json, with `review.approval`, `review.deadline` and
-`review.remove_when` describing the inherited approval, deadline and removal
+`review.remove_when` describing the current approval, deadline and removal
 condition. Approval remains limited to the exact
 finding ID, severity, package type, package name and installed version, with the
 reviewed source hashes, pinned base provenance and all required runtime probes.
@@ -111,10 +111,12 @@ daily and on manual dispatch with read-only repository access, no dependency
 installation, registry credentials, image build or publication. These notices
 allow reviews to begin ahead of a deadline without blocking a clean candidate.
 
-The existing approvals still end on October 7, 2026. Correcting deadline handling
-does not make a candidate that needs those exceptions eligible on October 8.
-Such a candidate needs proven dependency replacements or a new explicit security
-review before release.
+The October 6 review covers seven Python `3.14.7-r2` findings and the patched
+zlib `1.3.2-r0` finding through October 20, 2026 UTC, inclusive. Each entry records
+its review date. Earlier `3.14.7-r1` approvals do not carry forward to other package
+versions. A finding that still needs one of these exceptions on October 21 blocks
+validation and promotion; it requires a proven replacement or a new explicit
+security review. Correcting deadline handling alone never renews an approval.
 
 ## zlib delivery correction
 
@@ -142,9 +144,10 @@ amd64 and arm64 builds, signed provenance, all nine runtime checks with the
 strengthened zlib probe, Scout and Grype scans, matching-source and license
 evidence, and installation and recovery checks before release.
 
-Release remains blocked pending that evidence and an explicit review of the
-corrected source hashes and any needed exceptions. No exception deadline has
-been extended; the existing October 7, 2026 deadlines remain in force.
+At that stage, release remained blocked pending complete native evidence and an
+explicit review of the corrected source hashes and any needed exceptions. The
+October 6 review below records the completed replacement evidence and renewed
+exact scopes; successful current-main validation remains required before release.
 The runtime correction requires a new release version; the previously published
 image cannot be replaced under its immutable version tag.
 
@@ -193,9 +196,9 @@ Python `3.14.8` alone does not replace every reviewed fix: the inspected upstrea
 release and DHI package still lack the temporary-directory cleanup correction.
 The DHI package additionally carries a tar-link correction absent from the
 upstream release. Retain cleanup, permission-reset and zlib defenses until
-verified replacements supply them. Existing Python `3.14.7-r1` approvals do not
-cover findings for `3.14.7-r2`; those findings remain blocked pending explicit
-review. The remaining approval scopes and deadlines are unchanged.
+verified replacements supply them. Existing Python `3.14.7-r1` approvals did not
+cover findings for `3.14.7-r2`. The completed review below approves only the seven
+exact replacement tuples and the existing patched zlib tuple through October 20.
 
 **Review vendor runtime candidate** retains its read-only main vendor assessment.
 Its optional `qualification` input also builds and tests both native Keep images
@@ -215,8 +218,8 @@ The replacement images in native qualification
 nine security probes and verified normal loading of Expat `2.9.0` and OpenSSL
 `3.5.9` on both architectures. Scout reported zero findings; Grype reported the
 seven Python findings at `3.14.7-r2` and the patched zlib finding. No OpenSSL or
-Expat exception is needed. The Python findings block because the existing
-approvals cover `3.14.7-r1`, not the replacement revision.
+Expat exception is needed. At that time, the Python findings blocked because the
+approvals covered `3.14.7-r1`, not the replacement revision.
 
 Source acquisition in
 [37501921315](https://github.com/brspoon/keep/actions/runs/37501921315) completed
@@ -228,10 +231,22 @@ bytes. The subsequent native run
 source acquisition and notice preparation on both architectures, with all nine
 security probes passing. Its retained notice inputs reproduce the committed
 124-text union after explicit copyright-header selection and the checked POSIXtz
-license supplement. A fresh rebuild must verify the installed notice manifest,
-complete source attribution and every source-archive member. These engineering
-checks do not authorize promotion or renew the remaining October 7 approvals;
-the seven Python findings still require approval for the replacement revision.
+license supplement. Native qualification
+[37508957671](https://github.com/brspoon/keep/actions/runs/37508957671) then verified
+the rebuilt installed notice manifest, all 124 complete notice texts, all 458
+source attributions and every member of both source archives. Both architectures
+passed all nine security probes, ordinary dependency loading, installation and
+recovery checks. Grype reported the same eight findings and Scout reported none;
+both jobs failed only the finding gate under the earlier r1 approvals.
+
+The October 6 verified-fixed review now covers only those seven exact Python
+`3.14.7-r2` findings and patched zlib `1.3.2-r0`, through October 20 UTC. Six Python
+fixes are present in the verified base sources; Keep still supplies the cleanup
+correction, permission guard and corrected zlib library. No unfixed finding,
+additional finding ID or broader package/severity match is accepted. The original
+qualification reports remain unchanged. New current-main validation must pass
+every gate before its retained images and sources can be selected for separately
+approved publication.
 
 ## Replacing patched dependencies
 
@@ -295,9 +310,9 @@ Scout/Grype scans and the nine runtime probes could not be run in this assessmen
 No patch or exception was removed. A base change still requires coordinated
 updates to `Dockerfile`, `inspect_candidate.py`, base/package source locks,
 source hashes and original Expat-layer materials, followed by new native evidence.
-The new Python package version cannot use the old version's exception approval.
-If final scans still need any October 7 exception afterward, a new explicit
-security review remains required.
+At that assessment stage, the new Python package version could not use the old
+version's exception approval. Findings needing an original October 7 exception
+afterward required the new explicit review recorded above.
 
 ### Upstream and alternative-base blockers
 
@@ -371,9 +386,10 @@ notices together. Remove a patch or exception only after its replacement passes
 source inspection, all required native probes and complete unsuppressed scans on
 both architectures. Retain Keep's cleanup guard until equivalent behavior is
 proven. Dependency-update proposals must pass the same coordinated review.
-The October 6 qualification above records the verified replacement libraries and
-the individual exception removal. Remaining Python and zlib findings still need
-their reviewed fixes and exact candidate approval.
+The October 6 qualification and review above record the verified replacement
+libraries, individual exception removal and eight renewed exact scopes. Remaining
+Python and zlib findings still require their reviewed fixes, complete native
+evidence and a valid per-entry deadline.
 
 ## Directory cleanup
 

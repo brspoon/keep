@@ -18,10 +18,21 @@ from inspect_candidate import DIRECT
 from tests.native_dependency_fixture import dependency_report
 
 
+PYTHON_FINDINGS = {
+    'CVE-2026-87910': 'Medium',
+    'CVE-2026-17084': 'Medium',
+    'CVE-2026-19672': 'Medium',
+    'CVE-2026-15806': 'Medium',
+    'CVE-2025-15367': 'Medium',
+    'CVE-2026-15310': 'Low',
+    'CVE-2026-12345': 'Medium',
+}
+
+
 class ImageReviewTests(unittest.TestCase):
     def setUp(self):
         self.policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
-        self.report = {'matches': [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'}, 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]}
+        self.report = {'matches': [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'}, 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]}
         self.scout = {'runs': [{'results': []}]}
         self.evidence = {'success': True, 'tests': 9, 'failures': 0, 'errors': 0, 'skipped': 0, 'arch': 'amd64', 'patch_manifest_sha256': self.policy['reviewed_sources']['scripts/python_security_patches.json']}
 
@@ -70,9 +81,15 @@ class ImageReviewTests(unittest.TestCase):
         self.report['matches'][0]['vulnerability']['severity'] = 'High'
         self.assertEqual(self.result()['blocked'][0]['reason'], 'exception_mismatch')
 
-    def test_new_vendor_revision_does_not_inherit_an_old_package_approval(self):
-        self.report['matches'][0]['artifact']['version'] = '3.14.7-r2'
-        self.assertEqual(self.result()['blocked'][0]['reason'], 'exception_mismatch')
+    def test_old_or_future_vendor_revision_cannot_use_exact_r2_approvals(self):
+        for finding, severity in PYTHON_FINDINGS.items():
+            for version in ('3.14.7-r1', '3.14.7-r3'):
+                with self.subTest(finding=finding, version=version):
+                    self.report['matches'][0]['vulnerability'] = {'id': finding, 'severity': severity}
+                    self.report['matches'][0]['artifact']['version'] = version
+                    result = self.result(datetime.date(2026, 10, 20))
+                    self.assertFalse(result['accepted_fixed'])
+                    self.assertEqual(result['blocked'][0]['reason'], 'exception_mismatch')
 
     def test_regression_failure_or_wrong_arch_rejected(self):
         for key, value in (('success', False), ('tests', 7), ('failures', 1), ('errors', 1), ('skipped', 1), ('arch', 'arm64'), ('patch_manifest_sha256', 'changed')):
@@ -80,40 +97,72 @@ class ImageReviewTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.result()
             self.evidence[key] = original
 
-    def test_needed_exception_passes_on_deadline_and_blocks_afterward(self):
+    def test_historical_october_seven_deadline_is_inclusive(self):
+        self.policy['exceptions']['CVE-2026-17084']['review']['deadline'] = '2026-10-07'
         self.assertFalse(self.result(datetime.date(2026, 10, 7))['blocked'])
         result = self.result(datetime.date(2026, 10, 8))
         self.assertFalse(result['accepted_fixed'])
         self.assertEqual(result['blocked'][0]['reason'], 'exception_expired')
         self.assertEqual(result['blocked'][0]['deadline'], '2026-10-07')
 
+    def test_all_approved_findings_pass_on_october_twenty_and_block_afterward(self):
+        self.report['matches'] = [{
+            'vulnerability': {'id': finding, 'severity': severity},
+            'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'},
+        } for finding, severity in PYTHON_FINDINGS.items()]
+        self.report['matches'].append({
+            'vulnerability': {'id': 'CVE-2026-85091', 'severity': 'High'},
+            'artifact': {'name': 'zlib', 'type': 'apk', 'version': '1.3.2-r0'},
+        })
+        for arch in DIRECT:
+            evidence = {**self.evidence, 'arch': arch}
+            for day, expired in ((datetime.date(2026, 10, 20), False),
+                                 (datetime.date(2026, 10, 21), True)):
+                with self.subTest(arch=arch, day=day):
+                    result = assess(self.report, self.scout, evidence, self.policy, arch, day)
+                    self.assertEqual(len(result['accepted_fixed']), 0 if expired else 8)
+                    self.assertEqual(len(result['blocked']), 8 if expired else 0)
+                    for entry in result['blocked']:
+                        self.assertEqual(entry['reason'], 'exception_expired')
+                        self.assertEqual(entry['deadline'], '2026-10-20')
+
     def test_clean_scan_passes_after_deadline_with_unused_expired_exceptions(self):
         self.report['matches'] = []
-        for day in (datetime.date(2026, 10, 8), datetime.date(2099, 1, 1)):
+        for day in (datetime.date(2026, 10, 8), datetime.date(2026, 10, 21),
+                    datetime.date(2099, 1, 1)):
             with self.subTest(day=day):
                 self.assertFalse(self.result(day)['blocked'])
 
     def test_clean_scan_passes_after_deadline_with_no_exceptions(self):
         self.policy['exceptions'] = {}
         self.report['matches'] = []
-        self.assertFalse(self.result(datetime.date(2026, 10, 8))['blocked'])
+        for day in (datetime.date(2026, 10, 8), datetime.date(2026, 10, 21)):
+            with self.subTest(day=day):
+                self.assertFalse(self.result(day)['blocked'])
 
     def test_expired_unused_exception_does_not_block_a_needed_current_exception(self):
         self.policy['exceptions']['CVE-2026-85091']['review']['deadline'] = '2026-09-01'
-        self.assertFalse(self.result(datetime.date(2026, 10, 7))['blocked'])
+        self.assertFalse(self.result(datetime.date(2026, 10, 20))['blocked'])
 
     def test_each_exception_uses_its_own_deadline(self):
         self.policy['exceptions']['CVE-2026-17084']['review']['deadline'] = '2026-09-07'
         self.assertFalse(self.result()['blocked'])
         self.assertEqual(self.result(datetime.date(2026, 9, 8))['blocked'][0]['reason'], 'exception_expired')
 
-    def test_original_approval_limits_and_deadlines_are_preserved(self):
+    def test_approved_scope_and_review_dates_are_exact(self):
         self.assertNotIn('expires', self.policy)
-        self.assertEqual(len(self.policy['exceptions']), 8)
+        expected = {finding: (severity, 'apk', 'python-3.14', '3.14.7-r2')
+                    for finding, severity in PYTHON_FINDINGS.items()}
+        expected['CVE-2026-85091'] = ('High', 'apk', 'zlib', '1.3.2-r0')
+        self.assertEqual({finding: tuple(rule[field] for field in
+                                        ('severity', 'type', 'package', 'version'))
+                          for finding, rule in self.policy['exceptions'].items()}, expected)
         for rule in self.policy['exceptions'].values():
             self.assertEqual(rule['status'], 'fixed')
-            self.assertEqual(rule['review']['deadline'], '2026-10-07')
-            self.assertIn('No additional risk acceptance or deadline extension', rule['review']['approval'])
+            self.assertEqual(rule['review']['reviewed_on'], '2026-10-06')
+            self.assertEqual(rule['review']['deadline'], '2026-10-20')
+            self.assertTrue(rule['review']['approval'].strip())
+            self.assertTrue(rule['review']['remove_when'].strip())
 
     def test_missing_or_invalid_review_metadata_is_rejected(self):
         original = copy.deepcopy(self.policy)
@@ -168,10 +217,10 @@ class ImageReviewTests(unittest.TestCase):
 
     def test_deadline_warnings_start_fourteen_days_ahead_and_include_expired(self):
         original = copy.deepcopy(self.policy)
-        self.assertFalse(deadline_warnings(self.policy, datetime.date(2026, 9, 22)))
-        for day, remaining in ((datetime.date(2026, 9, 23), 14),
-                               (datetime.date(2026, 10, 7), 0),
-                               (datetime.date(2026, 10, 8), -1)):
+        self.assertFalse(deadline_warnings(self.policy, datetime.date(2026, 10, 5)))
+        for day, remaining in ((datetime.date(2026, 10, 6), 14),
+                               (datetime.date(2026, 10, 20), 0),
+                               (datetime.date(2026, 10, 21), -1)):
             with self.subTest(day=day):
                 warnings = deadline_warnings(self.policy, day)
                 self.assertEqual(len(warnings), 8)
@@ -179,11 +228,11 @@ class ImageReviewTests(unittest.TestCase):
         self.assertEqual(self.policy, original)
 
     def test_warning_window_can_be_configured_and_empty_policy_is_quiet(self):
-        self.assertFalse(deadline_warnings(self.policy, datetime.date(2026, 10, 5), 1))
-        self.assertEqual(len(deadline_warnings(self.policy, datetime.date(2026, 10, 5), 2)), 8)
+        self.assertFalse(deadline_warnings(self.policy, datetime.date(2026, 10, 18), 1))
+        self.assertEqual(len(deadline_warnings(self.policy, datetime.date(2026, 10, 18), 2)), 8)
         with self.assertRaises(ValueError): deadline_warnings(self.policy, warning_days=-1)
         self.policy['exceptions'] = {}
-        self.assertEqual(deadline_warnings(self.policy, datetime.date(2026, 10, 8)), [])
+        self.assertEqual(deadline_warnings(self.policy, datetime.date(2026, 10, 21)), [])
 
     def test_deadline_check_rejects_malformed_top_level_policy(self):
         for field in ('base', 'approval', 'reviewed_sources', 'exceptions'):
@@ -275,17 +324,24 @@ class CandidateReviewTests(unittest.TestCase):
 
     def test_check_only_preserves_original_bytes_for_pass_and_failure(self):
         for arch in DIRECT:
-            for finding in (None, 'CVE-2026-17084', 'CVE-2099-1234'):
-                with self.subTest(arch=arch, finding=finding):
+            for day, finding, version, status in (
+                (datetime.date(2026, 10, 20), None, '3.14.7-r2', 0),
+                (datetime.date(2026, 10, 20), 'CVE-2026-17084', '3.14.7-r2', 0),
+                (datetime.date(2026, 10, 21), None, '3.14.7-r2', 0),
+                (datetime.date(2026, 10, 21), 'CVE-2026-17084', '3.14.7-r2', 1),
+                (datetime.date(2026, 10, 20), 'CVE-2099-1234', '3.14.7-r2', 1),
+                (datetime.date(2026, 10, 20), 'CVE-2026-17084', '3.14.7-r1', 1),
+            ):
+                with self.subTest(arch=arch, day=day, finding=finding, version=version):
                     matches = [] if finding is None else [{
                         'vulnerability': {'id': finding, 'severity': 'Medium'},
-                        'artifact': {'type': 'apk', 'name': 'python-3.14', 'version': '3.14.7-r1'}}]
+                        'artifact': {'type': 'apk', 'name': 'python-3.14', 'version': version}}]
                     self.write(f'candidate-{arch}.json', {'matches': matches})
                     review = self.root / f'candidate-review-{arch}.json'
                     review.write_bytes(b'{ "original": true }\n\n')
                     files = {p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
-                    with chdir(self.root), patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 8)), redirect_stdout(io.StringIO()):
-                        self.assertEqual(review_image.main([arch, '--check-only']), int(finding is not None))
+                    with chdir(self.root), patch.object(review_image, 'current_day', return_value=day), redirect_stdout(io.StringIO()):
+                        self.assertEqual(review_image.main([arch, '--check-only']), status)
                     self.assertEqual(files, {p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
     def test_check_only_does_not_create_review_evidence(self):
@@ -297,9 +353,9 @@ class CandidateReviewTests(unittest.TestCase):
         original = (self.root / 'docs/image-exceptions.json').read_bytes()
         summary = self.root / 'summary.md'
         output = io.StringIO()
-        with chdir(self.root), patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 8)), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}), redirect_stdout(output):
+        with chdir(self.root), patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 21)), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}), redirect_stdout(output):
             self.assertEqual(review_image.main(['--check-deadlines']), 0)
         self.assertEqual(output.getvalue().count('::warning::'), 8)
-        self.assertIn('review deadline 2026-10-07', summary.read_text())
+        self.assertIn('review deadline 2026-10-20', summary.read_text())
         self.assertIn('Unused exceptions do not block a clean scan', summary.read_text())
         self.assertEqual((self.root / 'docs/image-exceptions.json').read_bytes(), original)
