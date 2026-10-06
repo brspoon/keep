@@ -87,6 +87,19 @@ class ValidationRetentionTests(unittest.TestCase):
                 'build': {'run_id': number, 'run_attempt': 1, 'job_id': job['id'],
                           'job_name': job['name'], 'workflow_id': 40}}
 
+    def make_legacy(self, number):
+        for job in self.jobs[number]:
+            if job['name'].startswith('image / '):
+                job['steps'] = [step for step in job['steps'] if step['name'] != retention.LOADER_STEP]
+                for step in job['steps']:
+                    if step['name'] == retention.CURRENT_ACCEPTANCE_STEP:
+                        step['name'] = retention.LEGACY_ACCEPTANCE_STEP
+        for artifact in self.artifacts[number]:
+            index = self.indexes[artifact['id']]
+            index['assets'] = [row for row in index['assets'] if 'candidate-dependencies-' not in row['path']]
+        self.assets[number + 1000] = [row for row in self.assets[number + 1000]
+                                      if 'candidate-dependencies-' not in row['name']]
+
     def cleanup_run(self):
         return {'id': 900, 'workflow_id': 80, 'path': retention.CLEANUP_WORKFLOW,
                 'event': os.environ['GITHUB_EVENT_NAME'], 'status': 'in_progress',
@@ -185,7 +198,245 @@ class ValidationRetentionTests(unittest.TestCase):
         plan = self.inventory()
         self.assertEqual(plan['protected_release_id'], 1200)
         newest = next(row for row in plan['candidates'] if row['run_id'] == 200)
-        self.assertIn('indexes unavailable', newest['reason'])
+        self.assertIn('current validation unavailable', newest['reason'])
+
+    def test_exact_legacy_contract_authenticates_original_indexes_but_is_not_usable(self):
+        self.make_legacy(100)
+        plan = self.inventory()
+        legacy = next(row for row in plan['candidates'] if row['run_id'] == 100)
+        self.assertFalse(legacy['usable'])
+        self.assertTrue(legacy['successful'])
+        self.assertTrue(next(row for row in plan['candidates'] if row['run_id'] == 200)['usable'])
+        self.assertEqual(plan['protected_release_ids'], [1200])
+        read_ids = {call.args[0]['id'] for call in retention.builds.read_index.call_args_list}
+        self.assertTrue({10000, 10001}.issubset(read_ids))
+        for artifact in self.artifacts[100]:
+            index = self.indexes[artifact['id']]
+            self.assertEqual({row['path'] for row in index['assets']},
+                             retention.expected_paths('2.21.4', index['architecture'], legacy=True))
+            self.assertEqual(len(index['assets']), 18)
+        for artifact in self.artifacts[200]:
+            self.assertEqual(len(self.indexes[artifact['id']]['assets']), 19)
+        self.assertEqual(self.deletes, [])
+
+    def test_only_legacy_candidates_preserve_latest_successful_fallback(self):
+        self.make_legacy(100)
+        self.make_legacy(200)
+        plan = self.inventory()
+        self.assertTrue(all(not row['usable'] for row in plan['candidates']))
+        self.assertEqual(plan['protected_release_ids'], [1200])
+        newest = next(row for row in plan['candidates'] if row['run_id'] == 200)
+        self.assertEqual(newest['action'], 'keep')
+        self.assertIn('current validation unavailable', newest['reason'])
+        self.assertEqual(self.deletes, [])
+
+    def test_all_current_main_legacy_candidates_remain_protected(self):
+        self.main = 'a' * 40
+        self.make_legacy(100)
+        self.add_candidate(300, self.main, 1)
+        self.make_legacy(300)
+        plan = self.inventory()
+        self.assertEqual(plan['protected_release_ids'], [1100, 1200, 1300])
+        for row in plan['candidates']:
+            if row['revision'] == self.main:
+                self.assertEqual(row['action'], 'keep')
+                self.assertEqual(row['reason'], 'current main candidate')
+        self.assertEqual(self.deletes, [])
+
+    def test_legacy_and_current_native_profiles_cannot_be_mixed(self):
+        self.make_legacy(100)
+        current = next(row for row in self.jobs[200] if row['name'].endswith('(arm64)'))
+        legacy = next(row for row in self.jobs[100] if row['name'].endswith('(arm64)'))
+        legacy['steps'] = copy.deepcopy(current['steps'])
+        with self.assertRaisesRegex(ValueError, 'disagree on the validation profile'):
+            self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_arbitrary_missing_gates_are_not_treated_as_legacy(self):
+        saved = copy.deepcopy(self.jobs)
+        for legacy in (False, True):
+            for missing in (retention.LOADER_STEP, retention.CURRENT_ACCEPTANCE_STEP,
+                            'Scan candidate without suppressions', retention.builds.RETAIN_STEP,
+                            retention.builds.INDEX_STEP):
+                self.jobs = copy.deepcopy(saved)
+                if legacy:
+                    self.make_legacy(100)
+                    if missing in (retention.LOADER_STEP, retention.CURRENT_ACCEPTANCE_STEP):
+                        missing = retention.LEGACY_ACCEPTANCE_STEP
+                native = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+                native['steps'] = [step for step in native['steps'] if step['name'] != missing]
+                with self.subTest(legacy=legacy, missing=missing), self.assertRaises(ValueError):
+                    self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_failed_or_skipped_legacy_gates_still_block_planning(self):
+        self.make_legacy(100)
+        saved = copy.deepcopy(self.jobs)
+        for name in (retention.LEGACY_ACCEPTANCE_STEP, 'Scan candidate without suppressions',
+                     retention.builds.RETAIN_STEP, retention.builds.INDEX_STEP):
+            for conclusion in ('failure', 'skipped', None):
+                self.jobs = copy.deepcopy(saved)
+                native = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+                next(step for step in native['steps'] if step['name'] == name)['conclusion'] = conclusion
+                with self.subTest(name=name, conclusion=conclusion), self.assertRaisesRegex(ValueError, 'gate did not succeed'):
+                    self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_malformed_or_duplicate_steps_block_both_native_profiles(self):
+        saved = copy.deepcopy(self.jobs)
+        for legacy in (False, True):
+            for mutation in ('missing', 'mapping', 'non-object', 'missing-name', 'blank-name',
+                             'duplicate', 'mixed-acceptance'):
+                self.jobs = copy.deepcopy(saved)
+                if legacy:
+                    self.make_legacy(100)
+                native = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+                if mutation == 'missing':
+                    del native['steps']
+                elif mutation == 'mapping':
+                    native['steps'] = {}
+                elif mutation == 'non-object':
+                    native['steps'].append(None)
+                elif mutation == 'missing-name':
+                    native['steps'].append({'status': 'completed', 'conclusion': 'success'})
+                elif mutation == 'blank-name':
+                    native['steps'].append({'name': ' \t', 'status': 'completed', 'conclusion': 'success'})
+                elif mutation == 'duplicate':
+                    native['steps'].append(copy.deepcopy(native['steps'][0]))
+                else:
+                    native['steps'].append({'name': retention.CURRENT_ACCEPTANCE_STEP if legacy
+                                            else retention.LEGACY_ACCEPTANCE_STEP,
+                                            'status': 'completed', 'conclusion': 'success'})
+                with self.subTest(legacy=legacy, mutation=mutation), self.assertRaises(ValueError):
+                    self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_shared_job_ids_across_required_names_block_both_profiles(self):
+        saved = copy.deepcopy((self.jobs, self.indexes, self.assets))
+        for legacy in (False, True):
+            for other_name in ('prepare-candidate', retention.builds.job_name('arm64')):
+                self.jobs, self.indexes, self.assets = copy.deepcopy(saved)
+                if legacy:
+                    self.make_legacy(100)
+                native = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+                other = next(row for row in self.jobs[100] if row['name'] == other_name)
+                native['id'] = other['id']
+                # Keep the index internally consistent so only the ambiguous
+                # provider job identities cause this rejection.
+                self.indexes[10000]['build']['job_id'] = other['id']
+                with self.subTest(legacy=legacy, other_name=other_name), self.assertRaisesRegex(
+                        ValueError, 'Duplicate required validation producer job identity'):
+                    self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_older_required_attempt_cannot_reuse_another_producer_job_id(self):
+        saved = copy.deepcopy((self.runs, self.jobs, self.indexes, self.assets))
+        for legacy in (False, True):
+            self.runs, self.jobs, self.indexes, self.assets = copy.deepcopy(saved)
+            if legacy:
+                self.make_legacy(100)
+            self.runs[100]['run_attempt'] = 2
+            prepare = next(row for row in self.jobs[100] if row['name'] == 'prepare-candidate')
+            arm64 = next(row for row in self.jobs[100] if row['name'].endswith('(arm64)'))
+            older = copy.deepcopy(prepare)
+            older['id'] = arm64['id']
+            prepare['run_attempt'] = 2
+            self.jobs[100].append(older)
+            # Selected jobs and both original native indexes still agree; the
+            # ambiguous ID belongs only to an older required-job attempt.
+            with self.subTest(legacy=legacy), self.assertRaisesRegex(
+                    ValueError, 'Duplicate required validation producer job identity'):
+                self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_legacy_jobs_preserve_strict_producer_and_latest_attempt_selection(self):
+        self.make_legacy(100)
+        saved_runs, saved_jobs = copy.deepcopy((self.runs, self.jobs))
+        for mutation in ('foreign-run', 'foreign-sha', 'future-attempt', 'invalid-id',
+                         'duplicate', 'duplicate-latest', 'latest-failed', 'latest-active'):
+            self.runs, self.jobs = copy.deepcopy((saved_runs, saved_jobs))
+            native = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+            if mutation == 'foreign-run':
+                native['run_id'] = 999
+            elif mutation == 'foreign-sha':
+                native['head_sha'] = 'e' * 40
+            elif mutation == 'future-attempt':
+                native['run_attempt'] = 2
+            elif mutation == 'invalid-id':
+                native['id'] = True
+            elif mutation in ('duplicate', 'duplicate-latest'):
+                duplicate = copy.deepcopy(native)
+                if mutation == 'duplicate-latest':
+                    duplicate['id'] += 10000
+                self.jobs[100].append(duplicate)
+            else:
+                self.runs[100]['run_attempt'] = 2
+                newer = copy.deepcopy(native)
+                newer.update(id=1999, run_attempt=2)
+                if mutation == 'latest-failed':
+                    newer['conclusion'] = 'failure'
+                else:
+                    newer.update(status='in_progress', conclusion=None)
+                self.jobs[100].append(newer)
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_index_and_asset_tampering_blocks_both_native_profiles(self):
+        saved = copy.deepcopy((self.jobs, self.indexes, self.assets))
+        for legacy in (False, True):
+            for mutation in ('producer', 'revision', 'hash', 'size', 'missing-record',
+                             'duplicate-record', 'unknown-record', 'missing-api-asset', 'wrong-api-hash'):
+                self.jobs, self.indexes, self.assets = copy.deepcopy(saved)
+                if legacy:
+                    self.make_legacy(100)
+                index = self.indexes[10000]
+                record = index['assets'][0]
+                if mutation == 'producer':
+                    index['build']['job_id'] += 999
+                elif mutation == 'revision':
+                    index['revision'] = 'e' * 40
+                elif mutation == 'hash':
+                    record['sha256'] = '0' * 64
+                elif mutation == 'size':
+                    record['bytes'] += 1
+                elif mutation == 'missing-record':
+                    index['assets'].pop()
+                elif mutation == 'duplicate-record':
+                    index['assets'][-1] = copy.deepcopy(record)
+                elif mutation == 'unknown-record':
+                    record['path'] = 'unknown.json'
+                elif mutation == 'missing-api-asset':
+                    self.assets[1100] = [row for row in self.assets[1100] if row['id'] != record['id']]
+                else:
+                    next(row for row in self.assets[1100] if row['id'] == record['id'])['digest'] = 'sha256:' + '0' * 64
+                with self.subTest(legacy=legacy, mutation=mutation), self.assertRaises(ValueError):
+                    self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_current_profile_cannot_use_the_legacy_evidence_inventory(self):
+        for index in self.indexes.values():
+            if index['build']['run_id'] == 100:
+                index['assets'] = [row for row in index['assets'] if 'candidate-dependencies-' not in row['path']]
+        self.assets[1100] = [row for row in self.assets[1100] if 'candidate-dependencies-' not in row['name']]
+        with self.assertRaisesRegex(ValueError, 'evidence inventory is incomplete'):
+            self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_legacy_profile_rejects_current_or_unindexed_producer_assets(self):
+        original_indexes, original_assets = copy.deepcopy((self.indexes, self.assets))
+        for indexed in (False, True):
+            self.indexes, self.assets = copy.deepcopy((original_indexes, original_assets))
+            self.make_legacy(100)
+            record = next(row for row in original_indexes[10000]['assets']
+                          if row['path'] == 'candidate-dependencies-amd64.json')
+            asset = next(row for row in original_assets[1100] if row['id'] == record['id'])
+            self.assets[1100].append(copy.deepcopy(asset))
+            if indexed:
+                self.indexes[10000]['assets'].append(copy.deepcopy(record))
+            with self.subTest(indexed=indexed), self.assertRaisesRegex(ValueError, 'inventory'):
+                self.inventory()
+        self.assertEqual(self.deletes, [])
 
     def test_provider_failures_and_unknown_metadata_block_planning(self):
         bad_changes = [lambda: self.releases[0].update(author={'login': 'someone', 'type': 'User'}),

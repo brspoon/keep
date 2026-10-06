@@ -146,8 +146,16 @@ and the latest usable successful native build, even
 when a later documentation commit skipped image validation. It leaves storage
 alone while validation or publication is active. Superseded or abandoned failed
 candidates are eligible immediately, without an extra grace period. If no
-usable index remains, it conservatively protects the latest successful candidate
-until replacement validation exists.
+currently usable index remains, it conservatively protects the latest successful
+candidate until replacement validation exists.
+
+Older retained builds used the earlier finding-check name and did not produce
+the separate dependency-loading report. Cleanup recognizes that exact historical
+layout, verifies every original required step and index/asset binding, and treats
+the build as unavailable for current qualification. It still protects current-main
+candidates and the latest successful fallback. Unknown layouts, missing common
+checks, failed gates or changed evidence stop cleanup. Publication always requires
+the current complete validation layout.
 
 Cleanup verifies the primary-repository producer, draft namespace, creator,
 original indexes and exact provider IDs before removing a candidate's temporary

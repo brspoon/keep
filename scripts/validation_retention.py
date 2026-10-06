@@ -24,6 +24,9 @@ VERSION = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z')
 ACTIVE = {'queued', 'in_progress', 'requested', 'pending', 'waiting'}
 CONCLUSIONS = {'success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out',
                'action_required', 'stale', 'startup_failure'}
+LOADER_STEP = 'Verify default Expat and OpenSSL library loading'
+CURRENT_ACCEPTANCE_STEP = 'Accept only reviewed fixed findings and block all others'
+LEGACY_ACCEPTANCE_STEP = 'Accept only the nine verified-fixed findings and block all others'
 
 
 def api(path, *, method='GET'):
@@ -123,11 +126,14 @@ def release_identity(release):
     return match[1], builds.positive(match[2], 'candidate producer run ID')
 
 
-def expected_paths(version, arch):
+def expected_paths(version, arch, *, legacy=False):
     source = f'distribution/keep-{version}-source-materials-{arch}.tar.gz'
-    return {f'keep-tested-{arch}.tar', source, source + '.sha256',
-            *builds.materials.evidence_names(arch), f'portable-recovery-{arch}.json',
-            f'installer-trial-{arch}.json', f'distribution/source-bundle-{arch}.json'}
+    paths = {f'keep-tested-{arch}.tar', source, source + '.sha256',
+             *builds.materials.evidence_names(arch), f'portable-recovery-{arch}.json',
+             f'installer-trial-{arch}.json', f'distribution/source-bundle-{arch}.json'}
+    if legacy:
+        paths.remove(f'candidate-dependencies-{arch}.json')
+    return paths
 
 
 def asset_snapshot(assets, run_id, attempt):
@@ -180,24 +186,83 @@ def artifacts_for(run, repository_id):
     return sorted(result, key=lambda row: row['id'])
 
 
+def latest_producer_job(jobs, run, name):
+    """Select a producer before interpreting its native validation contract."""
+    matches = [job for job in jobs if job.get('name') == name]
+    if not matches:
+        raise ValueError('Missing required main validation job: ' + name)
+    attempts, ids = [], set()
+    for job in matches:
+        attempt = builds.positive(job.get('run_attempt'), 'job attempt')
+        job_id = builds.positive(job.get('id'), 'job ID')
+        if (type(job.get('run_attempt')) is not int or type(job.get('id')) is not int or
+                job.get('run_id') != run['id'] or job.get('head_sha') != run['head_sha'] or
+                attempt > run['run_attempt'] or job_id in ids):
+            raise ValueError('Required job has an ambiguous or different producer identity')
+        ids.add(job_id)
+        attempts.append((attempt, job))
+    latest = max(attempt for attempt, _ in attempts)
+    newest = [job for attempt, job in attempts if attempt == latest]
+    if len(newest) != 1:
+        raise ValueError('Duplicate required main validation job: ' + name)
+    builds.job_success(newest[0])
+    return newest[0]
+
+
+def native_profile(job):
+    """Recognize the exact pre-dependency contract without approving it."""
+    steps = job.get('steps')
+    if (not isinstance(steps, list) or any(not isinstance(step, dict) or
+            not isinstance(step.get('name'), str) or not step['name'].strip() for step in steps)):
+        raise ValueError('Native validation step metadata is unavailable or malformed')
+    by_name = {step['name']: step for step in steps}
+    if len(by_name) != len(steps):
+        raise ValueError('Duplicate native validation step metadata')
+    if LOADER_STEP not in by_name and CURRENT_ACCEPTANCE_STEP not in by_name and LEGACY_ACCEPTANCE_STEP in by_name:
+        profile = 'legacy'
+        required = tuple(name for name in builds.NATIVE_STEPS
+                         if name not in (LOADER_STEP, CURRENT_ACCEPTANCE_STEP)) + (LEGACY_ACCEPTANCE_STEP,)
+    elif LOADER_STEP in by_name and CURRENT_ACCEPTANCE_STEP in by_name and LEGACY_ACCEPTANCE_STEP not in by_name:
+        profile = 'current'
+        required = builds.NATIVE_STEPS
+    else:
+        raise ValueError('Unknown or incomplete native validation profile')
+    for name in (*required, builds.RETAIN_STEP, builds.INDEX_STEP):
+        step = by_name.get(name, {})
+        if step.get('status') != 'completed' or step.get('conclusion') != 'success':
+            raise ValueError('Native validation gate did not succeed: ' + name)
+    return profile
+
+
 def usable(run, release, artifacts, assets):
     if run.get('status') != 'completed' or run.get('conclusion') != 'success':
         return False
     jobs = pages(f"/actions/runs/{run['id']}/jobs?filter=all", 'jobs')
-    for name in ('prepare-candidate', 'installer-windows', 'contributor-tests', 'required-checks',
-                 *(builds.job_name(arch) for arch in builds.ARCHES)):
-        builds.latest_job(jobs, run, name)
+    selected = {name: latest_producer_job(jobs, run, name)
+                for name in ('prepare-candidate', 'installer-windows', 'contributor-tests', 'required-checks',
+                             *(builds.job_name(arch) for arch in builds.ARCHES))}
+    relevant = [job for job in jobs if job.get('name') in selected]
+    if len({job['id'] for job in relevant}) != len(relevant):
+        raise ValueError('Duplicate required validation producer job identity')
+    profiles = {native_profile(selected[builds.job_name(arch)]) for arch in builds.ARCHES}
+    if len(profiles) != 1:
+        raise ValueError('Native architectures disagree on the validation profile')
+    legacy = profiles == {'legacy'}
+    available = True
     versions = set()
     for arch in builds.ARCHES:
         matches = [row for row in artifacts if row['name'].endswith('-' + arch)]
-        job = builds.latest_job(jobs, run, builds.job_name(arch))
+        job = selected[builds.job_name(arch)]
         matching = [row for row in matches if row['name'] == builds.artifact_name(run['id'], job['run_attempt'], arch)]
         if not matching or matching[0]['expired']:
-            return False
+            available = False
+            continue
         artifact = matching[0]
         index = builds.read_index(artifact)
+        if not isinstance(index, dict):
+            raise ValueError('Usable validation index is malformed')
         version = index.get('version', '')
-        if (not VERSION.fullmatch(version) or index.get('schema') != builds.SCHEMA or
+        if (not isinstance(version, str) or not VERSION.fullmatch(version) or index.get('schema') != builds.SCHEMA or
                 index.get('repository') != REPOSITORY or index.get('revision') != run['head_sha'] or
                 index.get('architecture') != arch or
                 index.get('build') != {'run_id': run['id'], 'run_attempt': job['run_attempt'],
@@ -207,9 +272,9 @@ def usable(run, release, artifacts, assets):
             raise ValueError('Usable validation index source or producer binding differs')
         builds.checked_digest(index.get('config_digest'))
         records = index.get('assets')
-        expected = expected_paths(version, arch)
+        expected = expected_paths(version, arch, legacy=legacy)
         if (not isinstance(records, list) or len(records) != len(expected) or
-                any(not isinstance(row, dict) for row in records) or
+                any(not isinstance(row, dict) or not isinstance(row.get('path'), str) for row in records) or
                 {row.get('path') for row in records} != expected):
             raise ValueError('Usable candidate evidence inventory is incomplete')
         ids = set()
@@ -217,7 +282,9 @@ def usable(run, release, artifacts, assets):
             asset_id = builds.positive(record.get('id'), 'index asset ID')
             basename = PurePosixPath(record['path']).name
             if (asset_id in ids or record.get('name') != f"build-{run['id']}-{job['run_attempt']}-{arch}--{basename}" or
-                    type(record.get('bytes')) is not int or not builds.HASH.fullmatch(record.get('sha256', ''))):
+                    type(record.get('bytes')) is not int or
+                    not 0 < record['bytes'] <= builds.asset_limit(record['path']) or
+                    not isinstance(record.get('sha256'), str) or not builds.HASH.fullmatch(record['sha256'])):
                 raise ValueError('Invalid indexed candidate asset')
             ids.add(asset_id)
             matching_assets = [row for row in assets if row['id'] == asset_id]
@@ -225,10 +292,15 @@ def usable(run, release, artifacts, assets):
                     matching_assets[0]['size'] != record['bytes'] or
                     matching_assets[0]['digest'] != 'sha256:' + record['sha256']):
                 raise ValueError('Candidate storage no longer agrees with its immutable index')
+        prefix = f"build-{run['id']}-{job['run_attempt']}-{arch}--"
+        if {row['id'] for row in assets if row['name'].startswith(prefix)} != ids:
+            raise ValueError('Candidate producer asset inventory differs from its immutable index')
         versions.add(version)
-    if len(versions) != 1:
+    if available and len(versions) != 1:
         raise ValueError('Native indexes disagree on the version')
-    return True
+    # Authenticated legacy storage can be retained or superseded, but cannot
+    # satisfy the current dependency qualification or promotion contract.
+    return available and not legacy
 
 
 def snapshot(release, run, artifacts, assets):
@@ -289,7 +361,7 @@ def plan(now=None):
         elif row['revision'] == main_revision:
             reason = 'current main candidate'
         elif protected is not None and row['release_id'] == protected['release_id']:
-            reason = 'latest usable native build' if eligible else 'latest successful build; indexes unavailable'
+            reason = 'latest usable native build' if eligible else 'latest successful build; current validation unavailable'
         elif row['snapshot']['run']['status'] != 'completed':
             reason = 'producer is active'
         else:
