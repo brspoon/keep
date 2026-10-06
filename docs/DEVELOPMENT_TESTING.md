@@ -21,6 +21,21 @@ and arm64 images, Compose, non-root runtime, durable web/worker startup and secu
 policy. Local development does not require publishing to the project's registry.
 See [release policy](RELEASE_POLICY.md) and [image security](IMAGE_SECURITY.md).
 
+The nine native security probes include zlib delivery verification. The patched
+library must replace `/usr/lib/libz.so.1.3.2` behind the existing `libz.so.1`
+alias. The probe imports ordinary Python consumers and uses default SONAME
+lookup, then checks loaded file identity, SHA-256 and loader candidates, along
+with zlib/gzip round trips and `binascii.crc32`. Opening a patched library by
+absolute path does not prove that the application uses it.
+
+Original retained scans and passing probes describe the original image and cannot
+validate this delivery correction. An isolated amd64 before-and-after trial is
+supplementary; native arm64 execution is unavailable in the current local checks.
+The corrected candidate still needs both complete native builds, provenance,
+security/source checks and fresh Scout/Grype scans before release and exception
+review. Existing review deadlines have not been extended. See
+[zlib delivery correction](IMAGE_SECURITY.md#zlib-delivery-correction).
+
 For UI checks, use an isolated preview with synthetic credentials and media.
 Exercise desktop and narrow mobile layouts, keyboard focus, validation, saved
 state, disclosure controls and modal scrolling. A desktop mobile viewport is not
@@ -61,6 +76,22 @@ Every pull request and main push runs the Python and JavaScript suites in the
 `contributor-tests` job. Pull requests also check the contributed diff for whitespace
 errors. This job has read-only repository permissions and no registry or publishing
 credentials. The independent Windows installer check runs for every pull request.
+
+Before dependency installation, contributor checks run the dependency-free image
+exception deadline check. It also runs daily and on manual dispatch in the
+read-only **Review image-exception deadlines** workflow:
+
+```sh
+python3 -B scripts/review_image.py --check-deadlines
+python3 -B scripts/review_image.py --check-deadlines --warning-days 14
+```
+
+Upcoming deadlines within the notice window and expired exceptions produce
+Actions warnings and a step summary. They do not fail this advisory check;
+malformed policy does. The check does not build, scan or publish an image. Native
+validation and promotion still reject a finding that needs an expired exception,
+while a clean scan can pass with unused expired exceptions. See
+[image security](IMAGE_SECURITY.md#exception-review-deadlines).
 
 Pull requests from forks and from this repository do not run the native image,
 vendor-provenance, vulnerability-scan, source-acquisition, or image privacy gates.

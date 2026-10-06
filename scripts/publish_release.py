@@ -157,10 +157,21 @@ def execute(image, revision, artifacts, release=False):
                 raise ValueError('Test artifact identity or runtime configuration does not match')
             ids[arch] = metadata['Id']
         require_current_source(revision, release)
+        # Read and verify the original assets once; retain their reports for the
+        # deadline check immediately before each registry publication.
+        import release_materials
+        security_reviews = {}
+        identities = release_materials.verify_identities(
+            version, release_materials.draft(version), expected_digests,
+            security_reviews=security_reviews,
+        )
+        if any(identities[arch]['config_digest'] != expected_configs[arch] for arch in ARCHES):
+            raise ValueError('Original release evidence config differs from the tested image')
         docker('login', '--username', username, '--password-stdin', input=secret)
         digests = {}
         for arch, reference in plan['images'].items():
             docker('tag', ids[arch], reference)
+            release_materials.revalidate_security(security_reviews)
             docker('push', reference)
             descriptor = json.loads(docker('manifest', 'inspect', '--verbose', reference, capture=True))['Descriptor']
             digest = descriptor['digest']
@@ -174,6 +185,7 @@ def execute(image, revision, artifacts, release=False):
             # Do not promote an older test run after the branch has advanced.
             require_current_source(revision, release)
             docker('manifest', 'create', reference, *refs)
+            release_materials.revalidate_security(security_reviews)
             docker('manifest', 'push', '--purge', reference)
             verify_manifest(json.loads(docker('manifest', 'inspect', reference, capture=True)), digests)
         print(json.dumps({'published': plan['manifests'], 'platform_digests': digests}))

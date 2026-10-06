@@ -22,7 +22,8 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
     ["/sbin/apk", "add", "--no-cache", "--upgrade", "expat=2.8.5-r0", "libexpat=2.8.5-r0"]
 COPY --from=dependencies /venv /venv
-COPY --from=dependencies /opt/zlib/lib/libz.so.1.3.2 /lib/libz.so.1.3.2
+# Replace the file behind the runtime's existing libz.so.1 SONAME alias.
+COPY --from=dependencies /opt/zlib/lib/libz.so.1.3.2 /usr/lib/libz.so.1.3.2
 COPY --from=dependencies /opt/zlib/ZLIB_SECURITY.json /app/ZLIB_SECURITY.json
 COPY --from=dependencies /opt/zlib/ZLIB_LICENSE.txt /app/ZLIB_LICENSE.txt
 COPY scripts/patch_python_runtime.py scripts/python_security_patches.json /tmp/security-patches/

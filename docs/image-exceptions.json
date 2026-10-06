@@ -1,14 +1,13 @@
 {
   "base": "sha256:7b9528fefc51c9d3753ccd25dcf1dea9dd327e7c2f8bef89cd2cf3b34f847408",
-  "expires": "2026-10-07",
   "approval": "Reviewed fixes for the pinned base packages, including the Python temporary-directory correction and Keep permission-reset guard. Accept only the exact package versions listed below with all nine native runtime probes passing; block all other findings.",
   "reviewed_sources": {
-    "Dockerfile": "14c65f5feb49a8853d1bb14856f4c696dab9119c9b5d014951e6e6db818d5146",
+    "Dockerfile": "ecde567a28269f20949cd0ac2c3da83ed29b2859366c21f35e8fecd64a7cd76b",
     "scripts/inspect_candidate.py": "28d160073d2c142e863f708941a044e772739eedbfda13bcb0289bbfd7e3388f",
     "requirements.txt": "7fd74b0bbe95ab605f4bfba2a95a7de1993888f9027c50dabb03c4d1bf04a639",
     "scripts/python_security_patches.json": "81d8119bbc903e70a921a7a26e780b55c8f318d6ddd77aee24567fda01e700ff",
     "scripts/patch_python_runtime.py": "ac173c04c32674c4b14a3d40ff091ef97793cc5460d124866111f27f83e09316",
-    "scripts/python_security_checks.py": "c544426587d1ce9b4edae99d862a2d76c60d59bb02da99a1f852eb22b52fbc9f",
+    "scripts/python_security_checks.py": "5e0c2b188129f93539e5d26f51e3fde659f1184754082ad4ffffe38c0500fb3f",
     "scripts/build_patched_zlib.py": "f4678605a699b6ef5836c333b9e6794aa0bb2a6c99d9d723ecb2f5a974193682"
   },
   "exceptions": {
@@ -18,7 +17,12 @@
       "package": "zlib",
       "version": "1.3.2-r0",
       "status": "fixed",
-      "evidence": "The checksum-pinned zlib 1.3.2 release receives the exact hunk from upstream commit df84af25, is compiled and tested in an isolated build stage, and is verified against the loaded runtime library by scripts/python_security_checks.py"
+      "evidence": "The checksum-pinned zlib 1.3.2 release receives the exact hunk from upstream commit df84af25 and is compiled and tested in an isolated build stage. The corrected recipe replaces /usr/lib/libz.so.1.3.2 behind the existing SONAME alias. Fresh native evidence must verify normal Python/default-loader mappings, file identity and hash, and compression/CRC behavior with scripts/python_security_checks.py; the original explicit-path probe is insufficient.",
+      "review": {
+        "approval": "Existing approval is limited to CVE-2026-85091 at this exact severity, package type, name and version, with the reviewed base/source hashes and all nine corrected native runtime probes. The prior image fails normal-consumer binding and must not be approved using its original passing report. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after a signed digest-pinned replacement supplies the zlib fix from df84af25 or a proven equivalent, the loaded-library regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update zlib build inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-87910": {
       "severity": "Medium",
@@ -26,7 +30,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "Exact upstream CPython commit fb2f0bbc is applied by scripts/python_security_patches.json and verified by scripts/python_security_checks.py"
+      "evidence": "Exact upstream CPython commit 16dea1e887ec7dfbed735beedd476b21dcc91a79 is applied by scripts/python_security_patches.json; the link-fallback probe in scripts/python_security_checks.py verifies that skipped filter decisions are honored.",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-87910 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources include 16dea1e887ec7dfbed735beedd476b21dcc91a79 or a proven equivalent, the corresponding runtime regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-17084": {
       "severity": "Medium",
@@ -34,7 +43,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base"
+      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-17084 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2026-17084, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-19672": {
       "severity": "Medium",
@@ -42,7 +56,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base"
+      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-19672 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2026-19672, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-15806": {
       "severity": "Medium",
@@ -50,7 +69,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base"
+      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-15806 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2026-15806, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2025-15367": {
       "severity": "Medium",
@@ -58,7 +82,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base"
+      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2025-15367 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2025-15367, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-4360": {
       "severity": "Medium",
@@ -66,7 +95,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base"
+      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-4360 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2026-4360, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-15310": {
       "severity": "Low",
@@ -74,7 +108,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base"
+      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-15310 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2026-15310, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     },
     "CVE-2026-12345": {
       "severity": "Medium",
@@ -82,7 +121,12 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "Exact upstream Python 3.14 commit 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 plus separately identified Keep local guard keep-tempfile-bound-permission-reset-v1. The ninth runtime probe checks descriptor-bound cleanup, rejected unbound and unreadable permission resets, nofollow failures, and preservation of sibling inode, permissions and contents. Both native architectures must pass before release; no expiry extension."
+      "evidence": "Exact upstream Python 3.14 commit 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 plus separately identified Keep local guard keep-tempfile-bound-permission-reset-v1. The ninth runtime probe checks descriptor-bound cleanup, rejected unbound and unreadable permission resets, nofollow failures, and preservation of sibling inode, permissions and contents. Both native architectures must pass before release; no expiry extension.",
+      "review": {
+        "approval": "Inherited verified-fixed approval for CVE-2026-12345 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
+        "deadline": "2026-10-07",
+        "remove_when": "Remove only after verified replacement Python sources include 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 or a proven equivalent and preserve the descriptor-bound permission-reset protections of keep-tempfile-bound-permission-reset-v1. The cleanup regression must pass on native amd64 and arm64 and both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
+      }
     }
   }
 }

@@ -23,6 +23,7 @@ from build_distribution_bundle import archive_tree, file_sha
 from publish_image import hub
 from publish_release import github_repository, repository_visibility, require_current_source, require_manual_dispatch
 from registry_transfer import checked_digest
+import review_image
 
 ARCHES = ('amd64', 'arm64')
 HASH = re.compile(r'[0-9a-f]{64}\Z')
@@ -371,15 +372,9 @@ def archive(arch, native_digest=None):
     reports = [Path(name) for name in evidence_names(arch)]
     if any(not p.is_file() or p.is_symlink() for p in reports):
         raise ValueError('Require all twelve original native security reports')
-    # Existing review rechecks the unsuppressed report and fixed/blocked ledger.
-    # Reassess current exception expiry without replacing the review report
-    # produced by the original successful main build.
-    original_review = Path(f'candidate-review-{arch}.json')
-    review_bytes = original_review.read_bytes()
-    try:
-        subprocess.run(['python3', 'scripts/review_image.py', arch], check=True)
-    finally:
-        original_review.write_bytes(review_bytes)
+    # Reassess the original unsuppressed reports against today's per-finding
+    # deadlines without writing to any retained evidence, even on failure.
+    subprocess.run(['python3', 'scripts/review_image.py', arch, '--check-only'], check=True)
     portable = Path(f'portable-recovery-{arch}.json')
     if not portable.is_file() or portable.is_symlink():
         raise ValueError('Native portable recovery evidence is required')
@@ -463,12 +458,26 @@ def verify_durable_validation(identity, proof, arch):
             raise ValueError('Durable native evidence differs from the original main validation')
 
 
-def verify_identities(version, release, digests=None):
+def revalidate_security(security_reviews):
+    """Reassess verified original reports under the current policy and UTC day."""
+    if set(security_reviews) != set(ARCHES):
+        raise ValueError('Both original native security reports are required')
+    for arch in ARCHES:
+        result = review_image.review_reports(arch, **security_reviews[arch])
+        if result['blocked'] or result['scout_blocked']:
+            reasons = [entry['id'] + ': ' + entry['reason'] for entry in result['blocked']]
+            if result['scout_blocked']:
+                reasons.append('blocked Scout findings')
+            raise ValueError('Release security review blocks ' + arch + ': ' + '; '.join(reasons))
+
+
+def verify_identities(version, release, digests=None, *, security_reviews=None):
     rows = api(f"/releases/{release['id']}/assets?per_page=100")
     assets = {row['name']: row for row in rows}
     if len(assets) != len(rows):
         raise ValueError('Duplicate release asset identity')
     identities = {}
+    original_reviews = {}
     with tempfile.TemporaryDirectory(prefix='keep-release-readback-') as directory:
         for arch in ARCHES:
             security_name = f'keep-{version}-security-evidence-{arch}.tar.gz'
@@ -499,10 +508,19 @@ def verify_identities(version, release, digests=None):
                         {member.name for member in members} != {prefix + name for name in required | {'IDENTITY.json'}} or
                         any(not member.isfile() for member in members)):
                     raise ValueError('Unexpected durable evidence archive member')
+                review_members = {
+                    f'candidate-{arch}.json': 'report',
+                    f'candidate-scout-{arch}.json': 'scout',
+                    f'candidate-regression-{arch}.json': 'evidence',
+                    f'candidate-provenance-{arch}.json': 'provenance',
+                }
+                original_reviews[arch] = {}
                 for record in identity['evidence']:
                     data = package.extractfile(prefix + record['path']).read()
                     if len(data) != record['bytes'] or hashlib.sha256(data).hexdigest() != record['sha256']:
                         raise ValueError('Durable native evidence member differs')
+                    if record['path'] in review_members:
+                        original_reviews[arch][review_members[record['path']]] = json.loads(data)
                 if f'validation-provenance-{arch}.json' in required:
                     proof = json.load(package.extractfile(prefix + f'validation-provenance-{arch}.json'))
                     verify_durable_validation(identity, proof, arch)
@@ -516,6 +534,9 @@ def verify_identities(version, release, digests=None):
                 if asset_body(assets[name + '.sha256']).decode() != expected:
                     raise ValueError('Durable asset checksum sidecar differs')
             identities[arch] = identity
+    revalidate_security(original_reviews)
+    if security_reviews is not None:
+        security_reviews.update(original_reviews)
     return identities
 
 
