@@ -198,11 +198,19 @@ class BenignFunctionalChecksTests(unittest.TestCase):
 
     def test_default_ca_trust_and_in_memory_tls_object_work_without_network(self):
         with patch.object(ssl, 'OPENSSL_VERSION', 'OpenSSL 3.5.9 fixture'), \
-             patch.object(ssl, 'OPENSSL_VERSION_INFO', (3, 5, 9, 0, 0)):
+             patch.object(ssl, 'OPENSSL_VERSION_INFO', (3, 5, 0, 9, 0)):
             self.assertEqual(checks.exercise_openssl(), '3.5.9')
         with patch.object(ssl, 'OPENSSL_VERSION', 'OpenSSL 3.5.8 fixture'):
             with self.assertRaisesRegex(ValueError, 'ssl version'):
                 checks.exercise_openssl()
+
+    def test_openssl_numeric_version_must_match_the_reviewed_release(self):
+        with patch.object(ssl, 'OPENSSL_VERSION', 'OpenSSL 3.5.9 fixture'):
+            for version in ((3, 5, 0, 8, 0), (3, 5, 9, 0, 0), (3, 5, 0, 9, 15)):
+                with self.subTest(version=version), \
+                     patch.object(ssl, 'OPENSSL_VERSION_INFO', version):
+                    with self.assertRaisesRegex(ValueError, 'ssl version'):
+                        checks.exercise_openssl()
 
 
 class RuntimeReportTests(unittest.TestCase):

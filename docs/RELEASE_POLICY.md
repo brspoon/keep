@@ -86,6 +86,9 @@ maintainer branch. It has read-only repository access and never retains a
 promotion image. Failed security review still fails qualification, while checked
 source preparation can produce reviewable notice records. Commit the verified
 notice union, rebuild, and complete normal main validation before publication.
+The seven-day qualification artifact retains original scanner and runtime
+reports, plus checked notice inputs including source headers awaiting selection.
+It contains no image or source archives and cannot authorize promotion.
 
 After verification, finalize the version draft as a normal GitHub release,
 preserving all assets. Candidate storage remains unpublished. A draft is temporary

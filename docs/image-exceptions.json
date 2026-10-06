@@ -10,7 +10,7 @@
     "scripts/python_security_checks.py": "5e0c2b188129f93539e5d26f51e3fde659f1184754082ad4ffffe38c0500fb3f",
     "scripts/build_patched_zlib.py": "f4678605a699b6ef5836c333b9e6794aa0bb2a6c99d9d723ecb2f5a974193682",
     "scripts/alpine_expat_sources.py": "3071513ad18bb712499e494f27fbad596ecebda810072b0e58519c2088e719cb",
-    "scripts/runtime_dependency_checks.py": "fe537b5d7002a28e11c455c2419a6b90e183926536975c30ca012afa956091e5",
+    "scripts/runtime_dependency_checks.py": "4758b945fc340542fed3fb02d3e4161fc4fc75326510d81ba54894d0b731c78c",
     "docs/os-package-sources.json": "345b878f721ad66240e1e11789c081c472fd4b1257b59635f05270db23f80659"
   },
   "exceptions": {

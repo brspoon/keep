@@ -329,6 +329,150 @@ class NoarchBundleTests(unittest.TestCase):
                 bundle.retain_output_groups(self.root, self.root / mutation, origin, modified, 'amd64')
 
 
+class NoticeInputRetentionTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.inputs = self.root / 'checked-package-notices'
+        self.inputs.mkdir()
+        self.bodies = [b'Copyright Fixture Authors. Complete permission terms.\n',
+                       b'/* Copyright Other Authors. Permission is granted. */\n']
+        proof = {'origin': 'fixture', 'version': '1-r0', 'architecture': 'amd64',
+                 'proof_architecture': 'arm64', 'for_packages': ['fixture-data'],
+                 'native_image_digest': 'sha256:' + 'a' * 64,
+                 'source_image_digest': None, 'provider_oci_binding': True,
+                 'binding_method': 'signed-build-provenance',
+                 'source_manifest_sha256': 'b' * 64,
+                 'signed_statement_sha256': {'slsa': 'c' * 64, 'scout': 'd' * 64}}
+        self.report = {**proof, 'schema': 1, 'success': True, 'notices': []}
+        for number, body in enumerate(self.bodies):
+            digest = hashlib.sha256(body).hexdigest()
+            name = 'notices/' + digest + '.txt'
+            target = self.inputs / name
+            target.parent.mkdir(exist_ok=True)
+            target.write_bytes(body)
+            self.report['notices'].append({'notice_file': name, 'sha256': digest,
+                'bytes': len(body), 'encoding': 'utf-8', 'path': 'source/' + str(number),
+                'discovery': 'complete-leading-legal-comment' if number else 'notice-file',
+                'provenance': proof})
+        self.write_report()
+
+    def write_report(self):
+        body = (json.dumps(self.report, indent=3) + '\n\n').encode()
+        (self.inputs / 'package-material-inventory.json').write_bytes(body)
+        return body
+
+    def test_retained_bytes_include_unselected_headers_and_replay_explicit_merge(self):
+        from package_source_notices import merge_notice_bundles
+        inventory = (self.inputs / 'package-material-inventory.json').read_bytes()
+        (self.inputs / 'source.tar.gz').write_bytes(b'archive must stay outside notice inputs')
+        (self.inputs / 'binary.apk').write_bytes(b'binary must stay outside notice inputs')
+        output = self.root / 'notice-inputs'
+        result = bundle.retain_notice_inputs([self.inputs, self.inputs], output, 'amd64')
+        self.assertEqual(len(result['bundles']), 1)
+        self.assertEqual(result['notice_files'], 2)
+        retained = output / result['bundles'][0]['directory']
+        self.assertEqual((retained / 'package-material-inventory.json').read_bytes(), inventory)
+        self.assertEqual(result['bundles'][0]['inventory_sha256'], hashlib.sha256(inventory).hexdigest())
+        self.assertEqual(result['bundles'][0]['inventory_bytes'], len(inventory))
+        for notice, body in zip(self.report['notices'], self.bodies):
+            self.assertEqual((retained / notice['notice_file']).read_bytes(), body)
+        self.assertFalse((retained / 'source.tar.gz').exists())
+        self.assertFalse((retained / 'binary.apk').exists())
+        default = merge_notice_bundles([retained], self.root / 'default-merge')
+        self.assertEqual(len(default['notices']), 1)
+        explicit = merge_notice_bundles([retained], self.root / 'explicit-merge',
+                                       selected_comment_paths=['source/1'])
+        self.assertEqual(len(explicit['notices']), 2)
+        proof = explicit['notices'][1]['provenance'][0]
+        self.assertEqual(proof['architecture'], 'amd64')
+        self.assertEqual(proof['proof_architecture'], 'arm64')
+        self.assertEqual(proof['signed_statement_sha256'], self.report['signed_statement_sha256'])
+
+    def test_unselected_header_hash_and_length_are_rechecked(self):
+        notice = self.report['notices'][1]
+        path = self.inputs / notice['notice_file']
+        for number, body in enumerate([b'x' * notice['bytes'], self.bodies[1] + b'truncated']):
+            path.write_bytes(body)
+            with self.subTest(mutation=number), self.assertRaisesRegex(ValueError, 'checksum or size'):
+                bundle.retain_notice_inputs([self.inputs], self.root / ('changed-' + str(number)), 'amd64')
+
+    def test_missing_unselected_header_is_rejected(self):
+        (self.inputs / self.report['notices'][1]['notice_file']).unlink()
+        with self.assertRaisesRegex(ValueError, 'input is missing'):
+            bundle.retain_notice_inputs([self.inputs], self.root / 'missing', 'amd64')
+
+    def test_unsafe_paths_and_linked_notice_inputs_are_rejected(self):
+        original = self.report['notices'][1]['notice_file']
+        self.report['notices'][1]['notice_file'] = '../escape.txt'
+        self.write_report()
+        with self.assertRaisesRegex(ValueError, 'Unsafe'):
+            bundle.retain_notice_inputs([self.inputs], self.root / 'unsafe', 'amd64')
+        self.report['notices'][1]['notice_file'] = original
+        self.write_report()
+        path = self.inputs / original
+        path.unlink()
+        path.symlink_to(self.inputs / self.report['notices'][0]['notice_file'])
+        with self.assertRaisesRegex(ValueError, 'symlinks'):
+            bundle.retain_notice_inputs([self.inputs], self.root / 'linked', 'amd64')
+
+    def test_incomplete_or_other_native_inventory_is_rejected(self):
+        original = copy.deepcopy(self.report)
+        for number, mutation in enumerate([{'schema': 2}, {'success': False},
+                                           {'architecture': 'arm64'}, {'notices': []}]):
+            self.report = {**original, **mutation}
+            self.write_report()
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'checked native inventory'):
+                bundle.retain_notice_inputs([self.inputs], self.root / ('invalid-' + str(number)), 'amd64')
+
+    def test_binary_or_empty_body_and_linked_output_are_rejected(self):
+        for number, body in enumerate([b'\x7fELF\x00binary', b'BZhcompressed', b' \n']):
+            digest = hashlib.sha256(body).hexdigest()
+            notice = self.report['notices'][1]
+            notice.update(notice_file='notices/' + digest + '.txt', sha256=digest, bytes=len(body))
+            (self.inputs / notice['notice_file']).write_bytes(body)
+            self.write_report()
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, 'readable text'):
+                bundle.retain_notice_inputs([self.inputs], self.root / ('binary-' + str(number)), 'amd64')
+        output = self.root / 'linked-output'
+        output.symlink_to(self.inputs, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'empty safe output'):
+            bundle.retain_notice_inputs([self.inputs], output, 'amd64')
+
+    def test_prepare_notices_exports_replay_inputs_without_automatic_header_selection(self):
+        fixture_root = self.root / 'keep'
+        bundle.write_json(fixture_root / 'docs/distribution-sources.json', {})
+        bundle.write_json(fixture_root / 'docs/os-package-sources.json',
+                          {'origins': [], 'original_base_origins': []})
+        inventory = self.root / 'candidate.json'
+        bundle.write_json(inventory, {})
+        source = self.root / 'sources'
+        output = self.root / 'preparation'
+
+        def packages(_source, destination, *_args, **_kwargs):
+            shutil.copytree(self.inputs, destination / 'fixture')
+            return []
+
+        def original(_source, destination, *_args, **_kwargs):
+            bundle.write_json(destination / 'base-provenance.json', {})
+            return {}
+
+        with patch.object(bundle, 'check_runtime', return_value={}), \
+                patch.object(bundle, 'retain_packages', side_effect=packages), \
+                patch.object(bundle, 'retain_original_base', side_effect=original):
+            report = bundle.prepare_notices(source, 'amd64', inventory, output, root=fixture_root)
+        self.assertEqual(report['notice_inputs_directory'], 'notice-inputs')
+        self.assertEqual(report['notice_input_bundles'], 1)
+        self.assertEqual(report['notice_input_files'], 2)
+        self.assertEqual(report['notices'], 1)
+        manifest = bundle.read_json(output / 'os-notices', 'manifest.json')
+        self.assertEqual(manifest['selected_source_comments'], [])
+        index = bundle.read_json(output / 'notice-inputs', 'index.json')
+        retained = output / 'notice-inputs' / index['bundles'][0]['directory']
+        self.assertEqual(bundle.read_json(retained, 'package-material-inventory.json'), self.report)
+
+
 class RuntimeNoticeBundleTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

@@ -701,7 +701,66 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
             'provenance_verification': 'Original native-base build provenance and source-reference signatures reverified offline.'}
 
 
-def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selected_comment_paths=()):
+def retain_notice_inputs(bundles, output_dir, architecture):
+    """Keep exact checked inventories and all notice texts for explicit review.
+
+    These inputs can replay merge_notice_bundles after download. They contain
+    no source archives, and retaining a header does not select it for runtime.
+    """
+    from package_source_notices import check_file
+    output = Path(output_dir)
+    if (architecture not in {'amd64', 'arm64'} or output.is_symlink()
+            or output.exists() and any(output.iterdir())):
+        raise ValueError('Notice inputs require a native architecture and empty safe output')
+    output.mkdir(parents=True, exist_ok=True)
+    records = []
+    for number, directory in enumerate(sorted({Path(path) for path in bundles})):
+        inventory_path = regular(directory, 'package-material-inventory.json')
+        report = read_json(directory, 'package-material-inventory.json')
+        if (report.get('schema') != 1 or report.get('success') is not True
+                or report.get('architecture') != architecture
+                or not isinstance(report.get('notices'), list) or not report['notices']):
+            raise ValueError('Notice inputs require a complete checked native inventory')
+        relative = f'bundles/{number:04d}'
+        target = output / relative
+        target.mkdir(parents=True)
+        inventory_bytes = inventory_path.read_bytes()
+        if json.loads(inventory_bytes) != report:
+            raise ValueError('Notice inventory changed during retention')
+        (target / inventory_path.name).write_bytes(inventory_bytes)
+        retained = set()
+        for notice in report['notices']:
+            name = safe_name(notice['notice_file'])
+            if PurePosixPath(name).name != notice['sha256'] + '.txt':
+                raise ValueError('Notice input must use its checked text digest filename')
+            source = regular(directory, name)
+            check_file(source, notice)
+            body = source.read_bytes()
+            if (len(body) != notice['bytes']
+                    or hashlib.sha256(body).hexdigest() != notice['sha256']):
+                raise ValueError('Notice input changed during retention')
+            if (notice.get('encoding') not in {'utf-8', 'latin-1'} or b'\x00' in body
+                    or body.startswith((b'\x7fELF', b'\x1f\x8b', b'\xfd7zXZ\x00', b'BZh', b'PK\x03\x04'))):
+                raise ValueError('Notice input must be a complete readable text')
+            if not body.decode(notice['encoding']).strip():
+                raise ValueError('Notice input must be a complete readable text')
+            destination = target / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(body)
+            retained.add(name)
+        records.append({'directory': relative, 'origin': report['origin'],
+            'version': report['version'], 'architecture': architecture,
+            'inventory_sha256': hashlib.sha256(inventory_bytes).hexdigest(),
+            'inventory_bytes': len(inventory_bytes), 'notice_records': len(report['notices']),
+            'notice_files': len(retained)})
+    result = {'format': 'keep-runtime-notice-inputs-v1', 'architecture': architecture,
+              'bundles': records, 'notice_files': sum(row['notice_files'] for row in records)}
+    write_json(output / 'index.json', result)
+    return result
+
+
+def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selected_comment_paths=(),
+                        retain_inputs=False):
     """Create the reusable notices-only union, including checked public inputs."""
     from package_source_notices import import_public_notices, merge_notice_bundles
     stage = Path(stage)
@@ -734,6 +793,8 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
         import_public_notices(expat, public / 'expat', origin='expat', architecture=arch,
             package_spec=origins[0], runtime_inventory=runtime_inventory)
     bundles = sorted({path.parent for path in stage.rglob('package-material-inventory.json')})
+    if retain_inputs:
+        retain_notice_inputs(bundles, stage / 'notice-inputs', arch)
     return merge_notice_bundles(bundles, stage / 'os-notices', selected_comment_paths=selected_comment_paths)
 
 
@@ -924,10 +985,13 @@ def prepare_notices(sources, architecture, runtime_inventory, output, *, root=RO
     coverage = retain_packages(package_root, output / 'os-packages', os_lock, architecture,
         material_inspector=material_inspector, base_source=source, runtime_inventory=inventory)
     base = retain_original_base(source, output / 'original-base', os_lock, architecture, root=root, fetch=fetch)
-    notices = consolidate_notices(output, os_lock, architecture, inventory)
+    notices = consolidate_notices(output, os_lock, architecture, inventory, retain_inputs=True)
+    notice_inputs = read_json(output / 'notice-inputs', 'index.json')
     report = {'format': 'keep-runtime-notice-preparation-v1', 'architecture': architecture,
         'runtime': counts, 'os_origins': coverage, 'original_base': base,
         'notices': len(notices['notices']), 'notice_directory': 'os-notices',
+        'notice_inputs_directory': 'notice-inputs', 'notice_input_bundles': len(notice_inputs['bundles']),
+        'notice_input_files': notice_inputs['notice_files'],
         'ready_for_runtime_distribution': notices['ready_for_runtime_distribution'],
         'origins_needing_explicit_attribution': notices['origins_needing_explicit_attribution'],
         'limitations': 'Source and notice preparation only; final archive additionally requires committed notices verified in a rebuilt candidate and clean committed Keep source.'}

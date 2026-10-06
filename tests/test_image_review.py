@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import review_image
 from review_image import assess, deadline_warnings, review_candidate
 from inspect_candidate import DIRECT
-from native_dependency_fixture import dependency_report
+from tests.native_dependency_fixture import dependency_report
 
 
 class ImageReviewTests(unittest.TestCase):

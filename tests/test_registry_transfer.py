@@ -168,6 +168,8 @@ class RegistryTransferTests(unittest.TestCase):
             self.assertNotIn(command, caller + native)
         self.assertIn('--prepare-notices', native)
         self.assertIn('runtime-qualification-${{ matrix.arch }}-${{ github.run_id }}', native)
+        self.assertIn('notice-preparation/notice-inputs/', native)
+        self.assertIn('candidate-*${{ matrix.arch }}.json', native)
 
     def test_native_checks_all_precede_retention_and_upload_only_small_index(self):
         native = Path('.github/workflows/native-image.yml').read_text()

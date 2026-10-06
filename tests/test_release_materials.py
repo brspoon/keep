@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import release_materials as materials
 import registry_transfer
 import review_image
-from native_dependency_fixture import dependency_report
+from tests.native_dependency_fixture import dependency_report
 
 
 def tar_bytes(entries):

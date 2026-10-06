@@ -201,6 +201,8 @@ review. No exception deadline or finding scope has changed.
 Its optional `qualification` input also builds and tests both native Keep images
 on a maintainer branch, obtains checked sources and prepares small notice records
 for review. This mode neither publishes nor retains images for promotion.
+Original scanner reports and full notice inputs remain in its small seven-day
+artifact, including source headers that need explicit attribution selection.
 Security findings still fail the job; independent source preparation can finish
 so matching notices can be committed and checked in a rebuilt candidate. Only
 successful complete current-main validation can supply promotion images.

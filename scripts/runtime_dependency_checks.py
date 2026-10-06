@@ -180,8 +180,10 @@ def exercise_expat():
 def exercise_openssl():
     import ssl
 
+    # CPython decodes OpenSSL 3's 0xMNN00PP0 number using the legacy five
+    # fields, so the patch release is the fourth field, not the third.
     require(ssl.OPENSSL_VERSION.startswith('OpenSSL ' + OPENSSL_VERSION + ' ')
-            and ssl.OPENSSL_VERSION_INFO[:3] == (3, 5, 9),
+            and ssl.OPENSSL_VERSION_INFO == (3, 5, 0, 9, 0),
             'Unexpected ordinary ssl version')
     context = ssl.create_default_context()
     require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname

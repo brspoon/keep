@@ -150,11 +150,9 @@ jobs:
           name: runtime-qualification-${{ matrix.arch }}-${{ github.run_id }}
           path: |
             notice-preparation/os-notices/
+            notice-preparation/notice-inputs/
             notice-preparation/NOTICE-PREPARATION.json
-            candidate-dependencies-${{ matrix.arch }}.json
-            candidate-regression-${{ matrix.arch }}.json
-            candidate-notices-${{ matrix.arch }}.json
-            candidate-review-${{ matrix.arch }}.json
+            candidate-*${{ matrix.arch }}.json
           if-no-files-found: warn
           retention-days: 7
       - name: Retain exact tested image, sources and original evidence
