@@ -4,7 +4,7 @@
   "reviewed_sources": {
     "Dockerfile": "ecde567a28269f20949cd0ac2c3da83ed29b2859366c21f35e8fecd64a7cd76b",
     "scripts/inspect_candidate.py": "28d160073d2c142e863f708941a044e772739eedbfda13bcb0289bbfd7e3388f",
-    "requirements.txt": "7fd74b0bbe95ab605f4bfba2a95a7de1993888f9027c50dabb03c4d1bf04a639",
+    "requirements.txt": "26a92d0b3e6ce4a03b950fdd007e549e716ef45a10cb73220b9207581824ea6c",
     "scripts/python_security_patches.json": "81d8119bbc903e70a921a7a26e780b55c8f318d6ddd77aee24567fda01e700ff",
     "scripts/patch_python_runtime.py": "ac173c04c32674c4b14a3d40ff091ef97793cc5460d124866111f27f83e09316",
     "scripts/python_security_checks.py": "5e0c2b188129f93539e5d26f51e3fde659f1184754082ad4ffffe38c0500fb3f",

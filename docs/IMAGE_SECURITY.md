@@ -126,9 +126,9 @@ loaded mappings' file identity and SHA-256 against the build manifest, and rejec
 divergent loader candidates. It also checks zlib and gzip round trips and
 `binascii.crc32`.
 
-The original retained reports remain unchanged. A fresh unsuppressed Grype scan
-of each original native image archive still reports the same eight findings,
-with no ignored findings. Those scans and the original passing probes do not
+The original retained reports remain unchanged. The supplementary October 5
+database scan of each original native image archive reported the same eight
+findings, with no ignored findings. Those scans and the original passing probes do not
 validate the delivery correction. An isolated amd64 trial passed all nine security
 probes and offline web/worker startup, restart and durable-data smoke checks.
 These results are supplementary. Native arm64 execution is unavailable in the
@@ -142,6 +142,36 @@ corrected source hashes and any needed exceptions. No exception deadline has
 been extended; the existing October 7, 2026 deadlines remain in force.
 The runtime correction requires a new release version; the previously published
 image cannot be replaced under its immutable version tag.
+
+### October 6 native qualification
+
+Main validation [37479080905](https://github.com/brspoon/keep/actions/runs/37479080905)
+built the corrected recipe on native amd64 and arm64. Both images passed all nine
+runtime probes, including normal zlib loading, and the application, installation
+and recovery checks. Vendor provenance, source hashes and scan completeness
+passed before the finding assessment blocked both candidates.
+
+The October 6 Grype database reported 13 new OpenSSL findings across
+`libcrypto3`, `libssl3` and `openssl` at `3.5.8-r1`, plus the Werkzeug finding
+fixed by `3.1.9`. Scout also reported Expat `CVE-2026-102633` and
+`CVE-2026-77214`, requiring `2.9.0-r0`, and the same Werkzeug issue. These findings
+are outside the existing approvals. Renewing the eight previously accepted
+exceptions cannot qualify these images for publication.
+
+Werkzeug is now pinned to `3.1.9` with matching source records. The documented
+newer DHI base contains OpenSSL `3.5.9-r0`, but its signed native identity and
+matching sources still require verification. Its Expat `2.8.5-r0` also requires
+a verified replacement. Public DHI `2.9.0-r0` package URLs returned HTTP 403;
+this does not establish their availability through the authenticated build path.
+
+**Review vendor runtime candidate** is a manual, main-only workflow that checks
+the exact documented candidate index, Docker signatures, both native image
+subjects and source statements, then tries the signed Expat `2.9.0-r0` packages
+on native amd64 and arm64. It retains original vendor evidence and inventories
+using the existing scoped registry credential in temporary configuration.
+Its result is an assessment, not release approval. A replacement must still
+pass complete Keep validation and matching-source/license checks. No exception
+deadline or finding scope has changed.
 
 ## Replacing patched dependencies
 

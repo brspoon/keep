@@ -193,7 +193,7 @@ matching source for covered MPL files (including CA material), not only a link
 to a newer release or an SBOM license label.
 
 Werkzeug also ships the Silk debugger icons with a separate
-[CC-BY-2.5 or CC-BY-3.0 attribution](https://github.com/pallets/werkzeug/blob/3.1.8/src/werkzeug/debug/shared/ICON_LICENSE.md)
+[CC-BY-2.5 or CC-BY-3.0 attribution](https://github.com/pallets/werkzeug/blob/3.1.9/src/werkzeug/debug/shared/ICON_LICENSE.md)
 to Mark James in `werkzeug/debug/shared/ICON_LICENSE.md`. Its notice is retained
 in the native notice inventory. A package-level BSD label does not cover those
 assets. Likewise, retain and verify the source/license choices for
