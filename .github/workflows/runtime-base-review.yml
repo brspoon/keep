@@ -86,10 +86,10 @@ jobs:
                       '--referrers'], env=env, check=True)
               subprocess.run(['docker', 'pull', '--platform', 'linux/' + arch, base], env=env, check=True)
               with (output / 'runtime-inventory.json').open('wb') as inventory:
-                  subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only',
+                  subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--entrypoint', 'python',
                       '-v', str(pathlib.Path('scripts/image_distribution.py').resolve()) + ':/inventory.py:ro',
-                      base, 'python', '-B', '/inventory.py', '--runtime'], env=env, stdout=inventory, check=True)
-              print('Candidate index, signatures, native subjects and original vendor inventory verified.', flush=True)
+                      base, '-B', '/inventory.py', '--runtime'], env=env, stdout=inventory, check=True)
+              print('Candidate index, signatures and native subjects verified; original vendor inventory captured.', flush=True)
               # Keep registry configuration outside the Docker build context.
               context = root / 'build-context'
               context.mkdir()
@@ -102,9 +102,16 @@ jobs:
               subprocess.run(['docker', 'build', '--progress=plain', '--tag', 'keep-vendor-review',
                               '--file', str(dockerfile), str(context)], env=env, check=True)
               with (output / 'upgraded-inventory.json').open('wb') as inventory:
-                  subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only',
+                  subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--entrypoint', 'python',
                       '-v', str(pathlib.Path('scripts/image_distribution.py').resolve()) + ':/inventory.py:ro',
-                      'keep-vendor-review', 'python', '-B', '/inventory.py', '--runtime'], env=env, stdout=inventory, check=True)
+                      'keep-vendor-review', '-B', '/inventory.py', '--runtime'], env=env, stdout=inventory, check=True)
+              upgraded = json.loads((output / 'upgraded-inventory.json').read_bytes())
+              expat = [p for p in upgraded['os_packages'] if p['name'] in ('expat', 'libexpat')]
+              if len(expat) != 2 or {p['name'] for p in expat} != {'expat', 'libexpat'} or any(p['version'] != '2.9.0-r0' for p in expat):
+                  raise ValueError('Upgraded candidate does not contain both exact Expat packages')
+              subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--entrypoint', 'python',
+                  'keep-vendor-review', '-B', '-c',
+                  "import pyexpat; assert pyexpat.EXPAT_VERSION == 'expat_2.9.0'; pyexpat.ParserCreate().Parse(b'<keep/>', True)"], env=env, check=True)
               print('Vendor Expat 2.9.0 package installation passed. Full Keep qualification is still required.')
           PY
       - name: Retain original vendor review evidence
