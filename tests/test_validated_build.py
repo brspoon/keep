@@ -313,7 +313,9 @@ class ValidatedBuildTests(unittest.TestCase):
         inspect.assert_called_once_with('amd64', self.indexes['amd64']['config_digest'])
         proof = json.loads(Path('validation-provenance-amd64.json').read_text())
         self.assertEqual(proof['index'], self.indexes['amd64'])
-        self.assertNotIn('900', json.dumps(proof))
+        self.assertEqual(proof['artifact'], self.artifacts[0])
+        self.assertEqual(proof['index']['build']['run_id'], 100)
+        self.assertNotEqual(proof['index']['build']['run_id'], int(os.environ['GITHUB_RUN_ID']))
 
     def test_failed_restore_has_no_build_or_scan_fallback(self):
         self.assets[0]['size'] += 1
