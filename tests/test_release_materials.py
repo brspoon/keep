@@ -1,13 +1,14 @@
 """Offline integrity and release-asset lifecycle tests."""
 import base64
 import copy
+import datetime
 import hashlib
 import io
 import json
 import os
 import subprocess
 import urllib.parse
-from contextlib import chdir
+from contextlib import chdir, redirect_stdout
 from pathlib import Path
 import tarfile
 import tempfile
@@ -19,6 +20,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import release_materials as materials
 import registry_transfer
+import review_image
 
 
 def tar_bytes(entries):
@@ -195,9 +197,13 @@ class ReleaseMaterialsTests(unittest.TestCase):
         return materials.archive('amd64')
 
     def verify_fixture(self, *, sidecar_error=None, identity_error=None, evidence_error=False,
-                       inventory_error=None):
+                       inventory_error=None, review_changes=None, matches=None,
+                       empty_exceptions=False, native_digests=None, config_digests=None,
+                       validation=False):
+        policy = self.write_reviewed_policy(empty_exceptions=empty_exceptions)
         rows, bodies = [], {}
-        for arch, native_digest in (('amd64', self.DIGEST), ('arm64', 'sha256:' + 'c' * 64)):
+        native_digests = native_digests or {'amd64': self.DIGEST, 'arm64': 'sha256:' + 'c' * 64}
+        for arch, native_digest in native_digests.items():
             source_name = f'keep-{self.VERSION}-source-materials-{arch}.tar.gz'
             source_body = ('synthetic source ' + arch).encode()
             source_digest = hashlib.sha256(source_body).hexdigest()
@@ -206,6 +212,14 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 name: ('report ' + name).encode()
                 for name in [*materials.evidence_names(arch), f'portable-recovery-{arch}.json',
                              f'installer-trial-{arch}.json', f'source-bundle-{arch}.json']}
+            reports = self.security_reports(arch, policy, matches)
+            if review_changes and arch == 'amd64':
+                for name, changes in review_changes.items():
+                    reports[name].update(changes)
+            evidence_payloads.update({name: (json.dumps(body, indent=3) + '\r\n').encode()
+                                      for name, body in reports.items()})
+            if validation:
+                evidence_payloads[f'validation-provenance-{arch}.json'] = b'{}\n'
             evidence = [{'path': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
                         for name, data in evidence_payloads.items()]
             if evidence_error and arch == 'amd64':
@@ -216,7 +230,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 evidence.append(dict(evidence[0]))
             identity = {'version': self.VERSION, 'revision': self.REVISION,
                         'architecture': arch, 'native_digest': native_digest,
-                        'config_digest': 'sha256:' + 'd' * 64, 'run_id': '123456',
+                        'config_digest': (config_digests or {}).get(arch, 'sha256:' + 'd' * 64), 'run_id': '123456',
                         'run_attempt': 3,
                         'source': {'name': source_name, 'sha256': source_digest,
                                    'bytes': len(source_body)}, 'evidence': evidence}
@@ -250,6 +264,35 @@ class ReleaseMaterialsTests(unittest.TestCase):
                              'digest': 'sha256:' + sidecar_digest, 'size': len(sidecar_body)})
                 bodies[sidecar_name] = sidecar_body
         return rows, bodies
+
+    def write_reviewed_policy(self, *, empty_exceptions=False):
+        repository = Path(materials.__file__).resolve().parents[1]
+        policy = json.loads((repository / 'docs/image-exceptions.json').read_text())
+        if empty_exceptions:
+            policy['exceptions'] = {}
+        policy_path = self.root / 'docs/image-exceptions.json'
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_text(json.dumps(policy))
+        for name in policy['reviewed_sources']:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((repository / name).read_bytes())
+        return policy
+
+    def security_reports(self, arch, policy, matches=None):
+        return {
+            f'candidate-{arch}.json': {'matches': matches or []},
+            f'candidate-scout-{arch}.json': {'runs': [{'results': []}]},
+            f'candidate-regression-{arch}.json': {
+                'success': True, 'tests': 9, 'failures': 0, 'errors': 0,
+                'skipped': 0, 'arch': arch,
+                'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json'],
+            },
+            f'candidate-provenance-{arch}.json': {
+                'predicateType': 'https://slsa.dev/provenance/v1',
+                'subject': [{'digest': {'sha256': review_image.DIRECT[arch][0]}}],
+            },
+        }
 
     def test_bundle_requires_checksum_and_exact_source_identity(self):
         self.write_bundle(checksum_ok=False)
@@ -988,6 +1031,89 @@ class ReleaseMaterialsTests(unittest.TestCase):
         self.assertEqual(identities['arm64']['native_digest'], 'sha256:' + 'c' * 64)
         self.assertEqual(identities['amd64']['run_attempt'], 3)
 
+    def assert_readback_security_review(self, *, day, expected_error=None, source_change=False, **options):
+        rows, bodies = self.verify_fixture(**options)
+        original = dict(bodies)
+        if source_change:
+            (self.root / 'scripts/python_security_patches.json').write_bytes(b'changed source')
+        held = {}
+        with chdir(self.root), patch.object(materials, 'api', return_value=rows), \
+             patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
+             patch.object(review_image, 'current_day', return_value=day):
+            if expected_error:
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    materials.verify_identities(self.VERSION, {'id': 88}, security_reviews=held)
+                self.assertEqual(held, {})
+            else:
+                identities = materials.verify_identities(self.VERSION, {'id': 88}, security_reviews=held)
+                self.assertEqual(set(identities), set(materials.ARCHES))
+                self.assertEqual(set(held), set(materials.ARCHES))
+                for arch in materials.ARCHES:
+                    name = f'keep-{self.VERSION}-security-evidence-{arch}.tar.gz'
+                    prefix = name.removesuffix('.tar.gz') + '/'
+                    with tarfile.open(fileobj=io.BytesIO(bodies[name])) as package:
+                        for key, report_name in (
+                            ('report', f'candidate-{arch}.json'),
+                            ('scout', f'candidate-scout-{arch}.json'),
+                            ('evidence', f'candidate-regression-{arch}.json'),
+                            ('provenance', f'candidate-provenance-{arch}.json'),
+                        ):
+                            self.assertEqual(held[arch][key], json.load(package.extractfile(prefix + report_name)))
+                        # The producer's review is retained even though the current
+                        # assessment is made from its original underlying reports.
+                        self.assertEqual(package.extractfile(prefix + f'candidate-review-{arch}.json').read(),
+                                         f'report candidate-review-{arch}.json'.encode())
+        self.assertEqual(bodies, original)
+
+    def test_readback_clean_scan_passes_after_deadline_with_empty_or_unused_exceptions(self):
+        for empty in (False, True):
+            with self.subTest(empty_exceptions=empty):
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 8), empty_exceptions=empty)
+
+    def test_readback_needed_exception_passes_on_deadline_and_blocks_afterward(self):
+        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
+        self.assert_readback_security_review(day=datetime.date(2026, 10, 7), matches=matches)
+        self.assert_readback_security_review(day=datetime.date(2026, 10, 8), matches=matches,
+                                            expected_error='exception_expired')
+
+    def test_readback_unknown_or_mismatched_findings_cannot_use_original_approval(self):
+        match = {'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}
+        for section, field, value, reason in (
+            ('vulnerability', 'id', 'CVE-unknown', 'unmatched_finding'),
+            ('vulnerability', 'severity', 'High', 'exception_mismatch'),
+            ('artifact', 'name', 'other-python', 'exception_mismatch'),
+            ('artifact', 'version', '3.14.8-r0', 'exception_mismatch'),
+            ('artifact', 'type', 'python', 'exception_mismatch'),
+        ):
+            changed = copy.deepcopy(match)
+            changed[section][field] = value
+            with self.subTest(field=field):
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 7),
+                                                    matches=[changed], expected_error=reason)
+
+    def test_readback_rejects_incomplete_scans_runtime_failure_and_bad_base_provenance(self):
+        for changes, message in (
+            ({'candidate-amd64.json': {'ignoredMatches': [{}]}}, 'Incomplete scan report'),
+            ({'candidate-scout-amd64.json': {'runs': []}}, 'Incomplete scan report'),
+            ({'candidate-scout-amd64.json': {'runs': [{'results': [], 'invocations': [
+                {'executionSuccessful': False}]}]}}, 'Incomplete Scout report'),
+            ({'candidate-scout-amd64.json': {'runs': [{'results': [{'ruleId': 'new-finding'}]}]}},
+             'blocked Scout findings'),
+            ({'candidate-regression-amd64.json': {'success': False, 'failures': 1}},
+             'unsuccessful security regression'),
+            ({'candidate-provenance-amd64.json': {'subject': [{'digest': {'sha256': '0' * 64}}]}},
+             'Base provenance does not cover'),
+        ):
+            with self.subTest(changes=changes):
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 8),
+                                                    review_changes=changes, expected_error=message)
+
+    def test_readback_rejects_changed_reviewed_source_hash(self):
+        self.assert_readback_security_review(day=datetime.date(2026, 10, 8), source_change=True,
+                                            expected_error='verified-fixed review must be refreshed')
+
     def test_aggregate_emits_both_digests_only_after_asset_and_tag_checks(self):
         rows, bodies = self.verify_fixture()
         output = self.root / 'github-output.txt'
@@ -1083,9 +1209,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
                     materials.aggregate()
                 self.assertFalse(output.exists())
 
-    def main_validation_fixture(self):
+    def main_validation_fixture(self, *, prepare=True):
         import validated_build
-        self.prepare_archive_inputs()
+        if prepare:
+            self.prepare_archive_inputs()
         with chdir(self.root):
             records = []
             for number, name in enumerate(validated_build.input_paths('amd64')):
@@ -1108,6 +1235,88 @@ class ReleaseMaterialsTests(unittest.TestCase):
         os.environ['KEEP_VALIDATION_RUN_ID'] = '100'
         return index, proof
 
+    def current_review_fixture(self, *, matches=None, empty_exceptions=False):
+        self.prepare_archive_inputs()
+        policy = self.write_reviewed_policy(empty_exceptions=empty_exceptions)
+        reports = self.security_reports('amd64', policy, matches)
+        for name, body in reports.items():
+            (self.root / name).write_text(json.dumps(body, indent=3) + '\n')
+        # Original producer bytes deliberately differ from a newly formatted review.
+        original_review = {
+            'accepted_fixed': [{'id': match['vulnerability']['id'],
+                                'package': match['artifact']['name'],
+                                'version': match['artifact']['version']}
+                               for match in matches or []],
+            'blocked': [], 'scout_blocked': [], 'raw_matches': len(matches or []),
+            'expires': '2026-10-07',
+        }
+        (self.root / 'candidate-review-amd64.json').write_bytes(
+            ('  ' + json.dumps(original_review, indent=3) + '\r\n').encode())
+        index, _ = self.main_validation_fixture(prepare=False)
+        paths = [self.root / name for name in materials.evidence_names('amd64')]
+        paths += [self.root / 'portable-recovery-amd64.json',
+                  self.root / 'installer-trial-amd64.json',
+                  self.root / 'validation-provenance-amd64.json',
+                  self.distribution / 'source-bundle-amd64.json']
+        return index, {path: path.read_bytes() for path in paths}
+
+    def current_review_runner(self, day):
+        def run(command, *, check):
+            self.assertEqual(command, ['python3', 'scripts/review_image.py', 'amd64', '--check-only'])
+            self.assertTrue(check)
+            with patch.object(review_image, 'current_day', return_value=day), redirect_stdout(io.StringIO()):
+                status = review_image.main(command[2:])
+            if status:
+                raise subprocess.CalledProcessError(status, command)
+            return subprocess.CompletedProcess(command, status)
+        return run
+
+    def assert_current_review_promotion(self, *, day, matches=None, empty_exceptions=False,
+                                       blocked=False):
+        import validated_build
+        index, original = self.current_review_fixture(matches=matches, empty_exceptions=empty_exceptions)
+        with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
+             patch.object(validated_build, 'verify_provenance', return_value=index), \
+             patch.object(materials.subprocess, 'run', side_effect=self.current_review_runner(day)) as review, \
+             patch.object(materials, 'draft', return_value={'id': 44}) as draft, \
+             patch.object(materials, 'upload') as upload:
+            if blocked:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    materials.archive('amd64', native_digest=self.DIGEST)
+            else:
+                materials.archive('amd64', native_digest=self.DIGEST)
+        review.assert_called_once()
+        for path, body in original.items():
+            self.assertEqual(path.read_bytes(), body, path.name)
+        if blocked:
+            draft.assert_not_called()
+            upload.assert_not_called()
+            self.assertFalse((self.distribution / f'keep-{self.VERSION}-security-evidence-amd64.tar.gz').exists())
+        else:
+            draft.assert_called_once()
+            self.assertEqual(upload.call_count, 4)
+            security = self.distribution / f'keep-{self.VERSION}-security-evidence-amd64.tar.gz'
+            with tarfile.open(security) as package:
+                prefix = security.name.removesuffix('.tar.gz') + '/'
+                for path, body in original.items():
+                    self.assertEqual(package.extractfile(prefix + path.name).read(), body, path.name)
+
+    def test_archive_clean_scan_with_empty_exceptions_passes_after_previous_deadline(self):
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 8), empty_exceptions=True)
+
+    def test_archive_unused_expired_exceptions_do_not_block_promotion(self):
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 8))
+
+    def test_archive_needed_exception_passes_on_review_deadline(self):
+        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 7), matches=matches)
+
+    def test_archive_expired_needed_exception_blocks_without_changing_original_evidence(self):
+        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
+        self.assert_current_review_promotion(day=datetime.date(2026, 10, 8), matches=matches, blocked=True)
+
     def test_archive_retains_original_main_provenance_and_review_bytes(self):
         import validated_build
         index, proof = self.main_validation_fixture()
@@ -1129,8 +1338,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
              patch.object(materials, 'draft', return_value={'id': 44}), \
              patch.object(materials, 'upload', side_effect=upload), \
              patch.object(validated_build, 'verify_provenance', return_value=index) as origin, \
-             patch.object(materials.subprocess, 'run', side_effect=lambda *a, **kw: review.write_bytes(b'current review')):
+             patch.object(materials.subprocess, 'run') as revalidation:
             materials.archive('amd64', native_digest=self.DIGEST)
+        revalidation.assert_called_once_with(
+            ['python3', 'scripts/review_image.py', 'amd64', '--check-only'], check=True)
         origin.assert_called_once_with(proof, 'amd64', 'sha256:' + 'd' * 64)
         self.assertEqual(review.read_bytes(), original)
         self.assertEqual(captured['review'], original)
@@ -1161,7 +1372,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
         original = review.read_bytes()
 
         def blocked(*args, **kwargs):
-            review.write_bytes(b'blocked current review')
+            self.assertEqual(args[0], ['python3', 'scripts/review_image.py', 'amd64', '--check-only'])
             raise subprocess.CalledProcessError(1, args[0])
 
         with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \

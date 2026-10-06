@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.23.2 — 2026-10-06
+
+- Ensure the container uses the patched zlib library for normal Python operations.
+- Allow clean image scans to pass when expired security exceptions are unused; continue blocking findings that need an expired exception.
+
 ## 2.23.1 — 2026-10-05
 
 - Clarify that Leaving updates follow Maintainerr's configured rule schedule.

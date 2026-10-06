@@ -64,7 +64,21 @@ version's separate draft release. Aggregation checks both original build identit
 asset hashes and current publication transfer tags. The publisher checks loaded
 image configurations and native manifest digests before creating version or commit
 indexes and promoting stable. Original scanner reports must still satisfy the
-checked-in review policy and its expiry; scanners are not rerun.
+checked-in review policy. Each exception needed by a matching finding must still
+be within its inclusive review deadline on the promotion date; unused expired
+exceptions do not block a clean scan. Scanners are not rerun. Revalidation uses
+`scripts/review_image.py --check-only` when archiving. Aggregation and final
+publication read and verify the original retained report bytes again and apply
+the current review policy. The verified reports are reassessed immediately before
+each native image or manifest push, including stable, so a queued publication or
+UTC date change cannot reuse an earlier deadline decision. The original reports
+and review evidence remain byte-for-byte unchanged.
+
+Read-only deadline checks warn in contributor runs and in the daily/manual
+**Review image-exception deadlines** workflow. These warnings are advisory,
+including for unused expired exceptions. They do not approve additional risk or
+replace native image validation. See [image security](IMAGE_SECURITY.md) for
+deadline behavior and dependency replacement requirements.
 
 After verification, finalize the version draft as a normal GitHub release,
 preserving all assets. Candidate storage remains unpublished. A draft is temporary

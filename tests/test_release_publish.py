@@ -1,3 +1,5 @@
+from contextlib import chdir, contextmanager
+import datetime
 import json
 import os
 from pathlib import Path
@@ -10,6 +12,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path('scripts').resolve()))
 import publish_release as publisher
+import release_materials as materials
+import review_image
 
 SHA = 'a' * 40
 DIGESTS = {'amd64': 'sha256:' + '1' * 64, 'arm64': 'sha256:' + '2' * 64}
@@ -30,6 +34,48 @@ def inspected_image(arch, config=None):
 
 
 class ReleasePublishTests(unittest.TestCase):
+    @contextmanager
+    def original_release_evidence(self, *, matches=None, config_digests=None,
+                                  empty_exceptions=False, day=None):
+        import tests.test_release_materials as fixtures
+        fixture = fixtures.ReleaseMaterialsTests()
+        fixture.VERSION = Path('VERSION').read_text().strip()
+        fixture.setUp()
+        # Preserve the caller's publisher environment; only the asset producer
+        # run fields are supplied by this fixture below.
+        fixture.environ.stop()
+        try:
+            rows, bodies = fixture.verify_fixture(
+                matches=matches, native_digests=DIGESTS,
+                config_digests=config_digests or CONFIGS,
+                empty_exceptions=empty_exceptions, validation=True,
+            )
+            original = dict(bodies)
+            downloads = []
+
+            def asset_body(asset):
+                downloads.append(asset['name'])
+                return bodies[asset['name']]
+
+            release = {'id': 88, 'draft': True, 'tag_name': fixture.VERSION,
+                       'target_commitish': SHA}
+            with chdir(fixture.root), \
+                 patch.dict(os.environ, {'GITHUB_RUN_ID': '123456', 'GITHUB_RUN_ATTEMPT': '3'}), \
+                 patch.object(materials, 'draft', return_value=release) as draft, \
+                 patch.object(materials, 'api', return_value=rows) as assets, \
+                 patch.object(materials, 'asset_body', side_effect=asset_body), \
+                 patch.object(materials, 'verify_durable_validation'), \
+                 patch.object(review_image, 'current_day', return_value=day or datetime.date(2026, 10, 7)):
+                yield fixture.root, downloads
+            draft.assert_called_once_with(fixture.VERSION)
+            assets.assert_called_once_with('/releases/88/assets?per_page=100')
+            self.assertEqual(bodies, original)
+            for arch in DIGESTS:
+                name = f'keep-{fixture.VERSION}-security-evidence-{arch}.tar.gz'
+                self.assertEqual(downloads.count(name), 1)
+        finally:
+            fixture.doCleanups()
+
     def test_pushes_and_invalid_inputs_never_contact_registry(self):
         cases = [
             {'GITHUB_EVENT_NAME': 'push', 'GITHUB_REF': 'refs/heads/main'},
@@ -121,7 +167,8 @@ class ReleasePublishTests(unittest.TestCase):
                     with patch.dict(os.environ, ENV), patch.object(publisher, 'github', side_effect=github), \
                          patch.object(publisher, 'require_new_tags'), \
                          patch.object(publisher, 'hub', side_effect=[{'access_token': 'token'}, {'is_private': hub_private}]), \
-                         patch.object(publisher.subprocess, 'run', side_effect=docker), patch('builtins.print'):
+                         patch.object(publisher.subprocess, 'run', side_effect=docker), patch('builtins.print'), \
+                         self.original_release_evidence():
                         publisher.execute('example/keep', SHA, Path(directory), release=True)
                     pushes = [c[-1] for c in calls if c[1] == 'push' or c[1:3] == ['manifest', 'push']]
                     self.assertEqual(pushes[-1], 'example/keep:stable')
@@ -191,11 +238,125 @@ class ReleasePublishTests(unittest.TestCase):
                 with patch.dict(os.environ, ENV), patch.object(publisher, 'require_current_source'), \
                      patch.object(publisher, 'require_new_tags'), \
                      patch.object(publisher, 'hub', side_effect=[{'access_token': 'token'}, {'is_private': False}]), \
-                     patch.object(publisher.subprocess, 'run', side_effect=docker):
+                     patch.object(publisher.subprocess, 'run', side_effect=docker), \
+                     self.original_release_evidence():
                     with self.assertRaisesRegex(ValueError, 'native digest differs'):
                         publisher.execute('example/keep', SHA, Path(directory), release=True)
                 self.assertFalse(any(c[1:3] in (['manifest', 'create'], ['manifest', 'push']) for c in calls))
                 self.assertNotIn(['docker', 'push', 'example/keep:stable'], calls)
+
+    def publishing_docker(self, calls, before_command=None):
+        def docker(command, **kwargs):
+            calls.append(command)
+            if before_command:
+                before_command(command)
+            output = ''
+            if command[1:3] == ['image', 'inspect']:
+                output = json.dumps([inspected_image(command[-1].removeprefix('keep-ci-'))])
+            elif command[1:4] == ['manifest', 'inspect', '--verbose']:
+                arch = 'amd64' if command[-1].endswith('-amd64') else 'arm64'
+                output = json.dumps({'Descriptor': {'digest': DIGESTS[arch]}})
+            elif command[1:3] == ['manifest', 'inspect']:
+                output = json.dumps({'manifests': [
+                    {'platform': {'os': 'linux', 'architecture': arch}, 'digest': digest}
+                    for arch, digest in DIGESTS.items()]})
+            return subprocess.CompletedProcess(command, 0, output)
+        return docker
+
+    @contextmanager
+    def publication_fixture(self, calls, *, before_command=None, **evidence_options):
+        with tempfile.TemporaryDirectory() as directory:
+            for arch in DIGESTS:
+                (Path(directory) / ('keep-' + arch + '.tar')).write_bytes(b'offline-only')
+            with patch.dict(os.environ, ENV), patch.object(publisher, 'require_current_source'), \
+                 patch.object(publisher, 'require_new_tags'), \
+                 patch.object(publisher, 'hub', side_effect=[{'access_token': 'token'}, {'is_private': False}]), \
+                 patch.object(publisher.subprocess, 'run', side_effect=self.publishing_docker(calls, before_command)), \
+                 patch('builtins.print'), self.original_release_evidence(**evidence_options) as evidence:
+                yield Path(directory), evidence
+
+    def needed_exception(self):
+        return [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
+
+    def test_clean_publication_with_empty_or_unused_expired_exceptions_passes(self):
+        for empty in (False, True):
+            calls = []
+            with self.subTest(empty_exceptions=empty), self.publication_fixture(
+                    calls, empty_exceptions=empty, day=datetime.date(2026, 10, 8)) as (artifacts, _evidence):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+            self.assertIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+
+    def test_needed_exception_passes_publication_on_deadline(self):
+        calls = []
+        with self.publication_fixture(calls, matches=self.needed_exception(),
+                                      day=datetime.date(2026, 10, 7)) as (artifacts, _evidence):
+            publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+
+    def test_expired_needed_exception_blocks_before_any_publication(self):
+        calls = []
+        with self.publication_fixture(calls, matches=self.needed_exception(),
+                                      day=datetime.date(2026, 10, 8)) as (artifacts, _evidence):
+            with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
+
+    def test_crossing_utc_deadline_blocks_stable_immediately_before_push(self):
+        calls = []
+        day = datetime.date(2026, 10, 7)
+
+        def cross_deadline(command):
+            nonlocal day
+            if command[1:3] == ['manifest', 'create'] and command[3] == 'example/keep:stable':
+                day = datetime.date(2026, 10, 8)
+
+        with self.publication_fixture(calls, matches=self.needed_exception(),
+                                      before_command=cross_deadline) as (artifacts, _evidence), \
+             patch.object(review_image, 'current_day', side_effect=lambda: day):
+            with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        pushes = [command for command in calls if command[1] == 'push' or command[1:3] == ['manifest', 'push']]
+        self.assertEqual(len(pushes), 4)
+        self.assertFalse(any(command[-1] == 'example/keep:stable' for command in pushes))
+
+    def test_crossing_deadline_before_native_push_is_also_blocked(self):
+        calls = []
+        day = datetime.date(2026, 10, 7)
+
+        def cross_deadline(command):
+            nonlocal day
+            if command[1] == 'tag':
+                day = datetime.date(2026, 10, 8)
+
+        with self.publication_fixture(calls, matches=self.needed_exception(),
+                                      before_command=cross_deadline) as (artifacts, _evidence), \
+             patch.object(review_image, 'current_day', side_effect=lambda: day):
+            with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertFalse(any(command[1] == 'push' for command in calls))
+
+    def test_archived_config_mismatch_blocks_before_publication(self):
+        for arch in DIGESTS:
+            calls = []
+            changed = {**CONFIGS, arch: 'sha256:' + '0' * 64}
+            with self.subTest(arch=arch), self.publication_fixture(
+                    calls, config_digests=changed) as (artifacts, _evidence):
+                with self.assertRaisesRegex(ValueError, 'release evidence config differs'):
+                    publisher.execute('example/keep', SHA, artifacts, release=True)
+            self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
+
+    def test_reviewed_source_change_before_stable_push_is_blocked(self):
+        calls = []
+
+        def change_source(command):
+            if command[1:3] == ['manifest', 'create'] and command[3] == 'example/keep:stable':
+                Path('scripts/python_security_patches.json').write_bytes(b'changed source')
+
+        with self.publication_fixture(calls, before_command=change_source) as (artifacts, _evidence):
+            with self.assertRaisesRegex(ValueError, 'verified-fixed review must be refreshed'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertNotIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
 
     def test_release_refuses_wrong_ref_or_confirmation_before_registry(self):
         for changes in ({'GITHUB_REF': 'refs/heads/feature/test'},

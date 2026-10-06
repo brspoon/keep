@@ -89,6 +89,8 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
+      - name: Warn about upcoming image-exception review deadlines
+        run: python -B scripts/review_image.py --check-deadlines
       - name: Install pinned application dependencies
         run: python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Test contribution without registry or publishing credentials
@@ -300,6 +302,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
           TESTED_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64 }}","arm64":"${{ needs.tested-images.outputs.arm64 }}"}'
           TESTED_CONFIG_DIGESTS: '{"amd64":"${{ needs.tested-images.outputs.amd64_config }}","arm64":"${{ needs.tested-images.outputs.arm64_config }}"}'
         run: python3 scripts/publish_release.py --image "$DOCKERHUB_IMAGE" --revision "$GITHUB_SHA" --artifacts artifacts --execute --release

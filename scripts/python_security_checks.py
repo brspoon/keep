@@ -5,9 +5,11 @@ References: python/cpython commits 16dea1e, a0d023f, 31980e8, 1e54caa,
 5e0ef3f, b234a2b, fb2f0bb and 363aec1; zlib commit df84af2.
 Keep additionally refuses unbound permission resets and unsafe open fallbacks.
 """
+import binascii
 import ctypes
 import errno
 import io
+import gzip
 import hashlib
 import json
 import os
@@ -24,6 +26,39 @@ import unittest
 from unittest.mock import Mock, patch
 import urllib.request
 import zipfile
+import zlib
+
+
+def verify_loaded_zlib(library_path, expected_sha256, maps_text, library_directories):
+    """Bind the reviewed file to the actual Linux mappings and loader aliases."""
+    expected_path = library_path.resolve(strict=True)
+    expected_stat = expected_path.stat()
+    if hashlib.sha256(expected_path.read_bytes()).hexdigest() != expected_sha256:
+        raise RuntimeError('zlib runtime file does not match the build manifest')
+    soname = library_path.with_name('libz.so.1')
+    if soname.resolve(strict=True) != expected_path:
+        raise RuntimeError('zlib SONAME alias does not select the reviewed library')
+
+    for directory in library_directories:
+        for candidate in directory.glob('libz.so*'):
+            if hashlib.sha256(candidate.read_bytes()).hexdigest() != expected_sha256:
+                raise RuntimeError('a zlib loader candidate differs from the reviewed library')
+
+    found = False
+    for line in maps_text.splitlines():
+        fields = line.split(None, 5)
+        if len(fields) != 6 or not pathlib.Path(fields[5]).name.startswith('libz.so'):
+            continue
+        mapped_path = pathlib.Path(fields[5])
+        if mapped_path.resolve(strict=True) != expected_path:
+            raise RuntimeError('default consumers mapped a different zlib library')
+        major, minor = (int(part, 16) for part in fields[3].split(':'))
+        if (int(fields[4]) != expected_stat.st_ino
+                or (major, minor) != (os.major(expected_stat.st_dev), os.minor(expected_stat.st_dev))):
+            raise RuntimeError('mapped zlib identity differs from the reviewed file')
+        found = True
+    if not found:
+        raise RuntimeError('no loaded zlib library was found')
 
 
 class PythonSecurityChecks(unittest.TestCase):
@@ -166,12 +201,22 @@ class PythonSecurityChecks(unittest.TestCase):
         self.assertEqual(manifest['upstream_commit'], 'df84af25dc1942490e1d1c899a07619152a46148')
         self.assertEqual(manifest['archive_sha256'], 'b99a0b86c0ba9360ec7e78c4f1e43b1cbdf1e6936c8fa0f6835c0cd694a495a1')
         self.assertEqual(manifest['version'], '1.3.2')
-        library_path = pathlib.Path('/lib/libz.so.1.3.2')
-        self.assertEqual(hashlib.sha256(library_path.read_bytes()).hexdigest(),
-                         manifest['library_sha256'])
-        library = ctypes.CDLL(str(library_path))
+        library_path = pathlib.Path('/usr/lib/libz.so.1.3.2')
+        # Use the normal SONAME lookup, after the ordinary Python imports above.
+        # Opening the patched file by absolute path can mask a delivery defect.
+        library = ctypes.CDLL('libz.so.1')
         library.zlibVersion.restype = ctypes.c_char_p
         self.assertEqual(library.zlibVersion(), b'1.3.2')
+        self.assertEqual(zlib.ZLIB_RUNTIME_VERSION, '1.3.2')
+        payload = b'normal compression round trip' * 100
+        self.assertEqual(zlib.decompress(zlib.compress(payload)), payload)
+        self.assertEqual(gzip.decompress(gzip.compress(payload)), payload)
+        self.assertEqual(binascii.crc32(b'123456789'), 0xcbf43926)
+        verify_loaded_zlib(
+            library_path, manifest['library_sha256'],
+            pathlib.Path('/proc/self/maps').read_text(),
+            (pathlib.Path('/lib'), pathlib.Path('/usr/lib')),
+        )
 
     def test_CVE_2025_15367_pop_command_injection(self):
         client = poplib.POP3.__new__(poplib.POP3)
