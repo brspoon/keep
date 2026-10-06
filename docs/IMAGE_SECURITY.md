@@ -158,11 +158,31 @@ fixed by `3.1.9`. Scout also reported Expat `CVE-2026-102633` and
 are outside the existing approvals. Renewing the eight previously accepted
 exceptions cannot qualify these images for publication.
 
-Werkzeug is now pinned to `3.1.9` with matching source records. The documented
-newer DHI base contains OpenSSL `3.5.9-r0`, but its signed native identity and
-matching sources still require verification. Its Expat `2.8.5-r0` also requires
-a verified replacement. Public DHI `2.9.0-r0` package URLs returned HTTP 403;
-this does not establish their availability through the authenticated build path.
+Werkzeug is now pinned to `3.1.9` with matching source records. Authenticated
+vendor assessment [37483114376](https://github.com/brspoon/keep/actions/runs/37483114376)
+verified the documented newer DHI index, both native subjects, and Docker
+signatures for the original build and source statements. The retained OCI
+signature objects and statement bytes also passed offline verification against
+the pinned Docker key and index.
+
+Both native inventories contain Python `3.14.7-r2`, OpenSSL `3.5.9-r0` and
+Expat `2.8.5-r0`. The authenticated package installation failed on both
+architectures: the configured vendor repositories offer `expat` and `libexpat`
+at `2.8.5-r0`, which cannot satisfy the exact `2.9.0-r0` requirement. Earlier
+anonymous DHI requests returned HTTP 403, and the examined official Alpine
+`2.9.0-r0` package URLs returned HTTP 404. No verified replacement package is
+available through either examined route.
+
+A replacement release needs verified Expat `2.9.0` packages on both
+architectures, complete final-image scans and runtime checks, and matching
+source/license materials. The newer base also changes CA certificates, timezone
+data and xz; update their source records together with Python and OpenSSL.
+Retain the cleanup and zlib defenses until replacement fixes are proven.
+Any needed Python `3.14.7-r2` exception requires explicit review of that new
+package tuple. Building an Expat replacement from verified upstream sources
+requires a truthful package version and corresponding build/source evidence;
+replacing library bytes while retaining the old package metadata does not remove
+the scanner findings or qualify an additional exception.
 
 **Review vendor runtime candidate** is a manual, main-only workflow that checks
 the exact documented candidate index, Docker signatures, both native image
