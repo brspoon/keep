@@ -14,12 +14,14 @@ Scout must report zero findings. Grype permits only the verified-fixed
 findings recorded in docs/image-exceptions.json; every other finding blocks release.
 Source hashes, base identity, complete scans, successful probes and the deadline
 of each exception used by a finding are enforced by scripts/review_image.py.
-Full raw JSON reports are printed
-in the workflow logs under each architecture's security-evidence groups and saved
-with the tested image in an unpublished main-validation draft. A small immutable
-Actions index binds the original reports to their producing run and attempt,
-independently of log retention. Large evidence and source archives stay out of
-Actions artifact storage.
+Full JSON report contents are printed in the workflow logs under each
+architecture's security-evidence groups. After all applicable gates pass, the
+original report bytes are saved with the tested image in an unpublished
+main-validation draft. A small immutable Actions index binds those reports to
+their producing run and attempt, independently of log retention. A failed
+security run supplies log-derived findings, without a retained promotion archive;
+reformatted log contents do not prove original report byte identity. Large
+evidence and source archives stay out of Actions artifact storage.
 The checksum-verified Scout executable also captures
 the final image's complete SPDX SBOM as `candidate-sbom-<architecture>.json`.
 The existing evidence reporter retains it alongside scans. License inventory
