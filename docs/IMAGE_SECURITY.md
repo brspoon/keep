@@ -158,8 +158,15 @@ fixed by `3.1.9`. Scout also reported Expat `CVE-2026-102633` and
 are outside the existing approvals. Renewing the eight previously accepted
 exceptions cannot qualify these images for publication.
 
-Werkzeug is now pinned to `3.1.9` with matching source records. Authenticated
-vendor assessment [37483114376](https://github.com/brspoon/keep/actions/runs/37483114376)
+Werkzeug is now pinned to `3.1.9` with matching source records. Final main
+validation [37483049399](https://github.com/brspoon/keep/actions/runs/37483049399)
+passed the nine runtime probes on both architectures and no longer reported the
+Werkzeug finding. Each image still blocked on 39 OpenSSL package findings from
+Grype and two Expat findings from Scout. Matching-source acquisition and final
+image retention did not run after the security gate failed.
+
+Authenticated vendor assessment
+[37483114376](https://github.com/brspoon/keep/actions/runs/37483114376)
 verified the documented newer DHI index, both native subjects, and Docker
 signatures for the original build and source statements. The retained OCI
 signature objects and statement bytes also passed offline verification against
