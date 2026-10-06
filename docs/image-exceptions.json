@@ -4,7 +4,7 @@
   "reviewed_sources": {
     "Dockerfile": "ecde567a28269f20949cd0ac2c3da83ed29b2859366c21f35e8fecd64a7cd76b",
     "scripts/inspect_candidate.py": "28d160073d2c142e863f708941a044e772739eedbfda13bcb0289bbfd7e3388f",
-    "requirements.txt": "7fd74b0bbe95ab605f4bfba2a95a7de1993888f9027c50dabb03c4d1bf04a639",
+    "requirements.txt": "26a92d0b3e6ce4a03b950fdd007e549e716ef45a10cb73220b9207581824ea6c",
     "scripts/python_security_patches.json": "81d8119bbc903e70a921a7a26e780b55c8f318d6ddd77aee24567fda01e700ff",
     "scripts/patch_python_runtime.py": "ac173c04c32674c4b14a3d40ff091ef97793cc5460d124866111f27f83e09316",
     "scripts/python_security_checks.py": "5e0c2b188129f93539e5d26f51e3fde659f1184754082ad4ffffe38c0500fb3f",
@@ -30,11 +30,11 @@
       "package": "python-3.14",
       "version": "3.14.7-r1",
       "status": "fixed",
-      "evidence": "Exact upstream CPython commit 16dea1e887ec7dfbed735beedd476b21dcc91a79 is applied by scripts/python_security_patches.json; the link-fallback probe in scripts/python_security_checks.py verifies that skipped filter decisions are honored.",
+      "evidence": "Exact upstream CPython commit fb2f0bbc3b35264f09cc2cb2934b7987527a6bc2 is applied by scripts/python_security_patches.json; the link-fallback probe in scripts/python_security_checks.py verifies that skipped filter decisions are honored.",
       "review": {
         "approval": "Inherited verified-fixed approval for CVE-2026-87910 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
         "deadline": "2026-10-07",
-        "remove_when": "Remove only after verified replacement Python sources include 16dea1e887ec7dfbed735beedd476b21dcc91a79 or a proven equivalent, the corresponding runtime regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update patch inputs, source materials and evidence together."
+        "remove_when": "Remove only after verified replacement Python sources include fb2f0bbc3b35264f09cc2cb2934b7987527a6bc2 or a proven equivalent, the corresponding runtime regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update patch inputs, source materials and evidence together."
       }
     },
     "CVE-2026-17084": {

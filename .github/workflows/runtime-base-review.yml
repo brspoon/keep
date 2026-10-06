@@ -1,0 +1,124 @@
+name: Review vendor runtime candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    if: github.repository == 'brspoon/keep' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify candidate vendor identity and Expat package availability
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          REVIEW_ARCH: ${{ matrix.arch }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys, tempfile
+          sys.path.insert(0, 'scripts')
+          from inspect_candidate import DIRECT, download
+          base = 'dhi.io/python@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7'
+          subjects = {
+              'amd64': ('fa220ee7ebeadd3e4d68f5fecb73dd29b69622684ce130157e59fd9811cbeb80',
+                        '11a52f02e3d4dc4440539cd2933c89c51b884bc7ff23e5d3ea1bb3a072c92049',
+                        'bcdacf10bee7e207f94c68bf309f9fff2d71821dab53457b9049e7bb82b5ee8a'),
+              'arm64': ('233127fc1adc0748f183e2341864e6c3caa2c9855819657c26b4a49c50fd7f06',
+                        '6b375b5b6d889fdbd3ddf3a745b6a1f43bed7c3f6a76802108a45898a7c04867',
+                        '17f4e791077abe068768bd99ac77ab6649444c618711494b823847527fdcfc71'),
+          }
+          arch = os.environ['REVIEW_ARCH']
+          native, provenance, source = subjects[arch]
+          username = os.environ.pop('DOCKERHUB_USERNAME')
+          token = os.environ.pop('DOCKERHUB_TOKEN')
+          output = pathlib.Path('vendor-review') / arch
+          output.mkdir(parents=True)
+          with tempfile.TemporaryDirectory() as temporary:
+              root = pathlib.Path(temporary)
+              env = {**os.environ, 'DOCKER_CONFIG': str(root / 'config')}
+              subprocess.run(['docker', 'login', 'dhi.io', '--username', username,
+                              '--password-stdin'], input=token, text=True, env=env, check=True)
+              regctl = download(root, 'regctl', f'https://github.com/regclient/regclient/releases/download/v0.11.6/regctl-linux-{arch}', DIRECT[arch][2])
+              cosign = download(root, 'cosign', f'https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-{arch}', DIRECT[arch][3])
+              key = download(root, 'dhi.pub', 'https://registry.scout.docker.com/keyring/dhi/latest.pub',
+                             '1d02bbccf149283ae6288d96264dcad3fb23ee1911d90324a48eab28e4cb8a5f')
+              (output / 'dhi.pub').write_bytes(key.read_bytes())
+              index_raw = subprocess.check_output([str(regctl), 'manifest', 'get', base, '--format', 'raw-body'], env=env)
+              if 'sha256:' + hashlib.sha256(index_raw).hexdigest() != base.split('@')[1]:
+                  raise ValueError('Candidate index bytes differ from pinned digest')
+              if not any(m.get('digest') == 'sha256:' + native and m.get('platform', {}).get('architecture') == arch
+                         for m in json.loads(index_raw)['manifests']):
+                  raise ValueError('Candidate native subject is outside pinned index')
+              (output / 'index.json').write_bytes(index_raw)
+              for name, digest, predicate in (
+                  ('provenance', provenance, 'https://slsa.dev/provenance/v1'),
+                  ('source', source, 'https://docker.com/dhi/source/v0.1')):
+                  reference = 'dhi.io/python@sha256:' + digest
+                  claims_raw = subprocess.check_output([str(cosign), 'verify', reference, '--key', str(key),
+                      '--experimental-oci11', '--insecure-ignore-tlog=true'], env=env)
+                  claims = json.loads(claims_raw)
+                  if not claims or not all(c['critical']['image']['docker-manifest-digest'] == 'sha256:' + digest for c in claims):
+                      raise ValueError('Candidate signature does not cover exact attestation')
+                  raw = subprocess.check_output([str(regctl), 'artifact', 'get', reference], env=env)
+                  statement = json.loads(raw)
+                  if statement.get('predicateType') != predicate or not any(s.get('digest', {}).get('sha256') == native for s in statement.get('subject', [])):
+                      raise ValueError('Candidate signed statement has wrong native subject or predicate')
+                  if name == 'provenance' and (not statement.get('predicate', {}).get('buildDefinition') or not statement.get('predicate', {}).get('runDetails')):
+                      raise ValueError('Candidate signed build provenance is incomplete')
+                  if name == 'source' and statement.get('predicate', {}).get('source', {}).get('name') != 'dhi/python':
+                      raise ValueError('Candidate source statement names an unexpected image')
+                  (output / (name + '.json')).write_bytes(raw)
+                  (output / (name + '-claims.json')).write_bytes(claims_raw)
+                  subprocess.run([str(regctl), 'image', 'copy', reference,
+                      'ocidir://' + str((output / (name + '-proof-oci')).resolve()) + ':' + name,
+                      '--referrers'], env=env, check=True)
+              subprocess.run(['docker', 'pull', '--platform', 'linux/' + arch, base], env=env, check=True)
+              with (output / 'runtime-inventory.json').open('wb') as inventory:
+                  subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--entrypoint', 'python',
+                      '-v', str(pathlib.Path('scripts/image_distribution.py').resolve()) + ':/inventory.py:ro',
+                      base, '-B', '/inventory.py', '--runtime'], env=env, stdout=inventory, check=True)
+              print('Candidate index, signatures and native subjects verified; original vendor inventory captured.', flush=True)
+              # Keep registry configuration outside the Docker build context.
+              context = root / 'build-context'
+              context.mkdir()
+              dockerfile = context / 'Dockerfile'
+              dockerfile.write_text('FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS package-manager\n'
+                  + 'FROM ' + base + '\nUSER 0\n'
+                  + 'RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk '
+                  + '--mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 '
+                  + '["/sbin/apk", "add", "--no-cache", "--upgrade", "expat=2.9.0-r0", "libexpat=2.9.0-r0"]\n')
+              subprocess.run(['docker', 'build', '--progress=plain', '--tag', 'keep-vendor-review',
+                              '--file', str(dockerfile), str(context)], env=env, check=True)
+              with (output / 'upgraded-inventory.json').open('wb') as inventory:
+                  subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--entrypoint', 'python',
+                      '-v', str(pathlib.Path('scripts/image_distribution.py').resolve()) + ':/inventory.py:ro',
+                      'keep-vendor-review', '-B', '/inventory.py', '--runtime'], env=env, stdout=inventory, check=True)
+              upgraded = json.loads((output / 'upgraded-inventory.json').read_bytes())
+              expat = [p for p in upgraded['os_packages'] if p['name'] in ('expat', 'libexpat')]
+              if len(expat) != 2 or {p['name'] for p in expat} != {'expat', 'libexpat'} or any(p['version'] != '2.9.0-r0' for p in expat):
+                  raise ValueError('Upgraded candidate does not contain both exact Expat packages')
+              subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--entrypoint', 'python',
+                  'keep-vendor-review', '-B', '-c',
+                  "import pyexpat; assert pyexpat.EXPAT_VERSION == 'expat_2.9.0'; pyexpat.ParserCreate().Parse(b'<keep/>', True)"], env=env, check=True)
+              print('Vendor Expat 2.9.0 package installation passed. Full Keep qualification is still required.')
+          PY
+      - name: Retain original vendor review evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vendor-runtime-${{ matrix.arch }}-${{ github.run_id }}
+          path: vendor-review/${{ matrix.arch }}/
+          if-no-files-found: warn
+          retention-days: 7
