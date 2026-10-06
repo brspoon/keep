@@ -55,7 +55,7 @@ NATIVE_STEPS = (
     'Scan candidate without suppressions',
     'Verify all nine runtime security fixes in the tested image',
     'Verify default Expat and OpenSSL library loading',
-    'Accept only the nine verified-fixed findings and block all others',
+    'Accept only reviewed fixed findings and block all others',
     'Obtain verified base source materials and license notices',
     'Obtain matching sources for every installed OS package',
     'Package sources and notices for the exact tested runtime',

@@ -27,6 +27,7 @@ from verify_source_proof import BASE_DIGEST, PREDICATE, ProofLayout, digest, ver
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_DOWNLOAD = 64 * 1024 * 1024
+MAX_NOTICE_INVENTORY = 64 * 1024 * 1024
 
 
 def fetch_source(url):
@@ -71,6 +72,22 @@ def read_json(root, name):
     if path.stat().st_size > 32 * 1024 * 1024:
         raise ValueError('Source metadata exceeds size limit')
     return json.loads(path.read_bytes())
+
+
+def read_notice_inventory(directory):
+    """Read a bounded full package inventory and preserve its exact bytes.
+
+    Compiler inventories include every preferred-source file and legal header,
+    so they can exceed the smaller limit for ordinary source metadata.
+    """
+    path = regular(directory, 'package-material-inventory.json')
+    if path.stat().st_size > MAX_NOTICE_INVENTORY:
+        raise ValueError('Package notice inventory exceeds size limit')
+    with path.open('rb') as stream:
+        body = stream.read(MAX_NOTICE_INVENTORY + 1)
+    if len(body) > MAX_NOTICE_INVENTORY:
+        raise ValueError('Package notice inventory exceeds size limit')
+    return json.loads(body), body
 
 
 def write_json(path, value):
@@ -193,8 +210,14 @@ def check_runtime_notices(root, inventory, os_lock, arch):
                 covered.add(origin)
     if covered != set(expected):
         raise ValueError('Committed runtime notices do not cover every reviewed OS origin and original Expat')
+    manifest_path = regular(directory, 'manifest.json')
+    manifest_sha256 = file_sha(manifest_path)
+    runtime_manifest = installed.get('/app/licenses/os/manifest.json')
+    if (not runtime_manifest or runtime_manifest.get('sha256') != manifest_sha256
+            or runtime_manifest.get('bytes') != manifest_path.stat().st_size):
+        raise ValueError('Candidate runtime lacks the exact committed OS notice manifest bytes')
     return {'origins': len(covered), 'notices': len(seen), 'runtime_bytes_verified': True,
-            'manifest_sha256': file_sha(directory / 'manifest.json')}
+            'manifest_sha256': manifest_sha256}
 
 
 def copy_proof(source, destination, arch, proof):
@@ -715,8 +738,7 @@ def retain_notice_inputs(bundles, output_dir, architecture):
     output.mkdir(parents=True, exist_ok=True)
     records = []
     for number, directory in enumerate(sorted({Path(path) for path in bundles})):
-        inventory_path = regular(directory, 'package-material-inventory.json')
-        report = read_json(directory, 'package-material-inventory.json')
+        report, inventory_bytes = read_notice_inventory(directory)
         if (report.get('schema') != 1 or report.get('success') is not True
                 or report.get('architecture') != architecture
                 or not isinstance(report.get('notices'), list) or not report['notices']):
@@ -724,10 +746,7 @@ def retain_notice_inputs(bundles, output_dir, architecture):
         relative = f'bundles/{number:04d}'
         target = output / relative
         target.mkdir(parents=True)
-        inventory_bytes = inventory_path.read_bytes()
-        if json.loads(inventory_bytes) != report:
-            raise ValueError('Notice inventory changed during retention')
-        (target / inventory_path.name).write_bytes(inventory_bytes)
+        (target / 'package-material-inventory.json').write_bytes(inventory_bytes)
         retained = set()
         for notice in report['notices']:
             name = safe_name(notice['notice_file'])
@@ -769,7 +788,7 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
     # Label overwritten packages separately from their installed replacements.
     # The original signed statements and source bytes remain untouched.
     for path in sorted((stage / 'original-base/packages').rglob('package-material-inventory.json')):
-        report = json.loads(path.read_bytes())
+        report, _ = read_notice_inventory(path.parent)
         if report['origin'] not in {row['origin'] for row in os_lock['original_base_origins']}:
             raise ValueError('Unreviewed original base notice origin')
         origin = report['origin'] + '-original-base'
@@ -825,9 +844,12 @@ def check_generated_notices(root, generated, arch):
         if match is None or match.get('bytes') != notice['bytes']:
             raise ValueError('Actual preferred-source notice is missing from committed runtime notices')
         for provenance in notice['provenance']:
-            identity = (provenance['origin'], provenance['version'], arch, provenance['source_path'])
-            if not any((row.get('origin'), row.get('version'), row.get('architecture'), row.get('source_path')) == identity
-                       for row in match['provenance']):
+            if not isinstance(provenance, dict) or provenance.get('architecture') != arch:
+                raise ValueError('Actual source notice attribution has the wrong native architecture')
+            # Compare the complete JSON attribution, including proof metadata
+            # and value types. A shared notice text does not transfer its proof.
+            attribution = json.dumps(provenance, sort_keys=True)
+            if not any(json.dumps(row, sort_keys=True) == attribution for row in match['provenance']):
                 raise ValueError('Actual source notice attribution differs from committed runtime provenance')
 
 

@@ -19,7 +19,7 @@ architecture's security-evidence groups. After all applicable gates pass, the
 original report bytes are saved with the tested image in an unpublished
 main-validation draft. A small immutable Actions index binds those reports to
 their producing run and attempt, independently of log retention. A failed
-security run supplies log-derived findings, without a retained promotion archive;
+main security run supplies log-derived findings, without a retained promotion archive;
 reformatted log contents do not prove original report byte identity. Large
 evidence and source archives stay out of Actions artifact storage.
 The checksum-verified Scout executable also captures
@@ -210,6 +210,23 @@ Disable `prepare_notices` after committing the checked notice union to verify
 the rebuilt images' notices and complete source archives without retaining
 images or enabling publication.
 
+The replacement images in native qualification
+[37499120809](https://github.com/brspoon/keep/actions/runs/37499120809) passed all
+nine security probes and verified normal loading of Expat `2.9.0` and OpenSSL
+`3.5.9` on both architectures. Scout reported zero findings; Grype reported the
+seven Python findings at `3.14.7-r2` and the patched zlib finding. No OpenSSL or
+Expat exception is needed. The Python findings block because the existing
+approvals cover `3.14.7-r1`, not the replacement revision.
+
+Source acquisition in
+[37501921315](https://github.com/brspoon/keep/actions/runs/37501921315) completed
+for all 18 installed OS origins on both architectures. Notice preparation then
+exceeded a metadata size limit on the complete GCC inventory. The preparation
+helper now uses a separate bounded inventory reader while preserving exact input
+bytes. Final qualification still requires a complete native notice union,
+rebuilt runtime notices and verified source archives. These partial results do
+not authorize promotion or renew the remaining October 7 approvals.
+
 ## Replacing patched dependencies
 
 Assess a newer base by its immutable digest and both native architecture images.
@@ -285,8 +302,14 @@ findings, but the original zlib probe did not verify the library used by Python.
 These reports remain tied to the original image. Being within the October 7
 deadlines does not authorize that image or prove the correction. The changed
 recipe and probe source bindings require fresh corrected candidate evidence and
-review; needed exceptions still block after their deadlines. The
-`CVE-2026-4360` policy entry is unused by those reports.
+review; needed exceptions still block after their deadlines.
+
+The unused `CVE-2026-4360` exception has been removed. The verified Python
+`3.14.7-r2` packages contain the hardlink-target filtering fix from `5e0ef3f`.
+Both native architectures passed its regression probe, and their original
+unsuppressed Grype and Scout reports contain no finding for it. All nine runtime
+probes and exact Python source assertions remain required; a future finding for
+this retired exception blocks as unmatched.
 
 As of October 5, the Python 3.14 directory-cleanup
 [backport PR](https://github.com/python/cpython/pull/158430) remains open and
@@ -342,7 +365,9 @@ notices together. Remove a patch or exception only after its replacement passes
 source inspection, all required native probes and complete unsuppressed scans on
 both architectures. Retain Keep's cleanup guard until equivalent behavior is
 proven. Dependency-update proposals must pass the same coordinated review.
-No base migration or exception removal has been validated yet.
+The October 6 qualification above records the verified replacement libraries and
+the individual exception removal. Remaining Python and zlib findings still need
+their reviewed fixes and exact candidate approval.
 
 ## Directory cleanup
 

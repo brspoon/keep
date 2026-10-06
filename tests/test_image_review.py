@@ -48,6 +48,17 @@ class ImageReviewTests(unittest.TestCase):
         self.report['matches'][0]['vulnerability'] = {'id': 'CVE-2099-1234', 'severity': 'Low'}
         self.assertEqual(len(self.result()['blocked']), 1)
 
+    def test_retired_hardlink_finding_is_unmatched_and_blocks(self):
+        self.assertNotIn('CVE-2026-4360', self.policy['exceptions'])
+        self.report['matches'][0]['vulnerability']['id'] = 'CVE-2026-4360'
+        for version in ('3.14.7-r1', '3.14.7-r2'):
+            with self.subTest(version=version):
+                self.report['matches'][0]['artifact']['version'] = version
+                result = self.result()
+                self.assertFalse(result['accepted_fixed'])
+                self.assertEqual(len(result['blocked']), 1)
+                self.assertEqual(result['blocked'][0]['reason'], 'unmatched_finding')
+
     def test_changed_package_or_version_blocks(self):
         for key in ('name', 'version', 'type'):
             package = self.report['matches'][0]['artifact']
@@ -98,7 +109,7 @@ class ImageReviewTests(unittest.TestCase):
 
     def test_original_approval_limits_and_deadlines_are_preserved(self):
         self.assertNotIn('expires', self.policy)
-        self.assertEqual(len(self.policy['exceptions']), 9)
+        self.assertEqual(len(self.policy['exceptions']), 8)
         for rule in self.policy['exceptions'].values():
             self.assertEqual(rule['status'], 'fixed')
             self.assertEqual(rule['review']['deadline'], '2026-10-07')
@@ -163,13 +174,13 @@ class ImageReviewTests(unittest.TestCase):
                                (datetime.date(2026, 10, 8), -1)):
             with self.subTest(day=day):
                 warnings = deadline_warnings(self.policy, day)
-                self.assertEqual(len(warnings), 9)
+                self.assertEqual(len(warnings), 8)
                 self.assertTrue(all(w['days_remaining'] == remaining for w in warnings))
         self.assertEqual(self.policy, original)
 
     def test_warning_window_can_be_configured_and_empty_policy_is_quiet(self):
         self.assertFalse(deadline_warnings(self.policy, datetime.date(2026, 10, 5), 1))
-        self.assertEqual(len(deadline_warnings(self.policy, datetime.date(2026, 10, 5), 2)), 9)
+        self.assertEqual(len(deadline_warnings(self.policy, datetime.date(2026, 10, 5), 2)), 8)
         with self.assertRaises(ValueError): deadline_warnings(self.policy, warning_days=-1)
         self.policy['exceptions'] = {}
         self.assertEqual(deadline_warnings(self.policy, datetime.date(2026, 10, 8)), [])
@@ -288,7 +299,7 @@ class CandidateReviewTests(unittest.TestCase):
         output = io.StringIO()
         with chdir(self.root), patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 8)), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}), redirect_stdout(output):
             self.assertEqual(review_image.main(['--check-deadlines']), 0)
-        self.assertEqual(output.getvalue().count('::warning::'), 9)
+        self.assertEqual(output.getvalue().count('::warning::'), 8)
         self.assertIn('review deadline 2026-10-07', summary.read_text())
         self.assertIn('Unused exceptions do not block a clean scan', summary.read_text())
         self.assertEqual((self.root / 'docs/image-exceptions.json').read_bytes(), original)

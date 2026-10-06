@@ -125,6 +125,9 @@ container. The prepared runtime union contains 124 complete notice texts
 (814,844 bytes), covering all 20 current and earlier-layer origins on both
 architectures, including 20 explicitly reviewed source copyright headers.
 The native gate checks the rebuilt candidate against those committed hashes.
+It also verifies the exact installed notice-manifest bytes and every generated
+notice's complete native source attribution against the committed provenance.
+Sharing a license text does not transfer its source or signature evidence.
 Asset and installed Python notices remain in their original paths.
 
 The collection and packaging scripts are under `scripts/`. Authenticated

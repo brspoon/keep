@@ -390,6 +390,43 @@ class NoticeInputRetentionTests(unittest.TestCase):
         self.assertEqual(proof['proof_architecture'], 'arm64')
         self.assertEqual(proof['signed_statement_sha256'], self.report['signed_statement_sha256'])
 
+    def test_large_full_inventory_retains_exact_bytes_without_relaxing_other_metadata(self):
+        # Preserve a full inventory larger than ordinary metadata, including
+        # insignificant whitespace that must not be rewritten during retention.
+        inventory = self.write_report() + b' ' * (32 * 1024 * 1024)
+        (self.inputs / 'package-material-inventory.json').write_bytes(inventory)
+        with self.assertRaisesRegex(ValueError, 'Source metadata exceeds size limit'):
+            bundle.read_json(self.inputs, 'package-material-inventory.json')
+        output = self.root / 'large-notice-inputs'
+        result = bundle.retain_notice_inputs([self.inputs], output, 'amd64')
+        retained = output / result['bundles'][0]['directory'] / 'package-material-inventory.json'
+        self.assertEqual(retained.read_bytes(), inventory)
+        self.assertEqual(result['bundles'][0]['inventory_bytes'], len(inventory))
+        self.assertEqual(result['bundles'][0]['inventory_sha256'], hashlib.sha256(inventory).hexdigest())
+
+    def test_full_notice_inventory_limit_rejects_oversize_before_reading(self):
+        path = self.inputs / 'package-material-inventory.json'
+        with path.open('wb') as stream:
+            stream.truncate(bundle.MAX_NOTICE_INVENTORY + 1)
+        with patch.object(Path, 'open') as opened:
+            with self.assertRaisesRegex(ValueError, 'Package notice inventory exceeds size limit'):
+                bundle.read_notice_inventory(self.inputs)
+        opened.assert_not_called()
+
+    def test_full_notice_inventory_growth_still_has_a_bounded_read(self):
+        inventory_path = unittest.mock.Mock()
+        inventory_path.stat.return_value.st_size = 1
+        stream = unittest.mock.Mock(wraps=io.BytesIO(b' ' * 257))
+        manager = unittest.mock.MagicMock()
+        manager.__enter__.return_value = stream
+        inventory_path.open.return_value = manager
+        with patch.object(bundle, 'MAX_NOTICE_INVENTORY', 256), \
+                patch.object(bundle, 'regular', return_value=inventory_path):
+            with self.assertRaisesRegex(ValueError, 'Package notice inventory exceeds size limit'):
+                bundle.read_notice_inventory(self.inputs)
+        inventory_path.open.assert_called_once_with('rb')
+        stream.read.assert_called_once_with(257)
+
     def test_unselected_header_hash_and_length_are_rechecked(self):
         notice = self.report['notices'][1]
         path = self.inputs / notice['notice_file']
@@ -489,14 +526,43 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
             {'notice_file': name, 'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body),
              'provenance': [{'origin': 'fixture', 'version': '1-r0', 'architecture': 'amd64'},
                             {'origin': 'expat-original-base', 'version': '2.8.5-r0', 'architecture': 'amd64'}]}]}
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
         self.inventory = {'notices': [{'path': '/app/licenses/os/' + name,
                                        'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body)}]}
+        self.write_manifest(self.manifest)
+
+    def write_manifest(self, manifest):
+        bundle.write_json(self.directory / 'manifest.json', manifest)
+        body = (self.directory / 'manifest.json').read_bytes()
+        self.inventory['notices'] = [row for row in self.inventory['notices']
+                                     if row['path'] != '/app/licenses/os/manifest.json']
+        self.inventory['notices'].append({'path': '/app/licenses/os/manifest.json',
+                                         'sha256': hashlib.sha256(body).hexdigest(), 'bytes': len(body)})
 
     def test_committed_notice_union_and_candidate_bytes_cover_original_layers(self):
         result = bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
         self.assertEqual(result['origins'], 2)
         self.assertTrue(result['runtime_bytes_verified'])
+        self.assertEqual(result['manifest_sha256'], self.inventory['notices'][-1]['sha256'])
+
+    def test_missing_or_changed_installed_notice_manifest_is_rejected(self):
+        for mutation in ('missing', 'hash', 'size'):
+            inventory = copy.deepcopy(self.inventory)
+            if mutation == 'missing':
+                inventory['notices'].pop()
+            elif mutation == 'hash':
+                inventory['notices'][-1]['sha256'] = 'f' * 64
+            else:
+                inventory['notices'][-1]['bytes'] += 1
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'exact committed OS notice manifest bytes'):
+                bundle.check_runtime_notices(self.root, inventory, self.lock, 'amd64')
+
+    def test_installed_manifest_must_match_original_bytes_not_reserialized_json(self):
+        path = self.directory / 'manifest.json'
+        original = path.read_bytes()
+        path.write_bytes(original + b'\n')
+        self.assertEqual(json.loads(path.read_bytes()), self.manifest)
+        with self.assertRaisesRegex(ValueError, 'exact committed OS notice manifest bytes'):
+            bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
 
     def test_missing_runtime_notice_and_changed_notice_bytes_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'runtime lacks'):
@@ -514,7 +580,7 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
                 modified['notices'][0]['provenance'][0]['architecture'] = 'arm64'
             else:
                 modified['notices'][0]['provenance'].pop()
-            bundle.write_json(self.directory / 'manifest.json', modified)
+            self.write_manifest(modified)
             with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'every reviewed OS origin'):
                 bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
 
@@ -522,18 +588,18 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
         self.lock['origins'].append({'origin': 'python-3.14', 'version': '3.14.7-r1'})
         self.manifest['notices'][0]['provenance'].append(
             {'origin': 'python-3.14', 'version': '3.14.7-r1', 'architecture': 'amd64'})
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         with self.assertRaisesRegex(ValueError, 'every reviewed OS origin'):
             bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
         self.manifest['notices'][0]['provenance'].append(
             {'origin': 'python-3.14-ensurepip', 'version': '3.14.7-r1', 'architecture': 'amd64'})
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         self.assertEqual(bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')['origins'], 4)
 
     def test_actual_source_notice_bytes_and_attribution_must_be_committed(self):
         for provenance in self.manifest['notices'][0]['provenance']:
             provenance['source_path'] = 'sources/source.tar.gz!package/COPYING'
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         actual = copy.deepcopy(self.manifest)
         bundle.check_generated_notices(self.root, actual, 'amd64')
         for mutation in ('hash', 'source_path', 'ready'):
@@ -547,15 +613,63 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 bundle.check_generated_notices(self.root, changed, 'amd64')
 
+    def test_complete_generated_proof_matches_exact_committed_attribution(self):
+        proof = self.manifest['notices'][0]['provenance'][0]
+        proof.update(source_path='sources/archive.tar.gz!fixture/COPYING', schema=1,
+            provider_oci_binding=True, binding_method='signed-build-provenance',
+            source_image_digest=None, source_manifest_sha256='a' * 64,
+            native_image_digest='sha256:' + 'b' * 64, proof_architecture='arm64',
+            for_packages=['fixture-data'], discovery='notice-file',
+            signed_statement_sha256={'slsa': 'c' * 64, 'scout': 'd' * 64})
+        self.write_manifest(self.manifest)
+        actual = copy.deepcopy(self.manifest)
+        original = copy.deepcopy(actual)
+        bundle.check_generated_notices(self.root, actual, 'amd64')
+        self.assertEqual(actual, original)
+        mutations = {
+            'source_manifest_sha256': 'e' * 64,
+            'native_image_digest': 'sha256:' + 'e' * 64,
+            'source_image_digest': 'sha256:' + 'e' * 64,
+            'provider_oci_binding': False,
+            'binding_method': 'unsigned-source-only',
+            'proof_architecture': 'amd64',
+            'for_packages': ['unreviewed-data'],
+            'discovery': 'complete-leading-legal-comment',
+            'signed_statement_sha256': {'slsa': 'e' * 64, 'scout': 'd' * 64},
+            'schema': True,
+        }
+        for field, value in mutations.items():
+            changed = copy.deepcopy(actual)
+            changed['notices'][0]['provenance'][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'differs from committed runtime provenance'):
+                bundle.check_generated_notices(self.root, changed, 'amd64')
+        for mutation in ('missing', 'added'):
+            changed = copy.deepcopy(actual)
+            if mutation == 'missing':
+                del changed['notices'][0]['provenance'][0]['source_manifest_sha256']
+            else:
+                changed['notices'][0]['provenance'][0]['license_source_url'] = 'https://example.org/unreviewed-license'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'differs from committed runtime provenance'):
+                bundle.check_generated_notices(self.root, changed, 'amd64')
+
+    def test_generated_attribution_must_have_requested_native_architecture(self):
+        actual = copy.deepcopy(self.manifest)
+        actual['notices'][0]['provenance'][0]['architecture'] = 'arm64'
+        # Even a byte-for-byte committed attribution from another native image
+        # cannot satisfy this architecture's source qualification.
+        self.write_manifest(actual)
+        with self.assertRaisesRegex(ValueError, 'wrong native architecture'):
+            bundle.check_generated_notices(self.root, actual, 'amd64')
+
     def test_source_comment_review_is_architecture_bound_and_explicit(self):
         provenance = self.manifest['notices'][0]['provenance'][0]
         provenance.update(source_path='sources/archive.tar.gz!package/source.c',
                           discovery='complete-leading-legal-comment')
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         with self.assertRaisesRegex(ValueError, 'explicit committed review'):
             bundle.reviewed_notice_comments(self.root, 'amd64')
         self.manifest['selected_source_comments'] = [provenance['source_path']]
-        bundle.write_json(self.directory / 'manifest.json', self.manifest)
+        self.write_manifest(self.manifest)
         self.assertEqual(bundle.reviewed_notice_comments(self.root, 'amd64'), [provenance['source_path']])
         self.assertEqual(bundle.reviewed_notice_comments(self.root, 'arm64'), [])
 

@@ -92,19 +92,6 @@
         "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2025-15367, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
       }
     },
-    "CVE-2026-4360": {
-      "severity": "Medium",
-      "type": "apk",
-      "package": "python-3.14",
-      "version": "3.14.7-r1",
-      "status": "fixed",
-      "evidence": "scripts/python_security_checks.py; exact upstream fixes in scripts/python_security_patches.json; POP and hardlink fixes already present in pinned base",
-      "review": {
-        "approval": "Inherited verified-fixed approval for CVE-2026-4360 only, at the exact severity, package type, name and version in this entry, with the reviewed base/source hashes and all nine native runtime probes. No additional risk acceptance or deadline extension.",
-        "deadline": "2026-10-07",
-        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2026-4360, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together."
-      }
-    },
     "CVE-2026-15310": {
       "severity": "Low",
       "type": "apk",
