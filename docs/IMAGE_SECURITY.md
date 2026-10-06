@@ -206,6 +206,9 @@ artifact, including source headers that need explicit attribution selection.
 Security findings still fail the job; independent source preparation can finish
 so matching notices can be committed and checked in a rebuilt candidate. Only
 successful complete current-main validation can supply promotion images.
+Disable `prepare_notices` after committing the checked notice union to verify
+the rebuilt images' notices and complete source archives without retaining
+images or enabling publication.
 
 ## Replacing patched dependencies
 

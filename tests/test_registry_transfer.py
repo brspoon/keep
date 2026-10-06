@@ -170,6 +170,11 @@ class RegistryTransferTests(unittest.TestCase):
         self.assertIn('runtime-qualification-${{ matrix.arch }}-${{ github.run_id }}', native)
         self.assertIn('notice-preparation/notice-inputs/', native)
         self.assertIn('candidate-*${{ matrix.arch }}.json', native)
+        self.assertIn('prepare_notices: ${{ inputs.prepare_notices }}', caller)
+        trial = native.split('      - name: Verify rebuilt source distribution without retaining images\n', 1)[1].split('      - name:', 1)[0]
+        self.assertIn("inputs.qualification && !inputs.prepare_notices && !cancelled() && steps.package_sources.outcome == 'success'", trial)
+        self.assertIn('bundle(\'${{ matrix.arch }}\', verify_files=True)', trial)
+        self.assertIn('distribution/source-bundle-${{ matrix.arch }}.json', native)
 
     def test_native_checks_all_precede_retention_and_upload_only_small_index(self):
         native = Path('.github/workflows/native-image.yml').read_text()

@@ -89,6 +89,10 @@ notice union, rebuild, and complete normal main validation before publication.
 The seven-day qualification artifact retains original scanner and runtime
 reports, plus checked notice inputs including source headers awaiting selection.
 It contains no image or source archives and cannot authorize promotion.
+After committing the checked notice union, disable `prepare_notices` for a
+second qualification run. This rebuilds both images and verifies every source
+archive member and installed notice. Only its small source manifest is retained;
+image eligibility still requires successful complete main validation.
 
 After verification, finalize the version draft as a normal GitHub release,
 preserving all assets. Candidate storage remains unpublished. A draft is temporary

@@ -18,6 +18,9 @@ import urllib.parse
 ROOT = Path(__file__).resolve().parents[1]
 SHA256 = re.compile(r'[a-f0-9]{64}')
 MAX_DOWNLOAD = 512 * 1024 * 1024
+OFFICIAL_ALPINE_SOURCE_CACHE = 'reviewed-official-alpine-source-cache-identical-to-signed-material-hash'
+# Every alternate is bound to one declared URL, installed origin/version and
+# signed SHA256. Alpine's retained copy does not replace source provenance.
 SOURCE_MIRRORS = {
     'https://invisible-mirror.net/archives/ncurses/current/ncurses-6.6-20260516.tgz': {
         'origin': 'ncurses', 'version': '6.6_p20260516-r0',
@@ -28,6 +31,42 @@ SOURCE_MIRRORS = {
         'origin': 'zlib', 'version': '1.3.2-r0',
         'sha256': 'bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16',
         'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/zlib-1.3.2.tar.gz',
+    },
+    'https://gitlab.alpinelinux.org/alpine/ca-certificates/-/archive/20260909/ca-certificates-20260909.tar.bz2': {
+        'origin': 'ca-certificates', 'version': '20260909-r0',
+        'sha256': 'dc460c535f3833432be4e561d214a5fe816b05ede5a2ade64787e501671cd082',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/ca-certificates-20260909.tar.bz2',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
+    },
+    'https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz': {
+        'origin': 'gdbm', 'version': '1.26-r0',
+        'sha256': '6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/gdbm-1.26.tar.gz',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
+    },
+    'https://ftp.gnu.org/gnu/readline/readline-8.3.tar.gz': {
+        'origin': 'readline', 'version': '8.3.3-r1',
+        'sha256': 'fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/readline-8.3.tar.gz',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
+    },
+    'https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-001': {
+        'origin': 'readline', 'version': '8.3.3-r1',
+        'sha256': '21f0a03106dbe697337cd25c70eb0edbaa2bdb6d595b45f83285cdd35bac84de',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/readline83-001.patch',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
+    },
+    'https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-002': {
+        'origin': 'readline', 'version': '8.3.3-r1',
+        'sha256': 'e27364396ba9f6debf7cbaaf1a669e2b2854241ae07f7eca74ca8a8ba0c97472',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/readline83-002.patch',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
+    },
+    'https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-003': {
+        'origin': 'readline', 'version': '8.3.3-r1',
+        'sha256': '72dee13601ce38f6746eb15239999a7c56f8e1ff5eb1ec8153a1f213e4acdb29',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/readline83-003.patch',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
     },
 }
 
@@ -208,7 +247,10 @@ def collect_sources(origin, architecture, slsa_statement, scout_statement,
         retain('sources/' + filename, body, download_uri, 'signed-upstream-source')
         if mirror:
             records[-1]['declared_url'] = clean_uri
-            records[-1]['retrieval_method'] = 'reviewed-historical-mirror-identical-to-signed-material-hash'
+            records[-1]['retrieval_method'] = mirror.get('retrieval_method',
+                'reviewed-historical-mirror-identical-to-signed-material-hash')
+            if 'retrieval_method' in mirror:
+                records[-1]['retrieval_url'] = download_uri
 
     commit = recipe.get('upstream_commit')
     if commit:

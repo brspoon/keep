@@ -5,6 +5,9 @@ on:
       qualification:
         type: boolean
         default: false
+      prepare_notices:
+        type: boolean
+        default: true
 jobs:
   image:
     if: >-
@@ -129,6 +132,19 @@ jobs:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: set -o pipefail; python3 scripts/collect_package_sources.py --map docs/os-package-sources.json --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --output source-materials/packages | tee source-acquisition-packages-${{ matrix.arch }}.log
+      - name: Verify rebuilt source distribution without retaining images
+        if: ${{ inputs.qualification && !inputs.prepare_notices && !cancelled() && steps.package_sources.outcome == 'success' }}
+        run: |
+          set -o pipefail
+          python3 scripts/build_distribution_bundle.py --sources source-materials --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --output distribution | tee source-distribution-${{ matrix.arch }}.log
+          python3 - <<'PY'
+          import json, pathlib, sys
+          sys.path.insert(0, 'scripts')
+          from release_materials import bundle
+          _, proof = bundle('${{ matrix.arch }}', verify_files=True)
+          pathlib.Path('distribution/source-bundle-${{ matrix.arch }}.json').write_text(json.dumps(proof, sort_keys=True) + '\n')
+          print('Every corresponding-source member and rebuilt runtime notice verified.')
+          PY
       - name: Package sources and notices for the exact tested runtime
         if: ${{ !inputs.qualification }}
         run: |
@@ -141,7 +157,7 @@ jobs:
         if: ${{ !inputs.qualification }}
         run: python3 scripts/release_materials.py report ${{ matrix.arch }}
       - name: Prepare checked source notices for review
-        if: ${{ inputs.qualification && !cancelled() && steps.package_sources.outcome == 'success' }}
+        if: ${{ inputs.qualification && inputs.prepare_notices && !cancelled() && steps.package_sources.outcome == 'success' }}
         run: python3 scripts/build_distribution_bundle.py --sources source-materials --architecture ${{ matrix.arch }} --runtime-inventory candidate-notices-${{ matrix.arch }}.json --prepare-notices --output notice-preparation
       - name: Retain small qualification records and notice bytes
         if: ${{ inputs.qualification && always() }}
@@ -152,6 +168,7 @@ jobs:
             notice-preparation/os-notices/
             notice-preparation/notice-inputs/
             notice-preparation/NOTICE-PREPARATION.json
+            distribution/source-bundle-${{ matrix.arch }}.json
             candidate-*${{ matrix.arch }}.json
           if-no-files-found: warn
           retention-days: 7

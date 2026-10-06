@@ -6,6 +6,10 @@ on:
         type: boolean
         default: false
         description: Test both native Keep images and prepare checked notices without publishing or retaining images
+      prepare_notices:
+        type: boolean
+        default: true
+        description: Prepare notice inputs; disable after committing notices to verify the rebuilt source archive
 permissions:
   contents: read
 jobs:
@@ -132,4 +136,5 @@ jobs:
     uses: ./.github/workflows/native-image.yml
     with:
       qualification: true
+      prepare_notices: ${{ inputs.prepare_notices }}
     secrets: inherit

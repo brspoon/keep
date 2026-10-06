@@ -29,7 +29,12 @@ because the recorded upstream `current/` URL no longer serves it. Both the
 original signed material hash and the Alpine recipe checksum must match the
 retained bytes; the manifest records the declared and retrieval URLs.
 The exact zlib 1.3.2 package archive also uses Alpine's retained distfile, with
-the same signed-source and recipe checksum requirements. Public downloads retry
+the same signed-source and recipe checksum requirements. Alpine's retained files
+also supply the exact signed CA 20260909, GDBM 1.26 and Readline 8.3 source
+archives and Readline's three patches. Each mapping requires its reviewed
+origin, package revision, declared URL and signed SHA-256. The manifest records
+both the declared and retrieval URLs; mirror bytes must also match the recipe
+checksums. Public downloads retry
 transient failures at most three times with Python's HTTPS client. If a transport
 failure persists and curl 8.4 or newer is available, one IPv4-only attempt uses
 the same URL, HTTPS-only redirects, verified TLS, and bounded time and size.
