@@ -52,11 +52,13 @@ DHI Expat 2.8.5, Python 3.14.7-r2 and zlib 1.3.2-r0 in earlier image layers reta
 native-base material binding and signed package sources separately from the
 installed replacement packages. Alpine's zlib 1.3.2-r1 is verified separately
 against signed APKs, its complete pinned aports context, upstream source,
-security patch and full Zlib notice. DHI Python 3.14.8-r0 still requires matching
-signed native build/source records; public recipe and archive inspection alone
-cannot satisfy that gate. Keep's exact Python patches are also included.
-Both architectures' committed notice union must be regenerated and verified
-before qualifying these replacements. The Python source lock covers all 17 pinned distributions,
+security patch and full Zlib notice. DHI Python 3.14.8-r0 has matching signed
+native build/source records verified on both architectures; public recipe and
+archive inspection alone cannot satisfy that gate. Keep's exact Python patches
+are also included. Both architectures' committed notice union is regenerated
+from their checked native inventories and verified in the rebuilt source-archive
+gate. Passing source and notice checks does not waive the separate security gate.
+The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
 against their embedded libffi 3.4.6 source and wheel build recipe; this is
 separate from the OS libffi package. Argon2's embedded source and complete
@@ -130,8 +132,12 @@ version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
 container. The prepared runtime union contains 124 complete notice texts
-(814,844 bytes), covering all 20 current and earlier-layer origins on both
-architectures, including 24 explicitly reviewed source copyright headers.
+(814,844 bytes) and 556 complete native attributions, covering all 22 current and
+earlier-layer origins on both architectures. It retains 20 explicitly selected
+source copyright headers and four timezone headers from the checked public
+source fallback. The license text bytes are unchanged; the new Python and zlib
+packages have their own source attributions, and timezone attributions describe
+the verified fallback rather than reusing earlier provider signature claims.
 The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated
 notice's complete native source attribution against the committed provenance.

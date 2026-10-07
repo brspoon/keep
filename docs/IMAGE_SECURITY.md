@@ -89,15 +89,15 @@ four-package DHI Python `3.14.8-r0` cohort for both native architectures. The
 includes the zlib fix already supplied locally in `2.23.2`. Genuine APK
 installation replaces both the library and the older APK inventory entry that
 Docker Hub now reports. The [pinned DHI Python recipe](https://github.com/docker-hardened-images/catalog/blob/d65ec8748eef33c1ed9033563e0a0a146ef3c739/package/apk/main/python/alpine-3.24/3.14.yaml)
-identifies the Python replacement; its signed native source/binary binding still
-has to pass the existing authenticated source acquisition gate.
+identifies the Python replacement; its signed native source/binary binding
+passes the authenticated source acquisition gate on both architectures.
 
 All eight candidate Python APKs and both zlib APKs have passed exact hashes,
 official key hashes, RSA signature and signed payload checks. Public zlib build
 context, fix, source and license bytes have been verified. These are package
-inspection results, not native image qualification. No new exception or later
-deadline is approved. The existing Python cleanup backport and Keep permission
-guard remain; changed ZIP contexts retain strict bounded-output behavior and
+inspection results; the native gates below determine qualification. No new
+exception or later deadline is approved. The existing Python cleanup backport
+and Keep permission guard remain; changed ZIP contexts retain strict bounded-output behavior and
 normal reads through EOF. Modified stdlib bytecode is removed before capture.
 Normal TLS setup, hostname validation and a complete in-memory handshake with
 an SNI context change are required alongside signed Python executable and
@@ -108,32 +108,43 @@ The original pinned DHI base is unchanged. Its Python `3.14.7-r2`, zlib
 earlier layers, so their exact original source records remain required. New
 ensurepip and cache bytes are removed in the installation RUN before a new
 layer is captured. Current runtime source records cannot replace that original
-coverage. Native source acquisition must regenerate and explicitly verify both
-architectures' complete notice union before the final source-archive gate.
+coverage. Native source acquisition regenerates both architectures' complete
+notice union for explicit review before the final source-archive gate.
 The unchanged development base builds the existing `cp314` application wheels;
 their compatibility with the upgraded runtime must pass native CFFI, Argon2,
 SQLite, application and recovery checks. Its Python development package has an
 exact old-runtime dependency, so it is not partially upgraded with runtime APKs.
 
-This candidate is not qualified or release-ready. It needs native amd64 and
-arm64 builds, full unsuppressed Scout and Grype scans, all runtime/application,
-installation and recovery gates, authenticated matching-source proof and the
-updated committed source/license notices. Then run the full native gate again
-with `prepare_notices=false`. Publication must replay the same zero-finding
-policy against unchanged original evidence bytes. After publication, verify the
-new registry digest and Docker Hub analysis on both architectures. A clean
-scan is time-bound evidence: newly published advisories can change Hub's counts.
+The October 7 [notice-preparation qualification](https://github.com/brspoon/keep/actions/runs/37654700878)
+built both native architectures and passed application, installation, recovery,
+all nine runtime probes and all three dependency families. Authenticated
+matching-source collection passed for all 18 current OS origins and all three
+overwritten base origins. It also verified the earlier ensurepip sources and
+prepared the complete native notice inventories. Original-base zlib acquisition
+uses its previously verified immutable native manifests, with unchanged APK
+hashes and required signatures. The Python 3.14.8 provider context and malformed
+upstream archive test fixtures retain exact archive, path, size and hash bindings;
+other archives keep their normal traversal checks.
 
-The first [native qualification](https://github.com/brspoon/keep/actions/runs/37648716168)
-on October 7 built both architectures and passed application, installation,
-recovery and runtime probes. Scout reported zero findings on both; Grype still
-reported `CVE-2026-87910`, `CVE-2025-15367` and `CVE-2026-12345` against
-Python `3.14.8-r0`, so the zero-finding acceptance gate blocked both images.
-Original-base zlib source acquisition also failed; its previously verified
-native manifests are now explicit immutable acquisition candidates, with the
-same original APK hashes and required signature checks. Qualification retains
-source acquisition reports so any remaining failure can be diagnosed without
-changing the source matching rules.
+The reused timezone package tag no longer matches the historical binary. The
+existing pinned IANA/Alpine source fallback retains the same full notice bytes,
+including the three BSD headers and POSIXtz copyright. Its current attributions
+explicitly record public source checks rather than claiming the old provider
+signature. Earlier release evidence and its original notice manifest remain
+unchanged; their signed attributions do not transfer to the fallback. The current
+union preserves all 124 full notice texts and records 556 complete native
+attributions across 22 current and earlier-layer origins on each architecture.
+
+This candidate is not qualified or release-ready. Scout reported zero findings
+on both architectures; Grype still reported `CVE-2026-87910`, `CVE-2025-15367`
+and `CVE-2026-12345` against Python `3.14.8-r0`, so the zero-finding acceptance
+gate blocked both images. Passing runtime probes does not clear these scanner
+findings. A rebuilt full native gate with `prepare_notices=false` must also verify
+the committed notice bytes, complete native attributions and every source-archive
+member. Publication must replay the zero-finding policy against unchanged
+original evidence bytes. After publication, verify the new registry digest and
+Docker Hub analysis on both architectures. A clean scan is time-bound evidence:
+newly published advisories can change Hub's counts.
 
 The current [Python 3.15 release notice](https://www.python.org/downloads/release/python-3150rc3/)
 identifies a production-unsuitable preview and schedules the final release for
