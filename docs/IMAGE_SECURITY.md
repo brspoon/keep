@@ -123,6 +123,24 @@ with `prepare_notices=false`. Publication must replay the same zero-finding
 policy against unchanged original evidence bytes. After publication, verify the
 new registry digest and Docker Hub analysis on both architectures. A clean
 scan is time-bound evidence: newly published advisories can change Hub's counts.
+
+The first [native qualification](https://github.com/brspoon/keep/actions/runs/37648716168)
+on October 7 built both architectures and passed application, installation,
+recovery and runtime probes. Scout reported zero findings on both; Grype still
+reported `CVE-2026-87910`, `CVE-2025-15367` and `CVE-2026-12345` against
+Python `3.14.8-r0`, so the zero-finding acceptance gate blocked both images.
+Original-base zlib source acquisition also failed; its previously verified
+native manifests are now explicit immutable acquisition candidates, with the
+same original APK hashes and required signature checks. Qualification retains
+source acquisition reports so any remaining failure can be diagnosed without
+changing the source matching rules.
+
+The current [Python 3.15 release notice](https://www.python.org/downloads/release/python-3150rc3/)
+identifies a production-unsuitable preview and schedules the final release for
+October 9. That schedule does not establish package availability or qualification.
+Keep must retain its required guards and pass both native zero-finding gates
+before this candidate can be published; no exception is extended to bypass them.
+
 ## Exception review deadlines
 
 The current zero-finding policy permits no scanner finding, including one

@@ -677,6 +677,133 @@ class PackageSourceTests(unittest.TestCase):
 
         return FakeRegistry()
 
+    def immutable_fallback_fixture(self, *, architecture='amd64', digest_mismatch=False,
+                                   signature_error=False):
+        if architecture != 'amd64':
+            self.native, self.layer = self.image(
+                layer([('out/sample-libs-1.2-r0.apk', self.apk)]), architecture=architecture)
+        reviewed_native = self.native
+        reviewed = self.root / 'reviewed-output-oci'
+        shutil.copytree(self.layout, reviewed)
+        requested = 'sha256:' + '0' * 64 if digest_mismatch else reviewed_native
+        origin = {'origin': 'sample', 'version': '1.2-r0', 'image': 'dhi.io/pkg-sample',
+                  'reference': 'dhi.io/pkg-sample:1.2-r0-alpine3.24',
+                  'candidate_references': ['dhi.io/pkg-sample@' + requested],
+                  'predicate_image_name': 'dhi/pkg-sample', 'packages': [
+                      {'name': 'sample-libs', 'version': '1.2-r0',
+                       'binaries': {'amd64': {'sha256': self.expected[0]['sha256']}}}]}
+        self.native, self.layer = self.image(
+            layer([('out/sample-libs-1.2-r0.apk', b'moved tag rebuild')]))
+        descriptor = {'digest': collection.digest(b'signed source attestation'),
+                      'annotations': {'in-toto.io/predicate-type': collection.PREDICATE}}
+        key = self.root / 'fixture-key.pem'
+        key.write_bytes(b'fixture verification key')
+        calls = []
+        test = self
+
+        class CandidateRegistry(type(self.fallback_registry())):
+            def manifest(self, reference):
+                calls.append(reference)
+                if reference == origin['candidate_references'][0]:
+                    return (reviewed / 'blobs' / 'sha256' /
+                            reviewed_native.split(':')[1]).read_bytes()
+                return super().manifest(reference)
+
+            def copy(self, reference, destination, **kwargs):
+                # The attestation verifier is isolated below; output and source
+                # OCI bytes still pass their real retained-blob checks.
+                if reference == origin['image'] + '@' + descriptor['digest']:
+                    return
+                if reference == origin['image'] + '@' + reviewed_native:
+                    shutil.copytree(reviewed, destination, dirs_exist_ok=True)
+                    return
+                return super().copy(reference, destination)
+
+            def referrers(self, reference):
+                test.assertEqual(reference, origin['image'] + '@' + reviewed_native)
+                return {'manifests': [descriptor]}
+
+            def verify(self, reference):
+                test.assertEqual(reference, origin['image'] + '@' + descriptor['digest'])
+                if signature_error:
+                    raise ValueError('Original source signature invalid')
+                return json.dumps([{'critical': {'image': {
+                    'docker-manifest-digest': descriptor['digest']}}}]).encode()
+
+            def statement(self, reference):
+                return json.dumps({'predicateType': collection.PREDICATE,
+                    'subject': [{'digest': {'sha256': reviewed_native.split(':')[1]}}],
+                    'predicate': {'source': {'name': 'dhi/pkg-sample',
+                                              'digest': reviewed_native}}}).encode()
+
+        registry = CandidateRegistry()
+        registry.key = key
+        proof = {'source_image_digest': reviewed_native,
+                 'attestation_digest': descriptor['digest']}
+        return origin, registry, proof, calls
+
+    def test_moved_tag_falls_back_to_exact_immutable_native_apk_and_source_proof(self):
+        origin, registry, proof, calls = self.immutable_fallback_fixture()
+        destination = self.root / 'immutable-fallback'
+        with patch.object(collection, 'verify_source_proof', return_value=proof) as verification, \
+             patch.object(collection, 'retain_recipe', return_value={'sha256': 'a' * 64}):
+            result = collection.acquire_origin(origin, 'amd64', destination, registry)
+        self.assertTrue(result['success'])
+        self.assertTrue(result['provider_oci_binding'])
+        self.assertTrue(result['index_is_native_manifest'])
+        self.assertEqual(calls, [origin['reference'], origin['candidate_references'][0]])
+        self.assertEqual(result['discovery_reference'], origin['candidate_references'][0])
+        self.assertEqual(result['candidate_failures'][0]['failure_kind'], 'apk-binary-mismatch')
+        self.assertEqual(result['apk_matches'][0]['sha256'], self.expected[0]['sha256'])
+        source = result['source_results'][0]
+        self.assertTrue(source['signature_verified'])
+        self.assertEqual(source['source_image_digest'], proof['source_image_digest'])
+        self.assertEqual(source['native_image_digest'], proof['source_image_digest'])
+        self.assertEqual(source['for_packages'], ['sample-libs'])
+        self.assertEqual(verification.call_args.kwargs['expected_native_digest'],
+                         proof['source_image_digest'])
+        self.assertTrue(verification.call_args.kwargs['index_is_native_manifest'])
+        retained = json.loads((destination / source['directory'] /
+                              'source-layout-verification.json').read_text())
+        self.assertTrue(retained['binding_verified'])
+        self.assertEqual(retained['source_image_digest'], proof['source_image_digest'])
+
+    def test_immutable_fallback_rejects_response_with_different_manifest_digest(self):
+        origin, registry, proof, calls = self.immutable_fallback_fixture(digest_mismatch=True)
+        with patch.object(collection, 'verify_source_proof') as verification, \
+             patch.object(collection, 'retain_recipe') as recipe:
+            result = collection.acquire_origin(origin, 'amd64', self.root / 'bad-digest', registry)
+        self.assertFalse(result['success'])
+        self.assertEqual(calls, [origin['reference'], origin['candidate_references'][0]])
+        self.assertIn('differs from immutable package reference',
+                      result['candidate_failures'][-1]['error'])
+        verification.assert_not_called()
+        recipe.assert_not_called()
+
+    def test_immutable_fallback_rejects_wrong_native_architecture_with_exact_apk(self):
+        origin, registry, proof, calls = self.immutable_fallback_fixture(architecture='arm64')
+        with patch.object(collection, 'verify_source_proof') as verification, \
+             patch.object(collection, 'retain_recipe') as recipe:
+            result = collection.acquire_origin(origin, 'amd64', self.root / 'bad-platform', registry)
+        self.assertFalse(result['success'])
+        self.assertEqual(calls, [origin['reference'], origin['candidate_references'][0]])
+        self.assertIn('wrong native platform', result['candidate_failures'][-1]['error'])
+        verification.assert_not_called()
+        recipe.assert_not_called()
+
+    def test_immutable_fallback_cannot_rescue_invalid_original_source_signature(self):
+        origin, registry, proof, calls = self.immutable_fallback_fixture(signature_error=True)
+        with patch.object(collection, 'verify_source_proof') as verification, \
+             patch.object(collection, 'retain_recipe') as recipe:
+            result = collection.acquire_origin(origin, 'amd64', self.root / 'bad-signature', registry)
+        self.assertFalse(result['success'])
+        self.assertEqual(calls, [origin['reference'], origin['candidate_references'][0]])
+        self.assertIn('Original source signature invalid',
+                      result['candidate_failures'][-1]['error'])
+        self.assertNotIn('source_results', result)
+        verification.assert_not_called()
+        recipe.assert_not_called()
+
     def test_timezone_public_sources_only_after_proven_mutable_tag_binary_mismatch(self):
         fallback = {'provider_oci_binding': False, 'binding_method': 'checked IANA release and pinned recipes',
                     'files': [{'path': 'tzdata2026d.tar.gz', 'sha256': 'a' * 64}]}

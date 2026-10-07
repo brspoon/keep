@@ -141,6 +141,9 @@ def main():
                     destination / 'original-base-packages', Registry(regctl, cosign, key, env),
                     base_provenance=provenance, runtime_inventory=json.loads(original_inventory))
                 if not original['success']:
+                    print(json.dumps(redacted({'original_base_source_failures': [
+                        row for row in original['origins'] if row['success'] is not True
+                    ]}), indent=2), flush=True)
                     raise ValueError('Overwritten base package source acquisition is incomplete')
                 subprocess.run([str(regctl), 'image', 'copy', reference,
                                 'ocidir://' + str((destination / 'dhi-source-proof-oci').resolve())

@@ -172,6 +172,8 @@ jobs:
             candidate-*${{ matrix.arch }}.json
             portable-recovery-${{ matrix.arch }}.json
             installer-trial-${{ matrix.arch }}.json
+            source-materials/original-base-packages/package-sources.json
+            source-materials/packages/package-sources.json
           if-no-files-found: warn
           retention-days: 7
       - name: Retain exact tested image, sources and original evidence

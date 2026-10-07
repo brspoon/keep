@@ -1020,6 +1020,10 @@
             }
           }
         }
+      ],
+      "candidate_references": [
+        "dhi.io/pkg-zlib@sha256:b51662f6735da9d71f4ddd6bccb50955caf0d3e373c8fd627d31e31369b0f4fb",
+        "dhi.io/pkg-zlib@sha256:dc7f68479a3c8186bc0d7bab986864f077f8503176d1b5acff00dad21653c1cd"
       ]
     },
     {
