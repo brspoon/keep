@@ -74,6 +74,75 @@ class PreferredSourceTests(unittest.TestCase):
             return sources.collect_sources(self.spec, 'amd64', slsa or self.slsa,
                 scout or self.scout, self.root / output, fetch=fetch or self.downloads.__getitem__)
 
+    def python_provider_context(self):
+        revision = self.spec['recipe']['revision']
+        self.source_url = 'https://example.org/Python-3.14.8.tar.gz'
+        self.source = archive({'Python-3.14.8/Lib/example.py': b'print("example")',
+                               'Python-3.14.8/LICENSE': b'Complete Python license'})
+        self.recipe = ('image: dhi/pkg-python\nvars:\n  VERSION: "3.14.8"\n  REL: "0"\n'
+                       'contents:\n  files:\n    - url: ' + self.source_url + '\n'
+                       '      path: /var/cache/distfiles/Python-3.14.8.tar.gz\n')
+        self.spec = {'origin': 'python-3.14', 'version': '3.14.8-r0', 'recipe': {
+            'url': self.public_url, 'revision': revision,
+            'sha256': hashlib.sha256(self.recipe.encode()).hexdigest()}}
+        prefix = 'catalog-' + revision + '/'
+        self.context = archive({
+            prefix + 'package/apk/main/python/patch/3.14/fix.patch': self.local_patch,
+            prefix + 'package/apk/main/python/patch/README': b'Patch build instructions',
+            prefix + 'package/apk/main/python/alpine-3.24/3.14.yaml': self.recipe.encode(),
+            prefix + 'LICENSE': b'Complete provider license'})
+        context_url = 'https://github.com/docker-hardened-images/catalog/archive/' + revision + '.tar.gz'
+        self.downloads = {self.source_url: self.source, context_url: self.context,
+                          self.public_url: self.recipe.encode()}
+        (self.root / 'docs/aports-source-lock.json').write_text(json.dumps({
+            'provider_contexts': [{'origin': 'python-3.14', 'revision': revision,
+                'url': context_url, 'sha256': hashlib.sha256(self.context).hexdigest()}]}))
+        self.slsa['predicate']['materials'] = [{'uri': self.source_url,
+            'digest': {'sha256': hashlib.sha256(self.source).hexdigest()}}]
+        self.scout['predicate']['source_map']['dockerfile'] = base64.b64encode(self.recipe.encode()).decode()
+        for statement in (self.slsa, self.scout):
+            statement['subject'][0]['name'] = 'pkg:docker/dhi/pkg-python'
+        return context_url
+
+    def test_python_provider_context_retains_complete_archive_and_nested_patches(self):
+        context_url = self.python_provider_context()
+        result = self.collect()
+        self.assertEqual(result['origin'], 'python-3.14')
+        self.assertEqual(result['version'], '3.14.8-r0')
+        self.assertEqual(result['recipe_revision'], self.spec['recipe']['revision'])
+        self.assertIsNone(result['aports_commit'])
+        self.assertEqual(result['native_image_digest'], 'sha256:' + self.native)
+        context = next(row for row in result['files'] if row['role'] == 'complete-provider-build-recipes')
+        self.assertEqual(context['url'], context_url)
+        self.assertEqual(context['sha256'], hashlib.sha256(self.context).hexdigest())
+        self.assertEqual(context['bytes'], len(self.context))
+        self.assertEqual((self.root / 'output' / context['path']).read_bytes(), self.context)
+        patches = {row['path']: row for row in result['files']
+                   if row['role'] == 'pinned-provider-python-patch'}
+        self.assertEqual(set(patches), {'context/python/patch/3.14/fix.patch',
+                                       'context/python/patch/README'})
+        patch_record = patches['context/python/patch/3.14/fix.patch']
+        self.assertEqual(patch_record['sha256'], hashlib.sha256(self.local_patch).hexdigest())
+        self.assertEqual((self.root / 'output' / patch_record['path']).read_bytes(), self.local_patch)
+
+    def test_python_provider_context_requires_the_reviewed_revision(self):
+        context_url = self.python_provider_context()
+        lockpath = self.root / 'docs/aports-source-lock.json'
+        lock = json.loads(lockpath.read_text())
+        lock['provider_contexts'][0]['revision'] = 'd' * 40
+        lockpath.write_text(json.dumps(lock))
+        fetch = Mock(side_effect=self.downloads.__getitem__)
+        with self.assertRaisesRegex(ValueError, 'Python provider patch context is not reviewed and pinned'):
+            self.collect(fetch=fetch)
+        self.assertNotIn(context_url, [call.args[0] for call in fetch.call_args_list])
+
+    def test_python_provider_context_tampering_is_rejected_before_patch_retention(self):
+        context_url = self.python_provider_context()
+        self.downloads[context_url] += b'corrupted'
+        with self.assertRaisesRegex(ValueError, 'Python provider patch context sha256 mismatch'):
+            self.collect()
+        self.assertFalse((self.root / 'output/context').exists())
+
     def test_complete_source_archive_and_indirect_patch_retained(self):
         result = self.collect()
         self.assertIsNone(result['source_image_digest'])
