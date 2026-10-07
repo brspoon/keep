@@ -52,13 +52,13 @@ After installing the prerequisites, run one command for your system on the compu
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.23.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.23.3/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.23.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.23.3/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.

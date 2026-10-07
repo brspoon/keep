@@ -48,10 +48,15 @@ identifiers are not interchangeable. The image-level source collection contains
 assembly inputs, so package-level sources are collected separately.
 
 The source map covers 18 origins and 29 installed OS packages. The original
-DHI Expat 2.8.5 in an earlier image layer retains its exact APK hashes,
+DHI Expat 2.8.5, Python 3.14.7-r2 and zlib 1.3.2-r0 in earlier image layers retain their exact APK hashes,
 native-base material binding and signed package sources separately from the
-installed Alpine 2.9.0 packages. Keep's exact Python patches and modified zlib 1.3.2 sources are
-also included. The Python source lock covers all 17 pinned distributions,
+installed replacement packages. Alpine's zlib 1.3.2-r1 is verified separately
+against signed APKs, its complete pinned aports context, upstream source,
+security patch and full Zlib notice. DHI Python 3.14.8-r0 still requires matching
+signed native build/source records; public recipe and archive inspection alone
+cannot satisfy that gate. Keep's exact Python patches are also included.
+Both architectures' committed notice union must be regenerated and verified
+before qualifying these replacements. The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
 against their embedded libffi 3.4.6 source and wheel build recipe; this is
 separate from the OS libffi package. Argon2's embedded source and complete
@@ -113,10 +118,10 @@ bytes in the source archive, without interpreting their unsafe test members.
 Other archives still undergo normal traversal and bounds checks.
 
 Use the adjacent checksum file before inspecting an archive. For example, for
-release 2.23.2:
+release 2.23.3:
 
 ```sh
-sha256sum -c keep-2.23.2-source-materials-amd64.tar.gz.sha256
+sha256sum -c keep-2.23.3-source-materials-amd64.tar.gz.sha256
 ```
 
 Use `shasum -a 256` on macOS and compare its output to the checksum file.

@@ -32,6 +32,8 @@ PYTHON_FINDINGS = {
 class ImageReviewTests(unittest.TestCase):
     def setUp(self):
         self.policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
+        # These fixtures exercise the historical exception matching/deadline rules.
+        self.policy['require_zero_findings'] = False
         self.report = {'matches': [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'}, 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]}
         self.scout = {'runs': [{'results': []}]}
         self.evidence = {'success': True, 'tests': 9, 'failures': 0, 'errors': 0, 'skipped': 0, 'arch': 'amd64', 'patch_manifest_sha256': self.policy['reviewed_sources']['scripts/python_security_patches.json']}
@@ -50,6 +52,83 @@ class ImageReviewTests(unittest.TestCase):
         }
         self.assertEqual(len(self.result()['accepted_fixed']), 1)
         self.assertFalse(self.result()['blocked'])
+
+    def test_missing_zero_finding_requirement_preserves_legacy_exception_rules(self):
+        del self.policy['require_zero_findings']
+        self.assertEqual(len(self.result()['accepted_fixed']), 1)
+        self.assertFalse(self.result()['blocked'])
+
+    def test_zero_finding_requirement_must_be_a_boolean_even_for_clean_scans(self):
+        self.report['matches'] = []
+        for value in (None, 0, 1, 'true', 'false', [], {}):
+            with self.subTest(value=value):
+                self.policy['require_zero_findings'] = value
+                with self.assertRaisesRegex(ValueError, 'must be a boolean'):
+                    self.result()
+                with self.assertRaisesRegex(ValueError, 'must be a boolean'):
+                    deadline_warnings(self.policy)
+
+    def test_zero_finding_policy_blocks_current_and_expired_exact_matches(self):
+        self.policy['require_zero_findings'] = True
+        for arch in DIRECT:
+            for day in (datetime.date(2026, 10, 19), datetime.date(2026, 10, 20),
+                        datetime.date(2026, 10, 21)):
+                with self.subTest(arch=arch, day=day):
+                    result = assess(self.report, self.scout, {**self.evidence, 'arch': arch},
+                                    self.policy, arch, day)
+                    self.assertFalse(result['accepted_fixed'])
+                    self.assertEqual(result['raw_matches'], 1)
+                    self.assertEqual(result['blocked'], [{
+                        'id': 'CVE-2026-17084', 'package': 'python-3.14',
+                        'version': '3.14.7-r2', 'deadline': '2026-10-20',
+                        'reason': 'finding_not_permitted',
+                    }])
+
+    def test_zero_finding_policy_preserves_unmatched_and_mismatched_rejections(self):
+        self.policy['require_zero_findings'] = True
+        original = copy.deepcopy(self.report)
+        for section, field, value, reason in (
+            ('vulnerability', 'id', 'CVE-unknown', 'unmatched_finding'),
+            ('vulnerability', 'severity', 'High', 'exception_mismatch'),
+            ('artifact', 'name', 'other-python', 'exception_mismatch'),
+            ('artifact', 'version', '3.14.7-r1', 'exception_mismatch'),
+            ('artifact', 'type', 'python', 'exception_mismatch'),
+        ):
+            self.report = copy.deepcopy(original)
+            self.report['matches'][0][section][field] = value
+            with self.subTest(field=field):
+                result = self.result(datetime.date(2026, 10, 21))
+                self.assertFalse(result['accepted_fixed'])
+                self.assertEqual(result['blocked'][0]['reason'], reason)
+
+    def test_zero_finding_policy_clean_scan_passes_with_unused_expired_or_no_exceptions(self):
+        self.policy['require_zero_findings'] = True
+        self.report['matches'] = []
+        for empty in (False, True):
+            if empty:
+                self.policy['exceptions'] = {}
+            with self.subTest(empty_exceptions=empty):
+                result = self.result(datetime.date(2026, 10, 21))
+                self.assertFalse(result['accepted_fixed'])
+                self.assertFalse(result['blocked'])
+                self.assertFalse(result['scout_blocked'])
+
+    def test_zero_finding_policy_still_requires_complete_scans_and_runtime_probes(self):
+        self.policy['require_zero_findings'] = True
+        self.report['matches'] = []
+        with self.assertRaisesRegex(ValueError, 'Incomplete Grype finding'):
+            assess({'matches': [{}]}, self.scout, self.evidence, self.policy, 'amd64')
+        with self.assertRaisesRegex(ValueError, 'Incomplete scan report'):
+            assess({'matches': [], 'ignoredMatches': [{}]}, self.scout, self.evidence,
+                   self.policy, 'amd64')
+        with self.assertRaisesRegex(ValueError, 'Incomplete Scout report'):
+            assess(self.report, {'runs': [{'results': [], 'invocations': [
+                {'executionSuccessful': False}]}]}, self.evidence, self.policy, 'amd64')
+        with self.assertRaisesRegex(ValueError, 'regression evidence'):
+            assess(self.report, self.scout, {**self.evidence, 'success': False},
+                   self.policy, 'amd64')
+        self.scout['runs'][0]['results'] = [{'ruleId': 'any-finding'}]
+        self.assertTrue(self.result()['scout_blocked'])
 
     def test_every_reviewed_source_digest_matches_before_ci(self):
         for name, expected in self.policy['reviewed_sources'].items():
@@ -263,6 +342,7 @@ class CandidateReviewTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
+        self.policy['require_zero_findings'] = False
         self.write('docs/image-exceptions.json', self.policy)
         for name in self.policy['reviewed_sources']:
             destination = self.root / name
@@ -284,6 +364,35 @@ class CandidateReviewTests(unittest.TestCase):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(record))
+
+    def test_zero_finding_candidate_still_requires_provenance_source_and_dependency_evidence(self):
+        self.policy['require_zero_findings'] = True
+        self.write('docs/image-exceptions.json', self.policy)
+        day = datetime.date(2026, 10, 21)
+        for arch in DIRECT:
+            with self.subTest(arch=arch, evidence='complete'):
+                self.assertFalse(review_candidate(arch, self.root, day)['blocked'])
+            for name, record, message in (
+                (f'candidate-provenance-{arch}.json',
+                 {'predicateType': 'https://slsa.dev/provenance/v1',
+                  'subject': [{'digest': {'sha256': '0' * 64}}]}, 'provenance'),
+                (f'candidate-dependencies-{arch}.json',
+                 {**dependency_report(arch), 'success': False, 'failures': 1},
+                 'failed native dependency qualification'),
+            ):
+                path = self.root / name
+                original = path.read_bytes()
+                self.write(name, record)
+                with self.subTest(arch=arch, evidence=name), self.assertRaisesRegex(ValueError, message):
+                    review_candidate(arch, self.root, day)
+                path.write_bytes(original)
+            source = self.root / 'scripts/python_security_patches.json'
+            original = source.read_bytes()
+            source.write_bytes(original + b'changed')
+            with self.subTest(arch=arch, evidence='source'), \
+                 self.assertRaisesRegex(ValueError, 'changed; verified-fixed review'):
+                review_candidate(arch, self.root, day)
+            source.write_bytes(original)
 
     def test_clean_scan_still_requires_original_dependency_qualification(self):
         for arch in DIRECT:

@@ -1,14 +1,16 @@
 import errno
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import tempfile
+import py_compile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
-from scripts.patch_python_runtime import apply_hunks, patch_provenance
+from scripts.patch_python_runtime import apply_hunks, apply_patches, patch_provenance
 from scripts.python_security_checks import verify_loaded_zlib
 
 
@@ -27,6 +29,67 @@ class RuntimePatchTests(unittest.TestCase):
                        'value = 1\nvalue = 1\nvalue = 2\n'):
             with self.assertRaises(RuntimeError):
                 apply_hunks(source, patch)
+
+    def test_cached_and_optimized_bytecode_cannot_override_patched_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / 'synthetic.py'
+            target.write_text('value = 1\n')
+            original_time = target.stat().st_mtime
+            py_compile.compile(str(target), doraise=True)
+            cache = root / '__pycache__'
+            for name in ('synthetic.cpython-314.opt-1.pyc', 'synthetic.cpython-314.opt-2.pyc'):
+                (cache / name).write_bytes(b'stale optimized vendor bytecode')
+            legacy = target.with_suffix('.pyc')
+            legacy.write_bytes(b'stale legacy bytecode')
+            other = cache / 'unrelated.cpython-314.pyc'
+            other.write_bytes(b'unrelated cache')
+            patch = {'path': target.name, 'commit': 'reviewed',
+                     'hunks': [{'before': 'value = 1', 'after': 'value = 2'}]}
+            result = apply_patches(root, [patch])
+            self.assertEqual(len(result), 1)
+            self.assertFalse(legacy.exists())
+            self.assertEqual(list(cache.iterdir()), [other])
+            # Same-size source at the same timestamp formerly permitted old .pyc.
+            os.utime(target, (original_time, original_time))
+            spec = importlib.util.spec_from_file_location('synthetic_security_patch', target)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertEqual(module.value, 2)
+            self.assertEqual(other.read_bytes(), b'unrelated cache')
+
+    def test_unknown_later_context_leaves_all_sources_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, second = root / 'first.py', root / 'second.py'
+            first.write_text('value = 1\n')
+            second.write_text('value = 3\n')
+            patches = [{'path': name, 'commit': 'reviewed',
+                        'hunks': [{'before': 'value = 1', 'after': 'value = 2'}]}
+                       for name in ('first.py', 'second.py')]
+            with self.assertRaises(RuntimeError):
+                apply_patches(root, patches)
+            self.assertEqual(first.read_text(), 'value = 1\n')
+            self.assertEqual(second.read_text(), 'value = 3\n')
+
+    def test_patch_targets_and_cache_directories_cannot_follow_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source.py'
+            source.write_text('value = 1\n')
+            target = root / 'target.py'
+            target.symlink_to(source.name)
+            patch = {'path': target.name, 'commit': 'reviewed',
+                     'hunks': [{'before': 'value = 1', 'after': 'value = 2'}]}
+            with self.assertRaises(RuntimeError):
+                apply_patches(root, [patch])
+            patch['path'] = source.name
+            cache_target = root / 'other-cache'
+            cache_target.mkdir()
+            (root / '__pycache__').symlink_to(cache_target.name)
+            with self.assertRaises(RuntimeError):
+                apply_patches(root, [patch])
+            self.assertEqual(source.read_text(), 'value = 1\n')
 
     def test_local_patch_provenance_does_not_claim_an_upstream_commit(self):
         patch = {'source_kind': 'keep-local', 'source_id': 'keep-reviewed-change',

@@ -1,17 +1,25 @@
 {
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
-  "approval": "Verified-fixed review on October 6, 2026 covers only the exact eight finding tuples below through their inclusive October 20 UTC deadlines. The pinned base, reviewed source hashes, complete native scans, all nine security probes, dependency loading and corresponding-source checks remain mandatory. Unknown findings and mismatches remain blocked; no unfixed vulnerability is accepted.",
+  "approval": "Zero-finding qualification is required for the changed runtime candidate. The October 6 verified-fixed entries below retain their original scope, evidence and inclusive October 20 UTC deadlines for historical review; no finding may use them under this policy. Updated source hashes bind candidate inputs and do not approve exceptions or establish native qualification.",
   "reviewed_sources": {
-    "Dockerfile": "2ddc2631ba7679ee101672be7bef4f968358fd75aa2487ac053327ebb9ca14e5",
+    "Dockerfile": "3630f49a8daf56c7487525cedd5f851be89372c673bbb975f60657d7937e0585",
     "scripts/inspect_candidate.py": "b891ac18d88d613b790902c904c9d5fbe4ce5c4c71a7c578079b250392ecd397",
     "requirements.txt": "26a92d0b3e6ce4a03b950fdd007e549e716ef45a10cb73220b9207581824ea6c",
-    "scripts/python_security_patches.json": "81d8119bbc903e70a921a7a26e780b55c8f318d6ddd77aee24567fda01e700ff",
-    "scripts/patch_python_runtime.py": "ac173c04c32674c4b14a3d40ff091ef97793cc5460d124866111f27f83e09316",
-    "scripts/python_security_checks.py": "5e0c2b188129f93539e5d26f51e3fde659f1184754082ad4ffffe38c0500fb3f",
-    "scripts/build_patched_zlib.py": "f4678605a699b6ef5836c333b9e6794aa0bb2a6c99d9d723ecb2f5a974193682",
+    "scripts/python_security_patches.json": "dc7d067e4ec8c428cf5a7fde630d5d4c174c4a6671be05e3d0bbe6ea63e79643",
+    "scripts/patch_python_runtime.py": "444b5a57b541b3a6ec1aecdef2488b124bfa5bd3fbdf881a3bd606a8347a3967",
+    "scripts/python_security_checks.py": "d206bc11a1819e03c2318c2d9c4dfdaab91bce93b737032df1cf279b6ed6a8e3",
     "scripts/alpine_expat_sources.py": "3071513ad18bb712499e494f27fbad596ecebda810072b0e58519c2088e719cb",
-    "scripts/runtime_dependency_checks.py": "4758b945fc340542fed3fb02d3e4161fc4fc75326510d81ba54894d0b731c78c",
-    "docs/os-package-sources.json": "345b878f721ad66240e1e11789c081c472fd4b1257b59635f05270db23f80659"
+    "scripts/runtime_dependency_checks.py": "a67eb435387885c813dfe335289c9e07c2efb871a2ccb88e3233af448dcb03d3",
+    "docs/os-package-sources.json": "8c6687df2fd63f6d064adbe1c0b0c99aefd0264ae76b19c096b8da9ca17a6f60",
+    ".dockerignore": "9a5d4556016801d6770748fd028d7668372a21dca7b00512e95dee98df404aa7",
+    "scripts/review_image.py": "d89635f7a5ee1d9bf7a03aafee94c6c58e79241c5439d9657558b40e75f2116e",
+    "scripts/alpine_zlib_sources.py": "1d7742f9e8a35048d65bf4642f37efc988635b6452836d71f5575e4876d983ff",
+    "scripts/dhi_python_packages.py": "365374494190fff6879fed735c972ac8053a52a0d3388a207c435ad34a259a6f",
+    "scripts/install_runtime_packages.py": "17e4b900d5f85bead210c0f930dd1bd1e772afc241d39c2d1bf6caf3dd5c0da7",
+    "scripts/build_distribution_bundle.py": "905b43f52ae7bc65de10336df04f36ddaeaef2c091d5701139d10d4577434361",
+    "scripts/collect_package_sources.py": "d0ce7b0ca69723309d99d56a6cacc2d9dcc3fee6d24f9d2dc5ae56e05875ec60",
+    "scripts/package_source_notices.py": "4056b9f2df4fa5a040f7c889de75d851d0d812172619b427e997220a713cbfe4",
+    "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad"
   },
   "exceptions": {
     "CVE-2026-85091": {
@@ -126,5 +134,6 @@
         "reviewed_on": "2026-10-06"
       }
     }
-  }
+  },
+  "require_zero_findings": true
 }

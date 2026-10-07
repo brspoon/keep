@@ -4,14 +4,16 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-builds checksum-pinned zlib 1.3.2 with the exact upstream commit hunk that fixes
-CVE-2026-85091. The patched library replaces `/usr/lib/libz.so.1.3.2`, behind
-the runtime's existing `libz.so.1` alias.
+installs the exact signed Alpine zlib `1.3.2-r1` and DHI Python `3.14.8-r0`
+packages. Package versions change through verified offline APK installation;
+the build never relabels an older package or suppresses a finding.
 
 Every architecture job verifies signed vendor provenance, runs Docker Scout and
 an unsuppressed Grype scan, and executes all nine runtime regression probes.
-Scout must report zero findings. Grype permits only the verified-fixed
-findings recorded in docs/image-exceptions.json; every other finding blocks release.
+Scout and Grype must both report zero findings. The current
+`require_zero_findings` policy in docs/image-exceptions.json blocks even a finding
+matching a historical verified-fixed exception. Those entries retain their
+original deadlines and evidence; they do not approve this changed candidate.
 Source hashes, base identity, complete scans, successful probes and the deadline
 of each exception used by a finding are enforced by scripts/review_image.py.
 Full JSON report contents are printed in the workflow logs under each
@@ -48,7 +50,7 @@ No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
 evidence, verify the actual runtime package identities, and package versioned
 source/notice archives with SHA-256 manifests before transferring an image.
-The original Expat layer, runtime security patches and statically embedded wheel
+The original Expat, Python and zlib layers, runtime security patches and statically embedded wheel
 libraries are included. Full OS and supplemental notices are also copied into
 the image. See [source distribution](SOURCE_DISTRIBUTION.md) for matching
 source downloads, verification, and retention requirements.
@@ -63,6 +65,7 @@ the verified reports immediately before each native image or manifest push.
 This applies the current deadlines even when publication queues or crosses a UTC
 date boundary. The original evidence bytes, including the review result, remain
 unchanged.
+
 Approved images then pass through temporary run-and-attempt-specific registry tags;
 the publication job receives immutable digests, validates source/runtime identity,
 and promotes stable only after both architecture jobs succeed. After publication,
@@ -78,7 +81,54 @@ and image digests. The exception policy, patch inputs and regression checks are
 tracked in this repository; results for an older image do not validate a newer
 candidate.
 
+## Vendor package replacement candidate (October 7)
+
+The `2.23.3` source prepares Alpine's signed zlib `1.3.2-r1` and the complete
+four-package DHI Python `3.14.8-r0` cohort for both native architectures. The
+[Alpine recipe](https://github.com/alpinelinux/aports/blob/0afa2da0e8c8051c6f8f64a7a388e5a259904245/main/zlib/APKBUILD)
+includes the zlib fix already supplied locally in `2.23.2`. Genuine APK
+installation replaces both the library and the older APK inventory entry that
+Docker Hub now reports. The [pinned DHI Python recipe](https://github.com/docker-hardened-images/catalog/blob/d65ec8748eef33c1ed9033563e0a0a146ef3c739/package/apk/main/python/alpine-3.24/3.14.yaml)
+identifies the Python replacement; its signed native source/binary binding still
+has to pass the existing authenticated source acquisition gate.
+
+All eight candidate Python APKs and both zlib APKs have passed exact hashes,
+official key hashes, RSA signature and signed payload checks. Public zlib build
+context, fix, source and license bytes have been verified. These are package
+inspection results, not native image qualification. No new exception or later
+deadline is approved. The existing Python cleanup backport and Keep permission
+guard remain; changed ZIP contexts retain strict bounded-output behavior and
+normal reads through EOF. Modified stdlib bytecode is removed before capture.
+Normal TLS setup, hostname validation and a complete in-memory handshake with
+an SNI context change are required alongside signed Python executable and
+loaded-library identities.
+
+The original pinned DHI base is unchanged. Its Python `3.14.7-r2`, zlib
+`1.3.2-r0`, Expat `2.8.5-r0` and original ensurepip materials remain in immutable
+earlier layers, so their exact original source records remain required. New
+ensurepip and cache bytes are removed in the installation RUN before a new
+layer is captured. Current runtime source records cannot replace that original
+coverage. Native source acquisition must regenerate and explicitly verify both
+architectures' complete notice union before the final source-archive gate.
+The unchanged development base builds the existing `cp314` application wheels;
+their compatibility with the upgraded runtime must pass native CFFI, Argon2,
+SQLite, application and recovery checks. Its Python development package has an
+exact old-runtime dependency, so it is not partially upgraded with runtime APKs.
+
+This candidate is not qualified or release-ready. It needs native amd64 and
+arm64 builds, full unsuppressed Scout and Grype scans, all runtime/application,
+installation and recovery gates, authenticated matching-source proof and the
+updated committed source/license notices. Then run the full native gate again
+with `prepare_notices=false`. Publication must replay the same zero-finding
+policy against unchanged original evidence bytes. After publication, verify the
+new registry digest and Docker Hub analysis on both architectures. A clean
+scan is time-bound evidence: newly published advisories can change Hub's counts.
 ## Exception review deadlines
+
+The current zero-finding policy permits no scanner finding, including one
+matching an otherwise unexpired historical entry. The rules below preserve the
+original review semantics and never extend or reuse those approvals for the
+changed vendor-package candidate.
 
 Each exception records its reviewed scope and evidence in
 docs/image-exceptions.json, with `review.approval`, `review.deadline` and

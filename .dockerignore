@@ -23,8 +23,10 @@
 !scripts/
 !scripts/patch_python_runtime.py
 !scripts/python_security_patches.json
-!scripts/build_patched_zlib.py
 !scripts/alpine_expat_sources.py
+!scripts/alpine_zlib_sources.py
+!scripts/dhi_python_packages.py
+!scripts/install_runtime_packages.py
 !docs/
 !docs/PYTHON_LICENSE.txt
 !docs/licenses/**

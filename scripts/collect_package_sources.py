@@ -536,19 +536,24 @@ def discover_origin(origin, architecture, destination, registry):
 
 
 def acquire_origin(origin, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None):
-    if origin.get('source_method') == 'alpine-signed-expat-v1':
-        from alpine_expat_sources import collect_sources
+    if origin.get('source_method') in {'alpine-signed-expat-v1', 'alpine-signed-zlib-v1'}:
+        if origin['source_method'] == 'alpine-signed-expat-v1':
+            from alpine_expat_sources import collect_sources
+            directory = 'alpine-expat-sources'
+        else:
+            from alpine_zlib_sources import collect_sources
+            directory = 'alpine-zlib-sources'
         if runtime_inventory is None:
-            raise ValueError('Signed Alpine Expat sources require the actual candidate inventory')
+            raise ValueError('Signed Alpine sources require the actual candidate inventory')
         root = Path(destination)
         root.mkdir(parents=True, exist_ok=True)
         manifest = collect_sources(origin, architecture, runtime_inventory,
-                                   root / 'alpine-expat-sources')
+                                   root / directory)
         result = {'origin': origin['origin'], 'version': origin['version'],
                   'architecture': architecture, 'success': True,
                   'provider_oci_binding': False, 'signature_verified': True,
                   'apk_binary_match_verified': True, 'binding_method': manifest['binding_method'],
-                  'public_sources': {'directory': 'alpine-expat-sources', 'manifest': 'manifest.json'}}
+                  'public_sources': {'directory': directory, 'manifest': 'manifest.json'}}
         (root / 'acquisition.json').write_text(json.dumps(result, indent=2) + '\n')
         return result
     origin_name = origin.get('origin', '')
