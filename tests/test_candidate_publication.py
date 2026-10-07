@@ -239,4 +239,3 @@ class WorkflowConditionTests(unittest.TestCase):
             with self.subTest(native=result):
                 self.assertFalse(self.condition('tested-images', values))
                 self.assertFalse(self.condition('publish-release', values))
-
