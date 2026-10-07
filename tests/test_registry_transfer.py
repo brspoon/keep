@@ -59,7 +59,7 @@ class RegistryTransferTests(unittest.TestCase):
             with self.subTest(metadata=metadata), \
                  patch.dict(os.environ, DOCKERHUB_IMAGE='example/keep', GITHUB_SHA='a' * 40, DOCKERHUB_USERNAME='test', DOCKERHUB_TOKEN='test'), \
                  patch.object(transfer, 'require_manual_dispatch'), patch.object(transfer, 'require_current_source'), \
-                 patch.object(transfer, 'hub', side_effect=[{'access_token': 'test'}, metadata]), \
+                 patch.object(transfer, 'revalidate_candidate'), patch.object(transfer, 'hub', side_effect=[{'access_token': 'test'}, metadata]), \
                  patch.object(transfer.subprocess, 'run') as docker:
                 with self.assertRaisesRegex(ValueError, 'visibility metadata'):
                     transfer.execute('stage', 'amd64')
@@ -90,6 +90,7 @@ class RegistryTransferTests(unittest.TestCase):
                 from subprocess import CompletedProcess
                 docker_reply = CompletedProcess([], 0, json.dumps({'Descriptor': {'digest': digests['amd64']}}))
                 with patch.dict(os.environ, environment), patch.object(transfer, 'require_current_source'), \
+                     patch.object(transfer, 'revalidate_candidate') as security, \
                      patch.object(transfer, 'require_new_tags'), patch.object(transfer, 'hub', side_effect=hub), \
                      patch.object(transfer.subprocess, 'run', return_value=docker_reply) as docker, \
                      patch.object(transfer, 'delete_transfer_tag', return_value=True) as delete, patch('builtins.print'):
@@ -98,6 +99,7 @@ class RegistryTransferTests(unittest.TestCase):
                     self.assertEqual(record['digest'], digests['amd64'])
                     self.assertEqual(record['run_id'], '123')
                     self.assertEqual(record['run_attempt'], '2')
+                    self.assertEqual(security.call_count, 2)
                     transfer.execute('cleanup')
                 self.assertEqual([call.args[0] for call in delete.call_args_list], [
                     'repositories/example/keep/tags/transfer-123-2-amd64/',
@@ -110,6 +112,49 @@ class RegistryTransferTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Both'):
                 transfer.execute('fetch')
             docker.assert_not_called()
+
+    def test_expired_or_changed_original_evidence_stops_before_registry_or_push(self):
+        from subprocess import CompletedProcess
+        environment = {
+            'DOCKERHUB_IMAGE': 'example/keep', 'GITHUB_SHA': 'a' * 40,
+            'DOCKERHUB_USERNAME': 'test', 'DOCKERHUB_TOKEN': 'synthetic',
+            'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2',
+            'KEEP_CANDIDATE_ONLY': 'true', 'KEEP_CANDIDATE_RUN_ID': '',
+        }
+        for failures in ([ValueError('expired exception')], [None, ValueError('expired exception')]):
+            with self.subTest(failures=len(failures)), patch.dict(os.environ, environment), \
+                 patch.object(transfer, 'require_manual_dispatch'), patch.object(transfer, 'require_current_source'), \
+                 patch.object(transfer, 'require_new_tags'), \
+                 patch.object(transfer, 'revalidate_candidate', side_effect=failures), \
+                 patch.object(transfer, 'hub', side_effect=[{'access_token': 'test'}, {'is_private': False}]) as hub, \
+                 patch.object(transfer.subprocess, 'run', return_value=CompletedProcess([], 0, '')) as docker:
+                with self.assertRaisesRegex(ValueError, 'expired exception'):
+                    transfer.execute('stage', 'amd64')
+                self.assertFalse(any(call.args[0][1] == 'push' for call in docker.call_args_list))
+                if len(failures) == 1:
+                    hub.assert_not_called()
+                    docker.assert_not_called()
+
+    def test_candidate_revalidation_requires_original_provenance_hashes_and_current_policy(self):
+        import validated_build
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            config = 'sha256:' + 'a' * 64
+            proof = {'original': True, 'index': {'config_digest': config}}
+            Path('validation-provenance-amd64.json').write_text(json.dumps(proof))
+            with patch.object(validated_build, 'verify_provenance', return_value={'original': 'index'}) as provenance, \
+                 patch.object(validated_build, 'verify_files') as files, \
+                 patch.object(validated_build, 'inspect_image') as image, \
+                 patch.object(transfer.subprocess, 'run') as review:
+                transfer.revalidate_candidate('amd64')
+                provenance.assert_called_once_with(proof, 'amd64', config)
+                files.assert_called_once_with({'original': 'index'}, 'amd64')
+                image.assert_called_once_with('amd64', config)
+                review.assert_called_once_with(['python3', 'scripts/review_image.py', 'amd64', '--check-only'], check=True)
+            with patch.object(validated_build, 'verify_provenance', side_effect=ValueError('changed hash')), \
+                 patch.object(transfer.subprocess, 'run') as review:
+                with self.assertRaisesRegex(ValueError, 'changed hash'):
+                    transfer.revalidate_candidate('amd64')
+                review.assert_not_called()
 
     def workflow_jobs(self):
         workflow = Path('.github/workflows/image.yml').read_text()
@@ -214,10 +259,12 @@ class RegistryTransferTests(unittest.TestCase):
         workflow, jobs = self.workflow_jobs()
         self.assertIn('validation_run_id:', workflow)
         self.assertIn('required: true', workflow.split('validation_run_id:', 1)[1].split('confirmation:', 1)[0])
-        guard = "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable'"
+        guards = ("github.event_name == 'workflow_dispatch'", "github.ref == 'refs/heads/main'",
+                  'inputs.publish_release', "inputs.confirmation == 'release-stable'")
         for name in ('validated-main', 'prepare-release', 'release-native', 'tested-images', 'publish-release'):
             job = jobs[name]
-            self.assertIn(guard, job)
+            for guard in guards:
+                self.assertIn(guard, job)
             self.assertIn("needs.release-needed.outputs.publish == 'true'", job)
             self.assertIn('persist-credentials: false', job)
             for expensive_command in ('docker build', 'scripts/review_image.py', 'scripts/inspect_candidate.py',

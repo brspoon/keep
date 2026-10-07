@@ -580,85 +580,97 @@
     },
     {
       "origin": "python-3.14",
-      "version": "3.14.7-r2",
+      "version": "3.14.8-r0",
       "image": "dhi.io/pkg-python",
-      "tag": "3.14.7-r2-apk-alpine3.24",
-      "reference": "dhi.io/pkg-python:3.14.7-r2-apk-alpine3.24",
+      "tag": "3.14.8-r0-apk-alpine3.24",
+      "reference": "dhi.io/pkg-python:3.14.8-r0-apk-alpine3.24",
       "predicate_image_name": "dhi/pkg-python",
       "recipe": {
         "path": "package/apk/main/python/alpine-3.24/3.14.yaml",
-        "revision": "196770f064617d465f42873ff54e63443e7116e2",
-        "sha256": "7ee882c6744b5b41e4c8c49369c48e733ea53b6802f41616bd9e54cb54ba0b8c",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/196770f064617d465f42873ff54e63443e7116e2/package/apk/main/python/alpine-3.24/3.14.yaml",
+        "revision": "d65ec8748eef33c1ed9033563e0a0a146ef3c739",
+        "sha256": "df45a49fbde3cc38d704cb3ce988f3c049f7fa6c30521c6ce241b04b8b710386",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/d65ec8748eef33c1ed9033563e0a0a146ef3c739/package/apk/main/python/alpine-3.24/3.14.yaml",
         "upstream_commit": null
       },
       "declared_tags": [
-        "3.14.7-apk-alpine3.24",
-        "3.14.7-r2-apk-alpine3.24"
+        "3.14.8-apk-alpine3.24",
+        "3.14.8-r0-apk-alpine3.24"
       ],
       "mutable_tag_reused_across_upstream_versions": false,
+      "signing_keys": {
+        "amd64": {
+          "name": "dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+          "url": "https://dhi.io/keyring/dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+          "sha256": "0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd"
+        },
+        "arm64": {
+          "name": "dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+          "url": "https://dhi.io/keyring/dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+          "sha256": "0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd"
+        }
+      },
       "packages": [
         {
           "name": "pyc-3.14",
-          "version": "3.14.7-r2",
+          "version": "3.14.8-r0",
           "license": "PSF-2.0",
-          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "build_commit": "02047b54ee05f804db953459ce3de1b1923be79a",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/pyc-3.14-3.14.7-r2.apk",
-              "sha256": "bed27c92cc82d13e9c9c8bc2e21e521941f05a6f62cce1fc311daabda002293f"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/pyc-3.14-3.14.8-r0.apk",
+              "sha256": "fa2849be7f428bb6a8ec71166d9444961b268bf6eeab61b16098cfb624a39b83"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/pyc-3.14-3.14.7-r2.apk",
-              "sha256": "bed27c92cc82d13e9c9c8bc2e21e521941f05a6f62cce1fc311daabda002293f"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/pyc-3.14-3.14.8-r0.apk",
+              "sha256": "fa2849be7f428bb6a8ec71166d9444961b268bf6eeab61b16098cfb624a39b83"
             }
           }
         },
         {
           "name": "python-3.14",
-          "version": "3.14.7-r2",
+          "version": "3.14.8-r0",
           "license": "PSF-2.0",
-          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "build_commit": "02047b54ee05f804db953459ce3de1b1923be79a",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-3.14.7-r2.apk",
-              "sha256": "a6fa39d2a124caa7d96a092009e19ef6c5244cc11fce070f5728c9030c25f5b8"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-3.14.8-r0.apk",
+              "sha256": "2d3a42cfd3e61b6ab8d8dc1700d6388aad35afb8c5907d5f03b551133c60b506"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-3.14.7-r2.apk",
-              "sha256": "1cf58f70edd7eb9a939d66c0853a17e85009173c44ea0d19e6340f708cc3f9f4"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-3.14.8-r0.apk",
+              "sha256": "f0f644c37070e604ad67091cac77d86f463beed171771f0e974818199c8efb93"
             }
           }
         },
         {
           "name": "python-3.14-pyc",
-          "version": "3.14.7-r2",
+          "version": "3.14.8-r0",
           "license": "PSF-2.0",
-          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "build_commit": "02047b54ee05f804db953459ce3de1b1923be79a",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pyc-3.14.7-r2.apk",
-              "sha256": "31691c74b71414c9ca47f4bcd6988744e9d73d226483eb3dd6364d1afec87e2f"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pyc-3.14.8-r0.apk",
+              "sha256": "9c38a80d7c0f1039d04350c36a20ec896a3b8f500237a8cfa3af74b835bb485b"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pyc-3.14.7-r2.apk",
-              "sha256": "31691c74b71414c9ca47f4bcd6988744e9d73d226483eb3dd6364d1afec87e2f"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pyc-3.14.8-r0.apk",
+              "sha256": "9c38a80d7c0f1039d04350c36a20ec896a3b8f500237a8cfa3af74b835bb485b"
             }
           }
         },
         {
           "name": "python-3.14-pycache-pyc0",
-          "version": "3.14.7-r2",
+          "version": "3.14.8-r0",
           "license": "PSF-2.0",
-          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "build_commit": "02047b54ee05f804db953459ce3de1b1923be79a",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
-              "sha256": "2ae0fa8b98962df49349a1e17af8a8cbfd64b836c7f1e0e5752bd8b9baf7e07b"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pycache-pyc0-3.14.8-r0.apk",
+              "sha256": "09126535fd4cc2d0d21ee2f9dbfa6eca363944aafc43bfe846ec85adbbfa75d4"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
-              "sha256": "bbc45b775c3ae8e364c9104854f7dba9d5b2bffbb78a6436f5745a0c8b47e230"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.8-r0.apk",
+              "sha256": "7506c6cb7ecd86b950653f78ded37bbb50d4434b448626e31f8ef8d4d7f7e5fe"
             }
           }
         }
@@ -857,37 +869,60 @@
     },
     {
       "origin": "zlib",
-      "version": "1.3.2-r0",
-      "image": "dhi.io/pkg-zlib",
-      "tag": "1.3.2-r0-alpine3.24",
-      "reference": "dhi.io/pkg-zlib:1.3.2-r0-alpine3.24",
-      "predicate_image_name": "dhi/pkg-zlib",
+      "version": "1.3.2-r1",
+      "source_method": "alpine-signed-zlib-v1",
       "recipe": {
-        "path": "package/apk/main/zlib/alpine-3.24/1.yaml",
-        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
-        "sha256": "e847c98224bdd96ea521ff76ba55f7dd2786867ee8d4e3f849a7e8d3d098c274",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/zlib/alpine-3.24/1.yaml",
-        "upstream_commit": "f248b33b5943c7dc69bf691031d7612ab2e8ed93"
+        "path": "main/zlib/APKBUILD",
+        "revision": "0afa2da0e8c8051c6f8f64a7a388e5a259904245",
+        "url": "https://raw.githubusercontent.com/alpinelinux/aports/0afa2da0e8c8051c6f8f64a7a388e5a259904245/main/zlib/APKBUILD",
+        "sha256": "c9348892bf3857602fe74fcc1d411e263b408b7d70344170396f5993a62bbe26",
+        "archive_url": "https://github.com/alpinelinux/aports/archive/0afa2da0e8c8051c6f8f64a7a388e5a259904245.tar.gz",
+        "archive_sha256": "d64797bed37c573333fdda5061a4636c2c8106a2d01dd0cfb327a6a135cf46d3"
       },
-      "declared_tags": [
-        "1.3.2-alpine3.24",
-        "1.3.2-r0-alpine3.24"
-      ],
-      "mutable_tag_reused_across_upstream_versions": false,
+      "source": {
+        "url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
+        "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+        "sha512": "70963771ea5d763614278a69b474f09b7d237ef8f53b675a10fe31d9923aeef601504b35d7ebd1b1e7f347e9ebb048e6b3b47fffdf137e7bdc7e8d5eb4ec4692",
+        "license_path": "zlib-1.3.2/LICENSE",
+        "license_sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+      },
+      "patch": {
+        "path": "main/zlib/CVE-2026-85091.patch",
+        "url": "https://raw.githubusercontent.com/alpinelinux/aports/0afa2da0e8c8051c6f8f64a7a388e5a259904245/main/zlib/CVE-2026-85091.patch",
+        "sha256": "110ff14375733173d8aa54574473424fbd7dfe4b81f1ca34a759c6fe14b15b14",
+        "sha512": "878888308a51296470f05eca59a79212314d4c9a26c19bbf70c1cb1b8d25eb42e0cce5a001acbe287268aa215c854cb5a9990ff62b7aefa9de221803d172957e",
+        "upstream_commit": "df84af25dc1942490e1d1c899a07619152a46148"
+      },
+      "signing_keys": {
+        "amd64": {
+          "name": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+          "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+        },
+        "arm64": {
+          "name": "alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+          "sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+        }
+      },
       "packages": [
         {
           "name": "zlib",
-          "version": "1.3.2-r0",
+          "version": "1.3.2-r1",
           "license": "Zlib",
-          "build_commit": "65a8fd550c9e75fc5dbf7e1aea4256b5f3d97c11",
+          "build_commit": "0afa2da0e8c8051c6f8f64a7a388e5a259904245",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/zlib-1.3.2-r0.apk",
-              "sha256": "16305aa4495fa104bd05cf78abdd74e9edc4258afa0dc3a8aef3b39b56bfdcba"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/zlib-1.3.2-r1.apk",
+              "sha256": "63aeea03c15a2f9018f81805cfc8aa926bdf5cd68921f22149c2fbb5d0ee9f47",
+              "pkginfo_sha256": "395e0ee97996853c6cf03f17dfe25b57d109b0432c6faabb585d78e6ac6f534a",
+              "library_sha256": "ecc8b9dfc45eb7fa29b410ffaca6257873890de53b80fe91735737b49067c5f2"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/zlib-1.3.2-r0.apk",
-              "sha256": "fe41875d7371df6f2a299e687efec66418d91b3e94bf76498206e635c5d38bb0"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/zlib-1.3.2-r1.apk",
+              "sha256": "1f77a542ac6634761b9fe38d8bdca19b154071dcfa25432e73f2bc8a0740a33f",
+              "pkginfo_sha256": "a05759ee7a44bc55b4e9455d12f5220293724e7f743fdae265863c00e02c521b",
+              "library_sha256": "afe41fdd58868461eae3b04068f334bfad2d4ecd0e11c7e30f9afafe06f28528"
             }
           }
         }
@@ -944,6 +979,134 @@
             "arm64": {
               "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libexpat-2.8.5-r0.apk",
               "sha256": "ca2ec23fee97d4f53ea437bb0cdc2239da9fc5df2ca58e162f41ac14cb81089a"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "zlib",
+      "version": "1.3.2-r0",
+      "image": "dhi.io/pkg-zlib",
+      "tag": "1.3.2-r0-alpine3.24",
+      "reference": "dhi.io/pkg-zlib:1.3.2-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-zlib",
+      "recipe": {
+        "path": "package/apk/main/zlib/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "e847c98224bdd96ea521ff76ba55f7dd2786867ee8d4e3f849a7e8d3d098c274",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/zlib/alpine-3.24/1.yaml",
+        "upstream_commit": "f248b33b5943c7dc69bf691031d7612ab2e8ed93"
+      },
+      "declared_tags": [
+        "1.3.2-alpine3.24",
+        "1.3.2-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "zlib",
+          "version": "1.3.2-r0",
+          "license": "Zlib",
+          "build_commit": "65a8fd550c9e75fc5dbf7e1aea4256b5f3d97c11",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/zlib-1.3.2-r0.apk",
+              "sha256": "16305aa4495fa104bd05cf78abdd74e9edc4258afa0dc3a8aef3b39b56bfdcba"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/zlib-1.3.2-r0.apk",
+              "sha256": "fe41875d7371df6f2a299e687efec66418d91b3e94bf76498206e635c5d38bb0"
+            }
+          }
+        }
+      ],
+      "candidate_references": [
+        "dhi.io/pkg-zlib@sha256:b51662f6735da9d71f4ddd6bccb50955caf0d3e373c8fd627d31e31369b0f4fb",
+        "dhi.io/pkg-zlib@sha256:dc7f68479a3c8186bc0d7bab986864f077f8503176d1b5acff00dad21653c1cd"
+      ]
+    },
+    {
+      "origin": "python-3.14",
+      "version": "3.14.7-r2",
+      "image": "dhi.io/pkg-python",
+      "tag": "3.14.7-r2-apk-alpine3.24",
+      "reference": "dhi.io/pkg-python:3.14.7-r2-apk-alpine3.24",
+      "predicate_image_name": "dhi/pkg-python",
+      "recipe": {
+        "path": "package/apk/main/python/alpine-3.24/3.14.yaml",
+        "revision": "196770f064617d465f42873ff54e63443e7116e2",
+        "sha256": "7ee882c6744b5b41e4c8c49369c48e733ea53b6802f41616bd9e54cb54ba0b8c",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/196770f064617d465f42873ff54e63443e7116e2/package/apk/main/python/alpine-3.24/3.14.yaml",
+        "upstream_commit": null
+      },
+      "declared_tags": [
+        "3.14.7-apk-alpine3.24",
+        "3.14.7-r2-apk-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "pyc-3.14",
+          "version": "3.14.7-r2",
+          "license": "PSF-2.0",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/pyc-3.14-3.14.7-r2.apk",
+              "sha256": "bed27c92cc82d13e9c9c8bc2e21e521941f05a6f62cce1fc311daabda002293f"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/pyc-3.14-3.14.7-r2.apk",
+              "sha256": "bed27c92cc82d13e9c9c8bc2e21e521941f05a6f62cce1fc311daabda002293f"
+            }
+          }
+        },
+        {
+          "name": "python-3.14",
+          "version": "3.14.7-r2",
+          "license": "PSF-2.0",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-3.14.7-r2.apk",
+              "sha256": "a6fa39d2a124caa7d96a092009e19ef6c5244cc11fce070f5728c9030c25f5b8"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-3.14.7-r2.apk",
+              "sha256": "1cf58f70edd7eb9a939d66c0853a17e85009173c44ea0d19e6340f708cc3f9f4"
+            }
+          }
+        },
+        {
+          "name": "python-3.14-pyc",
+          "version": "3.14.7-r2",
+          "license": "PSF-2.0",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pyc-3.14.7-r2.apk",
+              "sha256": "31691c74b71414c9ca47f4bcd6988744e9d73d226483eb3dd6364d1afec87e2f"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pyc-3.14.7-r2.apk",
+              "sha256": "31691c74b71414c9ca47f4bcd6988744e9d73d226483eb3dd6364d1afec87e2f"
+            }
+          }
+        },
+        {
+          "name": "python-3.14-pycache-pyc0",
+          "version": "3.14.7-r2",
+          "license": "PSF-2.0",
+          "build_commit": "1add8ab3ef38366e0da70f01b8607a92326be82d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
+              "sha256": "2ae0fa8b98962df49349a1e17af8a8cbfd64b836c7f1e0e5752bd8b9baf7e07b"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
+              "sha256": "bbc45b775c3ae8e364c9104854f7dba9d5b2bffbb78a6436f5745a0c8b47e230"
             }
           }
         }

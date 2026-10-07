@@ -24,6 +24,7 @@ from publish_image import hub
 from publish_release import github_repository, repository_visibility, require_current_source, require_manual_dispatch
 from registry_transfer import checked_digest
 import review_image
+from candidate_publication import publication_identity
 
 ARCHES = ('amd64', 'arm64')
 HASH = re.compile(r'[0-9a-f]{64}\Z')
@@ -472,6 +473,7 @@ def revalidate_security(security_reviews):
 
 
 def verify_identities(version, release, digests=None, *, security_reviews=None):
+    producer_run, producer_attempt = publication_identity(api)
     rows = api(f"/releases/{release['id']}/assets?per_page=100")
     assets = {row['name']: row for row in rows}
     if len(assets) != len(rows):
@@ -490,8 +492,8 @@ def verify_identities(version, release, digests=None, *, security_reviews=None):
                 if (identity.get('version') != version or identity.get('revision') != os.environ['GITHUB_SHA'] or
                         identity.get('architecture') != arch or
                         (digests is not None and identity.get('native_digest') != digests[arch]) or
-                        identity.get('run_id') != os.environ['GITHUB_RUN_ID'] or
-                        identity.get('run_attempt') != int(os.environ['GITHUB_RUN_ATTEMPT'])):
+                        identity.get('run_id') != producer_run or
+                        identity.get('run_attempt') != int(producer_attempt)):
                     raise ValueError('Durable release evidence identity differs')
                 checked_digest(identity['native_digest'])
                 checked_digest(identity['config_digest'])
@@ -552,7 +554,7 @@ def aggregate():
                                      'secret': os.environ['DOCKERHUB_TOKEN']})['access_token']
     repository_visibility(hub('repositories/' + image + '/', token), 'is_private', 'Docker Hub')
     for arch, identity in identities.items():
-        tag = f"transfer-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{arch}"
+        tag = f"transfer-{identity['run_id']}-{identity['run_attempt']}-{arch}"
         if hub('repositories/' + image + '/tags/' + tag + '/', token).get('digest') != identity['native_digest']:
             raise ValueError('Original native transfer tag differs from durable evidence')
     guard()
@@ -571,7 +573,7 @@ def verify():
     with tempfile.TemporaryDirectory(prefix='keep-release-identity-') as directory:
         identity_path = Path(directory) / f'keep-{version}-release-materials.json'
         identity_path.write_text(json.dumps({'version': version, 'revision': os.environ['GITHUB_SHA'],
-                                            'run_id': os.environ['GITHUB_RUN_ID'], 'images': identities},
+                                            'run_id': identities[ARCHES[0]]['run_id'], 'images': identities},
                                            indent=2, sort_keys=True) + '\n')
         guard()
         upload(release, identity_path)

@@ -51,12 +51,12 @@ Its upstream MIT notice is retained in `static/service-icons/seerr-LICENSE.txt`.
 The mark identifies the integration; Keep is not affiliated with Seerr.
 
 The Dockerfile includes Alpine software, exact CPython security patches identified
-in scripts/python_security_patches.json, and a checksum-pinned zlib 1.3.2 build
-with the exact upstream security-fix hunk. Python's license is retained in
-docs/PYTHON_LICENSE.txt; the zlib license is copied from that verified source archive.
+in scripts/python_security_patches.json, and the signed Alpine zlib 1.3.2-r1
+package. Python's license is retained in docs/PYTHON_LICENSE.txt; zlib's complete
+license is retained with its verified upstream sources and OS notices.
 
 The source map in `docs/os-package-sources.json` covers the final OS packages;
-the original Expat in earlier image layers is covered separately. Full notices,
+the original Expat, Python and zlib in earlier image layers are covered separately. Full notices,
 source patches and recipes accompany the sources. Keep's source archive also
 includes the Dockerfile and exact runtime patch/build scripts. Docker's signed
 native build/source records are verified against actual APK hashes, with

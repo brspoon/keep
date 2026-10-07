@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.23.3 — 2026-10-07
+
+- Update the container's Python and zlib packages with vendor security fixes.
+
 ## 2.23.2 — 2026-10-06
 
 - Ensure the container uses the patched zlib library for normal Python operations.

@@ -1529,6 +1529,98 @@
           "classification": "upstream-archive-or-compression-test-fixture"
         }
       ]
+    },
+    {
+      "origin": "python-3.14",
+      "version": "3.14.8-r0",
+      "upstream_url": "https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz",
+      "upstream_archive_sha256": "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73",
+      "fixtures": [
+        {
+          "path": "Python-3.14.8/Lib/test/archivetestdata/recursion.tar",
+          "sha256": "d80f55ac66a2570c8a19d2b1dad7c057cf4c944d9c2f8adaf5bf6c8539881e13",
+          "bytes": 516,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/archivetestdata/testtar.tar",
+          "sha256": "760200dda3cfdff2cd31d8ab6c806794f3770faa465e7eae00a1cb3a2fbcbe3a",
+          "bytes": 435200,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/archivetestdata/testtar.tar.xz",
+          "sha256": "89e0326292b96a5700582a37ebf3d8ba60f1d136772b5cd15b2c2ae653fda188",
+          "bytes": 172,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/archivetestdata/zip_cp437_header.zip",
+          "sha256": "e2cdb56febb5106607bf5f9b92b2b7a9516814e7650139cfe46f6b36bfcfa327",
+          "bytes": 270,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/archivetestdata/zipdir.zip",
+          "sha256": "19cb87050b0fb410da3b88df752c2e1bdaeec77ac052b04febef31a68823cfcb",
+          "bytes": 374,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/archivetestdata/zipdir_backslash.zip",
+          "sha256": "afdfa1f139c91c2b486f3a4a931bef18e08883fc5f5c81975f5bd19cf92e6d1f",
+          "bytes": 192,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/test_importlib/metadata/data/example-21.12-py3-none-any.whl",
+          "sha256": "23e918b9f11389dfad0d8c91f1fd4e149dede6efc8a36de4d1c6d0c494d43782",
+          "bytes": 1455,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/test_importlib/metadata/data/example-21.12-py3.6.egg",
+          "sha256": "f847ae8050228e47543bdc724074d9910c19a055cad3f431202063e91e40009a",
+          "bytes": 1497,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/test_importlib/metadata/data/example2-1.0.0-py3-none-any.whl",
+          "sha256": "59ecf7fd1d2a1d72a7acf81ebc772b3a220cdb3afac6481bc5000d431d5bd2d3",
+          "bytes": 1167,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/test_importlib/namespace_pkgs/missing_directory.zip",
+          "sha256": "2507eab0cb7a594b25fb2fc1c6a0b0f27af53d1980ba358d4e0c1b1dc32a9e63",
+          "bytes": 515,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/test_importlib/namespace_pkgs/nested_portion1.zip",
+          "sha256": "9d6e1c27870cb53512a2e29ab03e61c25188ebed57e933ee5ce4e749d72c0a87",
+          "bytes": 556,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/test_importlib/namespace_pkgs/top_level_portion1.zip",
+          "sha256": "42376ede22fbd49cd23ecb7fcd690206b53e5304c1c75fcf36358ab8acdda62a",
+          "bytes": 332,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/wheeldata/setuptools-79.0.1-py3-none-any.whl",
+          "sha256": "e147c0549f27767ba362f9da434eab9c5dc0045d5304feb602a0af001089fc51",
+          "bytes": 1256281,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "Python-3.14.8/Lib/test/zipimport_data/sparse-zip64-c0-0x000000000.part",
+          "sha256": "16bb488f291d5e19adb5c5d638c3c7ffd16574a0b56112407a1aea16ad424fa5",
+          "bytes": 4096,
+          "classification": "upstream-archive-or-compression-test-fixture"
+        }
+      ]
     }
   ]
 }

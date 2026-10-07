@@ -8,20 +8,38 @@ import sys
 import tempfile
 import unittest
 import urllib.error
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path('scripts').resolve()))
 import publish_release as publisher
 import release_materials as materials
 import review_image
+import hub_analysis_review
+import candidate_publication
 
 SHA = 'a' * 40
 DIGESTS = {'amd64': 'sha256:' + '1' * 64, 'arm64': 'sha256:' + '2' * 64}
 CONFIGS = {'amd64': 'sha256:' + '3' * 64, 'arm64': 'sha256:' + '4' * 64}
+
+
+def hub_review(now=None):
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return {'format': 'keep-hub-analysis-review-v1', 'review_source': 'docker-hub-ui',
+            'image': 'example/keep', 'revision': SHA, 'reviewed_by': 'maintainer',
+            'reviewed_at': now.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'architectures': {arch: {'platform': 'linux/' + arch, 'digest': DIGESTS[arch],
+                                    'status': 'complete', 'unfiltered': True,
+                                    'counts': {severity: 0 for severity in hub_analysis_review.SEVERITIES}}
+                              for arch in DIGESTS}}
+
+
 ENV = {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_REF': publisher.BRANCH,
        'GITHUB_SHA': SHA, 'GITHUB_REPOSITORY': 'example/keep',
+       'GITHUB_ACTOR': 'maintainer',
        'KEEP_RELEASE_PUBLISH': 'true', 'KEEP_RELEASE_CONFIRMATION': 'release-stable',
        'DOCKERHUB_USERNAME': 'example', 'DOCKERHUB_TOKEN': 'test-secret',
+       'KEEP_CANDIDATE_ONLY': 'false', 'KEEP_CANDIDATE_RUN_ID': '123456',
+       'KEEP_CANDIDATE_RUN_ATTEMPT': '3', 'KEEP_HUB_ANALYSIS_REVIEW': json.dumps(hub_review()),
        'TESTED_DIGESTS': json.dumps(DIGESTS), 'TESTED_CONFIG_DIGESTS': json.dumps(CONFIGS)}
 
 
@@ -65,6 +83,8 @@ class ReleasePublishTests(unittest.TestCase):
                  patch.object(materials, 'api', return_value=rows) as assets, \
                  patch.object(materials, 'asset_body', side_effect=asset_body), \
                  patch.object(materials, 'verify_durable_validation'), \
+                 patch.object(materials, 'publication_identity', return_value=('123456', '3')), \
+                 patch.object(hub_analysis_review, 'retain_review'), \
                  patch.object(review_image, 'current_day', return_value=day or datetime.date(2026, 10, 20)):
                 yield fixture.root, downloads
             draft.assert_called_once_with(fixture.VERSION)
@@ -108,6 +128,21 @@ class ReleasePublishTests(unittest.TestCase):
         with patch.dict(os.environ, ENV), patch.object(publisher, 'hub') as hub:
             with self.assertRaises(ValueError):
                 publisher.execute('example/keep', SHA, Path('missing'))
+            hub.assert_not_called()
+
+    def test_candidate_only_mode_cannot_publish_release_tags(self):
+        with patch.dict(os.environ, {**ENV, 'KEEP_CANDIDATE_ONLY': 'true'}), \
+             patch.object(publisher, 'hub') as hub, patch.object(publisher.subprocess, 'run') as docker:
+            with self.assertRaisesRegex(ValueError, 'Candidate-only'):
+                publisher.execute('example/keep', SHA, Path('missing'), release=True)
+            hub.assert_not_called()
+            docker.assert_not_called()
+
+    def test_missing_prior_candidate_identity_blocks_before_registry(self):
+        with patch.dict(os.environ, {**ENV, 'KEEP_CANDIDATE_RUN_ID': '', 'KEEP_CANDIDATE_RUN_ATTEMPT': ''}), \
+             patch.object(publisher, 'hub') as hub:
+            with self.assertRaisesRegex(ValueError, 'original candidate'):
+                publisher.execute('example/keep', SHA, Path('missing'), release=True)
             hub.assert_not_called()
 
     def test_invalid_registry_visibility_rejected_before_docker(self):
@@ -276,8 +311,89 @@ class ReleasePublishTests(unittest.TestCase):
                 yield Path(directory), evidence
 
     def needed_exception(self):
-        return [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        return [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
+
+    def test_missing_or_nonzero_hub_review_blocks_all_registry_publication(self):
+        bad = hub_review()
+        bad['architectures']['arm64']['counts']['unspecified'] = 1
+        for receipt in ('', json.dumps(bad)):
+            calls = []
+            with self.subTest(receipt=receipt), self.publication_fixture(calls) as (artifacts, _evidence), \
+                 patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': receipt}):
+                with self.assertRaisesRegex(ValueError, 'Docker Hub'):
+                    publisher.execute('example/keep', SHA, artifacts, release=True)
+            self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
+
+    def test_hub_review_expiring_before_stable_blocks_stable_push(self):
+        calls = []
+        now = datetime.datetime(2026, 10, 7, 12, 0, tzinfo=datetime.timezone.utc)
+        current = now
+        def expire(command):
+            nonlocal current
+            if command[1:3] == ['manifest', 'create'] and command[3] == 'example/keep:stable':
+                current = now + datetime.timedelta(seconds=3601)
+        with self.publication_fixture(calls, before_command=expire) as (artifacts, _evidence), \
+             patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': json.dumps(hub_review(now))}), \
+             patch.object(hub_analysis_review, 'utc_now', side_effect=lambda: current):
+            with self.assertRaisesRegex(ValueError, 'older than one hour'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertNotIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+
+    def test_final_source_lookup_crossing_hub_review_freshness_blocks_stable(self):
+        calls = []
+        now = datetime.datetime(2026, 10, 7, 12, 0, tzinfo=datetime.timezone.utc)
+        current = now
+        crossings = []
+
+        def source_lookup(_revision, _release):
+            nonlocal current
+            if calls and calls[-1] == ['docker', 'manifest', 'create', 'example/keep:stable',
+                                     'example/keep@' + DIGESTS['amd64'],
+                                     'example/keep@' + DIGESTS['arm64']]:
+                crossings.append(current)
+                current = now + datetime.timedelta(seconds=3601)
+
+        # The fixture verifies the retained source, scanner and review bytes
+        # remain unchanged after the failed publication exits.
+        with self.publication_fixture(calls) as (artifacts, _evidence), \
+             patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': json.dumps(hub_review(now))}), \
+             patch.object(hub_analysis_review, 'utc_now', side_effect=lambda: current), \
+             patch.object(publisher, 'require_current_source', side_effect=source_lookup):
+            with self.assertRaisesRegex(ValueError, 'older than one hour'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertEqual(crossings, [now])
+        self.assertNotIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+        self.assertEqual(len([command for command in calls if command[1] == 'push' or
+                              command[1:3] == ['manifest', 'push']]), 4)
+
+    def test_final_source_lookup_crossing_approval_utc_deadline_blocks_stable(self):
+        calls = []
+        now = datetime.datetime(2026, 10, 20, 23, 59, 59, tzinfo=datetime.timezone.utc)
+        current = now
+        crossings = []
+
+        def source_lookup(_revision, _release):
+            nonlocal current
+            if calls and calls[-1] == ['docker', 'manifest', 'create', 'example/keep:stable',
+                                     'example/keep@' + DIGESTS['amd64'],
+                                     'example/keep@' + DIGESTS['arm64']]:
+                crossings.append(current)
+                current = now + datetime.timedelta(seconds=2)
+
+        # The original matching finding is approved only through October 20.
+        # The Hub review remains fresh while the source lookup crosses midnight.
+        with self.publication_fixture(calls, matches=self.needed_exception()) as (artifacts, _evidence), \
+             patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': json.dumps(hub_review(now))}), \
+             patch.object(hub_analysis_review, 'utc_now', side_effect=lambda: current), \
+             patch.object(review_image, 'current_day', side_effect=lambda: current.date()), \
+             patch.object(publisher, 'require_current_source', side_effect=source_lookup):
+            with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertEqual(crossings, [now])
+        self.assertNotIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+        self.assertEqual(len([command for command in calls if command[1] == 'push' or
+                              command[1:3] == ['manifest', 'push']]), 4)
 
     def test_clean_publication_with_empty_or_unused_expired_exceptions_passes(self):
         for empty in (False, True):

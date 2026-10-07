@@ -12,10 +12,11 @@ import urllib.request
 
 from publish_image import hub, validate_release
 from publish_release import repository_visibility, require_current_source, require_manual_dispatch, require_new_tags
+from candidate_publication import selected_identity, publication_identity
 
 
 def transfer_tag(arch):
-    run, attempt = os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT']
+    run, attempt = selected_identity()
     if arch not in ('amd64', 'arm64') or not re.fullmatch(r'[0-9]+', run) or not re.fullmatch(r'[0-9]+', attempt):
         raise ValueError('Invalid transfer identity')
     return f'transfer-{run}-{attempt}-{arch}'
@@ -54,12 +55,32 @@ def report(arch):
         print('::endgroup::', flush=True)
 
 
+def revalidate_candidate(arch):
+    """Check original retained bytes and current approvals before staging."""
+    if arch not in ('amd64', 'arm64'):
+        raise ValueError('Invalid architecture')
+    import validated_build
+    proof_path = Path(f'validation-provenance-{arch}.json')
+    if not proof_path.is_file() or proof_path.is_symlink() or proof_path.stat().st_size > 128 * 1024:
+        raise ValueError('Candidate upload requires original main validation provenance')
+    proof = json.loads(proof_path.read_text())
+    config = checked_digest(proof.get('index', {}).get('config_digest'))
+    index = validated_build.verify_provenance(proof, arch, config)
+    validated_build.verify_files(index, arch)
+    validated_build.inspect_image(arch, config)
+    subprocess.run(['python3', 'scripts/review_image.py', arch, '--check-only'], check=True)
+
+
 def execute(mode, arch=None):
     require_manual_dispatch(True)
     image = os.environ['DOCKERHUB_IMAGE']
     revision = os.environ['GITHUB_SHA']
     validate_release(image, Path('VERSION').read_text().strip(), revision)
     require_current_source(revision, True)
+    if mode == 'stage':
+        if os.environ.get('KEEP_CANDIDATE_RUN_ID') or os.environ.get('KEEP_CANDIDATE_ONLY') == 'false':
+            raise ValueError('Promotion must reuse the original candidate, without staging replacement images')
+        revalidate_candidate(arch)
     username, secret = os.environ['DOCKERHUB_USERNAME'], os.environ['DOCKERHUB_TOKEN']
     token = hub('auth/token', payload={'identifier': username, 'secret': secret})['access_token']
     repository_visibility(hub('repositories/' + image + '/', token), 'is_private', 'Docker Hub')
@@ -73,6 +94,8 @@ def execute(mode, arch=None):
             require_new_tags({'images': {arch: reference}, 'manifests': []}, image, token)
             docker('login', '--username', username, '--password-stdin', input=secret)
             docker('tag', 'keep-ci', reference)
+            require_current_source(revision, True)
+            revalidate_candidate(arch)
             docker('push', reference)
             digest = checked_digest(json.loads(docker('manifest', 'inspect', '--verbose', reference, capture=True))['Descriptor']['digest'])
             Path(f'transfer-{arch}.json').write_text(json.dumps({
@@ -82,6 +105,9 @@ def execute(mode, arch=None):
                 output.write(f'{arch}={digest}\n')
             print(json.dumps({'transfer': reference, 'digest': digest, 'revision': revision}))
         elif mode in ('fetch', 'cleanup'):
+            if os.environ.get('KEEP_CANDIDATE_RUN_ID'):
+                import release_materials
+                publication_identity(release_materials.api)
             digests = json.loads(os.environ['TESTED_DIGESTS'])
             if set(digests) != {'amd64', 'arm64'}:
                 raise ValueError('Both tested architecture digests are required')

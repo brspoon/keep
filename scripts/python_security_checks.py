@@ -196,12 +196,15 @@ class PythonSecurityChecks(unittest.TestCase):
         self.assertEqual(unreadable.read_bytes(), b'synthetic unreadable fixture')
 
     def test_CVE_2026_85091_patched_zlib_is_loaded(self):
+        if __package__:
+            from .alpine_zlib_sources import build_security_manifest
+        else:
+            from alpine_zlib_sources import build_security_manifest
         manifest_path = pathlib.Path('/app/ZLIB_SECURITY.json')
         manifest = json.loads(manifest_path.read_text())
-        self.assertEqual(manifest['upstream_commit'], 'df84af25dc1942490e1d1c899a07619152a46148')
-        self.assertEqual(manifest['archive_sha256'], 'b99a0b86c0ba9360ec7e78c4f1e43b1cbdf1e6936c8fa0f6835c0cd694a495a1')
-        self.assertEqual(manifest['version'], '1.3.2')
-        library_path = pathlib.Path('/usr/lib/libz.so.1.3.2')
+        arch = {'x86_64': 'amd64', 'aarch64': 'arm64'}[platform.machine()]
+        self.assertEqual(manifest, build_security_manifest(arch, root=None))
+        library_path = pathlib.Path(manifest['library']['path'])
         # Use the normal SONAME lookup, after the ordinary Python imports above.
         # Opening the patched file by absolute path can mask a delivery defect.
         library = ctypes.CDLL('libz.so.1')
@@ -213,7 +216,7 @@ class PythonSecurityChecks(unittest.TestCase):
         self.assertEqual(gzip.decompress(gzip.compress(payload)), payload)
         self.assertEqual(binascii.crc32(b'123456789'), 0xcbf43926)
         verify_loaded_zlib(
-            library_path, manifest['library_sha256'],
+            library_path, manifest['library']['sha256'],
             pathlib.Path('/proc/self/maps').read_text(),
             (pathlib.Path('/lib'), pathlib.Path('/usr/lib')),
         )
@@ -253,12 +256,22 @@ class PythonSecurityChecks(unittest.TestCase):
             modes.append(zipfile.ZIP_ZSTANDARD)
         for mode in modes:
             with self.subTest(mode=mode):
+                payload = b'\0' * (4 * 1024 * 1024)
                 buffer = io.BytesIO()
                 with zipfile.ZipFile(buffer, 'w', compression=mode) as archive:
-                    archive.writestr('payload', b'\0' * (4 * 1024 * 1024))
+                    archive.writestr('payload', payload)
                 with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as archive:
                     with archive.open('payload') as member:
                         self.assertLessEqual(len(member._read1(100)), member.MIN_READ_SIZE)
+                    # A bounded read must still drain buffered decompressor
+                    # output correctly on subsequent ordinary reads to EOF.
+                    with archive.open('payload') as member:
+                        chunks = []
+                        while chunk := member.read(65536):
+                            self.assertLessEqual(len(chunk), 65536)
+                            chunks.append(chunk)
+                        self.assertEqual(b''.join(chunks), payload)
+                        self.assertEqual(member.read(1), b'')
 
     def test_CVE_2026_19672_no_directory_outside_destination(self):
         for extraction_filter in ('tar', 'data'):

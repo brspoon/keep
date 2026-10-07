@@ -1,4 +1,4 @@
-"""Accept only approved, verified-fixed findings within their review deadlines."""
+"""Enforce reviewed image security checks and the finding acceptance policy."""
 import argparse
 import datetime
 import hashlib
@@ -19,6 +19,8 @@ def exception_deadlines(policy):
             or not re.fullmatch(r'sha256:[0-9a-f]{64}', policy['base'])
             or not isinstance(policy.get('approval'), str) or not policy['approval'].strip()):
         raise ValueError('Missing or invalid reviewed base/approval')
+    if type(policy.get('require_zero_findings', False)) is not bool:
+        raise ValueError('require_zero_findings must be a boolean')
     sources = policy.get('reviewed_sources')
     if (not isinstance(sources, dict) or not sources
             or 'scripts/python_security_patches.json' not in sources
@@ -110,7 +112,10 @@ def assess(report, scout, evidence, policy, arch, today=None):
             blocked.append(entry)
         else:
             entry['deadline'] = deadlines[finding].isoformat()
-            if today > deadlines[finding]:
+            if policy.get('require_zero_findings', False):
+                entry['reason'] = 'finding_not_permitted'
+                blocked.append(entry)
+            elif today > deadlines[finding]:
                 entry['reason'] = 'exception_expired'
                 blocked.append(entry)
             else:

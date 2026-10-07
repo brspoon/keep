@@ -585,6 +585,8 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
                 bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
 
     def test_original_ensurepip_notices_remain_required_after_final_layer_deletion(self):
+        bundle.write_json(self.root / 'docs/base-python-sources.json',
+                          {'package': {'version': '3.14.7-r1'}})
         self.lock['origins'].append({'origin': 'python-3.14', 'version': '3.14.7-r1'})
         self.manifest['notices'][0]['provenance'].append(
             {'origin': 'python-3.14', 'version': '3.14.7-r1', 'architecture': 'amd64'})
@@ -595,6 +597,24 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
             {'origin': 'python-3.14-ensurepip', 'version': '3.14.7-r1', 'architecture': 'amd64'})
         self.write_manifest(self.manifest)
         self.assertEqual(bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')['origins'], 4)
+
+    def test_python_upgrade_keeps_original_ensurepip_notice_version(self):
+        bundle.write_json(self.root / 'docs/base-python-sources.json',
+                          {'package': {'version': '3.14.7-r2'}})
+        self.lock['origins'].append({'origin': 'python-3.14', 'version': '3.14.8-r0'})
+        self.lock['original_base_origins'].append({'origin': 'python-3.14', 'version': '3.14.7-r2'})
+        provenance = self.manifest['notices'][0]['provenance']
+        provenance.extend([
+            {'origin': 'python-3.14', 'version': '3.14.8-r0', 'architecture': 'amd64'},
+            {'origin': 'python-3.14-original-base', 'version': '3.14.7-r2', 'architecture': 'amd64'},
+            {'origin': 'python-3.14-ensurepip', 'version': '3.14.8-r0', 'architecture': 'amd64'},
+        ])
+        self.write_manifest(self.manifest)
+        with self.assertRaisesRegex(ValueError, 'every reviewed OS origin'):
+            bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')
+        provenance[-1]['version'] = '3.14.7-r2'
+        self.write_manifest(self.manifest)
+        self.assertEqual(bundle.check_runtime_notices(self.root, self.inventory, self.lock, 'amd64')['origins'], 5)
 
     def test_actual_source_notice_bytes_and_attribution_must_be_committed(self):
         for provenance in self.manifest['notices'][0]['provenance']:
@@ -784,7 +804,8 @@ class CommittedKeepSourceTests(unittest.TestCase):
         self.root.mkdir()
         self.output = Path(self.temp.name) / 'sources'
         self.files = ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-            'scripts/build_patched_zlib.py', 'scripts/patch_python_runtime.py',
+            'scripts/alpine_zlib_sources.py', 'scripts/patch_python_runtime.py',
+            'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
             'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
             'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
             'docs/distribution-sources.json', 'docs/os-package-sources.json',

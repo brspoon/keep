@@ -1,9 +1,10 @@
-"""Qualify ordinary Expat and OpenSSL loading in the final native image.
+"""Qualify ordinary Expat, OpenSSL and Python loading in the final native image.
 
 Run without network or loader overrides. These checks are separate from the
 nine security-patch probes and use only normal XML parsing and TLS setup.
 """
 import argparse
+import gc
 import hashlib
 import json
 import os
@@ -11,6 +12,9 @@ from pathlib import Path
 import platform
 import re
 import stat
+import sys
+import tempfile
+import weakref
 
 
 EXPAT_VERSION = '2.9.0'
@@ -26,9 +30,65 @@ OPENSSL_VERSION = '3.5.9'
 SSL_LIBRARY = Path('/usr/lib/libssl.so.3')
 CRYPTO_LIBRARY = Path('/usr/lib/libcrypto.so.3')
 MANIFEST_PATH = Path('/app/EXPAT_SECURITY.json')
+PYTHON_MANIFEST_PATH = Path('/app/PYTHON_SECURITY.json')
+PROC_EXECUTABLE_PATH = Path('/proc/self/exe')
+PYTHON_VERSION = '3.14.8'
+PYTHON_TLS_PROBES = {'wrap_bio_requires_hostname': True,
+                     'sni_context_switch_handshake': True,
+                     'tls_memory_bio_handshake': True}
 MAPS_PATH = Path('/proc/self/maps')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 ROOT = Path(__file__).resolve().parents[1]
+
+# Public, synthetic test credentials used only for this isolated in-memory exchange.
+TLS_CERTIFICATE = """-----BEGIN CERTIFICATE-----
+MIIC5jCCAc6gAwIBAgIJAIgoF6HuoP8/MA0GCSqGSIb3DQEBCwUAMB8xHTAbBgNV
+BAMMFGtlZXAtcnVudGltZS5pbnZhbGlkMCAXDTI2MTAwNzE1MzEwNFoYDzIxMjYw
+OTEzMTUzMTA0WjAfMR0wGwYDVQQDDBRrZWVwLXJ1bnRpbWUuaW52YWxpZDCCASIw
+DQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKeH8opUPIPTPEYQxfio5Rf/dKSV
+SVsVqTG26DLtI2at5yMZnqjJ2dYHETNcb03/B9pbkO+To1nkrP/lUNe+w7mtYtdw
+eEqz/Vr0Jv1JQ3hiPDAD5SIO8KeDIxOS8Rwn3YCxPXqKVX4f0FIsr1rSnESV0aCA
+dGzoIKgBvbHtRzLILhALldPy14r+egPUqdQvAEKt1dGBTlHa2cBUnaMLQosGOsr/
++DEy2BqpK7eJKEaLTf/6vaE1WgwarNHv0P2yy2Y+nem1+p3wYvckuhhSc0pYzokM
+T4xCs3DME3zskNoDtzWukuuCWcRZ7jNezy2lIqwukF6Kt97BB0IBdK33IG8CAwEA
+AaMjMCEwHwYDVR0RBBgwFoIUa2VlcC1ydW50aW1lLmludmFsaWQwDQYJKoZIhvcN
+AQELBQADggEBAGE26u57z6JhYh2k/pzFoY53S/Aa78/wPsIQ0gO0hlC4scc+eUTQ
+ACVdgDniIijM9bHKS6oskDjUTKnDgCofGC8XobHWM8ZzAsgYMmlIFRf/r2Zv/Vw6
+ySSb/71YIBo2bpxFFCCNAMnNqexqSI+nECaAcsm9XWGDfAobzT4CXQTtZ343Jmkd
+VMDI7n0p5oy3zil+tk1wBsIHjnR8y7BvXS8+XYcuk2T/WFcBGFfyYe5yYGF7QdIy
+G7EkXN5Hi8LCTpS3/AzsJDZQWtgcARyt8hH5ScHeOXAMTp2wOJ3MrzDsMPSgBoiL
+kaMYLFtCbCkknrzp1TAc1NdlKtZv1VBryTo=
+-----END CERTIFICATE-----
+"""
+TLS_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCnh/KKVDyD0zxG
+EMX4qOUX/3SklUlbFakxtugy7SNmrecjGZ6oydnWBxEzXG9N/wfaW5Dvk6NZ5Kz/
+5VDXvsO5rWLXcHhKs/1a9Cb9SUN4YjwwA+UiDvCngyMTkvEcJ92AsT16ilV+H9BS
+LK9a0pxEldGggHRs6CCoAb2x7UcyyC4QC5XT8teK/noD1KnULwBCrdXRgU5R2tnA
+VJ2jC0KLBjrK//gxMtgaqSu3iShGi03/+r2hNVoMGqzR79D9sstmPp3ptfqd8GL3
+JLoYUnNKWM6JDE+MQrNwzBN87JDaA7c1rpLrglnEWe4zXs8tpSKsLpBeirfewQdC
+AXSt9yBvAgMBAAECggEAWtr5iFeCsiNe7sit9Nrz033w7kkgDUvEBHgjmWrN5iOt
+1HVSfEtr3gzbITWiD3Sd96ftBGDXGCtSPz1ICJkmYI5NqnUOZ8URQ8BhXL/c3W65
+IXkbTMs5bD9MSJNKO3DLSb3Vj51yHAJ44ffl6aWKpg9yLk871MxW2YaIL/R0xm61
+HEAEhvWkXbbhj4H1/nITne70JkIaRMDuf2XMmQ70NmK0xlQ5rAR2R4LJLU0CRzQe
+JEEbQL+2AQKgk0SXTef62tgPuI/HxkQ6RBL257Z+dFVz/LKqKQ3+EYbqeUzuzII+
+hNOMEd4KaWCE3Vc7Irt3vjgODhOkfc5frxaFLKaRwQKBgQDPKRabpK5jRWlFobGv
+Ap9+A9pn1UWi8eMiqQR0Y7RsSGnGeGLhjpz8lGGWKA1QLZSfVwCLxSUbhj79nISI
+c6I+FSGNvhUpklIUUiR7uoh4BwVbYNlKuaSCqJ/mpYM5l85hh05s6DVs67SDwOp4
+2t2mMoMa3M0nWA+QEwail43hsQKBgQDPBxK0YguofxDwSSk03qtIOFMtS7/kxkut
+AT3lHh+VLlJUa+cIJDR9GMLrSXUTmuX2UyBB85wHmpymIktqDqwgN9b2Q83f4fjb
+Ng4uW2M51aD6VkrLzsyj4qDcEXv7GKfHZ6E2Lhkxa60iqmA5RIrSP3G4Rnp9DcvN
+bt3dHRyMHwKBgFY7ND31fuGzsu5ZMC05WkqKMA+opyP8rB9xW3lXR3MLcXw8AG0D
+gDVjTnvCkEgfsQ3imUeU+K1MZEwNKt3hxFczVJQ723NChQgQaT9XlhbgVUqENe70
+95Wru2O24bjHiBDw0aRjxFlig/GUDAXilQDpZcl4v6zw6wl94fUsQNMBAoGBAIik
+qnvUms1D0PJH16LFtVedlYi4Dpf5KcmuoCOxljbos/50mbCN9Pb8eOrDOTsPaekD
+RK9DEyERs4MT76K4vHMnaAJzDldO1uoY65M9TmjFz9JrUkLi477nvjSCdcpto4/B
+nm4cTxSHdWcD/S7PRrEunuh53C7eBD47hsSCim0RAoGBAI6vaNbQwMV2um+8euYy
+dpzYl5KnRdEKCyhNwZzo376YQZoUbmDtBAtWodkYcbnrIT/4h4Wut4HqS8NoZh6Y
+YLQeoTVw9u/Utd061CsjmwVWipiKSo+qjow0Mr0xTl9FOkSdRMAiSln3aof31vZB
+OlpnQIaYvKn08om0LYJGfV/c
+-----END PRIVATE KEY-----
+"""
 
 
 def require(condition, message):
@@ -89,6 +149,36 @@ def read_expat_manifest(path, arch):
     body = path.read_bytes()
     require(len(body) <= 128 * 1024, 'Expat install manifest is too large')
     return validate_expat_manifest(json.loads(body), arch), hashlib.sha256(body).hexdigest()
+
+
+def python_packages():
+    if __package__:
+        from . import dhi_python_packages
+    else:
+        import dhi_python_packages
+    return dhi_python_packages
+
+
+def expected_python_manifest(arch, root):
+    return python_packages().build_security_manifest(
+        arch, root=Path(root) if root is not None else None)
+
+
+def validate_python_manifest(manifest, arch):
+    require(isinstance(manifest, dict) and manifest == expected_python_manifest(arch, None)
+            and all(row.get('signature_verified') is True for row in manifest['packages']),
+            'Python install manifest differs from the exact signed packages and source records')
+    return manifest
+
+
+def read_python_manifest(path, arch):
+    path = Path(path)
+    require(not path.is_symlink() and path.is_file(),
+            'Python install manifest must be a regular file')
+    require(path.stat().st_size <= 128 * 1024, 'Python install manifest is too large')
+    body = path.read_bytes()
+    require(len(body) <= 128 * 1024, 'Python install manifest is too large')
+    return validate_python_manifest(json.loads(body), arch), hashlib.sha256(body).hexdigest()
 
 
 def library_mappings(maps_text, prefix):
@@ -201,6 +291,151 @@ def exercise_openssl():
     return OPENSSL_VERSION
 
 
+def memory_tls_handshake(client, server, client_in, client_out, server_in, server_out):
+    """Complete a normal client/server exchange using only in-memory BIOs."""
+    import ssl
+
+    finished = set()
+    for _ in range(128):
+        for name, connection in (('client', client), ('server', server)):
+            if name not in finished:
+                try:
+                    connection.do_handshake()
+                    finished.add(name)
+                except ssl.SSLWantReadError:
+                    pass
+        for outgoing, incoming in ((client_out, server_in), (server_out, client_in)):
+            if outgoing.pending:
+                incoming.write(outgoing.read())
+        if len(finished) == 2:
+            break
+    require(len(finished) == 2, 'In-memory TLS handshake did not complete')
+    client.write(b'keep runtime check')
+    server_in.write(client_out.read())
+    require(server.read(64) == b'keep runtime check', 'In-memory TLS request failed')
+    server.write(b'ready')
+    client_in.write(server_out.read())
+    require(client.read(64) == b'ready', 'In-memory TLS response failed')
+
+
+def exercise_python_tls():
+    """Check hostname enforcement and a legitimate SNI context switch offline."""
+    import ssl
+
+    client_context = ssl.create_default_context(cadata=TLS_CERTIFICATE)
+    require(client_context.check_hostname and client_context.verify_mode == ssl.CERT_REQUIRED,
+            'Python TLS hostname verification is not enabled')
+    for hostname in (None, ''):
+        try:
+            client_context.wrap_bio(ssl.MemoryBIO(), ssl.MemoryBIO(), server_hostname=hostname)
+        except ValueError:
+            pass
+        else:
+            raise ValueError('Hostname-checking wrap_bio accepted an absent server_hostname')
+
+    with tempfile.TemporaryDirectory(prefix='keep-python-tls-') as directory:
+        certificate = Path(directory) / 'certificate.pem'
+        private_key = Path(directory) / 'key.pem'
+        certificate.write_text(TLS_CERTIFICATE)
+        private_key.write_text(TLS_PRIVATE_KEY)
+        selected_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        selected_context.load_cert_chain(certificate, private_key)
+        selected_reference = weakref.ref(selected_context)
+        pending_contexts = [selected_context]
+        del selected_context
+        initial_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        callbacks = []
+
+        def select_context(connection, server_name, original_context):
+            require(server_name == 'keep-runtime.invalid' and original_context is initial_context,
+                    'Unexpected SNI callback identity')
+            callbacks.append(server_name)
+            connection.context = pending_contexts.pop()
+            gc.collect()
+            require(selected_reference() is not None
+                    and connection.context is selected_reference(),
+                    'SNI-selected context was not retained by the TLS connection')
+
+        initial_context.sni_callback = select_context
+        client_in, client_out, server_in, server_out = (ssl.MemoryBIO() for _ in range(4))
+        client = client_context.wrap_bio(client_in, client_out,
+                                         server_hostname='keep-runtime.invalid')
+        server = initial_context.wrap_bio(server_in, server_out, server_side=True)
+        memory_tls_handshake(client, server, client_in, client_out, server_in, server_out)
+        require(callbacks == ['keep-runtime.invalid'] and not pending_contexts
+                and selected_reference() is not None
+                and server.context is selected_reference() and bool(client.getpeercert()),
+                'SNI context switch or verified peer handshake failed')
+    return dict(PYTHON_TLS_PROBES)
+
+
+def exercise_python():
+    require(platform.python_implementation() == 'CPython'
+            and sys.version_info[:3] == (3, 14, 8)
+            and sys.version_info.releaselevel == 'final' and not sys.abiflags,
+            'Unexpected ordinary Python version or ABI')
+    return {'version': PYTHON_VERSION, 'tls_probes': exercise_python_tls()}
+
+
+def verify_python_files(manifest, maps_text, executable=None, process_executable=None):
+    """Bind the active interpreter, aliases and imported TLS files to signed bytes."""
+    import _ssl
+
+    executable = sys.executable if executable is None else executable
+    process_executable = PROC_EXECUTABLE_PATH if process_executable is None else process_executable
+    canonical = Path(manifest['executable']['path'])
+    require(canonical.resolve(strict=True) == canonical,
+            'Python executable is not at its canonical path')
+    binary, _ = file_identity(canonical)
+    require(binary['sha256'] == manifest['executable']['sha256'],
+            'Python executable does not match the signed package')
+    for active in (Path(executable), Path(process_executable)):
+        require(active.resolve(strict=True) == canonical,
+                'Active Python interpreter does not resolve to the signed executable')
+        identity, _ = file_identity(active)
+        require(all(identity[key] == binary[key] for key in ('sha256', 'device', 'inode')),
+                'Active Python executable bytes or inode differ from the signed package')
+    for name, target in manifest['aliases'].items():
+        alias = Path(name)
+        require(alias.is_symlink() and str(alias.readlink()) == target
+                and alias.resolve(strict=True) == canonical,
+                'Python executable alias differs from the signed package')
+    abi_path = Path(manifest['abi_library']['path'])
+    require(abi_path.resolve(strict=True) == abi_path, 'Python ABI library is not canonical')
+    abi, _ = file_identity(abi_path)
+    require(abi['sha256'] == manifest['abi_library']['sha256'],
+            'Python ABI library does not match the signed package')
+    library = Path(manifest['library']['path'])
+    allowed = {library, abi_path}
+    for mapped in library_mappings(maps_text, 'libpython3'):
+        require(Path(mapped['path']).resolve(strict=True) in allowed,
+                'Ordinary import mapped an unreviewed Python library')
+        if Path(mapped['path']).resolve(strict=True) == abi_path:
+            verify_loaded_library(abi_path, 'libpython3.so', maps_text, abi['sha256'])
+    python = verify_loaded_library(library, 'libpython3.14.so', maps_text,
+                                   manifest['library']['sha256'])
+    extension = Path(manifest['ssl_extension']['path'])
+    require(isinstance(getattr(_ssl, '__file__', None), str)
+            and Path(_ssl.__file__).resolve(strict=True) == extension,
+            'Ordinary ssl import selected an unreviewed Python extension')
+    python_ssl = verify_loaded_library(extension, '_ssl', maps_text,
+                                       manifest['ssl_extension']['sha256'])
+    return {'files': {'executable': binary, 'abi_library': abi},
+            'libraries': {'python': python, 'python_ssl': python_ssl},
+            'aliases': dict(manifest['aliases'])}
+
+
+def check_python(arch, manifest_path=PYTHON_MANIFEST_PATH, maps_path=MAPS_PATH):
+    import ssl  # Normal imports must load the reviewed extension before reading maps.
+
+    manifest, install_hash = read_python_manifest(manifest_path, arch)
+    python_packages().verify_installed(python_packages().reviewed_spec(), arch, manifest)
+    binding = verify_python_files(manifest, Path(maps_path).read_text())
+    result = exercise_python()
+    return {**binding, **result, 'source_manifest_sha256': manifest['source_manifest_sha256'],
+            'install_manifest_sha256': install_hash}
+
+
 def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
     version = exercise_expat()
     manifest, install_hash = read_expat_manifest(manifest_path, arch)
@@ -222,10 +457,13 @@ def check_openssl(arch, maps_path=MAPS_PATH):
     }}
 
 
-def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
-    report = {'schema': 1, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
+                    python_manifest_path=PYTHON_MANIFEST_PATH):
+    report = {'schema': 2, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
-              'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None}
+              'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
+              'python_source_manifest_sha256': None, 'python_install_manifest_sha256': None,
+              'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {}}
     try:
         report['arch'] = architecture()
         require(not any(name in os.environ for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD')),
@@ -236,6 +474,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
         for name, check in (
             ('expat', lambda: check_expat(report['arch'], manifest_path, maps_path)),
             ('openssl', lambda: check_openssl(report['arch'], maps_path)),
+            ('python', lambda: check_python(report['arch'], python_manifest_path, maps_path)),
         ):
             report['tests'] += 1
             try:
@@ -245,10 +484,16 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
                 if name == 'expat':
                     report['expat_source_manifest_sha256'] = result['source_manifest_sha256']
                     report['expat_install_manifest_sha256'] = result['install_manifest_sha256']
+                elif name == 'python':
+                    report['python_source_manifest_sha256'] = result['source_manifest_sha256']
+                    report['python_install_manifest_sha256'] = result['install_manifest_sha256']
+                    report['python_files'] = result['files']
+                    report['python_aliases'] = result['aliases']
+                    report['python_tls_probes'] = result['tls_probes']
             except Exception as error:
                 report['errors'].append({'check': name, 'message': str(error)})
     report['failures'] = len(report['errors'])
-    report['success'] = report['tests'] == 2 and report['failures'] == 0
+    report['success'] = report['tests'] == 3 and report['failures'] == 0
     return report
 
 
@@ -265,15 +510,18 @@ def validate_report(report, arch, root=ROOT):
     """Replay retained native evidence without accessing a runtime filesystem."""
     require(arch in EXPAT_LIBRARY_SHA256, 'Unreviewed dependency report architecture')
     keys = {'schema', 'arch', 'success', 'tests', 'failures', 'errors', 'versions',
-            'loaded_libraries', 'expat_source_manifest_sha256', 'expat_install_manifest_sha256'}
+            'loaded_libraries', 'expat_source_manifest_sha256', 'expat_install_manifest_sha256',
+            'python_source_manifest_sha256', 'python_install_manifest_sha256',
+            'python_files', 'python_aliases', 'python_tls_probes'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 1
+    require(type(report['schema']) is int and report['schema'] == 2
             and report['arch'] == arch and report['success'] is True
-            and type(report['tests']) is int and report['tests'] == 2
+            and type(report['tests']) is int and report['tests'] == 3
             and type(report['failures']) is int and report['failures'] == 0
             and report['errors'] == [], 'Missing or failed native dependency qualification')
-    require(report['versions'] == {'expat': EXPAT_VERSION, 'openssl': OPENSSL_VERSION},
+    require(report['versions'] == {'expat': EXPAT_VERSION, 'openssl': OPENSSL_VERSION,
+                                   'python': PYTHON_VERSION},
             'Dependency report versions differ from the reviewed runtime')
     expected = validate_expat_manifest(expected_expat_manifest(arch, root), arch)
     expected_install_hash = hashlib.sha256(
@@ -281,25 +529,53 @@ def validate_report(report, arch, root=ROOT):
     require(report['expat_source_manifest_sha256'] == expected['source_manifest_sha256']
             and report['expat_install_manifest_sha256'] == expected_install_hash,
             'Dependency report source or install manifest differs from the reviewed packages')
+    python = validate_python_manifest(expected_python_manifest(arch, root), arch)
+    python_install_hash = hashlib.sha256(
+        (json.dumps(python, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
+    require(report['python_source_manifest_sha256'] == python['source_manifest_sha256']
+            and report['python_install_manifest_sha256'] == python_install_hash,
+            'Dependency report Python source or install manifest differs from the reviewed packages')
+    probes = report['python_tls_probes']
+    require(isinstance(probes, dict) and set(probes) == set(PYTHON_TLS_PROBES)
+            and all(value is True for value in probes.values()),
+            'Missing or failed Python TLS qualification probes')
+    require(report['python_aliases'] == python['aliases'],
+            'Dependency report Python aliases differ from the signed package')
     libraries = report['loaded_libraries']
-    require(isinstance(libraries, dict) and set(libraries) == {'expat', 'ssl', 'crypto'},
+    require(isinstance(libraries, dict)
+            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl'},
             'Incomplete dependency loaded-library evidence')
     for name, canonical in (('expat', EXPAT_LIBRARY), ('ssl', SSL_LIBRARY),
-                            ('crypto', CRYPTO_LIBRARY)):
-        identity = libraries[name]
-        require(isinstance(identity, dict)
-                and set(identity) == {'path', 'sha256', 'device', 'inode'},
-                'Invalid dependency loaded-library identity')
-        require(identity['path'] == str(canonical),
-                'Dependency report loaded a noncanonical library: ' + name)
-        require(isinstance(identity['sha256'], str) and SHA256.fullmatch(identity['sha256'])
-                and isinstance(identity['device'], str)
-                and re.fullmatch(r'[0-9a-f]+:[0-9a-f]+', identity['device'])
-                and type(identity['inode']) is int and identity['inode'] > 0,
-                'Invalid dependency loaded-library hash, device or inode')
+                            ('crypto', CRYPTO_LIBRARY),
+                            ('python', Path(python['library']['path'])),
+                            ('python_ssl', Path(python['ssl_extension']['path']))):
+        validate_file_identity(libraries[name], canonical)
     require(libraries['expat']['sha256'] == EXPAT_LIBRARY_SHA256[arch],
             'Dependency report Expat hash differs from the signed package')
+    for name, record in (('python', python['library']), ('python_ssl', python['ssl_extension'])):
+        require(libraries[name]['sha256'] == record['sha256'],
+                'Dependency report Python loaded-library hash differs from the signed package')
+    files = report['python_files']
+    require(isinstance(files, dict) and set(files) == {'executable', 'abi_library'},
+            'Incomplete dependency Python file evidence')
+    for name in ('executable', 'abi_library'):
+        validate_file_identity(files[name], Path(python[name]['path']))
+        require(files[name]['sha256'] == python[name]['sha256'],
+                'Dependency report Python file hash differs from the signed package')
     return report
+
+
+def validate_file_identity(identity, canonical):
+    require(isinstance(identity, dict)
+            and set(identity) == {'path', 'sha256', 'device', 'inode'},
+            'Invalid dependency loaded-library identity')
+    require(identity['path'] == str(canonical),
+            'Dependency report used a noncanonical file: ' + str(canonical))
+    require(isinstance(identity['sha256'], str) and SHA256.fullmatch(identity['sha256'])
+            and isinstance(identity['device'], str)
+            and re.fullmatch(r'[0-9a-f]+:[0-9a-f]+', identity['device'])
+            and type(identity['inode']) is int and identity['inode'] > 0,
+            'Invalid dependency loaded-library hash, device or inode')
 
 
 def main(argv=None):

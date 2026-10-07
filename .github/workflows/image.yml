@@ -6,9 +6,25 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish retained main images to version and stable tags
+        description: Authorize candidate publication or a separately reviewed release promotion
         type: boolean
         default: false
+      candidate_only:
+        description: Stage exact native candidates for Docker Hub review without release tags
+        type: boolean
+        default: true
+      candidate_run_id:
+        description: Completed candidate-only publication run to reuse for promotion
+        type: string
+        default: ''
+      candidate_run_attempt:
+        description: Successful attempt of that candidate-only publication run
+        type: string
+        default: ''
+      hub_analysis_review:
+        description: Fresh exact-digest Docker Hub hosted-analysis maintainer review JSON for promotion
+        type: string
+        default: ''
       validation_run_id:
         description: Successful main validation run containing the exact images to publish
         type: string
@@ -163,7 +179,7 @@ jobs:
           PYCHECK
   release-native:
     needs: [release-needed, prepare-release]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.candidate_only && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
     permissions:
       contents: write
       actions: read
@@ -182,6 +198,9 @@ jobs:
       KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
       KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
       KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+      KEEP_CANDIDATE_ONLY: ${{ inputs.candidate_only }}
+      KEEP_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      KEEP_CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -205,8 +224,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/release_materials.py archive-native ${{ matrix.arch }}
   tested-images:
-    needs: [release-native, release-needed, prepare-release]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    needs: [release-native, release-needed, prepare-release, validated-main]
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true' && needs.validated-main.result == 'success' && ((inputs.candidate_only && needs.release-native.result == 'success' && needs.prepare-release.result == 'success') || (!inputs.candidate_only && needs.release-native.result == 'skipped' && needs.prepare-release.result == 'skipped'))
     permissions:
       # GitHub exposes unpublished draft listings only to push-capable tokens.
       # This confirmed-release job still performs only evidence GETs.
@@ -233,10 +252,13 @@ jobs:
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
           KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
+          KEEP_CANDIDATE_ONLY: ${{ inputs.candidate_only }}
+          KEEP_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          KEEP_CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
         run: python3 scripts/release_materials.py aggregate
   prepare-release:
     needs: [release-needed, validated-main]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.candidate_only && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -252,13 +274,18 @@ jobs:
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
         run: python3 scripts/release_materials.py prepare
   publish-release:
-    needs: [release-native, release-needed, tested-images, prepare-release]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true'
+    needs: [release-native, release-needed, tested-images, prepare-release, validated-main]
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && !inputs.candidate_only && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true' && needs.validated-main.result == 'success' && needs.tested-images.result == 'success'
     permissions:
       contents: write
       actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      KEEP_CANDIDATE_ONLY: ${{ inputs.candidate_only }}
+      KEEP_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      KEEP_CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+      KEEP_HUB_ANALYSIS_REVIEW: ${{ inputs.hub_analysis_review }}
     concurrency:
       group: keep-release-stable
       cancel-in-progress: false
@@ -337,7 +364,12 @@ jobs:
           KEEP_VALIDATION_RUN_ID: ${{ inputs.validation_run_id }}
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-        run: python3 scripts/validated_build.py check
+          KEEP_CANDIDATE_ONLY: ${{ inputs.candidate_only }}
+          KEEP_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          KEEP_CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+        run: |
+          python3 -c 'import sys; sys.path.insert(0,"scripts"); from candidate_publication import selected_identity; selected_identity()'
+          python3 scripts/validated_build.py check
   release-needed:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.confirmation == 'release-stable'
     runs-on: ubuntu-latest

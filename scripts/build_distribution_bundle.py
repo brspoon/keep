@@ -19,7 +19,6 @@ from urllib.parse import urlsplit
 import urllib.request
 
 from python_distribution_sources import canonical_name, collect_sources, exact_requirements, fetch_public, public_url
-from build_patched_zlib import URL as ZLIB_URL, ARCHIVE_SHA256 as ZLIB_SHA
 from collect_package_sources import expected_packages, match_package_output, resolve_native
 from oci_source_materials import retain_materials, safe_name
 from verify_source_proof import BASE_DIGEST, PREDICATE, ProofLayout, digest, verify_source_proof, verify_attestation_proof
@@ -188,7 +187,8 @@ def check_runtime_notices(root, inventory, os_lock, arch):
                      for row in os_lock.get('original_base_origins', [])})
     python = [row for row in os_lock['origins'] if row['origin'] == 'python-3.14']
     if python:
-        expected['python-3.14-ensurepip'] = python[0]['version']
+        original_python = read_json(root, 'docs/base-python-sources.json')
+        expected['python-3.14-ensurepip'] = original_python['package']['version']
     installed = {row['path']: row for row in inventory.get('notices', [])}
     covered = set()
     seen = set()
@@ -209,7 +209,7 @@ def check_runtime_notices(root, inventory, os_lock, arch):
                     and provenance.get('architecture') == arch):
                 covered.add(origin)
     if covered != set(expected):
-        raise ValueError('Committed runtime notices do not cover every reviewed OS origin and original Expat')
+        raise ValueError('Committed runtime notices do not cover every reviewed OS origin and original base package')
     manifest_path = regular(directory, 'manifest.json')
     manifest_sha256 = file_sha(manifest_path)
     runtime_manifest = installed.get('/app/licenses/os/manifest.json')
@@ -532,25 +532,35 @@ def retain_openssl(source, destination, origin, result, arch, *, base_source, os
 
 
 def retain_alpine_expat(source, destination, origin, result, arch, runtime_inventory):
+    return retain_signed_alpine(source, destination, origin, result, arch, runtime_inventory)
+
+
+def retain_signed_alpine(source, destination, origin, result, arch, runtime_inventory):
     """Replay signed Alpine APK/source verification against original downloads."""
-    from alpine_expat_sources import collect_sources
-    if (origin.get('source_method') != 'alpine-signed-expat-v1'
-            or result.get('binding_method') != 'signed-alpine-packages'
+    if origin.get('source_method') == 'alpine-signed-expat-v1':
+        from alpine_expat_sources import collect_sources
+        directory = 'alpine-expat-sources'
+    elif origin.get('source_method') == 'alpine-signed-zlib-v1':
+        from alpine_zlib_sources import collect_sources
+        directory = 'alpine-zlib-sources'
+    else:
+        raise ValueError('Unreviewed signed Alpine source method')
+    if (result.get('binding_method') != 'signed-alpine-packages'
             or result.get('provider_oci_binding') is not False
             or result.get('signature_verified') is not True
             or result.get('apk_binary_match_verified') is not True
             or runtime_inventory is None
-            or result.get('public_sources') != {'directory': 'alpine-expat-sources',
+            or result.get('public_sources') != {'directory': directory,
                                                 'manifest': 'manifest.json'}):
-        raise ValueError('Require the exact signed Alpine Expat source acquisition')
-    original = Path(source) / 'alpine-expat-sources'
+        raise ValueError('Require the exact signed Alpine source acquisition')
+    original = Path(source) / directory
     manifest = read_json(original, 'manifest.json')
     fetch = cached_manifest_fetch(original, manifest, {
         'alpine-signing-key', 'signed-alpine-binary-evidence',
         'complete-alpine-build-recipes', 'upstream-source', 'upstream-detached-signature'})
     checked = collect_sources(origin, arch, runtime_inventory, destination, fetch=fetch)
     if checked != manifest:
-        raise ValueError('Alpine Expat sources differ from checked signed package inputs')
+        raise ValueError('Alpine sources differ from checked signed package inputs')
     return {'origin': origin['origin'], 'version': origin['version'],
             'provider_oci_binding': False, 'binding_method': checked['binding_method'],
             'signature_verified': True, 'apk_binary_match_verified': True,
@@ -575,8 +585,8 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
         target = destination / name
         copy_file(package_root, 'acquisition.json', target / 'acquisition.json')
         if result.get('provider_oci_binding') is False:
-            if origin.get('source_method') == 'alpine-signed-expat-v1':
-                coverage.append(retain_alpine_expat(package_root, target / 'public-sources',
+            if origin.get('source_method') in {'alpine-signed-expat-v1', 'alpine-signed-zlib-v1'}:
+                coverage.append(retain_signed_alpine(package_root, target / 'public-sources',
                     origin, result, arch, runtime_inventory))
             elif name == 'openssl' and base_source is not None and runtime_inventory is not None:
                 coverage.append(retain_openssl(package_root, target / 'public-sources', origin, result, arch,
@@ -692,9 +702,15 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
     copy_file(source, 'base-runtime-inventory.json', destination / 'base-runtime-inventory.json')
     original_inventory = read_json(source, 'base-runtime-inventory.json')
     original_origins = os_lock.get('original_base_origins')
-    if (not isinstance(original_origins, list) or len(original_origins) != 1
-            or original_origins[0].get('origin') != 'expat'):
-        raise ValueError('Require the reviewed overwritten Expat base source identity')
+    expected_originals = {'expat'}
+    for origin in os_lock.get('origins', []):
+        if origin.get('source_method') == 'alpine-signed-zlib-v1':
+            expected_originals.add('zlib')
+        if origin.get('origin') == 'python-3.14' and origin.get('version') == '3.14.8-r0':
+            expected_originals.add('python-3.14')
+    if (not isinstance(original_origins, list) or len(original_origins) != len(expected_originals)
+            or {row.get('origin') for row in original_origins} != expected_originals):
+        raise ValueError('Require every reviewed overwritten base source identity')
     bind_original_packages(original_origins, original_inventory, provenance, arch)
     original_coverage = retain_packages(Path(source) / 'original-base-packages',
         destination / 'packages', {**os_lock, 'origins': original_origins}, arch,
@@ -715,7 +731,8 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
         destination / 'ensurepip', lock=base_python_lock, fetch=fetch)
     omit_apk_materials(materials, retained)
     return {'native_image_digest': proof['native_image_digest'], 'source_image_digest': proof['source_image_digest'],
-            'signature_verified': True, 'original_expat_version': original_origins[0]['version'],
+            'signature_verified': True,
+            'original_expat_version': next(row['version'] for row in original_origins if row['origin'] == 'expat'),
             'original_package_sources': original_coverage,
             'original_ensurepip': {'source_packages': len(base_python['source_packages']),
                 'matched_python_modules': sum(len(row['matched_python_modules']) for row in base_python['wheels']),
@@ -811,6 +828,11 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
         origins = [row for row in os_lock['origins'] if row['origin'] == 'expat']
         import_public_notices(expat, public / 'expat', origin='expat', architecture=arch,
             package_spec=origins[0], runtime_inventory=runtime_inventory)
+    zlib = stage / 'os-packages/zlib/public-sources'
+    if zlib.exists():
+        origins = [row for row in os_lock['origins'] if row['origin'] == 'zlib']
+        import_public_notices(zlib, public / 'zlib', origin='zlib', architecture=arch,
+            package_spec=origins[0], runtime_inventory=runtime_inventory)
     bundles = sorted({path.parent for path in stage.rglob('package-material-inventory.json')})
     if retain_inputs:
         retain_notice_inputs(bundles, stage / 'notice-inputs', arch)
@@ -898,7 +920,8 @@ def keep_source(root, destination):
     with (destination / 'keep-source.tar').open('wb') as stream:
         subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=root, stdout=stream, check=True)
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-                     'scripts/build_patched_zlib.py', 'scripts/patch_python_runtime.py',
+                     'scripts/alpine_zlib_sources.py', 'scripts/patch_python_runtime.py',
+                     'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
                      'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
                      'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
                      'docs/distribution-sources.json', 'docs/os-package-sources.json',
@@ -954,7 +977,6 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
             if path.is_symlink() or not path.is_file():
                 raise ValueError('Committed OS notice directory must contain regular files only')
             copy_file(path.parent, path.name, stage / 'committed-runtime-os-notices' / path.name)
-        checked_download(ZLIB_URL, ZLIB_SHA, stage / 'keep-patches/zlib-1.3.2.tar.gz', fetch)
         revision = keep_source(root, stage / 'keep')
         provider_bound = [row['origin'] for row in os_coverage if row['provider_oci_binding']]
         public_fallbacks = [row['origin'] for row in os_coverage if not row['provider_oci_binding']]

@@ -145,6 +145,13 @@
       "url": "https://github.com/docker-hardened-images/catalog/archive/196770f064617d465f42873ff54e63443e7116e2.tar.gz",
       "sha256": "1cfcf2209abdc1755601f6a18044257af489fb20344e927aedf5046ba373c5ee",
       "bytes": 25326420
+    },
+    {
+      "origin": "python-3.14",
+      "revision": "d65ec8748eef33c1ed9033563e0a0a146ef3c739",
+      "url": "https://github.com/docker-hardened-images/catalog/archive/d65ec8748eef33c1ed9033563e0a0a146ef3c739.tar.gz",
+      "sha256": "5e9de605bae115f11eae89cc78930187f8cbfce1d3db626129c4dd084df383f1",
+      "bytes": 25676064
     }
   ]
 }

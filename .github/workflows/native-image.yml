@@ -110,7 +110,7 @@ jobs:
       - name: Verify all nine runtime security fixes in the tested image
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/python_security_checks.py --report > candidate-regression-${{ matrix.arch }}.json
       - name: Verify default Expat and OpenSSL library loading
-        run: docker run --rm --network none --read-only -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/runtime_dependency_checks.py --report > candidate-dependencies-${{ matrix.arch }}.json
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/runtime_dependency_checks.py --report > candidate-dependencies-${{ matrix.arch }}.json
       - name: Accept only reviewed fixed findings and block all others
         run: python3 scripts/review_image.py ${{ matrix.arch }}
       - name: Retain full scan and review evidence
@@ -172,6 +172,8 @@ jobs:
             candidate-*${{ matrix.arch }}.json
             portable-recovery-${{ matrix.arch }}.json
             installer-trial-${{ matrix.arch }}.json
+            source-materials/original-base-packages/package-sources.json
+            source-materials/packages/package-sources.json
           if-no-files-found: warn
           retention-days: 7
       - name: Retain exact tested image, sources and original evidence

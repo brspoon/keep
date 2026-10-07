@@ -48,10 +48,17 @@ identifiers are not interchangeable. The image-level source collection contains
 assembly inputs, so package-level sources are collected separately.
 
 The source map covers 18 origins and 29 installed OS packages. The original
-DHI Expat 2.8.5 in an earlier image layer retains its exact APK hashes,
+DHI Expat 2.8.5, Python 3.14.7-r2 and zlib 1.3.2-r0 in earlier image layers retain their exact APK hashes,
 native-base material binding and signed package sources separately from the
-installed Alpine 2.9.0 packages. Keep's exact Python patches and modified zlib 1.3.2 sources are
-also included. The Python source lock covers all 17 pinned distributions,
+installed replacement packages. Alpine's zlib 1.3.2-r1 is verified separately
+against signed APKs, its complete pinned aports context, upstream source,
+security patch and full Zlib notice. DHI Python 3.14.8-r0 has matching signed
+native build/source records verified on both architectures; public recipe and
+archive inspection alone cannot satisfy that gate. Keep's exact Python patches
+are also included. Both architectures' committed notice union is regenerated
+from their checked native inventories and verified in the rebuilt source-archive
+gate. Passing source and notice checks does not waive the separate security gate.
+The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
 against their embedded libffi 3.4.6 source and wheel build recipe; this is
 separate from the OS libffi package. Argon2's embedded source and complete
@@ -113,10 +120,10 @@ bytes in the source archive, without interpreting their unsafe test members.
 Other archives still undergo normal traversal and bounds checks.
 
 Use the adjacent checksum file before inspecting an archive. For example, for
-release 2.23.2:
+release 2.23.3:
 
 ```sh
-sha256sum -c keep-2.23.2-source-materials-amd64.tar.gz.sha256
+sha256sum -c keep-2.23.3-source-materials-amd64.tar.gz.sha256
 ```
 
 Use `shasum -a 256` on macOS and compare its output to the checksum file.
@@ -125,8 +132,12 @@ version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
 container. The prepared runtime union contains 124 complete notice texts
-(814,844 bytes), covering all 20 current and earlier-layer origins on both
-architectures, including 24 explicitly reviewed source copyright headers.
+(814,844 bytes) and 556 complete native attributions, covering all 22 current and
+earlier-layer origins on both architectures. It retains 20 explicitly selected
+source copyright headers and four timezone headers from the checked public
+source fallback. The license text bytes are unchanged; the new Python and zlib
+packages have their own source attributions, and timezone attributions describe
+the verified fallback rather than reusing earlier provider signature claims.
 The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated
 notice's complete native source attribution against the committed provenance.
