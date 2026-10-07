@@ -30,14 +30,25 @@ locking and launcher behavior in the same main validation run. Full Windows Dock
 Desktop, LAN-device and Plex acceptance remain separate checks; see
 [development testing](DEVELOPMENT_TESTING.md#installation-platforms).
 
-Image publication runs only from a manual `workflow_dispatch` on `main`, with
+Candidate publication runs only from a manual `workflow_dispatch` on `main`, with
 `publish_release` set to `true`, confirmation set to `release-stable`, and
 `validation_run_id` identifying the successful main-push run for that exact commit.
 Main pushes never publish an image, even when `VERSION` changes. Both native
 jobs must pass, the tested source commit must still be current main, and the
-publisher may use only their retained tested images. The manual workflow restores
+publisher may use only their retained tested images. `candidate_only` defaults to
+`true`: this dispatch stages the two exact native images under temporary registry
+tags and retains their original source and evidence bytes, then stops. It creates
+no version, commit or stable tag. The manual workflow restores
 and verifies the original files; it does not build, rescan or repeat the long native
 tests. Published Keep releases and images are public.
+
+Promotion is a separate dispatch with `candidate_only=false`, the original
+`candidate_run_id` and `candidate_run_attempt`, and a fresh
+`hub_analysis_review` JSON receipt. The original candidate attempt must have
+completed successfully on the exact current main commit, with both native
+stage/archive jobs, aggregation and main-validation preflight successful and
+release publication skipped. Promotion reuses that attempt's original registry
+digests and draft assets; it does not restage or rewrite the native evidence.
 
 Version and commit tags are immutable. The publisher verifies the native child
 digests in the multi-platform indexes and promotes mutable `stable` last.
@@ -66,13 +77,48 @@ image configurations and native manifest digests before creating version or comm
 indexes and promoting stable. Original scanner reports must still satisfy the
 checked-in review policy. Each exception needed by a matching finding must still
 be within its inclusive review deadline on the promotion date; unused expired
-exceptions do not block a clean scan. Scanners are not rerun. Revalidation uses
+exceptions do not block a clean scan. Scanners are not rerun. Candidate staging
+verifies the original retained file hashes and reapplies current approval
+deadlines before registry access and immediately before uploading each temporary
+candidate tag. Revalidation uses
 `scripts/review_image.py --check-only` when archiving. Aggregation and final
 publication read and verify the original retained report bytes again and apply
 the current review policy. The verified reports are reassessed immediately before
 each native image or manifest push, including stable, so a queued publication or
 UTC date change cannot reuse an earlier deadline decision. The original reports
 and review evidence remain byte-for-byte unchanged.
+
+The former standalone `publish_portable.py --execute` path is disabled. Its
+read-only tag plan remains available; publication must use the gated candidate
+and promotion workflow.
+
+Before promotion, a maintainer must review the actual Docker Hub hosted-analysis
+view for each native digest. The completed view must identify the full expected
+digest and Linux architecture, have no active filters or suppressed findings,
+and explicitly show zero Critical, High, Medium, Low and Unspecified
+vulnerabilities. Pending, unavailable, incomplete or nonzero analysis blocks
+promotion. A local scan or `docker scout cves registry://...` result does not
+establish that Docker Hub's stored analysis completed.
+Docker documents [hosted analysis](https://docs.docker.com/scout/explore/analysis/)
+and its [image details view](https://docs.docker.com/scout/explore/image-details-view/),
+but the supported Hub API does not document a hosted-analysis status/count
+endpoint. This gate therefore records maintainer verification; it does not claim
+to query such an API automatically.
+
+The receipt uses `format: keep-hub-analysis-review-v1`,
+`review_source: docker-hub-ui`, the exact `image` and `revision`, `reviewed_by`
+matching the dispatching GitHub actor,
+and a UTC `reviewed_at` timestamp in `YYYY-MM-DDTHH:MM:SSZ` form. Its
+`architectures` object must contain exactly `amd64` and `arm64`. Each entry must
+contain the matching `platform` (`linux/<architecture>`) and full native `digest`,
+`status: complete`, `unfiltered: true`, and a `counts` object with explicit
+integer zeros for `critical`, `high`, `medium`, `low`, and `unspecified`.
+Missing or unknown counts are never interpreted as zero. The review must be no
+more than one hour old and cannot be future-dated. It is rechecked immediately
+before every permanent image or index push, together with current-main identity
+and the original security policy. The exact receipt bytes and checksum are
+uploaded and read back as separate publication-run assets before any permanent
+tag is pushed. They do not replace the original native evidence.
 
 Read-only deadline checks warn in contributor runs and in the daily/manual
 **Review image-exception deadlines** workflow. These warnings are advisory,
@@ -120,10 +166,26 @@ status. CI log expiry is not a source-retention policy. See
 2. Review that commit and its original validation evidence, then obtain publication
    approval. A successful validation run alone does not authorize publication.
 3. Select **Run workflow** on `main`, enter that ID as `validation_run_id`, enable
-   `publish_release`, and enter `release-stable` as confirmation.
-4. Review the promotion result and finalize the version draft with its original
+   `publish_release`, keep `candidate_only=true`, and enter `release-stable` as
+   confirmation. This existing confirmation value authorizes only the selected
+   stage; candidate-only mode cannot promote stable. Leave candidate-run and Hub
+   review inputs empty. Wait for the complete candidate dispatch to succeed.
+4. Review both exact native digests in Docker Hub and record the complete,
+   unfiltered zero-count result. Start another dispatch on the same current main
+   commit with the same `validation_run_id`, `publish_release=true`,
+   `candidate_only=false`, the successful candidate run and attempt, the fresh
+   JSON receipt in `hub_analysis_review`, and confirmation `release-stable`.
+5. Review the promotion result and finalize the version draft with its original
    source and evidence assets. Verify public downloads and image identities before
    announcing the release.
+
+Candidate continuation selects one complete successful publication attempt;
+mixed or incomplete attempts are rejected. Interrupted candidate publication
+retains its temporary images and draft evidence for investigation. Existing
+evidence assets and immutable release tags are never replaced to make a retry
+pass. If a promotion stops after creating an immutable tag, resolve that partial
+publication explicitly before attempting another release; an existing version
+still prevents automatic publication.
 
 If a native job fails, investigate the failure and use **Re-run failed jobs** after
 it is understood and safe to retry. A successful architecture can retain its

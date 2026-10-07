@@ -970,6 +970,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
         with chdir(self.root), \
              patch.object(registry_transfer, 'require_manual_dispatch') as manual, \
              patch.object(registry_transfer, 'require_current_source') as current, \
+             patch.object(registry_transfer, 'revalidate_candidate') as security, \
              patch.object(registry_transfer, 'validate_release') as validate, \
              patch.object(registry_transfer, 'require_new_tags') as new_tags, \
              patch.object(registry_transfer, 'hub', side_effect=transfer_hub), \
@@ -984,7 +985,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
         })
         self.assertEqual(output.read_text(), 'amd64=' + pushed_digest + '\n')
         manual.assert_called_once_with(True)
-        current.assert_called_once_with(self.REVISION, True)
+        self.assertEqual(current.call_args_list, [
+            unittest.mock.call(self.REVISION, True), unittest.mock.call(self.REVISION, True)])
+        self.assertEqual(security.call_args_list, [
+            unittest.mock.call('amd64'), unittest.mock.call('amd64')])
         validate.assert_called_once_with('brspoon/keep', self.VERSION, self.REVISION)
         new_tags.assert_called_once_with(
             {'images': {'amd64': 'brspoon/keep:transfer-123456-3-amd64'}, 'manifests': []},
@@ -1084,8 +1088,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
                     empty_exceptions=empty, require_zero_findings=True)
 
     def test_zero_finding_readback_blocks_exact_matches_before_and_after_deadline(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         for day in (datetime.date(2026, 10, 20), datetime.date(2026, 10, 21)):
             with self.subTest(day=day):
                 self.assert_readback_security_review(day=day, matches=matches,
@@ -1093,8 +1097,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
 
     def test_zero_finding_readback_still_blocks_unknown_and_mismatched_findings(self):
         for finding, version, reason in (
-            ('CVE-unknown', '3.14.7-r2', 'unmatched_finding'),
-            ('CVE-2026-17084', '3.14.7-r1', 'exception_mismatch'),
+            ('CVE-unknown', '3.14.8-r0', 'unmatched_finding'),
+            ('CVE-2026-87910', '3.14.7-r1', 'exception_mismatch'),
         ):
             matches = [{'vulnerability': {'id': finding, 'severity': 'Medium'},
                         'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': version}}]
@@ -1103,8 +1107,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
                     matches=matches, require_zero_findings=True, expected_error=reason)
 
     def test_final_revalidation_uses_new_zero_policy_without_rewriting_original_reports(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         rows, bodies = self.verify_fixture(matches=matches, require_zero_findings=False)
         original = dict(bodies)
         held = {}
@@ -1120,21 +1124,21 @@ class ReleaseMaterialsTests(unittest.TestCase):
         self.assertEqual(held, verified_original)
 
     def test_readback_needed_exception_passes_on_deadline_and_blocks_afterward(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         self.assert_readback_security_review(day=datetime.date(2026, 10, 20), matches=matches)
         self.assert_readback_security_review(day=datetime.date(2026, 10, 21), matches=matches,
                                             expected_error='exception_expired')
 
     def test_readback_unknown_or_mismatched_findings_cannot_use_original_approval(self):
-        match = {'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}
+        match = {'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
         for section, field, value, reason in (
             ('vulnerability', 'id', 'CVE-unknown', 'unmatched_finding'),
             ('vulnerability', 'severity', 'High', 'exception_mismatch'),
             ('artifact', 'name', 'other-python', 'exception_mismatch'),
             ('artifact', 'version', '3.14.7-r1', 'exception_mismatch'),
-            ('artifact', 'version', '3.14.8-r0', 'exception_mismatch'),
+            ('artifact', 'version', '3.14.8-r1', 'exception_mismatch'),
             ('artifact', 'type', 'python', 'exception_mismatch'),
         ):
             changed = copy.deepcopy(match)
@@ -1376,25 +1380,25 @@ class ReleaseMaterialsTests(unittest.TestCase):
                                             require_zero_findings=True)
 
     def test_zero_finding_archive_blocks_exact_match_without_changing_original_evidence(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         for day in (datetime.date(2026, 10, 20), datetime.date(2026, 10, 21)):
             with self.subTest(day=day):
                 self.assert_current_review_promotion(day=day, matches=matches,
                     require_zero_findings=True, blocked=True)
 
     def test_archive_needed_exception_passes_on_review_deadline(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         self.assert_current_review_promotion(day=datetime.date(2026, 10, 20), matches=matches)
 
     def test_archive_expired_needed_exception_blocks_without_changing_original_evidence(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r2'}}]
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         self.assert_current_review_promotion(day=datetime.date(2026, 10, 21), matches=matches, blocked=True)
 
     def test_archive_old_python_revision_blocks_without_changing_original_evidence(self):
-        matches = [{'vulnerability': {'id': 'CVE-2026-17084', 'severity': 'Medium'},
+        matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
                     'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.7-r1'}}]
         self.assert_current_review_promotion(day=datetime.date(2026, 10, 20), matches=matches, blocked=True)
 

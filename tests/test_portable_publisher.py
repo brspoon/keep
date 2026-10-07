@@ -13,8 +13,11 @@ class PortablePublisherTests(unittest.TestCase):
         self.assertEqual(set(result['images']), {'amd64', 'arm64'})
         self.assertEqual(result['manifests'][-1], 'example/keep:stable')
 
-    def test_execute_refuses_feature_branch_before_registry_access(self):
-        with patch.object(publisher.subprocess, 'check_output', side_effect=['feature/work\n', 'a' * 40]), patch.object(publisher, 'hub') as hub:
-            with self.assertRaisesRegex(ValueError, 'clean, reviewed main'):
-                publisher.execute('example/keep', '2.0.0', 'a' * 40, 'private')
+    def test_legacy_execution_fails_before_any_subprocess_or_registry_access(self):
+        with patch('subprocess.run') as run, patch('subprocess.check_output') as output, \
+             patch('publish_image.hub') as hub:
+            with self.assertRaisesRegex(ValueError, 'Standalone publication is disabled'):
+                publisher.execute('example/keep', '2.0.0', 'a' * 40, 'public')
+            run.assert_not_called()
+            output.assert_not_called()
             hub.assert_not_called()

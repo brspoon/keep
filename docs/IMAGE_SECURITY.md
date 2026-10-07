@@ -10,10 +10,11 @@ the build never relabels an older package or suppresses a finding.
 
 Every architecture job verifies signed vendor provenance, runs Docker Scout and
 an unsuppressed Grype scan, and executes all nine runtime regression probes.
-Scout and Grype must both report zero findings. The current
-`require_zero_findings` policy in docs/image-exceptions.json blocks even a finding
-matching a historical verified-fixed exception. Those entries retain their
-original deadlines and evidence; they do not approve this changed candidate.
+Scout must report zero findings. Grype's complete raw findings remain visible;
+only the three exact verified-fixed Python `3.14.8-r0` scopes in
+docs/image-exceptions.json may pass through October 20, 2026 UTC inclusive.
+Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
+`1.3.2-r0` scopes are retired and cannot authorize this runtime.
 Source hashes, base identity, complete scans, successful probes and the deadline
 of each exception used by a finding are enforced by scripts/review_image.py.
 Full JSON report contents are printed in the workflow logs under each
@@ -68,7 +69,11 @@ unchanged.
 
 Approved images then pass through temporary run-and-attempt-specific registry tags;
 the publication job receives immutable digests, validates source/runtime identity,
-and promotes stable only after both architecture jobs succeed. After publication,
+and retains them for a separate stable-promotion run. Before publishing release
+tags, a maintainer must inspect Docker Hub's completed stored analysis for both
+exact native digests and record zero counts at every severity. A CLI scan is not
+proof that Hub's stored analysis has completed. Missing, pending, nonzero, stale
+or wrong-digest review records block stable promotion. After publication,
 CI attempts to remove only its temporary tags, not their shared image manifests. If the CI
 token lacks delete permission, it emits an explicit cleanup warning. A maintainer
 can remove those exact tags with a separate deletion-capable credential after
@@ -95,8 +100,9 @@ passes the authenticated source acquisition gate on both architectures.
 All eight candidate Python APKs and both zlib APKs have passed exact hashes,
 official key hashes, RSA signature and signed payload checks. Public zlib build
 context, fix, source and license bytes have been verified. These are package
-inspection results; the native gates below determine qualification. No new
-exception or later deadline is approved. The existing Python cleanup backport
+inspection results; the native gates below determine qualification. The October 7
+review below approves only three exact verified-fixed Grype scopes, retaining
+the October 20 deadline. The existing Python cleanup backport
 and Keep permission guard remain; changed ZIP contexts retain strict bounded-output behavior and
 normal reads through EOF. Modified stdlib bytecode is removed before capture.
 Normal TLS setup, hostname validation and a complete in-memory handshake with
@@ -135,29 +141,85 @@ unchanged; their signed attributions do not transfer to the fallback. The curren
 union preserves all 124 full notice texts and records 556 complete native
 attributions across 22 current and earlier-layer origins on each architecture.
 
-This candidate is not qualified or release-ready. Scout reported zero findings
-on both architectures; Grype still reported `CVE-2026-87910`, `CVE-2025-15367`
-and `CVE-2026-12345` against Python `3.14.8-r0`, so the zero-finding acceptance
-gate blocked both images. Passing runtime probes does not clear these scanner
-findings. A rebuilt full native gate with `prepare_notices=false` must also verify
-the committed notice bytes, complete native attributions and every source-archive
-member. Publication must replay the zero-finding policy against unchanged
-original evidence bytes. After publication, verify the new registry digest and
-Docker Hub analysis on both architectures. A clean scan is time-bound evidence:
-newly published advisories can change Hub's counts.
+The [complete native qualification](https://github.com/brspoon/keep/actions/runs/37657188329)
+at source revision `6cf7c2ca4b5ae86d46bdf21cee41b27069702e6d` rebuilt both
+architectures with `prepare_notices=false`. Application, installation, recovery,
+all nine runtime probes, all three dependency families, authenticated source
+collection and complete source-archive checks passed. The committed notice
+bytes and every required native attribution also passed. Scout reported zero
+findings on both architectures. Grype reported `CVE-2026-87910`,
+`CVE-2025-15367` and `CVE-2026-12345` against Python `3.14.8-r0`, so security
+acceptance failed for both images under the then-required zero-Grype policy.
+That failed run cannot provide publication images, and its original evidence
+remains unchanged. The new review requires fresh successful native qualification
+and complete exact-commit main validation before candidate publication.
+
+Inspection of the signed DHI packages confirms the vendor's POP3 control-character
+and tarfile filter fixes. The cleanup correction still comes from Keep's
+verified backport, together with the Keep permission guard. Generic upstream
+version ranges do not describe all these vendor backports. A controlled
+comparison of Grype `0.118.0` and `0.120.1` against the unchanged native Python
+package identities and CPEs, using the same current official database, returned
+the same three findings. Updating the scanner alone does not resolve acceptance.
+That focused comparison is diagnostic evidence, not a complete image scan or
+replacement qualification. The full original native reports remain unchanged.
+
+The October 7 review inspected the signed APK/source bindings, exact vendor
+POP3 and tarfile fixes, Keep's applied cleanup backport and permission guard,
+and both architectures' complete original scans, nine runtime probes, three
+dependency families and matching-source/license evidence. It permits only
+`CVE-2026-87910`, `CVE-2025-15367` and `CVE-2026-12345` at Medium severity,
+APK package `python-3.14`, version `3.14.8-r0`. The cleanup approval applies
+to the patched Keep runtime, not the unpatched vendor package. No additional
+risk or later deadline is approved.
+
+Publication must replay this policy against unchanged original evidence bytes.
+Docker Hub's completed analysis must then show zero findings for both candidate
+digests before release tags or stable promotion. Internal Grype approvals do
+not change Hub's counts. A clean Hub result is time-bound evidence: newly
+published advisories can change those counts.
 
 The current [Python 3.15 release notice](https://www.python.org/downloads/release/python-3150rc3/)
 identifies a production-unsuitable preview and schedules the final release for
 October 9. That schedule does not establish package availability or qualification.
-Keep must retain its required guards and pass both native zero-finding gates
-before this candidate can be published; no exception is extended to bypass them.
+Keep must retain its required guards and pass both native security gates
+before this candidate can be published. A scheduled upstream release does not
+replace verification or extend an exception deadline.
+
+### Alternate vendor assessment
+
+The October 7 assessment also inspected the immutable native images in
+Red Hat's `registry.access.redhat.com/hi/python:3.14` index
+`sha256:9ad2603a9f39caba3ac4101788fcceb2d63569fd1f448821bacba7c922b8b144`.
+The vendor's POP3 and tarfile fixes are present, but its cleanup sources still
+require the reviewed backport and Keep permission guard. Inspected Red Hat
+Python `3.12.15` and `3.13.16` sources also do not supply that cleanup correction.
+Vendor advisory status or a newer version alone does not prove its inclusion.
+
+Complete read-only Grype scans of both Red Hat 3.14 base images reported ten
+matches across four CVEs: `CVE-2025-12781`, `CVE-2026-55856`,
+`CVE-2026-95619` and `CVE-2026-84783`. Full catalog replays retained all 50
+packages and 261 CPEs per architecture; Grype `0.118.0` and `0.120.1` each
+returned the same ten matches with no ignored findings. Some records conflict
+with Red Hat's [GCC](https://access.redhat.com/security/cve/CVE-2026-95619),
+[OpenSSL](https://access.redhat.com/security/cve/CVE-2026-84783) and
+[MariaDB](https://access.redhat.com/security/cve/CVE-2026-55856) records.
+These are reported findings, not four independently validated defects. They still block the
+zero-finding gate; source inspection cannot substitute for an official data
+correction and complete unsuppressed rescanning.
+
+No Red Hat Keep image was built or qualified. A base change would additionally
+require authenticated source/build bindings, matching source and license
+records, rebuilt native wheels, loaded-library integrity checks and all existing
+functional, installation, recovery and runtime probes on both architectures.
+The current candidate, scanner configuration, original evidence and historical
+approval deadlines remain unchanged.
 
 ## Exception review deadlines
 
-The current zero-finding policy permits no scanner finding, including one
-matching an otherwise unexpired historical entry. The rules below preserve the
-original review semantics and never extend or reuse those approvals for the
-changed vendor-package candidate.
+The current policy permits only the three reviewed Python `3.14.8-r0` Grype
+scopes. Earlier package approvals are preserved in Git history and original
+release evidence; they are absent from the active exception dictionary.
 
 Each exception records its reviewed scope and evidence in
 docs/image-exceptions.json, with `review.approval`, `review.deadline` and
@@ -190,10 +252,11 @@ daily and on manual dispatch with read-only repository access, no dependency
 installation, registry credentials, image build or publication. These notices
 allow reviews to begin ahead of a deadline without blocking a clean candidate.
 
-The October 6 review covers seven Python `3.14.7-r2` findings and the patched
-zlib `1.3.2-r0` finding through October 20, 2026 UTC, inclusive. Each entry records
-its review date. Earlier `3.14.7-r1` approvals do not carry forward to other package
-versions. A finding that still needs one of these exceptions on October 21 blocks
+The October 7 review covers three Python `3.14.8-r0` findings through
+October 20, 2026 UTC, inclusive. Each entry records its review date; the
+October 6 deadline was not extended. Earlier Python and zlib approvals do not
+carry forward to other package versions. A finding that still needs one of
+the current exceptions on October 21 blocks
 validation and promotion; it requires a proven replacement or a new explicit
 security review. Correcting deadline handling alone never renews an approval.
 
@@ -465,10 +528,11 @@ notices together. Remove a patch or exception only after its replacement passes
 source inspection, all required native probes and complete unsuppressed scans on
 both architectures. Retain Keep's cleanup guard until equivalent behavior is
 proven. Dependency-update proposals must pass the same coordinated review.
-The October 6 qualification and review above record the verified replacement
-libraries, individual exception removal and eight renewed exact scopes. Remaining
-Python and zlib findings still require their reviewed fixes, complete native
-evidence and a valid per-entry deadline.
+The October 6 qualification records the earlier replacement libraries and eight
+historical scopes. The October 7 package replacement retires those scopes; only
+three exact Python `3.14.8-r0` findings remain approved, with the same deadline.
+They still require their reviewed fixes, complete native evidence and a valid
+per-entry deadline.
 
 ## Directory cleanup
 

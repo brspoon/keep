@@ -11,6 +11,8 @@ import urllib.request
 from pathlib import Path
 from publish_image import hub
 from publish_portable import release_plan
+import hub_analysis_review
+from candidate_publication import selected_identity
 
 BRANCH = 'refs/heads/main'
 ARCHES = {'amd64', 'arm64'}
@@ -122,6 +124,9 @@ def execute(image, revision, artifacts, release=False):
     version = Path('VERSION').read_text().strip()
     plan = release_plan(image, version, revision) if release else development_plan(image, revision)
     require_manual_dispatch(release)
+    if os.environ.get('KEEP_CANDIDATE_ONLY') != 'false':
+        raise ValueError('Candidate-only publication cannot publish release tags or promote stable')
+    selected_identity()
     if revision != os.environ.get('GITHUB_SHA'):
         raise ValueError('Revision differs from this workflow run')
     expected_digests, expected_configs = tested_identity()
@@ -161,17 +166,22 @@ def execute(image, revision, artifacts, release=False):
         # deadline check immediately before each registry publication.
         import release_materials
         security_reviews = {}
+        release_draft = release_materials.draft(version)
         identities = release_materials.verify_identities(
-            version, release_materials.draft(version), expected_digests,
+            version, release_draft, expected_digests,
             security_reviews=security_reviews,
         )
         if any(identities[arch]['config_digest'] != expected_configs[arch] for arch in ARCHES):
             raise ValueError('Original release evidence config differs from the tested image')
+        hub_review = hub_analysis_review.review_body(image, revision, expected_digests)
+        hub_analysis_review.retain_review(release_materials, release_draft, version, hub_review)
         docker('login', '--username', username, '--password-stdin', input=secret)
         digests = {}
         for arch, reference in plan['images'].items():
             docker('tag', ids[arch], reference)
+            require_current_source(revision, release)
             release_materials.revalidate_security(security_reviews)
+            hub_analysis_review.validate_review(hub_review, image, revision, expected_digests)
             docker('push', reference)
             descriptor = json.loads(docker('manifest', 'inspect', '--verbose', reference, capture=True))['Descriptor']
             digest = descriptor['digest']
@@ -185,7 +195,9 @@ def execute(image, revision, artifacts, release=False):
             # Do not promote an older test run after the branch has advanced.
             require_current_source(revision, release)
             docker('manifest', 'create', reference, *refs)
+            require_current_source(revision, release)
             release_materials.revalidate_security(security_reviews)
+            hub_analysis_review.validate_review(hub_review, image, revision, expected_digests)
             docker('manifest', 'push', '--purge', reference)
             verify_manifest(json.loads(docker('manifest', 'inspect', reference, capture=True)), digests)
         print(json.dumps({'published': plan['manifests'], 'platform_digests': digests}))
