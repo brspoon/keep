@@ -13,6 +13,8 @@ Use [GitHub Releases](https://github.com/brspoon/keep/releases) to find release 
 ## Where to ask
 
 - Use [GitHub Issues](https://github.com/brspoon/keep/issues) for reproducible bugs and feature requests that do not contain sensitive information.
+- Report accessibility barriers using the details in [ACCESSIBILITY.md](ACCESSIBILITY.md).
+- Report conduct concerns privately using the contact in the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Use [installation guidance](docs/INSTALLATION.md), [backup and restore](docs/PORTABLE_BACKUP.md), and the in-app FAQ for common operator questions.
 - Report suspected vulnerabilities through [GitHub's private reporting form](https://github.com/brspoon/keep/security/advisories/new). See [SECURITY.md](SECURITY.md) for reporting guidance. Do not post vulnerability details in public issues, discussions, or pull requests.
 

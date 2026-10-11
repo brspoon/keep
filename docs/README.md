@@ -25,6 +25,8 @@ The in-app FAQ covers day-to-day use. Owners can view background work under
 | Guide | Use it for |
 | --- | --- |
 | [Contributing](../CONTRIBUTING.md) | Propose and prepare a code change |
+| [Code of Conduct](../CODE_OF_CONDUCT.md) | Review community standards and report conduct concerns privately |
+| [Accessibility](../ACCESSIBILITY.md) | Review accessibility goals, current limitations, and how to report barriers |
 | [Development and testing](DEVELOPMENT_TESTING.md) | Set up a development environment and run checks |
 | [Supported versions](../SUPPORT.md) | Check the support window |
 | [Release policy](RELEASE_POLICY.md) | Understand validation, image publication, and source retention |

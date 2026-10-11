@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Code of Conduct and private reporting
+    url: https://github.com/brspoon/keep/blob/main/CODE_OF_CONDUCT.md
+    about: Read the community standards and use the private email contact for conduct concerns.
+  - name: Accessibility guidance and reporting
+    url: https://github.com/brspoon/keep/blob/main/ACCESSIBILITY.md
+    about: Review current limitations and what to include in an accessibility bug report.
   - name: Security vulnerability reporting
     url: https://github.com/brspoon/keep/security/advisories/new
     about: Report vulnerabilities confidentially. See SECURITY.md if the form is unavailable; never put vulnerability details in a public issue.

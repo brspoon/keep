@@ -2,6 +2,9 @@
 
 Thanks for helping improve Keep. The project is for self-hosters running Keep with Plex and Maintainerr. Contributions should preserve account boundaries, current permissions, CSRF protections, media-deletion safeguards, and the separation between collection Keeps and Library Management.
 
+Participation follows the [Code of Conduct](CODE_OF_CONDUCT.md). Report conduct
+concerns privately using the contact there.
+
 ## Before opening a change
 
 - Check existing issues and the [changelog](CHANGELOG.md) for related work.
@@ -10,6 +13,9 @@ Thanks for helping improve Keep. The project is for self-hosters running Keep wi
 - For source and dependency changes, preserve applicable notices and update the relevant source/notice inventory. See [source distribution](docs/SOURCE_DISTRIBUTION.md) and its [source acquisition instructions](docs/SOURCE_DISTRIBUTION.md#matching-the-container).
 - For image or dependency changes, review [image security](docs/IMAGE_SECURITY.md) and [source distribution requirements](docs/SOURCE_DISTRIBUTION.md#component-licenses-and-redistribution). A passing unit test does not replace native image/security/source gates.
 - For API changes, keep the `/api/v1` contract and owner-only `/settings/api-keys` management page in sync with the [API guide](docs/API.md) and [OpenAPI 3.1 specification](static/openapi.json). Breaking changes need a new version namespace.
+- For interface changes, follow the [accessibility guidance](ACCESSIBILITY.md).
+  Check the affected workflow with keyboard navigation and relevant display
+  settings, and describe the browsers or assistive technology actually used.
 
 ## Local development
 
