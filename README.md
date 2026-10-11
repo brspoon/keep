@@ -79,6 +79,7 @@ Radarr, Sonarr, Seerr, Tautulli, and email are optional. See the [installation g
 - [Upgrade and migration](docs/MIGRATION.md)
 - [API guide](docs/API.md) and [OpenAPI specification](static/openapi.json)
 - [Contributing](CONTRIBUTING.md) and [development and testing](docs/DEVELOPMENT_TESTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md) and [accessibility](ACCESSIBILITY.md)
 - [Security policy](SECURITY.md) and [supported versions](SUPPORT.md)
 - [License](LICENSE) and [third-party notices](THIRD_PARTY.md)
 
