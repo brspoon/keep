@@ -120,6 +120,7 @@
       latestDiagnostics = body.diagnostics; syncDiagnostics();
     }
     render();
+    window.dispatchEvent?.(new CustomEvent('keep-release-updated'));
   };
   async function request(url, options = {}, polling = false) {
     const controller = new AbortController(); controllers.add(controller);

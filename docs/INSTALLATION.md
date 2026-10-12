@@ -237,6 +237,10 @@ and configure HSTS at the proxy.
 
 ## Upgrades and source builds
 
+Owners can install updates or restart Keep from **Admin → About** after enrolling
+the [optional Linux maintenance helper](MAINTENANCE.md). It requires Python 3.12
+or newer on the host; the regular installer continues to support Python 3.9.
+
 Before upgrading, restoring, or moving an existing installation, read the
 [backup and restore guide](PORTABLE_BACKUP.md) and the
 [upgrade and migration guide](MIGRATION.md). Keep's database lives in the shared

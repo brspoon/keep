@@ -5,6 +5,7 @@
 - Add Admin Notifications with email and Pushover settings, test notifications, and delivery history.
 - Let users choose notification channels, events, and collections in Preferences. The owner can also receive connection, job, and update alerts.
 - Keep uncertain deliveries for review without pausing other recipients or channels.
+- Add Install update and Restart controls on About for installations with the optional Linux maintenance helper.
 
 ## 2.25.0 — 2026-10-11
 

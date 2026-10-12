@@ -1,0 +1,927 @@
+#!/usr/bin/env python3
+"""Execute real native Keep maintenance in an isolated Docker29 daemon.
+
+Requires preloaded source-packaged Keep and exactly pinned tooling images. All
+synthetic manifests are published only to the owned internal test registry. The
+production adapter, command runner, signed mailbox and app barrier are used
+unchanged; only release resolution and deterministic failure injection are local
+test substitutions. Importing this file does not invoke Docker or the network.
+"""
+from __future__ import annotations
+
+import argparse
+from dataclasses import replace
+import hashlib
+import http.client
+import json
+import os
+import platform
+from pathlib import Path
+import re
+import shutil
+import sqlite3
+import stat
+import subprocess
+import sys
+import tempfile
+import tarfile
+import threading
+import time
+import uuid
+
+def helper_source(script):
+    """Fixed packaged layouts only, never a browser/operator module path."""
+    parent = Path(script).resolve().parent
+    packaged = parent / 'maintenance_host'
+    if packaged.is_dir():
+        return packaged
+    return parent if (parent / 'docker_adapter.py').is_file() else parent.parent
+
+
+def neutral_source(script):
+    parent = Path(script).resolve().parent
+    return parent if (parent/'maintenance_app.py').is_file() and (parent/'maintenance_mailbox.py').is_file() else parent.parent
+
+
+HOST_SOURCE = helper_source(__file__)
+NEUTRAL_SOURCE = neutral_source(__file__)
+sys.path.insert(0, str(HOST_SOURCE))
+
+from docker_adapter import PosixDockerAdapter
+from host_cli import HostState, enroll, load_backend
+from host_engine import BoundedRunner, EngineError, HostEngine
+from host_mailbox import HostMailbox
+from maintenance_protocol import ImageIdentity, canonical, canonical_uuid, parse_json
+from private_store import Journal, Profile, create_private_paths
+from helper_bundle import create_root, source_bundle, stage_bundle
+from recovery_set import verify_docker_save
+
+DRAFT = HOST_SOURCE
+INDEX = 'application/vnd.oci.image.index.v1+json'
+MANIFEST = 'application/vnd.oci.image.manifest.v1+json'
+DIGEST = re.compile(r'sha256:[0-9a-f]{64}\Z')
+TOOLING = [
+ {'repository':'library/docker','index_digest':'sha256:5efed980cba3fc126cf54e21a5a6ff8849d05b6e0623d6e7612f48e9cd6cd17e',
+  'native':{'amd64':'sha256:77759fdec1efef224ba7110ef7b5b3c6af6164ffaef5441d3beba059bde8b857','arm64':'sha256:c9da39e30475d7bf353436738239d02fb1c2a52a1c968322beccb6ec239707d8'}},
+ {'repository':'library/registry','index_digest':'sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0',
+  'native':{'amd64':'sha256:3d527cee870ddd0fc8a31f99b2fdfb6451801a8dd4f5a92c1ec36dae24c14274','arm64':'sha256:16c9340cae30cbf9b5ced3f3e77340f3bf4064971685540f4257a0254069c6b2'}}]
+
+
+class TrialError(RuntimeError):
+    pass
+
+
+def require(value, message):
+    if not value:
+        raise TrialError(message)
+
+
+def pinned_tool_identity(inspected, tool, architecture):
+    """Accept Docker's exact familiar/fully qualified approved repo spellings."""
+    if inspected.get('Architecture') != architecture or inspected.get('Os') != 'linux':
+        return False
+    digest, native = tool['index_digest'], tool['native'][architecture]
+    descriptor = inspected.get('Descriptor')
+    if descriptor is not None:
+        if (not isinstance(descriptor, dict) or descriptor.get('digest') != inspected.get('Id')
+                or not (inspected['Id'] == digest and descriptor.get('mediaType') in
+                    (INDEX, 'application/vnd.docker.distribution.manifest.list.v2+json')
+                    or inspected['Id'] == native and descriptor.get('mediaType') in
+                    (MANIFEST, 'application/vnd.docker.distribution.manifest.v2+json'))):
+            return False
+        return True
+    repository=tool['repository'];familiar=repository.removeprefix('library/')
+    allowed={name+'@'+digest for name in (familiar,repository,'docker.io/'+repository,'index.docker.io/'+repository)}
+    return bool(isinstance(inspected.get('Id'),str) and DIGEST.fullmatch(inspected['Id'])
+        and allowed.intersection(inspected.get('RepoDigests') or []))
+
+
+def candidate_configuration(archive_path, inspected):
+    """Derive the canonical config digest from actual Docker-save bytes."""
+    require(archive_path.stat().st_size<=32*1024**3,'Candidate export exceeded bound')
+    with tarfile.open(archive_path,mode='r:') as archive:
+        members={}
+        for member in archive:
+            require(len(members)<4096 and member.name not in members,'Candidate archive inventory invalid')
+            members[member.name]=member
+        def small(name,limit=524288):
+            member=members[name]
+            require(member.isfile() and 0<member.size<=limit,'Candidate metadata exceeded bound')
+            value=archive.extractfile(member).read(limit+1)
+            require(len(value)==member.size,'Candidate metadata truncated')
+            return value
+        def blob(descriptor):
+            digest=descriptor['digest'];require(DIGEST.fullmatch(digest),'Candidate descriptor invalid')
+            value=small('blobs/sha256/'+digest[7:])
+            require(len(value)==descriptor['size'] and 'sha256:'+hashlib.sha256(value).hexdigest()==digest,'Candidate descriptor bytes differ')
+            return parse_json(value,524288),digest
+        if 'oci-layout' in members:
+            wrapper=parse_json(small('index.json'))
+            selected=[row for row in wrapper['manifests'] if row.get('digest')==inspected['Id']]
+            require(len(selected)==1,'Candidate original descriptor unavailable')
+            document,_=blob(selected[0])
+            if document.get('mediaType') in (INDEX,'application/vnd.docker.distribution.manifest.list.v2+json'):
+                selected=[row for row in document['manifests'] if row.get('platform',{}).get('os')=='linux'
+                    and row.get('platform',{}).get('architecture')==inspected['Architecture']]
+                require(len(selected)==1,'Candidate native descriptor unavailable')
+                document,_=blob(selected[0])
+            configuration,digest=blob(document['config'])
+        else:
+            manifests=parse_json(small('manifest.json'))
+            require(len(manifests)==1,'Candidate export must contain one image')
+            raw=small(manifests[0]['Config'])
+            digest='sha256:'+hashlib.sha256(raw).hexdigest()
+            require(digest==inspected['Id'],'Candidate classic config identity differs')
+            configuration=parse_json(raw,524288)
+        config=configuration.get('config') or {}
+        require(configuration.get('architecture')==inspected['Architecture'] and configuration.get('os')=='linux'
+            and config.get('User')==inspected['Config'].get('User')
+            and config.get('Labels')==inspected['Config'].get('Labels'),'Candidate archive and live configuration differ')
+        return digest
+
+
+def run(argv, *, env=None, timeout=120, stdin=None, stdout=None):
+    try:
+        result = subprocess.run([str(arg) for arg in argv], stdin=stdin,
+            stdout=stdout or subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+            timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise TrialError('Bounded trial command could not complete') from error
+    if result.returncode:
+        raise TrialError('Trial command failed; preserve its private evidence')
+    return result.stdout
+
+
+class RegistryGraph:
+    """Trial-only loopback registry; no credentials, proxies or external fallback."""
+    def __init__(self, port, architecture):
+        require(type(port) is int and 1 <= port <= 65535, 'Invalid fixture registry port')
+        self.port, self.architecture = port, architecture
+        self.identities, self.configurations, self.configuration_bytes = {}, {}, {}
+
+    def request(self, method, path, data=None, content_type=None):
+        require(path.startswith('/v2/brspoon/keep/') or path == '/v2/', 'Unscoped fixture registry path')
+        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=15)
+        try:
+            connection.request(method, path, body=data, headers={'Accept': INDEX+','+MANIFEST+','+'application/vnd.docker.distribution.manifest.v2+json',
+                **({'Content-Type': content_type} if content_type else {})})
+            response = connection.getresponse()
+            require(response.status in (200, 201), 'Fixture registry response failed')
+            body = response.read(1048577)
+            require(len(body) <= 1048576, 'Fixture registry metadata exceeded bound')
+            return body, response.getheader('Docker-Content-Digest')
+        finally:
+            connection.close()
+
+    def blob(self, kind, digest):
+        require(DIGEST.fullmatch(digest), 'Invalid fixture content digest')
+        body, header = self.request('GET', '/v2/brspoon/keep/'+kind+'/'+digest)
+        require('sha256:'+hashlib.sha256(body).hexdigest() == digest, 'Fixture content digest changed')
+        if header:
+            require(header == digest, 'Fixture digest header changed')
+        return body
+
+    def register(self, native_tag, version, revision):
+        body, native = self.request('GET', '/v2/brspoon/keep/manifests/'+native_tag)
+        require(native == 'sha256:'+hashlib.sha256(body).hexdigest(), 'Pushed native manifest changed')
+        parsed = parse_json(body, 1048576)
+        require(parsed.get('mediaType') in (MANIFEST, 'application/vnd.docker.distribution.manifest.v2+json'), 'Pushed fixture must be a native manifest')
+        descriptor = {'mediaType': parsed['mediaType'], 'digest': native, 'size': len(body),
+            'platform': {'os': 'linux', 'architecture': self.architecture}}
+        index = canonical({'schemaVersion': 2, 'mediaType': INDEX, 'manifests': [descriptor]})
+        digest = 'sha256:'+hashlib.sha256(index).hexdigest()
+        _, received = self.request('PUT', '/v2/brspoon/keep/manifests/'+version, index, INDEX)
+        require(received == digest, 'Fixture index publication changed')
+        identity = ImageIdentity(digest, native, parsed['config']['digest'], version, revision, self.architecture)
+        self.identities[identity.reference] = identity
+        self.resolve(identity)
+        return identity
+
+    def resolve(self, identity):
+        require(self.identities.get(identity.reference) == identity, 'Unknown trial-only release')
+        index = parse_json(self.blob('manifests', identity.index_digest), 1048576)
+        require(index.get('mediaType') == INDEX and len(index.get('manifests', [])) == 1, 'Trial release index changed')
+        descriptor = index['manifests'][0]
+        require(descriptor.get('digest') == identity.native_digest and descriptor.get('platform') == {'os':'linux','architecture':self.architecture}, 'Trial native selection changed')
+        manifest_raw = self.blob('manifests', identity.native_digest)
+        require(len(manifest_raw) == descriptor.get('size'), 'Trial native descriptor size changed')
+        manifest = parse_json(manifest_raw, 1048576)
+        require(manifest.get('config', {}).get('digest') == identity.image_id, 'Trial config identity changed')
+        config_raw = self.blob('blobs', identity.image_id)
+        require(len(config_raw) == manifest['config'].get('size'), 'Trial config descriptor size changed')
+        self.configurations[identity.reference] = PosixDockerAdapter.configuration_proof(config_raw, identity)
+        self.configuration_bytes[identity.reference] = config_raw
+        return identity
+
+    def resolve_version(self, version, architecture):
+        require(architecture == self.architecture, 'Trial architecture changed')
+        match = [image for image in self.identities.values() if image.version == version]
+        require(len(match) == 1, 'Unknown fixture version')
+        return self.resolve(match[0])
+
+    def latest(self, architecture, installed_version):
+        raise TrialError('Automatic discovery is not used by the native fixture')
+
+
+class NoNetworkResolver:
+    def __init__(self):
+        self.configurations, self.configuration_bytes = {}, {}
+    def resolve(self, identity):
+        raise TrialError('Fresh recovery must not consult a registry or release cache')
+    def resolve_version(self, version, architecture):
+        raise TrialError('Fresh recovery must not consult a registry or release cache')
+
+
+class ArchiveOnlyResolver(NoNetworkResolver):
+    def __init__(self, paths, archive, identity):
+        super().__init__()
+        self.archive_proof=verify_docker_save(paths,archive,identity)
+        with tarfile.open(archive,mode='r:') as saved:
+            # Empty-store recovery must carry the original immutable index,
+            # selected native manifest and config in the archive itself.
+            for digest in (identity.index_digest,identity.native_digest,identity.image_id):
+                member=saved.getmember('blobs/sha256/'+digest[7:])
+                require(member.isfile(),'Original immutable archive graph missing')
+            config=saved.extractfile('blobs/sha256/'+identity.image_id[7:]).read(524289)
+        require(len(config)<=524288,'Archive configuration exceeded bound')
+        self.configurations[identity.reference]=PosixDockerAdapter.configuration_proof(config,identity)
+        self.configuration_bytes[identity.reference]=config
+
+
+def child_helper(state_directory, identifier, *, crash=False):
+    """A genuinely new helper process reconstructs only durable private state."""
+    paths=create_private_paths()
+    root=paths.check(Path(state_directory).resolve(),directory=True)
+    canonical_uuid(identifier)
+    resolver=NoNetworkResolver()
+    if crash:
+        graph=parse_json(paths.read(root/'trial-registry-graph.json',limit=1048576),1048576)
+        require(graph.get('schema')=='keep.maintenance-trial-graph.v1','Invalid trial graph')
+        resolver=RegistryGraph(graph['port'],graph['architecture'])
+        resolver.identities={value.reference:value for value in (ImageIdentity.from_dict(item) for item in graph['images'])}
+    def factory(paths,profile,enrollment=None):
+        class Backend:
+            def __init__(inner):
+                inner.mailbox=HostMailbox(paths,profile,enrollment,resolver=resolver)
+            def engine(inner):
+                adapter=PosixDockerAdapter(paths,profile,enrollment,resolver=resolver,runner=inner.mailbox.runner)
+                return HostEngine(paths,profile,adapter)
+        return Backend()
+    state,backend=load_backend(paths,root,backend_factory=factory)
+    request=backend.mailbox.accepted_request(paths.read(root/'accepted-requests'/(identifier+'.json'),limit=65536))
+    require(request.request_id==identifier,'Child helper request differs')
+    if crash:
+        class TerminateAfterCommit(PosixDockerAdapter):
+            def open_gate_and_verify(inner,request):
+                super().open_gate_and_verify(request)
+                app=inner.discover(images={request.target.image_id})['keep-app']['Id']
+                inner.run('protected post-commit fixture write',(*inner.plans.base,'exec',app,'python','-B',
+                    '/app/maintenance_trial_fixture.py','write'),limit=65536)
+                paths.publish(root/('trial-crashed-'+identifier+'.json'),canonical({'request_id':identifier,'pid':os.getpid(),'phase':'committed'}))
+                # Terminate the process without unwinding HostEngine or retaining
+                # any Request, resolver, adapter or controller object in memory.
+                os._exit(91)
+        adapter=TerminateAfterCommit(paths,backend.mailbox.profile,backend.mailbox.enrollment,
+            resolver=resolver,runner=backend.mailbox.runner)
+        HostEngine(paths,backend.mailbox.profile,adapter).execute(request)
+        raise TrialError('Post-commit termination did not occur')
+    result=backend.engine().resume(request)
+    paths.publish(root/('trial-resumed-'+identifier+'.json'),canonical({'request_id':identifier,
+        'pid':os.getpid(),'phase':result['phase'],'sequence':result['sequence'],'network_resolution':False}))
+    return 0
+
+
+class NativeTrial:
+    def __init__(self, source, integration, candidate, architecture, evidence):
+        require(sys.platform == 'linux' and os.name == 'posix', 'Execute on a native Linux runner')
+        self.source, self.integration, self.architecture = source.resolve(), integration.resolve(), architecture
+        self.candidate, self.evidence = candidate, evidence.resolve()
+        self.paths = create_private_paths()
+        self.temp = Path(tempfile.mkdtemp(prefix='keep-maintenance-native-')).resolve()
+        os.chmod(self.temp, 0o700)
+        self.root = create_root(self.paths, self.temp/'private')
+        self.tool_state = self.paths.mkdir(self.root/'tool-state')
+        self.installation = self.paths.mkdir(self.root/'installation')
+        self.state = self.paths.mkdir(self.root/'state')
+        self.config = self.paths.mkdir(self.root/'docker-config')
+        self.outer_config = self.paths.mkdir(self.root/'outer-config')
+        self.socket = self.paths.mkdir(self.root/'socket')
+        self.docker = Path(shutil.which('docker') or '').resolve(strict=True)
+        require(self.docker.is_file(), 'Pinned Docker executable is unavailable')
+        self.env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'DOCKER_CONFIG': str(self.outer_config), 'HOME': str(self.root)}
+        self.name = 'keep-maintenance-native-'+uuid.uuid4().hex[:12]
+        self.tools, self.outer_images = [], []
+        self.network = None
+        self.profile = None
+        self.report = {'schema':'keep.maintenance-native-trial.v1','architecture':architecture,
+            'project':self.name,
+            'runner_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), 'images':{}, 'source_files':{},
+            'phases':[], 'cleanup':{}, 'outcome':'running', 'limitations':[
+                'Synthetic local Plex owner; no live Plex authentication or provider deliveries.',
+                'Fixture-derived images add a deterministic schema marker and intentional health failure.',
+                'This native Linux evidence does not qualify Docker Desktop on macOS or Windows.']}
+
+    def outer(self, *args, **kwargs):
+        return run((self.docker, '--host', 'unix:///var/run/docker.sock', *args), env=self.env, **kwargs)
+
+    def inner(self, *args, **kwargs):
+        require(self.profile is not None, 'Isolated daemon is not enrolled')
+        return run((self.profile.docker_executable, '--context', self.profile.docker_context, *args),
+            env={'PATH':self.env['PATH'],'HOME':str(self.root),'DOCKER_CONFIG':str(self.config)}, **kwargs)
+
+    def tooling(self):
+        require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(platform.machine()) == self.architecture, 'Host CPU is not native')
+        outer_arch = self.outer('info','--format','{{.Architecture}}').decode().strip()
+        require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(outer_arch) == self.architecture, 'Runner is not native')
+        for tool in TOOLING:
+            ref = tool['repository']+'@'+tool['index_digest']
+            inspected = json.loads(self.outer('image','inspect','--platform','linux/'+self.architecture,ref))[0]
+            require(inspected['Architecture'] == self.architecture and inspected['Os'] == 'linux', 'Tooling is not native')
+            require(pinned_tool_identity(inspected,tool,self.architecture), 'Pinned tooling index identity unavailable')
+            self.report.setdefault('tooling', []).append({'reference':ref,'native_digest':tool['native'][self.architecture], 'local_id':inspected['Id']})
+        self.network = self.outer('network','create','--internal','--label','io.keep.maintenance.trial='+self.name,self.name).decode().strip()
+        registry_data=self.paths.mkdir(self.tool_state/'registry-data')
+        daemon_data=self.paths.mkdir(self.tool_state/'daemon-data')
+        registry = self.outer('run','--detach','--name',self.name+'-registry','--label','io.keep.maintenance.trial='+self.name,
+            '--network',self.name,'--publish','127.0.0.1::5000','--mount','type=bind,source='+str(registry_data)+',target=/var/lib/registry',TOOLING[1]['repository']+'@'+TOOLING[1]['index_digest']).decode().strip()
+        self.tools.append(registry)
+        port = self.outer('inspect','--format','{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}',registry).decode().strip()
+        self.resolver = RegistryGraph(int(port), self.architecture)
+        dind = self.outer('run','--detach','--privileged','--name',self.name+'-daemon','--label','io.keep.maintenance.trial='+self.name,
+            '--network',self.name,'--entrypoint','dockerd','--env','DOCKER_TLS_CERTDIR=', '--mount','type=bind,source='+str(daemon_data)+',target=/var/lib/docker','--mount','type=bind,source='+str(self.socket)+',target=/trial-socket',
+            TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],'--host=unix:///trial-socket/docker.sock',
+            '--registry-mirror=http://'+self.name+'-registry:5000','--insecure-registry='+self.name+'-registry:5000').decode().strip()
+        self.tools.append(dind)
+        # The daemon's exact pinned native image also supplies the matching
+        # Docker29 client and Compose binary; the runner's older CLI must not
+        # silently drop modern native descriptor fields in inspect responses.
+        binaries=self.paths.mkdir(self.root/'bin')
+        selected=binaries/'docker'
+        plugins=self.paths.mkdir(self.config/'cli-plugins')
+        plugin=plugins/'docker-compose'
+        self.outer('cp',dind+':/usr/local/bin/docker',selected)
+        self.outer('cp',dind+':/usr/local/libexec/docker/cli-plugins/docker-compose',plugin)
+        for binary in (selected,plugin):
+            require(binary.is_file() and not binary.is_symlink(),'Pinned client binary is unavailable')
+            os.chmod(binary,0o500)
+            self.paths.check(binary)
+        self.report['client_binary_sha256']=hashlib.sha256(selected.read_bytes()).hexdigest()
+        self.report['compose_binary_sha256']=hashlib.sha256(plugin.read_bytes()).hexdigest()
+        deadline = time.monotonic()+90
+        while not (self.socket/'docker.sock').exists():
+            require(time.monotonic() < deadline, 'Isolated Unix socket did not appear')
+            time.sleep(.2)
+        self.outer('exec',dind,'chown',str(os.geteuid())+':'+str(os.getegid()),'/trial-socket/docker.sock')
+        self.outer('exec',dind,'chmod','600','/trial-socket/docker.sock')
+        endpoint = 'unix://'+str(self.socket/'docker.sock')
+        local_env = {'PATH':self.env['PATH'],'HOME':str(self.root),'DOCKER_CONFIG':str(self.config)}
+        run((selected,'context','create',self.name,'--docker','host='+endpoint),env=local_env)
+        self.profile = Profile(self.installation,self.state,selected,self.config,self.name,endpoint,'temporary',self.name,
+            self.name+'_keep-data',(self.installation/'compose.yml',),self.installation/'.env')
+        deadline = time.monotonic()+90
+        while True:
+            try:
+                daemon = json.loads(self.inner('info','--format','{{json .ID}}'))
+                break
+            except TrialError:
+                require(time.monotonic() < deadline, 'Isolated daemon is unavailable')
+                time.sleep(.2)
+        self.profile = replace(self.profile, daemon_id=daemon)
+        require(self.inner('info','--format','{{.OSType}}').strip() == b'linux', 'Isolated daemon must use Linux containers')
+        native = self.inner('info','--format','{{.Architecture}}').decode().strip()
+        require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(native) == self.architecture, 'Isolated daemon is not native')
+
+    def images(self):
+        base = json.loads(self.outer('image','inspect',self.candidate))[0]
+        require(base['Architecture'] == self.architecture and base['Os'] == 'linux', 'Source-packaged base is not native')
+        revision = (base.get('Config',{}).get('Labels') or {}).get('org.opencontainers.image.revision')
+        require(isinstance(revision,str) and re.fullmatch('[a-f0-9]{40}',revision), 'Base image needs its full source revision')
+        archive=self.tool_state/'source-packaged-base.tar'
+        self.outer('image','save','--output',archive,self.candidate,timeout=300)
+        config_digest=candidate_configuration(archive,base)
+        require(json.loads(self.outer('image','inspect',self.candidate))[0]['Id']==base['Id'],'Source-packaged candidate changed during export')
+        self.report['candidate']={'version':base['Config']['Labels'].get('org.opencontainers.image.version'),
+            'revision':revision,'architecture':self.architecture,'os':'linux','image_id':config_digest}
+        self.report['base_image'] = {'id':base['Id'], 'config_digest':config_digest,'revision':revision,'reference':self.candidate,
+            'version':base['Config']['Labels'].get('org.opencontainers.image.version')}
+        self.base_alias=self.name+'-base:source'
+        self.outer('image','tag',self.candidate,self.base_alias)
+        self.outer_images.append((self.base_alias,base['Id']))
+        base['fixture_reference']=self.base_alias
+        build=self.stage_source(base)
+        self.images_by_schema={}
+        for schema in (1,2,3,4):
+            version='0.0.'+str(schema)
+            self.paths.publish(build/'VERSION',(version+'\n').encode(),overwrite=schema>1)
+            self.paths.publish(build/'TRIAL_SCHEMA',(str(schema)+'\n').encode(),overwrite=schema>1)
+            tag=self.name+'-image:'+version
+            require(json.loads(self.outer('image','inspect',self.base_alias))[0]['Id']==base['Id'],'Owned source base alias changed')
+            self.outer('build','--network','none','--pull=false','--label','org.opencontainers.image.version='+version,
+                '--label','org.opencontainers.image.revision='+revision,'--tag',tag,str(build),timeout=300)
+            metadata=json.loads(self.outer('image','inspect',tag))[0]
+            require(json.loads(self.outer('image','inspect',self.base_alias))[0]['Id']==base['Id'],'Owned source base alias changed during build')
+            self.outer_images.append((tag,metadata['Id']))
+            archive=self.tool_state/('source-'+version+'.tar')
+            self.outer('image','save','--output',archive,tag,timeout=300)
+            self.inner('image','load','--input',archive,timeout=300)
+            mirror=self.name+'-registry:5000/brspoon/keep:native-'+str(schema)
+            self.inner('image','tag',tag,mirror)
+            self.inner('push',mirror,timeout=300)
+            identity=self.resolver.register('native-'+str(schema),version,revision)
+            # Resolve official-name immutable URI through the internal mirror.
+            self.inner('pull',identity.reference,timeout=300)
+            self.images_by_schema[schema]=identity
+            self.report['images'][version]=identity.as_dict()
+        self.paths.publish(self.state/'trial-registry-graph.json',canonical({'schema':'keep.maintenance-trial-graph.v1',
+            'architecture':self.architecture,'port':self.resolver.port,
+            'images':[image.as_dict() for image in self.images_by_schema.values()]}))
+
+    def stage_source(self, base):
+        revision=base['Config']['Labels']['org.opencontainers.image.revision']
+        build = self.paths.mkdir(self.root/'image-source')
+        files = {'app.py':self.integration/'app.py','onboarding.py':self.integration/'onboarding.py',
+            **{name:NEUTRAL_SOURCE/name for name in ('maintenance_app.py','maintenance_mailbox.py','maintenance_protocol.py','private_store.py')},
+            'maintenance_trial_fixture.py':(DRAFT/'maintenance_trial_fixture.py' if (DRAFT/'maintenance_trial_fixture.py').is_file() else self.source/'tests/maintenance_trial_fixture.py'),
+            'maintenance_portable_fixture.py':self.source/'tests/portable_trial.py'}
+        for path in sorted((self.integration/'templates').glob('about*.html')):
+            files['templates/'+path.name]=path
+        for name in ('keep-maintenance.js','keep-maintenance.css','keep-about.js'):
+            path=self.integration/'static'/name
+            if path.is_file():files['static/'+name]=path
+        for name,path in files.items():
+            body=path.read_bytes()
+            self.report['source_files'][name]={'source_sha256':hashlib.sha256(body).hexdigest(),'fixture_sha256':hashlib.sha256(body).hexdigest()}
+            if name=='maintenance_mailbox.py':
+                false_count=body.count(b'RUNTIME_QUALIFIED = False')
+                true_count=body.count(b'RUNTIME_QUALIFIED = True')
+                require((false_count,true_count) in ((1,0),(0,1)), 'Qualification constant is ambiguous or unavailable')
+                if false_count:
+                    body=body.replace(b'RUNTIME_QUALIFIED = False',b'RUNTIME_QUALIFIED = True')
+                self.report['source_files'][name]['fixture_sha256']=hashlib.sha256(body).hexdigest()
+            if '/' in name and not (build/Path(name).parent).exists():self.paths.mkdir(build/Path(name).parent)
+            self.paths.publish(build/name,body)
+        require(isinstance(base.get('fixture_reference'),str) and re.fullmatch('[a-z0-9][a-z0-9_.-]{0,100}:source',base['fixture_reference']),
+            'Owned local source base alias is required')
+        dockerfile = ('FROM '+base['fixture_reference']+'\nUSER root\n'+''.join('COPY --chown=10001:10001 '+name+' /app/'+name+'\n' for name in files)
+            +'COPY --chown=10001:10001 VERSION TRIAL_SCHEMA /app/\nUSER 10001:10001\n'
+            +'LABEL org.opencontainers.image.source="https://github.com/brspoon/keep"\n'
+            +'CMD ["python","-B","/app/maintenance_trial_fixture.py","web"]\n')
+        self.paths.publish(build/'Dockerfile',dockerfile.encode())
+        return build
+
+    def compose(self):
+        previous=self.images_by_schema[1]
+        env=('KEEP_IMAGE='+previous.reference+'\nKEEP_DB_PATH=/app/data/keep.sqlite3\n'
+            +'FLASK_SECRET_KEY=synthetic-maintenance-native-fixture\nKEEP_WEBHOOK_SECRET=synthetic-maintenance-native-fixture\n'
+            +'EMAIL_ENABLED=false\nPUSHOVER_ENABLED=false\nPLEX_OWNER_ID=7\n')
+        self.paths.publish(self.profile.env_file,env.encode())
+        self.paths.publish(self.installation/'VERSION',(previous.version+'\n').encode())
+        # Fixed services and the real named-volume/Compose label topology.
+        composition='''name: %s
+x-keep: &keep
+  image: ${KEEP_IMAGE}
+  env_file: .env
+  restart: "no"
+  network_mode: none
+  volumes: [keep-data:/app/data]
+  read_only: true
+  tmpfs: [/tmp:size=64m,mode=1777]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+services:
+  keep-app:
+    <<: *keep
+    command: [python, -B, /app/maintenance_trial_fixture.py, web]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"]
+      interval: 1s
+      timeout: 4s
+      retries: 2
+      start_period: 2s
+  keep-digest:
+    <<: *keep
+    command: [python, -B, /app/maintenance_trial_fixture.py, worker]
+    healthcheck:
+      test: [CMD, python, -c, "import os,time; assert time.time()-os.path.getmtime('/app/data/digest-worker.heartbeat')<300"]
+      interval: 1s
+      timeout: 4s
+      retries: 2
+      start_period: 2s
+volumes:
+  keep-data:
+'''%self.name
+        self.paths.publish(self.profile.compose_files[0],composition.encode())
+        self.profile.validate(self.paths)
+        self.compose_args=('compose','--project-name',self.profile.project,'--project-directory',str(self.installation),
+            '--env-file',str(self.profile.env_file),'--file',str(self.profile.compose_files[0]))
+        self.inner(*self.compose_args,'create','--pull','never')
+        self.inner('run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true',
+            '--env-file',self.profile.env_file,'--mount','type=volume,source='+self.profile.volume+',target=/app/data',
+            '--tmpfs','/tmp:size=64m,mode=1777','--entrypoint','python',previous.reference,'-B','/app/maintenance_trial_fixture.py','seed',timeout=120)
+        self.inner(*self.compose_args,'up','--detach','--no-build','--pull','never')
+        self.wait(previous)
+        resolver=self.resolver
+        def factory(paths,profile,enrollment=None):
+            class Backend:
+                def __init__(inner):
+                    inner.mailbox=HostMailbox(paths,profile,enrollment,resolver=resolver)
+                    inner.target=None
+                def engine(inner):
+                    adapter=PosixDockerAdapter(paths,profile,enrollment,resolver=resolver,runner=inner.mailbox.runner)
+                    adapter.known_identities.update(inner.mailbox.adapter.known_identities)
+                    return HostEngine(paths,profile,adapter)
+            return Backend()
+        self.factory=factory
+        bundle=source_bundle(self.paths,DRAFT,version=previous.version,revision=previous.revision)
+        staged=stage_bundle(self.paths,self.state,bundle,version=previous.version,revision=previous.revision,
+            expected_sha256=hashlib.sha256(bundle).hexdigest())
+        source_proof=HostState(self.paths,self.state).source_proof(staged)
+        self.report['helper_bundle_sha256']=source_proof['archive_sha256']
+        self.report['helper_sources']=source_proof['manifest']['files']
+        activation=enroll(self.paths,self.profile,source_proof=source_proof,backend_factory=factory)
+        self.host_state,self.backend=load_backend(self.paths,self.state,backend_factory=factory)
+        self.report['activation']={'install_id':activation['install_id'],'context':self.profile.docker_context,'daemon_id':self.profile.daemon_id}
+
+    def wait(self,image):
+        mailbox=HostMailbox(self.paths,self.profile,resolver=self.resolver)
+        mailbox.adapter.known_identities[image.image_id]=image
+        deadline=time.monotonic()+90
+        while True:
+            rows=mailbox.adapter.discover(images={image.image_id})
+            if all(row['State']['Running'] and row['State']['Health']=='healthy' for row in rows.values()):return
+            require(time.monotonic()<deadline,'Fixture services did not become healthy')
+            time.sleep(.2)
+
+    def ids(self):
+        return self.backend.mailbox.probe().containers
+
+    def fixture(self,mode):
+        return parse_json(self.inner('exec',self.ids()['keep-app'],'python','-B','/app/maintenance_trial_fixture.py',mode),65536) if mode=='inspect' else self.inner('exec',self.ids()['keep-app'],'python','-B','/app/maintenance_trial_fixture.py',mode)
+
+    def request(self,operation,target=None,identifier=None):
+        mailbox=self.backend.mailbox
+        mailbox.advisory(target=target)
+        identifier=identifier or str(uuid.uuid4())
+        intent=self.state/('trial-request-'+identifier+'.json')
+        if not intent.exists():self.paths.publish(intent,canonical({'request_id':identifier,'operation':operation}))
+        mailbox.queue(operation,request_id=identifier)
+        request=mailbox.poll()
+        require(request is not None and request.request_id==identifier,'Signed queued request unavailable')
+        self.host_state.retain_request(mailbox,request)
+        return request
+
+    def execute(self,request,adapter_class=PosixDockerAdapter):
+        adapter=adapter_class(self.paths,self.profile,self.backend.mailbox.enrollment,resolver=self.resolver,runner=self.backend.mailbox.runner)
+        adapter.known_identities.update(self.backend.mailbox.adapter.known_identities)
+        return HostEngine(self.paths,self.profile,adapter).execute(request)
+
+    def record(self,name,action):
+        entry={'name':name,'status':'running'};self.report['phases'].append(entry)
+        try:
+            value=action()
+            if value:entry.update(value)
+            entry['status']='passed'
+        except Exception as error:
+            entry['status']='failed';entry['error_type']=type(error).__name__
+            raise
+
+    def restart_and_drain(self):
+        request=self.request('restart')
+        trial=self
+        proof={}
+        class ObserveDrain(PosixDockerAdapter):
+            def close_gate_and_drain(inner,request):
+                # Start after the engine's last pre-drain status/authority call.
+                # A preexisting lease must not merely delay claim/status before
+                # the gate closes: this handshake observes the actual drain.
+                app=inner.discover(images={request.expected.image_id})['keep-app']['Id']
+                environment={'PATH':trial.env['PATH'],'HOME':str(trial.root),'DOCKER_CONFIG':str(trial.config)}
+                writer=subprocess.Popen((str(trial.profile.docker_executable),'--context',trial.profile.docker_context,
+                    'exec',app,'python','-B','/app/maintenance_trial_fixture.py','hold',request.request_id),
+                    stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=environment)
+                errors=[]
+                def drain():
+                    try:super(ObserveDrain,inner).close_gate_and_drain(request)
+                    except BaseException as error:errors.append(error)
+                thread=None
+                def observation():
+                    return parse_json(trial.inner('exec',app,'python','-B','/app/maintenance_trial_fixture.py','gate'),65536)
+                try:
+                    deadline=time.monotonic()+10
+                    while not observation()['writer_ready']:
+                        require(writer.poll() is None and time.monotonic()<deadline,'Controlled protected writer did not acquire its lease')
+                        time.sleep(.05)
+                    thread=threading.Thread(target=drain)
+                    thread.start()
+                    deadline=time.monotonic()+10
+                    while True:
+                        view=observation()
+                        if view['closed']:break
+                        require(not errors and time.monotonic()<deadline,'Drain did not close admission while writer was held')
+                        time.sleep(.05)
+                    require(view['request_id']==request.request_id and not view['drained'] and view['writer_ready']
+                        and view['writer_done'] is None and request.request_id not in view['drain_writes'] and writer.poll() is None,
+                        'Protected writer was not held across actual gate closure')
+                    code="import urllib.request,urllib.error;\ntry: print(urllib.request.urlopen('http://127.0.0.1:5000/login',timeout=3).status)\nexcept urllib.error.HTTPError as e: print(e.code)"
+                    require(trial.inner('exec',app,'python','-B','-c',code).strip()==b'503','Ordinary HTTP admission was not refused during drain')
+                    require(writer.poll() is None and not observation()['drained'],'Drain completed before controlled writer release')
+                    proof.update(gate_closed_with_writer_held=True,ordinary_http_status=503)
+                    trial.inner('exec',app,'python','-B','/app/maintenance_trial_fixture.py','release',request.request_id)
+                    writer.communicate(timeout=10)
+                    require(writer.returncode==0,'Controlled admitted writer was interrupted')
+                    thread.join(timeout=25)
+                    require(not thread.is_alive() and not errors,'Actual drain did not complete after final protected write')
+                    view=observation()
+                    require(view['closed'] and view['drained'] and view['writer_done']==request.request_id
+                        and request.request_id in view['drain_writes'],'Drain did not retain the completed protected write')
+                    proof['protected_write_before_stop']=True
+                finally:
+                    if writer.poll() is None:
+                        try:trial.inner('exec',app,'python','-B','/app/maintenance_trial_fixture.py','release',request.request_id)
+                        finally:
+                            try:writer.communicate(timeout=5)
+                            except subprocess.TimeoutExpired:writer.kill();writer.communicate(timeout=5)
+                    if thread is not None:thread.join(timeout=25)
+            def stop_and_verify_both(inner,profile):
+                require(proof.get('protected_write_before_stop') is True,'Service stop preceded protected writer completion')
+                super().stop_and_verify_both(profile)
+            def snapshot_matched_state(inner,request,profile):
+                result=super().snapshot_matched_state(request,profile)
+                snapshot=inner.operation/'recovery/database.sqlite3'
+                with sqlite3.connect(snapshot.as_uri()+'?mode=ro',uri=True) as db:
+                    row=db.execute("SELECT version FROM user_feature_acknowledgements WHERE feature_key='maintenance-drain-write'").fetchone()
+                require(row==(request.request_id,),'Matched SQLite snapshot omitted the final admitted write')
+                proof['protected_write_in_snapshot']=True
+                return result
+        result=self.execute(request,ObserveDrain)
+        require(result['phase']=='success','Restart did not finish')
+        after=self.ids()
+        require(self.fixture('inspect')['schema']==1,'Restart changed database schema')
+        journal=Journal(self.paths,self.state,request.request_id,request.payload_sha256)
+        old_rows=journal.records()
+        self.backend.mailbox.queue('restart',request_id=request.request_id)
+        result=self.execute(request)
+        require(result==old_rows[-1] and journal.records()==old_rows and self.ids()==after,'Duplicate operation repeated a cutover')
+        return {'request_id':request.request_id,'journal_records':len(old_rows),'duplicate_operation_unchanged':True,**proof}
+
+    def successful_install(self):
+        request=self.request('install',self.images_by_schema[2]);result=self.execute(request)
+        require(result['phase']=='success' and self.fixture('inspect')['schema']==2,'Real candidate schema migration failed')
+        require(self.backend.mailbox.probe().image==self.images_by_schema[2],'Candidate native/config identity mismatch')
+        require(self.profile.env_file.read_text().splitlines()[0]=='KEEP_IMAGE='+self.images_by_schema[2].reference,'Normal image environment setting not applied')
+        return {'request_id':request.request_id,'schema':2}
+
+    def failed_upgrade(self):
+        before={str(path):path.read_bytes() for path in (self.profile.env_file,*self.profile.compose_files,self.installation/'VERSION')}
+        request=self.request('install',self.images_by_schema[3])
+        try:self.execute(request)
+        except EngineError:pass
+        else:raise TrialError('Intentional unhealthy candidate unexpectedly succeeded')
+        journal=Journal(self.paths,self.state,request.request_id,request.payload_sha256).records()
+        require(journal[-1]['phase']=='recovered','Matched recovery was not completed')
+        require(self.fixture('inspect')['schema']==2 and self.backend.mailbox.probe().image==request.expected,'Real DB/image rollback failed')
+        require(all(path.read_bytes()==body for name,body in before.items() for path in (Path(name),)),'Matching configuration was not restored')
+        recovery=self.state/'operations'/request.request_id/'recovery'
+        require(all((recovery/name).is_file() for name in ('database.sqlite3','image.tar','manifest.json','protected-fingerprint.json')),'Original recovery set was not retained')
+        # Inspect the preserved FAILED volume database using the current app,
+        # whose admission is open. It must contain the failed migration marker3.
+        code="from pathlib import Path; import sqlite3; roots=list(Path('/app/data/.maintenance/recovery').glob('"+request.request_id+"/failed/*/keep.sqlite3')); assert len(roots)==1; db=sqlite3.connect(roots[0].as_uri()+'?mode=ro',uri=True); assert db.execute('SELECT value FROM maintenance_trial_schema').fetchone()==(3,); print('preserved')"
+        require(self.inner('exec',self.ids()['keep-app'],'python','-B','-c',code).strip()==b'preserved','Failed migrated database evidence was lost')
+        self.reacquire_request=request
+        return {'request_id':request.request_id,'schema_restored':2,'failed_schema_preserved':3,'matched_recovery_retained':True}
+
+    def empty_store_reacquisition(self):
+        request=self.reacquire_request
+        identity=request.expected
+        archive=self.state/'operations'/request.request_id/'recovery/image.tar'
+        resolver=ArchiveOnlyResolver(self.paths,archive,identity)
+        socket=self.paths.mkdir(self.root/'empty-store-socket')
+        data=self.paths.mkdir(self.tool_state/'empty-store-daemon-data')
+        name=self.name+'-empty-daemon'
+        daemon=self.outer('run','--detach','--privileged','--name',name,'--label','io.keep.maintenance.trial='+self.name,
+            '--network','none','--entrypoint','dockerd','--env','DOCKER_TLS_CERTDIR=',
+            '--mount','type=bind,source='+str(socket)+',target=/trial-socket',
+            '--mount','type=bind,source='+str(data)+',target=/var/lib/docker',
+            TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],'--host=unix:///trial-socket/docker.sock').decode().strip()
+        self.tools.append(daemon)
+        deadline=time.monotonic()+90
+        while not (socket/'docker.sock').exists():
+            require(time.monotonic()<deadline,'Empty-store socket did not appear');time.sleep(.2)
+        self.outer('exec',daemon,'chown',str(os.geteuid())+':'+str(os.getegid()),'/trial-socket/docker.sock')
+        self.outer('exec',daemon,'chmod','600','/trial-socket/docker.sock')
+        endpoint='unix://'+str(socket/'docker.sock')
+        context=self.name+'-empty'
+        env={'PATH':self.env['PATH'],'HOME':str(self.root),'DOCKER_CONFIG':str(self.config)}
+        def empty(*args,**kwargs):
+            return run((self.profile.docker_executable,'--context',context,*args),env=env,**kwargs)
+        run((self.profile.docker_executable,'context','create',context,'--docker','host='+endpoint),env=env)
+        deadline=time.monotonic()+90
+        while True:
+            try:
+                daemon_id=json.loads(empty('info','--format','{{json .ID}}'));break
+            except TrialError:
+                require(time.monotonic()<deadline,'Empty-store daemon did not start');time.sleep(.2)
+        require(not empty('image','ls','--all','--quiet').strip(),'Reacquisition daemon was not empty')
+        require(json.loads(empty('info','--format','{{json .RegistryConfig.Mirrors}}')) in ([],None),'Empty-store daemon has a registry mirror')
+        require(json.loads(self.outer('inspect',daemon))[0]['HostConfig']['NetworkMode']=='none','Reacquisition daemon has external network access')
+        empty('image','load','--input',archive,timeout=300)
+        state=self.paths.mkdir(self.root/'empty-store-state')
+        profile=replace(self.profile,state=state,docker_context=context,docker_endpoint=endpoint,daemon_id=daemon_id)
+        adapter=PosixDockerAdapter(self.paths,profile,None,resolver=resolver)
+        adapter.assert_daemon()
+        observed=adapter.image(identity)
+        code="import json,os,platform;from pathlib import Path;print(json.dumps({'uid':os.getuid(),'machine':platform.machine(),'version':Path('/app/VERSION').read_text().strip()}))"
+        identifier=empty('create','--name',self.name+'-empty-proof','--label','io.keep.maintenance.trial='+self.name,
+            '--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true','--pull','never',
+            '--entrypoint','python',observed['SelectedReference'],'-B','-c',code).decode().strip()
+        row=json.loads(empty('inspect',identifier))[0]
+        require(row['Id']==identifier and (row['Config'].get('Labels') or {}).get('io.keep.maintenance.trial')==self.name,
+            'Empty-store proof container identity changed')
+        descriptor=row.get('ImageManifestDescriptor')
+        require(isinstance(descriptor,dict) and descriptor.get('digest')==identity.native_digest,
+            'Reloaded original index did not select the original native manifest')
+        runtime=parse_json(empty('start','--attach',identifier),65536)
+        require(runtime['uid']==10001 and runtime['version']==identity.version
+            and {'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(runtime['machine'])==self.architecture,
+            'Reacquired original image runtime differs')
+        require(not json.loads(empty('inspect',identifier))[0]['State']['Running'],'Empty-store proof container did not exit')
+        empty('rm',identifier)
+        require(not empty('ps','--all','--no-trunc','--format','{{.ID}}').strip(),'Empty-store proof container remains')
+        self.empty_store_cleanup={'daemon_container_id':daemon,'proof_container_id':identifier,'proof_container_absent':True}
+        return {'request_id':request.request_id,'image':identity.as_dict(),'empty_before_load':True,
+            'original_index_loaded':True,'original_native_selected':True,'original_config_verified':True,
+            'registry_assistance':False,'prior_cache_assistance':False,'runtime_uid':runtime['uid'],
+            'archive_sha256':resolver.archive_proof['sha256']}
+
+    def committed_crash(self):
+        request=self.request('install',self.images_by_schema[4])
+        command=(sys.executable,'-B',str(Path(__file__).resolve()),'--child-execute',request.request_id,'--state',str(self.state))
+        result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=600,
+            env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+        require(result.returncode==91,'Real helper process did not terminate at the commit boundary')
+        crash=parse_json(self.paths.read(self.state/('trial-crashed-'+request.request_id+'.json')))
+        require(crash['request_id']==request.request_id and crash['phase']=='committed','Original terminated helper receipt differs')
+        rows=Journal(self.paths,self.state,request.request_id,request.payload_sha256).records()
+        require(rows[-1]['phase']=='committed','Process termination did not retain durable commit boundary')
+        require(self.fixture('inspect')['new_writes']==1,'New admitted write did not commit before helper termination')
+        resumed=subprocess.run((sys.executable,'-B',str(Path(__file__).resolve()),'--child-resume',request.request_id,'--state',str(self.state)),
+            stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=120,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+        require(resumed.returncode==0,'Fresh helper could not reconstruct and resume the original private state')
+        receipt=parse_json(self.paths.read(self.state/('trial-resumed-'+request.request_id+'.json')))
+        require(receipt['request_id']==request.request_id and receipt['phase']=='success' and receipt['pid']!=crash['pid']
+            and receipt['pid']!=os.getpid() and receipt['network_resolution'] is False,'Fresh helper reconstruction proof differs')
+        require(self.fixture('inspect')=={'schema':4,'new_writes':1,'owner':'7'},'Fresh committed resume rolled back new writes')
+        latest=Journal(self.paths,self.state,request.request_id,request.payload_sha256).records()
+        require(not any(row['phase'].startswith('recover') for row in latest),'Post-commit resume attempted rollback')
+        return {'request_id':request.request_id,'terminated_helper_pid':crash['pid'],'fresh_helper_pid':receipt['pid'],
+            'new_admitted_write_preserved':True,'fresh_private_state_reconstruction':True,'registry_assistance':False,
+            'post_commit_rollback':False,'schema':4}
+
+    def cleanup(self):
+        # Only exact owned disposable tools/data. Recovery files remain in the
+        # private host evidence directory; production helper cleanup is separate.
+        if self.profile:
+            containers=self.inner('ps','--all','--no-trunc','--format','{{.ID}}').decode().split()
+            rows={identifier:json.loads(self.inner('inspect',identifier))[0] for identifier in containers}
+            identities=tuple(getattr(self,'images_by_schema',{}).values())
+            project_rows=[row for row in rows.values() if (row.get('Config',{}).get('Labels') or {}).get('com.docker.compose.project')==self.name]
+            service_ids=set()
+            if project_rows:
+                adapter=PosixDockerAdapter(self.paths,self.profile,None,resolver=self.resolver)
+                adapter.known_identities.update({image.image_id:image for image in identities})
+                service_ids={row['Id'] for row in adapter.discover(images={image.image_id for image in identities}).values()}
+            install_id=self.report.get('activation',{}).get('install_id')
+            enrollment=None
+            if isinstance(install_id,str) and install_id:
+                try:canonical_uuid(install_id)
+                except Exception:raise TrialError('Invalid activation identity; cleanup held') from None
+                active=HostState(self.paths,self.state).active()
+                mailbox=getattr(getattr(self,'backend',None),'mailbox',None)
+                enrollment=getattr(mailbox,'enrollment',None)
+                require(active is not None and active[0]['install_id']==install_id
+                    and enrollment is not None and enrollment.install_id==install_id,
+                    'Unverified activation identity; cleanup held')
+            # Preflight every container and volume before any stop/removal. An
+            # unrelated unlabeled resource must remain untouched even if owned
+            # services appeared earlier in the Docker inventory.
+            for identifier in containers:
+                row=rows[identifier]
+                require(row.get('Id')==identifier and re.fullmatch('[a-f0-9]{64}',identifier), 'Container identity changed; cleanup held')
+                labels=row.get('Config',{}).get('Labels') or {}
+                owned=identifier in service_ids
+                if not owned and enrollment is not None and labels.get('io.keep.maintenance.install')==install_id:
+                    operation=canonical_uuid(labels.get('io.keep.maintenance.operation'))
+                    purpose=labels.get('io.keep.maintenance.purpose')
+                    require(purpose in ('snapshot','preserve','prepare-restore','restore','upload'),'Unknown helper purpose; cleanup held')
+                    request=mailbox.accepted_request(self.paths.read(self.state/'accepted-requests'/(operation+'.json'),limit=65536))
+                    require(request.request_id==operation,'Helper operation identity differs; cleanup held')
+                    selected=PosixDockerAdapter(self.paths,self.profile,enrollment,resolver=self.resolver,runner=mailbox.runner)
+                    selected.bind(request)
+                    original=parse_json(self.paths.read(selected.operation/('helper-'+purpose+'.json')))
+                    require(original=={'container_id':identifier,'source_sha256':selected.source_sha},'Original helper ID/source differs; cleanup held')
+                    selected.validate_helper(selected.inspect(identifier,helper=True),purpose,stopped=False)
+                    owned=True
+                require(owned,'Unexpected isolated daemon container; cleanup held')
+            volumes=self.inner('volume','ls','--format','{{.Name}}').decode().split()
+            for name in volumes:
+                require(name==self.profile.volume,'Unexpected isolated volume; cleanup held')
+            for identifier in containers:
+                row=rows[identifier]
+                if row['State']['Running']:self.inner('stop','--time','15',identifier,timeout=30)
+                require(not json.loads(self.inner('inspect',identifier))[0]['State']['Running'],'Cleanup stop failed')
+                self.inner('rm',identifier)
+            for name in volumes:
+                self.inner('volume','rm',name)
+            self.report['cleanup']['trial_containers_removed']=len(containers)
+            self.report['cleanup']['trial_volumes_removed']=volumes
+            require(not self.inner('ps','--all','--no-trunc','--format','{{.ID}}').strip(),'Isolated trial containers remain')
+            require(not self.inner('volume','ls','--format','{{.Name}}').strip(),'Isolated trial volumes remain')
+            self.report['cleanup']['owned_service_helper_ids']=containers
+            self.report['cleanup']['project']=self.name
+        for identifier in reversed(self.tools):
+            row=json.loads(self.outer('inspect',identifier))[0]
+            require((row.get('Config',{}).get('Labels') or {}).get('io.keep.maintenance.trial')==self.name,'Tooling identity changed')
+            self.outer('stop','--time','15',identifier,timeout=30)
+            self.outer('rm',identifier)
+            require(not self.outer('ps','--all','--no-trunc','--filter','id='+identifier,'--format','{{.ID}}').strip(),'Owned tooling container remains')
+        if self.network:
+            row=json.loads(self.outer('network','inspect',self.network))[0]
+            require(row.get('Labels',{}).get('io.keep.maintenance.trial')==self.name and not row.get('Containers'),'Tooling network changed')
+            self.outer('network','rm',self.network)
+            require(not self.outer('network','ls','--no-trunc','--filter','id='+self.network,'--format','{{.ID}}').strip(),'Owned tooling network remains')
+        for tag,identifier in self.outer_images:
+            actual=json.loads(self.outer('image','inspect',tag))[0]
+            require(actual['Id']==identifier,'Fixture image alias changed')
+            refs=self.outer('ps','--all','--no-trunc','--filter','ancestor='+identifier,'--format','{{.ID}}').strip()
+            require(not refs,'Fixture image still referenced; cleanup held')
+            self.outer('image','rm',tag)
+            require(not self.outer('image','ls','--no-trunc','--filter','reference='+tag,'--format','{{.ID}}').strip(),'Owned fixture image alias remains')
+        retained_ids=set(self.outer('image','ls','--all','--no-trunc','--quiet').decode().split())
+        for tag,identifier in self.outer_images:
+            if tag!=getattr(self,'base_alias',None):
+                require(identifier not in retained_ids,'Owned fixture image ID remains')
+        if getattr(self,'base_alias',None):
+            require(json.loads(self.outer('image','inspect',self.candidate))[0]['Id']==self.report['base_image']['id'],
+                'Original source-packaged candidate changed during cleanup')
+        self.report['cleanup']['tooling_containers_removed']=self.tools
+        self.report['cleanup']['fixture_images_removed']=len(self.outer_images)
+        self.report['cleanup']['owned_image_aliases']=[{'alias':tag,'image_id':identifier} for tag,identifier in self.outer_images]
+        self.report['cleanup']['owned_network_id']=self.network
+        self.report['cleanup']['empty_store']=getattr(self,'empty_store_cleanup',None)
+        self.report['cleanup']['source_candidate_preserved']=True
+        self.report['cleanup']['resources_absent']=True
+
+    def execute_all(self):
+        try:
+            self.record('isolated-native-daemon',self.tooling)
+            self.record('source-packaged-real-registry-graphs',self.images)
+            self.record('signed-enrollment-and-paired-compose',self.compose)
+            self.record('restart-active-work-drain-and-duplicate',self.restart_and_drain)
+            self.record('real-schema-upgrade',self.successful_install)
+            self.record('unhealthy-schema-upgrade-matched-rollback',self.failed_upgrade)
+            self.record('empty-store-original-index-reacquisition',self.empty_store_reacquisition)
+            self.record('post-commit-crash-preserves-new-write',self.committed_crash)
+            self.report['outcome']='passed'
+        except Exception:
+            self.report['outcome']='failed'
+            raise
+        finally:
+            try:self.cleanup()
+            except Exception as error:
+                self.report['outcome']='failed';self.report['cleanup']['held']=type(error).__name__
+            self.report['private_evidence_directory']=str(self.root)
+            self.evidence.parent.mkdir(parents=True,exist_ok=True)
+            self.evidence.write_bytes(canonical(self.report)+b'\n')
+            os.chmod(self.evidence,0o600)
+
+
+def main(argv=None):
+    argv=list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ('--child-execute','--child-resume'):
+        parser=argparse.ArgumentParser(description='Fixed native-trial child helper')
+        parser.add_argument(argv[0],required=True,dest='identifier')
+        parser.add_argument('--state',type=Path,required=True)
+        args=parser.parse_args(argv)
+        try:return child_helper(args.state,args.identifier,crash=argv[0]=='--child-execute')
+        except Exception as error:
+            print('Native helper child failed: '+type(error).__name__,file=sys.stderr)
+            return 1
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source-directory',type=Path,required=True)
+    parser.add_argument('--integration-source',type=Path,required=True)
+    parser.add_argument('--candidate-image',required=True)
+    parser.add_argument('--architecture',choices=('amd64','arm64'),required=True)
+    parser.add_argument('--evidence',type=Path,required=True)
+    args=parser.parse_args(argv)
+    try:
+        trial=NativeTrial(args.source_directory,args.integration_source,args.candidate_image,args.architecture,args.evidence)
+        trial.execute_all()
+        require(trial.report['outcome']=='passed','Native qualification or cleanup failed')
+    except (TrialError,EngineError,OSError,ValueError) as error:
+        print('Native maintenance qualification failed: '+type(error).__name__,file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__=='__main__':
+    raise SystemExit(main())

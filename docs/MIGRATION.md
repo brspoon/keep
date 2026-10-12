@@ -2,6 +2,10 @@
 
 ## Upgrade an installation
 
+An enrolled Linux installation can use **Admin → About → Install update**.
+See [in-app maintenance](MAINTENANCE.md) to configure the optional host helper.
+The following steps remain available for installations without that helper.
+
 Work from the installation directory (`~/keep` on Linux/macOS, `$HOME\keep` in
 Windows PowerShell for the one-command installer).
 Read the target release notes and [create a verified backup](PORTABLE_BACKUP.md)

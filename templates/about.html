@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <link rel="stylesheet" href="/static/keep-about.css?v={{ app_version }}">
 <script defer src="/static/keep-about.js?v={{ app_version }}"></script>
+<link rel="stylesheet" href="/static/keep-maintenance.css?v={{ app_version }}">
+<script defer src="/static/keep-maintenance.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 {% include 'shared_assets.html' %}
 </head>
@@ -36,6 +38,7 @@
   <p id="about-check-reason" class="about-check-reason" {% if not about_snapshot.reason or (busy and about_snapshot.worker_available) %}hidden{% endif %}>{{ about_snapshot.reason or '' }}</p>
   <button id="about-refresh" class="about-button secondary" type="button" hidden>Refresh status</button>
 </section>
+{% include 'about_maintenance.html' %}
 <section class="about-panel" aria-labelledby="about-releases-title">
   <div class="about-section-heading"><h2 id="about-releases-title">Recent releases</h2></div>
   <p id="about-releases-empty" class="about-empty" {% if about_snapshot.releases %}hidden{% endif %}>No releases checked yet.</p>
