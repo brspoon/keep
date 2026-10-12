@@ -43,20 +43,25 @@ See [Seerr setup and deletion policy](seerr-attribution.md) for request matching
 | Seerr | Optional | Request history and verified requester-based deletion access. Linking an account alone does not grant deletion permission. |
 | Tautulli | Optional | Qualifying watch history and watched thresholds for Leaving information and supported forecasts. |
 | SMTP/email | Optional | Invitations, password resets, and Leaving email summaries. With email disabled, the owner can share private account setup/reset links. |
+| Pushover | Optional | Leaving summaries and reminders, with separate personal keys, events, and collection choices. The owner can also choose operational alerts. |
 
 Plex and Maintainerr must already be running and reachable from Keep. Optional connections enable their associated features; forecasts require supported rules and verifiable media/watch data. See [installation and configuration](INSTALLATION.md) for setup.
 
-## Email and personal preferences
+## Notifications and personal preferences
 
-When email delivery is enabled, viewers can choose which selected Leaving lists they follow and turn their summaries on or off. Keep sends new-entry summaries and reminders when titles have seven days or less remaining; missed updates can make a reminder arrive later. Kept titles are excluded. Preferences also provide system, light, and dark appearance choices.
+Viewers can choose email, Pushover, or both in Preferences, with separate event and collection choices for each channel. Keep sends new-entry summaries and reminders when titles have seven days or less remaining; missed updates can make a reminder arrive later. Kept titles are excluded. Preferences also provide system, light, and dark appearance choices.
 
-Under **Admin → Email**, recipient cards show the corresponding account's full name, with a display name or Plex username as a fallback. Search matches email addresses, full names, display names, and Plex usernames. Addresses without an associated account remain independent email recipients.
+Under **Admin → Notifications**, the owner enables providers, tests their own saved destination, and reviews recent deliveries. SMTP settings remain in Connections. Email recipient cards show the corresponding account's full name, with a display name or Plex username as a fallback. Search matches email addresses, full names, display names, and Plex usernames. Addresses without an associated account remain independent email recipients.
+
+The owner can opt into connection failures and recovery, failed jobs and recovery, and available Keep updates. These events are unavailable to other accounts. A failed connection alert follows two failed automatic checks. Notifications use recorded results; they do not start extra service checks.
+
+An uncertain delivery stays available for review while other destinations continue. The owner can discard it or explicitly resend it after acknowledging that a duplicate is possible. A successful send records provider acceptance; it does not confirm inbox or device delivery.
 
 ## Owner controls and API access
 
 The owner manages accounts, indefinite-Keep and Keep-management permissions, deletion capabilities, library grants, and Seerr account links. Under Admin, the owner also manages selected Maintainerr collections, service connections, email recipients, jobs, and activity records.
 
-**Admin → Jobs** shows each job's schedule, next run, and latest result. **Run now** queues an available job to run shortly. **Edit** changes the frequency of Plex account access checks, Leaving reminders, Seerr request history refreshes, and service connection checks. Lifecycle tasks such as temporary Keep expiry, reminder reconciliation, and cleanup keep their fixed schedules. Running email delivery still respects recipient preferences and the digest quiet period; it does not resend completed deliveries.
+**Admin → Jobs** shows each job's schedule, next run, and latest result. **Run now** queues an available job to run shortly. **Edit** changes the frequency of Plex account access checks, Leaving reminders, Seerr request history refreshes, and service connection checks. Lifecycle tasks such as temporary Keep expiry, reminder reconciliation, and cleanup keep their fixed schedules. Running notification delivery still respects recipient preferences and the quiet period; it does not resend completed deliveries.
 
 **Admin → About** shows the installed version, the latest published stable release, recent releases, and project links. Keep checks for updates every six hours; **Check for updates** queues a check through the background worker. Failed or stale checks keep the last known release visible and do not claim Keep is up to date. **Copy diagnostics** includes versions, platform, worker status, and whether connections are configured, without credentials, server addresses, or account details.
 

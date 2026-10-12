@@ -14,6 +14,11 @@
 !deployment_transport.py
 !background_jobs.py
 !release_updates.py
+!notifications.py
+!notification_settings.py
+!notifications_app.py
+!notifications_routes.py
+!pushover.py
 !media_services.py
 !seerr.py
 !title_details.py

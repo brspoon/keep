@@ -62,9 +62,12 @@ class EmailMimeTests(unittest.TestCase):
                 self.assertIn('https://keep.example/auth/local/setup/synthetic-token', body)
 
     def test_digest_and_reminder_delivery_embed_the_same_logo(self):
-        item = dict(collection_id=1, collection='Movies', title='Example', year=2026,
+        item = dict(collection_id=1, media_id='synthetic-title', collection='Movies', title='Example', year=2026,
                     days=2, urgent=True)
-        tables = ('notification_queue', 'notification_reminders',
+        tables = ('notification_dispatches', 'notification_runs',
+                  'notification_destination_epochs', 'notification_cooldowns',
+                  'notification_operational_events', 'notification_transitions',
+                  'notification_queue', 'notification_reminders',
                   'notification_deliveries', 'notification_batches')
         for kind in ('MEDIA_ADDED_TO_COLLECTION', keep.REMINDER_KIND):
             with self.subTest(kind=kind):
@@ -80,7 +83,8 @@ class EmailMimeTests(unittest.TestCase):
                     self.assertEqual(keep.process_digest(now=2000), 'sent')
                 message = self.captured_message()
                 plain, body = self.assert_embedded_logo(message)
-                self.assertIn('Last chance · 2 days left', plain)
+                expected_deadline = 'Last chance · 2 days left' if kind == keep.REMINDER_KIND else '2 days left'
+                self.assertIn(expected_deadline, plain)
                 self.assertIn('Example', body)
                 self.assertEqual(message['Bcc'], 'viewer@example.test')
 
@@ -91,3 +95,14 @@ class EmailMimeTests(unittest.TestCase):
                          ['text/plain', 'text/html'])
         self.assertEqual(message.get_body(preferencelist=('plain',)).get_content().strip(), 'Test')
         self.assertEqual(message.get_body(preferencelist=('html',)).get_content().strip(), '<p>Test</p>')
+
+    def test_operational_notifications_embed_the_shared_logo_and_safe_text(self):
+        target = keep.notifications.Destination('email', 'viewer@example.test', 'generation', frozenset())
+        prepared = keep.notification_runtime().render_event(target,
+            {'kind': 'CONNECTION_FAILED', 'entity': 'plex'})
+        keep.send_notification_email(['viewer@example.test'], prepared.subject, prepared.html, prepared.text)
+        message = self.captured_message()
+        plain, body = self.assert_embedded_logo(message)
+        self.assertEqual(message['Subject'], 'Keep: Plex connection unavailable')
+        self.assertIn('Plex connection needs attention.', plain)
+        self.assertIn('https://keep.example', body)

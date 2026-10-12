@@ -11,13 +11,19 @@ class ReminderTests(unittest.TestCase):
 
     def setUp(self):
         with closing(keep.attribution_db()) as db, db:
-            for table in ('notification_queue', 'notification_reminders', 'notification_deliveries', 'notification_batches'):
+            for table in ('notification_dispatches', 'notification_runs',
+                          'notification_destination_epochs', 'notification_cooldowns',
+                          'notification_operational_events', 'notification_transitions',
+                          'notification_test_attempts', 'notification_email_events',
+                          'pushover_preferences', 'notification_provider_generations',
+                          'notification_queue', 'notification_reminders',
+                          'notification_deliveries', 'notification_batches'):
                 db.execute('DELETE FROM ' + table)
         self.items = {}
         self.settings = patch.object(keep, 'get_collections', return_value={1: 'Movies Leaving Plex Soon', 3: 'Shows Leaving Plex Soon'})
         self.current = patch.object(keep, 'digest_collection_items', side_effect=lambda cid: self.items.get(cid, {}))
         self.retention = patch.object(keep, 'get_collection_delete_after_days', return_value=30)
-        self.enabled = patch.object(keep, 'email_enabled', return_value=True)
+        self.enabled = patch.object(keep, 'notification_enabled_providers', return_value={'email'})
         for name in ('settings', 'current', 'retention', 'enabled'):
             patcher = getattr(self, name)
             setattr(self, name, patcher.start())
@@ -82,7 +88,7 @@ class ReminderTests(unittest.TestCase):
         self.assertEqual(keep.queue_due_reminders(self.now + 1000), 1)
         self.assertEqual(len(self.rows('notification_reminders')), 2)
 
-    def test_existing_review_batch_takes_precedence_and_still_blocks_sending(self):
+    def test_existing_review_batch_keeps_reminder_claim_without_replaying_uncertain_delivery(self):
         self.items = {1: {'movie': self.item(4)}}
         keep.queue_notifications(1, ['movie'], keep.REMINDER_KIND, self.now - 1000)
         with closing(keep.attribution_db()) as db, db:
@@ -94,6 +100,9 @@ class ReminderTests(unittest.TestCase):
         with patch.object(keep, 'send_email') as mail:
             self.assertEqual(keep.process_digest(self.now + 1000), 'review')
             mail.assert_not_called()
+        held = keep.notification_store(read_only=True).snapshot(batch_id='uncertain')
+        self.assertEqual([(row['destination_id'], row['state']) for row in held], [('legacy-held', 'review')])
+        self.assertEqual(len(self.rows('notification_reminders')), 1)
 
     def test_retention_failure_does_not_partially_enqueue_a_scan(self):
         self.items = {1: {'movie': self.item(4)}}
@@ -110,19 +119,27 @@ class ReminderTests(unittest.TestCase):
         mail.assert_not_called()
         self.assertEqual(len(self.rows()), 1)
 
-    def test_kept_removed_and_disabled_email_do_not_queue(self):
+    def test_kept_removed_and_disabled_providers_do_not_queue(self):
         self.assertEqual(keep.queue_due_reminders(self.now), 0)
         self.items = {1: {'movie': self.item(4)}}
-        self.enabled.return_value = False
+        self.enabled.return_value = set()
         self.assertEqual(keep.queue_due_reminders(self.now), 0)
         self.current.assert_called()  # Only the first, enabled empty scan accessed data.
         self.assertEqual(self.rows(), [])
+
+    def test_push_only_provider_still_queues_due_reminders_with_durable_claims(self):
+        self.enabled.return_value = {'pushover'}
+        self.items = {1: {'movie': self.item(4)}}
+        with patch.object(keep, 'email_enabled', return_value=False):
+            self.assertEqual(keep.queue_due_reminders(self.now), 1)
+        self.assertEqual(len(self.rows('notification_reminders')), 1)
+        self.assertEqual(self.rows()[0]['media_id'], 'movie')
 
     def test_warning_batch_send_retains_claim_and_cannot_resend(self):
         self.items = {1: {'movie': self.item(4)}}
         keep.queue_due_reminders(self.now)
         with patch.object(keep, 'get_recipient_delivery_preferences', return_value={'a@example.com': {1}}), \
-             patch.object(keep, 'connection_value', return_value='https://keep.example'), \
+             patch.object(keep, 'KEEP_URL', 'https://keep.example'), \
              patch.object(keep, 'send_email') as mail:
             self.assertEqual(keep.process_digest(self.now + 1000), 'sent')
             self.assertEqual(len(self.rows('notification_reminders')), 1)

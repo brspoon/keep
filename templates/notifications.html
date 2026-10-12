@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<meta name="theme-color" content="#f5a623"><meta name="referrer" content="same-origin">
+<title>Notifications · Keep Admin</title>
+{% include 'shared_brand_head.html' %}
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="admin-ui notifications-ui">
+{% include 'shared_whats_new.html' %}
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+{% include 'shared_header.html' %}
+<div class="page-heading"><h2>Notifications</h2></div>
+{% include 'shared_admin_tabs.html' %}
+{% if notice %}<div class="notice" id="settings-saved-notice" role="status">{{ notice }}</div>{% endif %}
+{% if settings_error %}<div class="settings-error" role="alert">{{ settings_error }}</div>{% endif %}
+<div class="notification-providers">
+  <section class="notification-panel" aria-labelledby="notification-email-title">
+    <div class="notification-heading"><h2 id="notification-email-title">Email</h2><span class="notification-state">{{ 'Enabled' if email_installation.enabled else 'Disabled' }}</span></div>
+    <form method="post" action="/settings/notifications/email" data-save-key="notification-email">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="notification-choice"><input type="checkbox" name="enabled" value="1" {% if email_installation.enabled %}checked{% endif %} {% if email_installation.managed %}disabled{% endif %}>Enable email notifications</label>
+      <p class="help">{{ 'SMTP configured in Connections.' if email_installation.configured else 'Set up SMTP in Connections.' }}{% if email_installation.managed %} Enabled setting is managed by the environment.{% endif %}</p>
+      <button class="notification-button save-button" type="submit" {% if email_installation.managed %}disabled{% endif %}>Save Email</button>
+    </form>
+    <form class="notification-test" method="post" action="/settings/notifications/test/email" data-notification-test>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="notification-button secondary" type="submit" {% if not email_installation.can_test %}disabled aria-describedby="notification-email-test-reason"{% endif %}>Send me a test</button>
+      {% if not email_installation.can_test and email_installation.test_reason %}<p class="help" id="notification-email-test-reason">{{ email_installation.test_reason }}</p>{% endif %}
+    </form>
+  </section>
+  <section class="notification-panel" aria-labelledby="notification-pushover-title">
+    <div class="notification-heading"><h2 id="notification-pushover-title">Pushover</h2><span class="notification-state">{{ 'Enabled' if pushover_installation.enabled else 'Disabled' }}</span></div>
+    {% if pushover_installation.configuration_error|default('') %}<p class="notification-provider-error" role="alert">{{ pushover_installation.configuration_error }}</p>{% endif %}
+    <form method="post" action="/settings/notifications/pushover" data-save-key="notification-pushover">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="notification-choice"><input type="checkbox" name="enabled" value="1" {% if pushover_installation.enabled %}checked{% endif %} {% if pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Enable Pushover notifications</label>
+      {% if pushover_installation.fields.PUSHOVER_ENABLED.managed %}<p class="help">Enabled setting is managed by the environment.</p>{% endif %}
+      <div class="notification-secret" data-secret-control>
+        <label for="notification-app-token-mode">App token</label>
+        <select id="notification-app-token-mode" name="token_mode" data-secret-mode {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed %}disabled{% endif %}>
+          {% if pushover_installation.configured %}<option value="keep">Keep saved token</option>{% endif %}
+          <option value="replace">{{ 'Replace token' if pushover_installation.configured else 'Add token' }}</option>
+          {% if pushover_installation.configured %}<option value="clear">Remove token</option>{% endif %}
+        </select>
+        <div data-secret-replacement>
+          <label for="notification-app-token">New app token</label>
+          <input id="notification-app-token" name="app_token" type="password" maxlength="30" autocomplete="new-password" spellcheck="false" {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed %}disabled{% endif %}>
+        </div>
+        {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed %}<p class="help">App token is managed by the environment.</p>{% endif %}
+      </div>
+      <button class="notification-button save-button" type="submit" {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed and pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Save Pushover</button>
+    </form>
+    {% set push_can_test = owner_push.can_test|default(owner_push.configured and pushover_installation.ready) %}
+    <form class="notification-test" method="post" action="/settings/notifications/test/pushover" data-notification-test>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="notification-button secondary" type="submit" {% if not push_can_test %}disabled aria-describedby="notification-pushover-test-reason"{% endif %}>Send me a test</button>
+      {% if not push_can_test %}<p class="help" id="notification-pushover-test-reason">{{ owner_push.test_reason|default('Add your user key in Preferences and enable Pushover above.', true) }}</p>{% endif %}
+    </form>
+  </section>
+</div>
+{% include 'notification_email_recipients.html' %}
+<section class="notification-panel notification-deliveries" aria-labelledby="notification-deliveries-title">
+  <div class="notification-heading"><h2 id="notification-deliveries-title">Recent deliveries</h2></div>
+  {% for delivery in delivery_rows %}
+  <article class="notification-delivery">
+    <div class="notification-delivery-main"><div class="notification-delivery-title"><strong>{{ delivery.event_label }}</strong><span class="notification-delivery-state tone-{{ delivery.tone }}">{{ 'Delivery needs review' if delivery.review_needed else delivery.label }}</span></div>
+      <p>{{ 'Pushover' if delivery.provider == 'pushover' else 'Email' }} · {{ delivery.destination }}</p><time>{{ delivery.when }}</time>
+    </div>
+    {% if delivery.review_needed %}
+    <form class="notification-review" method="post" action="/settings/notifications/review" data-delivery-review>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="batch_id" value="{{ delivery.batch_id }}">
+      <input type="hidden" name="provider" value="{{ delivery.provider }}">
+      <input type="hidden" name="destination_id" value="{{ delivery.destination_id }}">
+      <input type="hidden" name="request_id" value="{{ delivery.request_id }}">
+      {% if delivery.can_retry %}<label class="notification-review-confirm"><input type="checkbox" name="confirm_duplicate" value="1" data-review-confirm>Resending may deliver a duplicate.</label>{% endif %}
+      <div class="notification-actions"><button class="notification-button secondary" name="action" value="discard" type="submit">Discard</button>{% if delivery.can_retry %}<button class="notification-button secondary" name="action" value="retry" type="submit" data-review-retry>Resend</button>{% endif %}</div>
+      <p class="notification-review-error" role="alert" hidden>Confirm the possible duplicate before resending.</p>
+    </form>
+    {% endif %}
+  </article>
+  {% else %}<p class="help">No deliveries yet.</p>{% endfor %}
+</section>
+</main>
+</body></html>

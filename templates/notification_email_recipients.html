@@ -1,0 +1,59 @@
+    {% include 'admin_toolbar.html' %}
+    <details class="panel creation-panel" hidden>
+        <summary><span>Add email recipient</span><svg class="creation-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+        <div class="creation-content"><p class="help">New recipients follow all collections.</p>
+        <form class="add-form" method="post" action="/settings/recipients">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="add">
+            <input type="email" name="email" maxlength="254" required placeholder="name@example.com" aria-label="New recipient email" value="{{ new_recipient_email }}">
+            <button type="submit">Add recipient</button>
+        </form>
+        </div>
+    </details>
+    <div class="summary">
+        <div class="stat"><div class="eyebrow">Active recipients</div><div class="stat-value">{{ active_recipients }}</div></div>
+        <div class="stat"><div class="eyebrow">Queued titles</div><div class="stat-value">{{ pending }}</div></div>
+        <div class="stat"><div class="eyebrow">Next digest</div><div class="stat-value">{{ due_text }}</div></div>
+    </div>
+    {% if held %}<div class="notification-held" role="status">{{ held }} email {{ 'delivery needs' if held == 1 else 'deliveries need' }} review.</div>{% endif %}
+    <section class="panel admin-card-list">
+        <div class="panel-head"><div><h2>Email recipients</h2></div></div>
+        {% for recipient in recipients %}
+        {% set recipient_expanded = recipient.email == settings_error_email or recipient.email == expanded_recipient %}
+        {% set recipient_label = (recipient.names|join(', ') ~ ' (' ~ recipient.email ~ ')') if recipient.names else recipient.email %}
+        <div class="recipient-row" data-search-text="{{ recipient.search_text }}">
+                        <button type="button" class="admin-card-header" data-user-toggle data-edit-name="{{ recipient_label }}" aria-expanded="{{ 'true' if recipient_expanded else 'false' }}" aria-controls="recipient-editor-{{ loop.index }}" aria-label="{{ 'Close settings for' if recipient_expanded else 'Edit' }} {{ recipient_label }}">
+            <span>{% if recipient.names %}<span class="recipient-name">{{ recipient.names|join(', ') }}</span>{% endif %}<span class="recipient-address">{{ recipient.email }}</span>
+                <span class="status{% if recipient.enabled %} on{% endif %}">{{ "Enabled" if recipient.enabled else "Disabled" }} · {{ recipient.subscriptions|length }} topics</span></span>
+            <span class="visually-hidden" data-edit-label>{{ 'Close' if recipient_expanded else 'Edit' }}</span>{% include "admin_chevron.html" %}</button>
+            <div class="user-editor" id="recipient-editor-{{ loop.index }}" {% if not recipient_expanded %}hidden{% endif %}>
+            <form data-save-key="recipient-{{ loop.index }}" class="subscriptions{% if not recipient.enabled %} disabled{% endif %}{% if settings_error_email == recipient.email %} invalid{% endif %}" method="post" action="/settings/recipients/preferences" novalidate
+                {% if not recipient.enabled %}aria-disabled="true"{% endif %}>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="email" value="{{ recipient.email }}">
+                {% for collection_id, collection_name in collections.items() %}
+                <label class="subscription"><input type="checkbox" name="collection_id" value="{{ collection_id }}"
+                    {% if collection_id in recipient.subscriptions %}checked{% endif %}{% if not recipient.enabled %} disabled{% endif %}>
+                    {{ collection_name.replace(" Leaving Plex Soon", "") }}</label>
+                {% endfor %}
+                <button class="save-button" type="submit"{% if not recipient.enabled %} disabled{% endif %}>Save</button>
+                <p class="subscription-error" role="alert" aria-live="polite">Choose at least one email topic.</p>
+            </form>
+            <div class="recipient-actions">
+                <form method="post" action="/settings/recipients">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="email" value="{{ recipient.email }}">
+                    <input type="hidden" name="action" value="{{ 'disable' if recipient.enabled else 'enable' }}">
+                    <button class="secondary" type="submit">{{ "Disable" if recipient.enabled else "Enable" }}</button>
+                </form>
+                <form method="post" action="/settings/recipients">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="email" value="{{ recipient.email }}">
+                    <input type="hidden" name="action" value="remove">
+                    <button class="danger" type="submit">Remove</button>
+                </form>
+            </div>
+            </div>
+        </div>
+        {% else %}<p class="help">No email recipients.</p>{% endfor %}
+    </section>
