@@ -2646,8 +2646,6 @@ def home():
                         {% endif %}
                     </h2>
                     <span class="count">{{ collection["items"]|length }}</span>
-                    {% set alphabet_name = collection.name|replace(" Leaving Plex Soon", " Kept") if is_kept_view else collection.name %}
-                    {% include 'shared_alphabet_nav.html' %}
                 </div>
 
                 {% if collection["items"] %}

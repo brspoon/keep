@@ -2,7 +2,7 @@
 
 ## 2.25.0 — 2026-10-11
 
-- Add letter navigation to Manage Library, Leaving, and Kept, with desktop and mobile controls that follow searches and filters.
+- Add letter navigation to Manage Library, Leaving, and Kept, with a desktop side index and a mobile drag handle that follow searches and filters.
 
 ## 2.24.0 — 2026-10-11
 
