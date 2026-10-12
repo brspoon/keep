@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<meta name="theme-color" content="#f5a623"><meta name="referrer" content="same-origin">
+<title>About · Keep Admin</title>
+{% include 'shared_brand_head.html' %}
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-about.css?v={{ app_version }}">
+<script defer src="/static/keep-about.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="admin-ui about-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+{% include 'shared_header.html' %}
+<div class="page-heading"><h2>About</h2></div>
+{% include 'shared_admin_tabs.html' %}
+{% set busy = about_snapshot.check_state in ('queued', 'running') %}
+{% set feedback = error or notice or (about_snapshot.message if about_snapshot.status in ('failed', 'rate_limited') else '') %}
+<p id="about-feedback" class="about-feedback{% if error or about_snapshot.status in ('failed', 'rate_limited') %} is-error{% endif %}" role="status" aria-live="polite" aria-atomic="true" {% if not feedback %}hidden{% endif %}>{{ feedback }}</p>
+<section class="about-panel" aria-labelledby="about-version-title">
+  <div class="about-section-heading"><h2 id="about-version-title">Version</h2>
+    {% if owner %}<form id="about-check-form" method="post" action="/settings/about/check" aria-busy="{{ 'true' if busy else 'false' }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="about-button" type="submit" id="about-check" aria-describedby="about-check-reason" {% if busy or not about_snapshot.can_check or not about_snapshot.worker_available %}disabled{% endif %}>{{ 'Queued' if about_snapshot.check_state == 'queued' else 'Checking…' if about_snapshot.check_state == 'running' else 'Check for updates' }}</button>
+    </form>{% endif %}
+  </div>
+  <dl class="about-version-details">
+    <div><dt>Installed</dt><dd id="about-installed">{{ about_snapshot.installed_version }}</dd></div>
+    <div><dt>Latest stable</dt><dd><strong id="about-latest">{{ about_snapshot.latest_version or 'Not checked' }}</strong><span id="about-comparison" class="about-badge" {% if about_snapshot.comparison == 'unknown' and not about_snapshot.latest_version %}hidden{% endif %}>{{ 'Last known' if about_snapshot.stale and about_snapshot.latest_version else 'Update available' if about_snapshot.comparison == 'update_available' else 'Up to date' if about_snapshot.comparison == 'up_to_date' else 'Ahead of latest stable' if about_snapshot.comparison == 'ahead' else '' }}</span></dd></div>
+    <div><dt>Last check</dt><dd><span id="about-last-check">{% if about_snapshot.last_attempt_at %}<time datetime="{{ about_snapshot.last_attempt_at }}">{{ about_snapshot.last_attempt_at }}</time>{% else %}Not checked{% endif %}</span><span id="about-check-state" class="about-badge">{{ 'Queued' if about_snapshot.check_state == 'queued' else 'Checking' if about_snapshot.check_state == 'running' else 'Failed' if about_snapshot.status == 'failed' else 'Rate limited' if about_snapshot.status == 'rate_limited' else 'Checked' if about_snapshot.status == 'success' else 'Not checked' }}</span></dd></div>
+  </dl>
+  <p id="about-check-reason" class="about-check-reason" {% if not about_snapshot.reason or (busy and about_snapshot.worker_available) %}hidden{% endif %}>{{ about_snapshot.reason or '' }}</p>
+  <button id="about-refresh" class="about-button secondary" type="button" hidden>Refresh status</button>
+</section>
+<section class="about-panel" aria-labelledby="about-releases-title">
+  <div class="about-section-heading"><h2 id="about-releases-title">Recent releases</h2></div>
+  <p id="about-releases-empty" class="about-empty" {% if about_snapshot.releases %}hidden{% endif %}>No releases checked yet.</p>
+  <div id="about-releases" class="about-release-list">
+    {% for release in about_snapshot.releases %}<article class="about-release">
+      <div class="about-release-main"><div class="about-release-title"><h3>{{ release.version }}</h3>{% if release.version == about_snapshot.installed_version %}<span class="about-badge">Current</span>{% endif %}{% if release.tag == about_snapshot.latest_tag %}<span class="about-badge">{{ 'Last known' if about_snapshot.stale else 'Latest' }}</span>{% endif %}</div><time datetime="{{ release.published_at }}">{{ release.published_at }}</time></div>
+      <a class="about-link secondary" href="{{ release.url }}" target="_blank" rel="noopener noreferrer">View changelog<span class="visually-hidden"> for {{ release.version }} (opens a new tab)</span></a>
+    </article>{% endfor %}
+  </div>
+</section>
+<section class="about-panel" aria-labelledby="about-resources-title">
+  <div class="about-section-heading"><h2 id="about-resources-title">Project</h2></div>
+  <nav class="about-resources" aria-label="Keep resources">
+    {% for label, path in [('GitHub', 'https://github.com/brspoon/keep'), ('Documentation', 'https://github.com/brspoon/keep/blob/main/docs/README.md'), ('Report an issue', 'https://github.com/brspoon/keep/issues'), ('License', '/settings/about/notices/license'), ('Third-party notices', '/settings/about/notices/third-party')] %}<a class="about-link secondary" href="{{ path }}" target="_blank" rel="noopener noreferrer">{{ label }}<span class="visually-hidden"> (opens a new tab)</span></a>{% endfor %}
+  </nav>
+</section>
+<section class="about-panel" aria-labelledby="about-diagnostics-title">
+  <div class="about-section-heading"><h2 id="about-diagnostics-title">Diagnostics</h2><button id="about-copy" class="about-button secondary" type="button">Copy diagnostics</button></div>
+  <p id="about-copy-feedback" class="about-copy-feedback" role="status" aria-live="polite" hidden></p>
+  <details id="about-diagnostics-details"><summary>View diagnostics</summary><textarea id="about-diagnostics" aria-label="Keep diagnostics" rows="10" readonly spellcheck="false">{{ diagnostics }}</textarea></details>
+</section>
+<script type="application/json" id="about-snapshot">{{ about_snapshot|tojson }}</script>
+</main>
+</body></html>

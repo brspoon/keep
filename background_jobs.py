@@ -15,11 +15,13 @@ import time
 import uuid
 
 from connection_settings import AUTO_INTERVALS
+import release_updates
 import seerr
 
 
 JOBS = (
     ('onboarding-cleanup', 'Setup cleanup', 'Remove expired setup codes and Plex sign-in attempts.'),
+    ('release-check', 'Release checks', 'Check published stable releases of Keep.'),
     ('plex-access-sync', 'Plex account access', 'Refresh server access for Plex accounts.'),
     ('keep-expiry', 'Temporary Keeps', 'Release expired Keep protection.'),
     ('reminder-scan', 'Leaving reminders', 'Find titles eligible for a seven-day reminder.'),
@@ -35,6 +37,8 @@ RESULT_MESSAGES = frozenset((
     'Completed', 'No changes', 'Waiting for queued work', 'Delivery needs review',
     'Connection unavailable', 'Some Keeps will be retried', 'Email is disabled',
     'Waiting for the next scheduled check', 'Result unavailable',
+    'Release information checked', 'Release check unavailable', 'Release check rate limited',
+    'Waiting for the next release check',
 ))
 COUNT_RESULT = re.compile(
     r'(?:Checked|Removed|Released|Queued|Updated|Processed) [0-9]{1,12} '
@@ -490,8 +494,11 @@ class Store:
         maintainerr = bool(getter('MAINTAINERR_URL'))
         intervals = {job_id: 30 for job_id in JOB_IDS}
         intervals.update({'plex-access-sync': plex_interval, 'reminder-scan': reminder_interval,
-                          'seerr-history': seerr.REFRESH_INTERVAL})
+                          'seerr-history': seerr.REFRESH_INTERVAL,
+                          'release-check': release_updates.CHECK_INTERVAL})
         intervals = {job_id: self.interval(job_id, seconds, read_only=read_only) for job_id, seconds in intervals.items()}
+        intervals['release-check'] = release_updates.CHECK_INTERVAL
+        releases = release_updates.Store(self.path, initialize=False).snapshot('', now=now)
         job_rows = []
         for job_id, title, description in JOBS:
             record = records.get(job_id)
@@ -529,6 +536,13 @@ class Store:
             cache = (db.execute('SELECT updated,failed FROM seerr_cache WHERE scope=?', (scope,)).fetchone()
                      if 'seerr_cache' in tables else None)
         for row in job_rows:
+            if row['id'] == 'release-check':
+                row['next_run'] = releases['next_attempt_at']
+                row['last_success'] = releases['last_success_at']
+                if available and row['status'] != 'running' and releases['status'] in ('failed', 'rate_limited'):
+                    limited = releases['status'] == 'rate_limited'
+                    row.update(status='failed', label='Rate limited' if limited else 'Retrying',
+                               result='Release check rate limited' if limited else 'Release check unavailable')
             if configured['seerr'] and row['id'] == 'seerr-history':
                 if history:
                     row['next_run'] = timestamp(history['next_attempt'])
@@ -605,6 +619,9 @@ class Store:
                                     'Jobs are temporarily unavailable' if not available else None)
             if queued and not disabled and not running:
                 row.update(status='queued', label='Queued')
+            if row['id'] == 'release-check' and not queued and not running and not releases['can_check']:
+                row.update(can_run=False, action_reason='GitHub release checks are temporarily rate limited.'
+                           if releases['status'] == 'rate_limited' else 'Wait briefly before checking again.')
         return {'worker': worker, 'jobs': job_rows}
 
     @staticmethod

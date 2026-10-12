@@ -167,7 +167,9 @@ class PortableTrialStateTests(unittest.TestCase):
                 with patch.object(app.requests, 'get', side_effect=blocked), \\
                      patch.object(app.requests, 'post', side_effect=blocked), \\
                      patch.object(app.requests, 'delete', side_effect=blocked), \\
+                     patch.object(app.release_updates.requests, 'Session') as release_session, \\
                      redirect_stdout(io.StringIO()):
+                    release_session.return_value.__enter__.return_value.get.side_effect = blocked
                     fixture.seed(app)
                     fixture.verify(app)
                     before = io.StringIO()

@@ -176,6 +176,13 @@ class MaintenanceObservationTests(TestCase):
         store_patch = patch.object(keep, 'job_store', return_value=self.store)
         store_patch.start()
         self.addCleanup(store_patch.stop)
+        self.updates = keep.release_updates.Store(self.store.path)
+        update_patch = patch.object(keep, 'release_store', return_value=self.updates)
+        update_patch.start()
+        self.addCleanup(update_patch.stop)
+        due_patch = patch.object(self.updates, 'due', return_value=False)
+        self.release_due = due_patch.start()
+        self.addCleanup(due_patch.stop)
         self.state = {'plex_sync': 0, 'reminder_scan': None}
         self.callbacks = {}
         for name, result in (
@@ -220,6 +227,30 @@ class MaintenanceObservationTests(TestCase):
         self.callbacks['queue_due_reminders'].side_effect = None
         keep.background_maintenance_once(self.state)
         self.assertEqual(self.callbacks['queue_due_reminders'].call_count, 2)
+
+    def test_release_check_runs_in_worker_even_with_email_disabled(self):
+        self.release_due.return_value = True
+        with patch.object(self.updates, 'check', return_value={'status': 'success', 'latest_version': '2.24.0'}) as check, \
+             patch.object(keep, 'EMAIL_ENABLED', 'false'):
+            keep.background_maintenance_once(self.state)
+        check.assert_called_once_with(force=False)
+        self.assertEqual(self.store.records()['release-check']['status'], 'success')
+        self.assertEqual(self.store.records()['release-check']['result'], 'Release information checked')
+
+    def test_release_storage_failure_does_not_block_existing_worker_jobs(self):
+        self.release_due.return_value = True
+        with patch.object(self.updates, 'check', side_effect=RuntimeError('private upstream body')):
+            keep.background_maintenance_once(self.state)
+        self.assertEqual(self.store.records()['release-check']['status'], 'failed')
+        self.assertNotIn('private upstream', str(self.store.records()))
+        self.callbacks['process_digest'].assert_called_once_with()
+
+    def test_release_initialization_and_due_read_failure_do_not_block_existing_jobs(self):
+        for target, name in ((keep, 'release_store'), (self.updates, 'due')):
+            with self.subTest(name=name), patch.object(target, name, side_effect=keep.sqlite3.OperationalError('private storage path')):
+                keep.background_maintenance_once(self.state)
+        self.assertEqual(self.callbacks['process_digest'].call_count, 2)
+        self.assertEqual(self.callbacks['expire_due_keeps'].call_count, 2)
 
     def test_partial_expiry_access_failure_and_held_email_are_not_success(self):
         self.callbacks['sync_plex_user_access'].return_value = None

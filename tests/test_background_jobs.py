@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import background_jobs
 import connection_monitor
 from connection_settings import ConnectionSettings
+import release_updates
 import seerr
 
 
@@ -151,7 +152,7 @@ class BackgroundJobTests(unittest.TestCase):
     def test_new_install_has_no_invented_last_run_or_seerr_schedule(self):
         self.alive()
         snapshot = self.snapshot()
-        self.assertEqual(len(snapshot['jobs']), 16)
+        self.assertEqual(len(snapshot['jobs']), len(background_jobs.JOB_IDS))
         self.assertTrue(snapshot['worker']['available'])
         self.assertEqual(self.row('keep-expiry')['label'], 'Not run yet')
         self.assertIsNone(self.row('keep-expiry')['last_run'])
@@ -259,6 +260,41 @@ class BackgroundJobTests(unittest.TestCase):
                 self.store.interval('keep-expiry', 30, read_only=True)
             with self.assertRaises(sqlite3.OperationalError):
                 self.store.pending(read_only=True)
+
+    def test_release_check_has_fixed_schedule_and_records_unsuccessful_results(self):
+        self.alive()
+        checker = release_updates.Store(self.path)
+        with patch.object(release_updates.requests, 'Session') as session:
+            session.return_value.__enter__.return_value.get.side_effect = release_updates.requests.ConnectionError('private token')
+            with patch.object(background_jobs.time, 'time', return_value=100):
+                result = self.store.run('release-check', lambda: checker.check(now=100),
+                                        interval=release_updates.CHECK_INTERVAL,
+                                        result_fn=release_updates.job_result)
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(self.store.records()['release-check']['status'], 'failed')
+        self.assertIsNone(self.store.records()['release-check']['last_success'])
+        row = self.row('release-check')
+        self.assertEqual(row['interval'], 21600)
+        self.assertFalse(row['editable'])
+        self.assertEqual(row['next_run'], background_jobs.timestamp(1000).replace('+00:00', 'Z'))
+        self.assertEqual(row['result'], 'Release check unavailable')
+        self.assertFalse(row['can_run'])
+        self.assertNotIn('private token', str(row))
+        with self.assertRaises(ValueError):
+            self.store.set_interval('release-check', 300)
+
+    def test_release_snapshot_reads_without_initialization_or_network(self):
+        self.alive()
+        with patch.object(release_updates.Store, '_initialize', side_effect=AssertionError('Read created schema')), \
+             patch.object(release_updates.requests, 'Session', side_effect=AssertionError('Read made HTTP')):
+            snapshot = self.store.snapshot(self.settings.get, self.connections,
+                                           heartbeat_path=self.heartbeat, now=100, read_only=True)
+        row = next(row for row in snapshot['jobs'] if row['id'] == 'release-check')
+        self.assertEqual(row['status'], 'waiting')
+        self.assertEqual(row['interval'], 21600)
+        self.assertIsNone(row['next_run'])
+        with sqlite3.connect(self.path) as db:
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='release_checks'").fetchone())
 
     def test_stopped_worker_marks_unfinished_run_interrupted(self):
         self.store._start('keep-expiry', 'interrupted', 1)

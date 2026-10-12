@@ -15,6 +15,7 @@ import artwork_cache
 import seerr
 import connection_monitor
 import background_jobs
+import release_updates
 import email_templates
 import api_v1
 MASKED_CONNECTION_FIELDS = SECRETS + ("PLEX_MACHINE_IDENTIFIER",)
@@ -31,6 +32,7 @@ import json
 import sqlite3
 import time
 import sys
+import platform
 import uuid
 import html
 import re
@@ -4477,6 +4479,127 @@ def settings_jobs():
     return response
 
 
+def about_snapshot():
+    """Read recorded release and worker state without starting network work."""
+    snapshot = release_updates.Store(KEEP_DB_PATH, initialize=False).snapshot(APP_VERSION)
+    jobs = jobs_snapshot(read_only=True)
+    row = next((row for row in jobs['jobs'] if row['id'] == 'release-check'), None)
+    queued = bool(row and row['queued'])
+    running = bool(row and row['status'] == 'running')
+    available = jobs['worker']['available']
+    reason = ('A check is running.' if running else 'A check is already queued.' if queued else
+              'The background worker is unavailable.' if not available else
+              'GitHub release checks are temporarily rate limited.' if not snapshot['can_check'] and snapshot['status'] == 'rate_limited' else
+              'Wait briefly before checking again.' if not snapshot['can_check'] else '')
+    snapshot.update(check_state='running' if running else 'queued' if queued else 'idle',
+                    can_check=bool(snapshot['can_check'] and available and not queued and not running),
+                    reason=reason, worker_available=available)
+    for release in snapshot['releases']:
+        release.update(is_current=release['version'] == APP_VERSION,
+                       is_latest=release['version'] == snapshot['latest_version'])
+    return snapshot
+
+
+def about_diagnostics(snapshot):
+    """Public support facts only; never export environment or raw connection data."""
+    jobs = jobs_snapshot(read_only=True)
+    safe_statuses = {'success', 'failed', 'waiting', 'running', 'queued', 'disabled', 'stale', 'review'}
+    observed = {row['id']: row['status'] if row['status'] in safe_statuses else 'unknown'
+                for row in jobs['jobs']}
+    details = {
+        'keep_version': APP_VERSION,
+        'latest_stable_version': snapshot['latest_version'],
+        'release_check': {key: snapshot[key] for key in
+                          ('status', 'last_attempt_at', 'last_success_at', 'stale')},
+        'python_version': '.'.join(map(str, sys.version_info[:3])),
+        'platform': platform.system(),
+        'architecture': platform.machine(),
+        'worker': {'available': jobs['worker']['available'],
+                   'last_heartbeat': jobs['worker']['checked_at']},
+        'connections': {service: {
+            'configured': bool(connection_settings.configured(service, connection_value)),
+            'status': observed.get('probe-' + service,
+                                   observed.get('seerr-history', 'unknown') if service == 'seerr' else 'unknown'),
+        } for service in (*dict(background_jobs.PROBES), 'seerr')},
+    }
+    return json.dumps(details, indent=2)
+
+
+@app.get('/settings/about')
+def settings_about():
+    denied = require_owner()
+    if denied:
+        return denied
+    snapshot = about_snapshot()
+    response = app.make_response(render_template('about.html', about_snapshot=snapshot,
+        diagnostics=about_diagnostics(snapshot), notice=session.pop('about_notice', None),
+        error=session.pop('about_error', None)))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.get('/settings/about/status')
+def settings_about_status():
+    denied = require_owner()
+    if denied:
+        return denied
+    snapshot = about_snapshot()
+    response = jsonify(snapshot=snapshot, diagnostics=about_diagnostics(snapshot))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+def about_action_response(message, status=200, snapshot=None):
+    if request.accept_mimetypes.best == 'application/json':
+        if snapshot is None:
+            try:
+                snapshot = about_snapshot()
+            except (sqlite3.Error, OSError):
+                snapshot = None
+        response = jsonify({('error' if status >= 400 else 'message'): message,
+                            'snapshot': snapshot})
+        response.status_code = status
+    else:
+        session['about_error' if status >= 400 else 'about_notice'] = message
+        response = redirect(url_for('settings_about'), code=303)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.post('/settings/about/check')
+def settings_about_check():
+    denied = require_owner()
+    if denied:
+        return denied
+    if require_form_csrf():
+        return about_action_response('Your session changed. Refresh the page and try again.', 403)
+    try:
+        snapshot = about_snapshot()
+        if snapshot['check_state'] == 'queued':
+            return about_action_response('An update check is already queued.', 202, snapshot)
+        if not snapshot['can_check']:
+            return about_action_response(snapshot['reason'] or 'A check cannot run right now.', 409, snapshot)
+        job_store().request_run('release-check')
+    except (sqlite3.Error, OSError):
+        return about_action_response('Keep could not queue the check. Try again shortly.', 503)
+    log_activity('job-requested', 'Queued update check')
+    return about_action_response('Update check queued.', 202)
+
+
+@app.get('/settings/about/notices/<document>')
+def settings_about_notice(document):
+    denied = require_owner()
+    if denied:
+        return denied
+    name = {'license': 'LICENSE', 'third-party': 'THIRD_PARTY.md'}.get(document)
+    if name is None:
+        return branded_error_page(404)
+    response = app.response_class((Path(__file__).resolve().parent / name).read_text(),
+                                  mimetype='text/plain')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 def jobs_snapshot(*, read_only=False):
     store = background_jobs.Store(KEEP_DB_PATH, logger=app.logger, initialize=False) if read_only else job_store()
     return store.snapshot(connection_value, connection_settings,
@@ -5616,9 +5739,26 @@ def job_store():
     return store
 
 
+def release_store():
+    store = app.extensions.get('keep_release_updates')
+    if store is None or store.path != Path(KEEP_DB_PATH):
+        store = release_updates.Store(KEEP_DB_PATH)
+        app.extensions['keep_release_updates'] = store
+    return store
+
+
 def background_maintenance_once(state):
     """One existing worker pass, with durable, credential-free job results."""
     jobs = job_store()
+    try:
+        updates = release_store()
+        requested = jobs.requested('release-check', first_attempt=True)
+        if updates.due(force=requested):
+            run_maintenance_job(jobs, 'release-check', lambda: updates.check(force=requested),
+                                interval=release_updates.CHECK_INTERVAL,
+                                result_fn=release_updates.job_result)
+    except (sqlite3.Error, OSError):
+        app.logger.warning('Release check deferred; continuing scheduled maintenance')
     run_maintenance_job(jobs, 'onboarding-cleanup', onboarding.cleanup)
     _settings_snapshot.set(connection_settings.snapshot())
     plex_interval = jobs.interval('plex-access-sync', PLEX_ACCESS_SYNC_SECONDS)

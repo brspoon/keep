@@ -253,7 +253,8 @@ class ApiV1Tests(unittest.TestCase):
         for path in ('/settings/api-keys', '/settings/api-reference'):
             owner_page = self.client.get(path).get_data(as_text=True)
             owner_nav = re.search(r'<nav class="admin-nav".*?</nav>', owner_page, re.S).group(0)
-            self.assertEqual(len(re.findall(r'<a\s', owner_nav)), 7)
+            self.assertEqual(len(re.findall(r'<a\s', owner_nav)), 8)
+            self.assertIn('href="/settings/about"', owner_nav)
             self.assertIn('href="/settings/jobs"', owner_nav)
             owner_menu = re.search(r'<div class="user-links".*?</div>', owner_page, re.S).group(0)
             self.assertNotIn('/settings/api-keys', owner_menu)
@@ -1166,6 +1167,14 @@ class ApiV1Tests(unittest.TestCase):
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(set(updated.json), set(response_schema['properties']))
         self.assertEqual(set(updated.json['data']), set(keep_item_schema['properties']))
+
+    def test_openapi_status_job_catalog_matches_current_jobs(self):
+        from pathlib import Path
+        schemas = json.loads(Path('static/openapi.json').read_text())['components']['schemas']
+        identifiers = schemas['JobStatus']['properties']['id']['enum']
+        self.assertEqual(set(identifiers), keep.background_jobs.JOB_IDS)
+        self.assertEqual(len(identifiers), len(set(identifiers)))
+        self.assertEqual(schemas['Status']['properties']['jobs']['maxItems'], len(identifiers))
 
     def test_openapi_exact_media_and_status_schemas_match_live_payloads(self):
         from pathlib import Path

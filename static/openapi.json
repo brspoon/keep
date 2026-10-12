@@ -1626,6 +1626,7 @@
               "seerr-availability",
               "seerr-history",
               "connection-monitor",
+              "release-check",
               "probe-plex",
               "probe-maintainerr",
               "probe-radarr",
@@ -1728,7 +1729,7 @@
           },
           "jobs": {
             "type": "array",
-            "maxItems": 16,
+            "maxItems": 17,
             "items": {
               "$ref": "#/components/schemas/JobStatus"
             },
