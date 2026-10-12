@@ -28,7 +28,7 @@ INSPECT_CONTAINER = ('{"Id":{{json .Id}},"Image":{{json .Image}},"Source":{{json
     '"Manifest":{{json .ImageManifestDescriptor}},"Labels":{{json .Config.Labels}},'
     '"Mounts":{{json .Mounts}},"State":{"Running":{{json .State.Running}},'
     '"Restarting":{{json .State.Restarting}},"Status":{{json .State.Status}},'
-    '"Health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}},'
+    '"Health":{{with index .State "Health"}}{{json .Status}}{{else}}null{{end}}},'
     '"Guard":{"ReadonlyRootfs":{{json .HostConfig.ReadonlyRootfs}},'
     '"Privileged":{{json .HostConfig.Privileged}},"CapDrop":{{json .HostConfig.CapDrop}},'
     '"SecurityOpt":{{json .HostConfig.SecurityOpt}}}}')

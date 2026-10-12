@@ -10,13 +10,15 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from docker_adapter import PosixDockerAdapter, env_image
+from docker_adapter import INSPECT_CONTAINER, INSPECT_HELPER, PosixDockerAdapter, env_image
 from host_engine import BoundedRunner, EngineError, HostEngine, Plan
 from maintenance_protocol import canonical, parse_json, signed, verify, verify_request
 from private_store import Journal
@@ -24,6 +26,89 @@ from release_resolver import HTTPSClient, OfficialReleaseResolver
 from test_drafts import DraftFixture, image, request
 import test_drafts
 import volume_worker
+
+
+class InspectFormatterTests(unittest.TestCase):
+    """Exercise Docker's raw-JSON fallback with the real Go template engine.
+
+    Docker uses missingkey=error for this fallback. Python-only environments
+    rely on the native Docker trial for this check; no toolchain is downloaded.
+    """
+    @classmethod
+    def setUpClass(cls):
+        go=shutil.which('go')
+        if go is None:raise unittest.SkipTest('Go is unavailable; native Docker trial covers inspect formatting')
+        temporary=tempfile.TemporaryDirectory(prefix='keep-inspect-format-')
+        cls.addClassCleanup(temporary.cleanup)
+        root=Path(temporary.name);cls.binary=root/'inspect-template'
+        source=root/'main.go'
+        source.write_text('''package main
+import ("bytes"; "encoding/json"; "os"; "text/template")
+func main() {
+    var input struct { Format string; Records []map[string]interface{} }
+    if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil { panic(err) }
+    format, err := template.New("inspect").Option("missingkey=error").Funcs(template.FuncMap{
+        "json": func(value interface{}) (string, error) { body, err := json.Marshal(value); return string(body), err },
+    }).Parse(input.Format)
+    if err != nil { panic(err) }
+    results := []map[string]string{}
+    for _, record := range input.Records {
+        var output bytes.Buffer
+        result := map[string]string{}
+        if err := format.Execute(&output, record); err != nil { result["error"] = err.Error() } else { result["text"] = output.String() }
+        results = append(results, result)
+    }
+    if err := json.NewEncoder(os.Stdout).Encode(results); err != nil { panic(err) }
+}
+''')
+        environment={**os.environ,'GOTOOLCHAIN':'local','GOPROXY':'off','GOSUMDB':'off',
+                     'GO111MODULE':'off','GOWORK':'off','GOCACHE':str(root/'cache')}
+        subprocess.run([go,'build','-o',str(cls.binary),str(source)],check=True,
+                       capture_output=True,env=environment,timeout=90)
+
+    def render(self,formatter,records):
+        result=subprocess.run([str(self.binary)],input=canonical({'Format':formatter,'Records':records}),
+                              check=True,capture_output=True,timeout=5)
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def raw_container():
+        return {'Id':'1'*64,'Image':'sha256:'+'2'*64,'ImageManifestDescriptor':None,
+                'Config':{'Image':'brspoon/keep:2.26.0','Labels':{},'Cmd':['-B','-c','fixed helper'],
+                          'Entrypoint':['python'],'User':'10001:10001'},
+                'Mounts':[],'State':{'Running':False,'Restarting':False,'Status':'created'},
+                'HostConfig':{'ReadonlyRootfs':True,'Privileged':False,'CapDrop':['ALL'],
+                              'SecurityOpt':['no-new-privileges:true'],'NetworkMode':'none'}}
+
+    def test_absent_and_null_health_render_for_created_utilities(self):
+        absent=self.raw_container();null=copy.deepcopy(absent);null['State']['Health']=None
+        for formatter in (INSPECT_CONTAINER,INSPECT_HELPER):
+            with self.subTest(helper=formatter==INSPECT_HELPER):
+                for result in self.render(formatter,[absent,null]):
+                    self.assertNotIn('error',result)
+                    record=json.loads(result['text'])
+                    self.assertIsNone(record['State']['Health'])
+                    self.assertEqual(record['State']['Status'],'created')
+                    self.assertEqual(record['Guard']['CapDrop'],['ALL'])
+                    if formatter==INSPECT_HELPER:
+                        self.assertEqual(record['Network'],'none')
+                        self.assertEqual(record['User'],'10001:10001')
+
+    def test_present_service_health_is_preserved(self):
+        records=[]
+        for health in ('healthy','unhealthy'):
+            record=self.raw_container();record['State'].update(Running=True,Status='running',Health={'Status':health})
+            records.append(record)
+        for formatter in (INSPECT_CONTAINER,INSPECT_HELPER):
+            results=self.render(formatter,records)
+            self.assertEqual([json.loads(result['text'])['State']['Health'] for result in results],['healthy','unhealthy'])
+
+    def test_missing_required_state_still_fails(self):
+        record=self.raw_container();del record['State']['Running']
+        for formatter in (INSPECT_CONTAINER,INSPECT_HELPER):
+            result=self.render(formatter,[record])[0]
+            self.assertIn('error',result)
+            self.assertNotIn('text',result)
 
 
 class FakeResolver:
@@ -293,6 +378,18 @@ class AdapterTests(DraftFixture):
         self.adapter.bind(self.command);self.adapter.close_gate_and_drain(self.command);self.adapter.stop_and_verify_both(self.profile)
         cid=self.adapter.helper('snapshot');self.fake.helpers[cid]['Network']='bridge'
         with self.assertRaises(EngineError):self.adapter.helper('snapshot')
+
+    def test_created_helper_without_health_preserves_identity_and_isolation_guards(self):
+        self.adapter.bind(self.command);self.adapter.close_gate_and_drain(self.command);self.adapter.stop_and_verify_both(self.profile)
+        cid=self.adapter.helper('snapshot');original=copy.deepcopy(self.fake.helpers[cid])
+        self.assertIsNone(original['State']['Health'])
+        self.adapter.validate_helper(original,'snapshot',stopped=True)
+        for field,value in (('Network','bridge'),('User','0:0'),('Source',self.target.reference)):
+            with self.subTest(field=field):
+                changed=copy.deepcopy(original);changed[field]=value
+                with self.assertRaises(EngineError):self.adapter.validate_helper(changed,'snapshot',stopped=True)
+        changed=copy.deepcopy(original);changed['Guard']['Privileged']=True
+        with self.assertRaises(EngineError):self.adapter.validate_helper(changed,'snapshot',stopped=True)
 
     def test_gate_cannot_open_without_durable_commit(self):
         self.adapter.bind(self.command)
