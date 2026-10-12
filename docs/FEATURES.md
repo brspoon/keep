@@ -18,13 +18,13 @@ Choose **Keep** to protect a title from scheduled removal. A temporary Keep last
 
 When a temporary Keep expires, or someone removes its protection, the title may qualify for Leaving again under the library's rules. **Removing a Keep does not delete the title or its files.** Leaving and Kept are shared browsing views; deletion access is controlled separately.
 
-Use the letter controls in each collection to jump to a title. They follow search results and the My Keeps filter. On mobile, use **Jump to letter**; **#** includes titles beginning with numbers or other characters.
+Use the side index to jump to a title in the collection you are browsing. It follows search results and the My Keeps filter. On mobile, hold and drag the side handle to choose a letter; **#** includes titles beginning with numbers or other characters.
 
 ## Manage Library
 
 Manage Library uses Radarr and Sonarr to show downloaded media, file sizes, and available cleanup actions. The owner must grant deletion capability and access to specific libraries before a viewer can use it.
 
-Each library has its own letter navigation, including the mobile letter picker. Search narrows both the titles and available letters.
+The side navigation follows the library you are browsing. Search narrows both the titles and available letters.
 
 - **Requester-restricted access:** viewers can delete movies or downloaded TV seasons requested exclusively by their verified Seerr account. Shared, ambiguous, stale, or unavailable request history does not establish deletion rights. Local accounts need an explicit owner-managed Seerr link.
 - **Delete any title:** this separate permission allows deletion of other titles within granted libraries, including whole series, without relying on Seerr request ownership. Restricted season access does not grant whole-series deletion rights.
