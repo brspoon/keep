@@ -61,7 +61,10 @@ Maintainerr supplies Leaving collections and Keep protection. Radarr and Sonarr 
 - [Releases and changelog](https://github.com/brspoon/keep/releases)
 - [Backup and restore](https://github.com/brspoon/keep/blob/main/docs/PORTABLE_BACKUP.md)
 - [Report a bug or request a feature](https://github.com/brspoon/keep/issues)
+- [Support](https://github.com/brspoon/keep/blob/main/SUPPORT.md)
 - [Contributing](https://github.com/brspoon/keep/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/brspoon/keep/blob/main/CODE_OF_CONDUCT.md)
+- [Accessibility](https://github.com/brspoon/keep/blob/main/ACCESSIBILITY.md)
 - [Security policy](https://github.com/brspoon/keep/security/policy)
 
 <br>
