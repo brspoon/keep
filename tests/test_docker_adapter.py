@@ -253,6 +253,82 @@ class AdapterTests(DraftFixture):
         self.adapter=PosixDockerAdapter(self.paths,self.profile,self.enrollment,runner=self.fake,
             resolver=FakeResolver(),wall_time=lambda:1200,sleep=lambda _:None)
 
+    def health_clock(self, on_sleep=None):
+        self.adapter.bind(self.command)
+        clock=[0];sleeps=[]
+        self.adapter.monotonic=lambda:clock[0]
+        def sleep(seconds):
+            sleeps.append(seconds);clock[0]+=seconds
+            if on_sleep:on_sleep(clock[0])
+        self.adapter.sleep=sleep
+        return clock,sleeps
+
+    def test_running_unhealthy_service_can_recover_within_existing_deadline(self):
+        self.fake.containers['keep-app']['State']['Health']='unhealthy'
+        def recover(elapsed):
+            if elapsed==5:self.fake.containers['keep-app']['State']['Health']='healthy'
+        clock,sleeps=self.health_clock(recover)
+        self.adapter.wait_healthy(self.previous)
+        self.assertEqual(clock[0],5);self.assertEqual(sleeps,[1]*5)
+        inspections=[plan for plan in self.fake.plans if plan.argv[3]=='inspect']
+        self.assertEqual(len(inspections),12)
+        self.assertEqual({plan.argv[-1] for plan in inspections},{'1'*64,'2'*64})
+
+    def test_persistent_running_unhealthy_service_times_out_at_original_300_seconds(self):
+        self.fake.containers['keep-digest']['State']['Health']='unhealthy'
+        clock,sleeps=self.health_clock()
+        with self.assertRaisesRegex(EngineError,'Keep health verification timed out'):
+            self.adapter.wait_healthy(self.previous)
+        self.assertEqual(clock[0],300);self.assertEqual(sleeps,[1]*300)
+
+    def test_dead_and_exited_services_fail_immediately_even_with_healthy_other_service(self):
+        for service in ('keep-app','keep-digest'):
+            for status in ('dead','exited'):
+                with self.subTest(service=service,status=status):
+                    row=self.fake.containers[service];original=copy.deepcopy(row['State'])
+                    row['State'].update(Status=status,Running=False,Health='unhealthy')
+                    clock,sleeps=self.health_clock()
+                    with self.assertRaisesRegex(EngineError,'A Keep service failed health verification'):
+                        self.adapter.wait_healthy(self.previous)
+                    self.assertEqual(clock[0],0);self.assertEqual(sleeps,[])
+                    row['State']=original
+
+    def test_mixed_pair_health_never_counts_as_both_healthy(self):
+        def alternate(elapsed):
+            self.fake.containers['keep-app']['State']['Health']='healthy' if elapsed%2==0 else 'unhealthy'
+            self.fake.containers['keep-digest']['State']['Health']='unhealthy' if elapsed%2==0 else 'healthy'
+        alternate(0);clock,sleeps=self.health_clock(alternate)
+        with self.assertRaisesRegex(EngineError,'Keep health verification timed out'):
+            self.adapter.wait_healthy(self.previous)
+        self.assertEqual(clock[0],300);self.assertEqual(len(sleeps),300)
+
+    def test_starting_pair_is_waited_for_and_requires_running_healthy_both(self):
+        for row in self.fake.containers.values():row['State']['Health']='starting'
+        def start(elapsed):
+            self.fake.containers['keep-app']['State']['Health']='healthy'
+            if elapsed==2:self.fake.containers['keep-digest']['State']['Health']='healthy'
+        clock,sleeps=self.health_clock(start)
+        self.adapter.wait_healthy(self.previous)
+        self.assertEqual(clock[0],2);self.assertEqual(sleeps,[1,1])
+
+    def test_health_wait_revalidates_image_compose_mount_and_isolation_on_each_poll(self):
+        mutations=(
+            lambda row:row.update(Image=self.target.image_id,Source=self.target.reference),
+            lambda row:row['Labels'].update({'com.docker.compose.project.config_files':'/foreign/compose.yml'}),
+            lambda row:row['Mounts'].append({'Type':'bind','Source':'/foreign','Destination':'/foreign','RW':True}),
+            lambda row:row['Guard'].update(Privileged=True),
+        )
+        for mutate in mutations:
+            original=copy.deepcopy(self.fake.containers)
+            self.fake.containers['keep-app']['State']['Health']='unhealthy'
+            def drift(elapsed):
+                row=self.fake.containers['keep-app'];row['State']['Health']='healthy';mutate(row)
+            clock,sleeps=self.health_clock(drift)
+            with self.subTest(mutate=mutate),self.assertRaises(EngineError):
+                self.adapter.wait_healthy(self.previous)
+            self.assertEqual(clock[0],1);self.assertEqual(sleeps,[1])
+            self.fake.containers=original
+
     def test_complete_update_persists_immutable_config_and_preserves_protected_data(self):
         result=HostEngine(self.paths,self.profile,self.adapter).execute(self.command)
         self.assertEqual(result['phase'],'success');self.assertEqual(self.fake.gate,'open')

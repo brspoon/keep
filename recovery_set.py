@@ -4,6 +4,7 @@ Reads private adapter-selected files without archive extraction or Docker access
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import gzip
 import io
@@ -15,7 +16,7 @@ import tarfile
 import time
 import zlib
 
-from maintenance_protocol import ImageIdentity, canonical, canonical_uuid, parse_json
+from maintenance_protocol import ImageIdentity, ProtocolError, canonical, canonical_uuid, parse_json
 from private_store import StorageError
 
 MAX_IMAGE = 32 * 1024**3
@@ -27,6 +28,11 @@ OCI_MANIFEST = ('application/vnd.oci.image.manifest.v1+json','application/vnd.do
 OCI_CONFIG = ('application/vnd.oci.image.config.v1+json','application/vnd.docker.container.image.v1+json')
 RAW_LAYERS = ('application/vnd.oci.image.layer.v1.tar','application/vnd.docker.image.rootfs.diff.tar')
 GZIP_LAYERS = ('application/vnd.oci.image.layer.v1.tar+gzip','application/vnd.docker.image.rootfs.diff.tar.gzip')
+ATTESTATION_TYPE = 'application/vnd.docker.attestation.manifest.v1+json'
+ATTESTATION_LAYER = 'application/vnd.in-toto+json'
+EMPTY_CONFIG = 'application/vnd.oci.empty.v1+json'
+EMPTY_DIGEST = 'sha256:' + hashlib.sha256(b'{}').hexdigest()
+MAX_ATTESTATION_JSON = 1048576
 
 
 def file_digest(paths, path, *, limit):
@@ -74,14 +80,14 @@ def verify_docker_save(paths, path, identity):
                 raise StorageError("Image archive contains too many members")
             members[member.name] = member
 
-        def small(name):
+        def small(name, limit=65536):
             member = members.get(name)
-            if not member or not member.isfile() or member.size > 65536:
+            if not member or not member.isfile() or member.size > limit:
                 raise StorageError("Image archive metadata is unavailable")
             stream = archive.extractfile(member)
             if stream is None:
                 raise StorageError("Image archive metadata is unavailable")
-            return stream.read(65537)
+            return stream.read(limit + 1)
 
         def configuration(data):
             config=parse_json(data,65536)
@@ -125,6 +131,69 @@ def verify_docker_save(paths, path, identity):
                 raise StorageError('Recovery OCI metadata bytes do not match')
             return parse_json(data,65536),name,data
 
+        def attachment(value, native_descriptor):
+            # Docker29 may retain a subject-bound, non-runnable attestation next
+            # to the original index. It cannot replace or rename that index.
+            if (value.get('platform') not in (None, {'os':'unknown','architecture':'unknown'})
+                    or value.get('artifactType', ATTESTATION_TYPE) != ATTESTATION_TYPE
+                    or value.get('annotations', {}).get('io.containerd.manifest.subject', identity.native_digest)
+                       != identity.native_digest):
+                raise StorageError('Recovery attachment is not a supported non-runnable attestation')
+            try:
+                manifest, _, _ = blob(value, (OCI_MANIFEST[0],))
+            except ProtocolError as error:
+                raise StorageError('Recovery attestation manifest JSON is invalid') from error
+            fields = {'schemaVersion','mediaType','artifactType','subject','config','layers'}
+            subject = {key:native_descriptor[key] for key in ('mediaType','digest','size')}
+            if (not isinstance(manifest,dict) or not fields <= set(manifest)
+                    or not set(manifest) <= fields | {'annotations'}
+                    or type(manifest['schemaVersion']) is not int or manifest['schemaVersion'] != 2
+                    or manifest['mediaType'] != OCI_MANIFEST[0] or manifest['artifactType'] != ATTESTATION_TYPE
+                    or not isinstance(manifest['subject'],dict) or type(manifest['subject'].get('size')) is not int
+                    or manifest['subject'] != subject):
+                raise StorageError('Recovery attestation does not belong to the original native image')
+            annotations = manifest.get('annotations', {})
+            if (not isinstance(annotations,dict) or len(annotations) > 32
+                    or any(not isinstance(key,str) or not isinstance(text,str)
+                           or len(key) > 256 or len(text) > 4096 for key,text in annotations.items())):
+                raise StorageError('Recovery attestation annotations are invalid')
+            config = manifest['config']
+            if (not isinstance(config,dict) or not {'mediaType','digest','size'} <= set(config)
+                    or not set(config) <= {'mediaType','digest','size','data'}
+                    or config['mediaType'] != EMPTY_CONFIG or config['digest'] != EMPTY_DIGEST
+                    or type(config['size']) is not int or config['size'] != 2):
+                raise StorageError('Recovery attestation configuration is not empty')
+            empty_name = 'blobs/sha256/' + EMPTY_DIGEST[7:]
+            if 'data' in config:
+                try:
+                    inline = base64.b64decode(config['data'], validate=True)
+                except (TypeError, ValueError) as error:
+                    raise StorageError('Recovery attestation inline configuration is invalid') from error
+                if (config['data'] != 'e30=' or inline != b'{}' or len(inline) != config['size']
+                        or 'sha256:' + hashlib.sha256(inline).hexdigest() != config['digest']):
+                    raise StorageError('Recovery attestation inline configuration differs')
+                if empty_name in members and small(empty_name) != inline:
+                    raise StorageError('Recovery attestation stored configuration differs from inline bytes')
+            elif small(empty_name) != b'{}':
+                raise StorageError('Recovery attestation stored configuration is not empty')
+            layers = manifest['layers']
+            if not isinstance(layers,list) or len(layers) != 1:
+                raise StorageError('Recovery attestation content is incomplete')
+            layer = layers[0]
+            name = descriptor(layer, (ATTESTATION_LAYER,))
+            if (not set(layer) <= {'mediaType','digest','size','annotations'}
+                    or not 0 < layer['size'] <= MAX_ATTESTATION_JSON):
+                raise StorageError('Recovery attestation content exceeds its supported bounds')
+            data = small(name, MAX_ATTESTATION_JSON)
+            if len(data) != layer['size'] or 'sha256:' + hashlib.sha256(data).hexdigest() != layer['digest']:
+                raise StorageError('Recovery attestation content bytes differ')
+            try:
+                statement = parse_json(data, MAX_ATTESTATION_JSON)
+            except ProtocolError as error:
+                raise StorageError('Recovery attestation content JSON is invalid') from error
+            if not isinstance(statement, dict):
+                raise StorageError('Recovery attestation content is not a JSON object')
+
         def tags(value):
             if value is None:return
             allowed={'brspoon/keep:'+identity.version,identity.reference,'brspoon/keep@'+identity.native_digest}
@@ -137,9 +206,20 @@ def verify_docker_save(paths, path, identity):
                 raise StorageError('Recovery OCI layout is unsupported')
             top=parse_json(small('index.json'),65536)
             if (not isinstance(top,dict) or top.get('schemaVersion')!=2 or top.get('mediaType') not in OCI_INDEX
-                    or not isinstance(top.get('manifests'),list) or len(top['manifests'])!=1):
+                    or not isinstance(top.get('manifests'),list) or not 1 <= len(top['manifests']) <= 17):
                 raise StorageError('Recovery OCI export must contain one original index')
-            root=top['manifests'][0]
+            roots = []
+            attachments = []
+            for entry in top['manifests']:
+                descriptor(entry, OCI_INDEX + (OCI_MANIFEST[0],))
+                if entry['mediaType'] in OCI_INDEX:
+                    roots.append(entry)
+                else:
+                    attachments.append(entry)
+            if (len(roots) != 1 or roots[0]['digest'] != identity.index_digest
+                    or len({entry['digest'] for entry in top['manifests']}) != len(top['manifests'])):
+                raise StorageError('Recovery OCI export must contain one original index')
+            root = roots[0]
             index,_,_=blob(root,OCI_INDEX)
             if (root['digest']!=identity.index_digest or not isinstance(index,dict) or index.get('schemaVersion')!=2
                     or index.get('mediaType') not in OCI_INDEX or not isinstance(index.get('manifests'),list)
@@ -163,6 +243,8 @@ def verify_docker_save(paths, path, identity):
                 raise StorageError('Recovery native layers are incomplete')
             names=[descriptor(value,RAW_LAYERS+GZIP_LAYERS) for value in layers]
             if len(set(names))!=len(names):raise StorageError('Recovery native layers are duplicated')
+            for entry in attachments:
+                attachment(entry, matches[0])
             if 'manifest.json' in members:
                 compatible=parse_json(small('manifest.json'),65536)
                 if (not isinstance(compatible,list) or len(compatible)!=1 or not isinstance(compatible[0],dict)

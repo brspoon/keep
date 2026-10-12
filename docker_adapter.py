@@ -549,9 +549,9 @@ changed identity hold. No container or artifact is removed.
         deadline=self.monotonic()+300
         while True:
             rows=self.discover(images={image.image_id})
-            if all(row['State'].get('Running') is True and row['State'].get('Health')=='healthy' for row in rows.values()):return
-            if any(row['State'].get('Status') in ('dead','exited') or row['State'].get('Health')=='unhealthy' for row in rows.values()):
+            if any(row['State'].get('Status') in ('dead','exited') for row in rows.values()):
                 raise EngineError("A Keep service failed health verification")
+            if all(row['State'].get('Running') is True and row['State'].get('Health')=='healthy' for row in rows.values()):return
             if self.monotonic()>=deadline:raise EngineError("Keep health verification timed out")
             self.sleep(1)
 

@@ -49,7 +49,7 @@ HOST_SOURCE = helper_source(__file__)
 NEUTRAL_SOURCE = neutral_source(__file__)
 sys.path.insert(0, str(HOST_SOURCE))
 
-from docker_adapter import INSPECT_HELPER, PosixDockerAdapter
+from docker_adapter import INSPECT_CONTAINER, INSPECT_HELPER, PosixDockerAdapter
 from host_cli import HostState, enroll, load_backend
 from host_engine import BoundedRunner, EngineError, HostEngine, Plan
 from host_mailbox import HostMailbox
@@ -189,6 +189,107 @@ def snapshot_helper_diagnostic(adapter):
             'startup_error_codes':startup_errors,
             'worker':volume_error_diagnostic(body,adapter.source)}
     except Exception:return unavailable
+
+
+SERVICE_ERROR_TYPES=VOLUME_ERROR_TYPES|frozenset(('MaintenanceError','StorageError','ProtocolError',
+    'AttributeError','NameError','KeyError','ImportError','ModuleNotFoundError','SyntaxError'))
+SERVICE_SOURCE_FILES=frozenset(('app.py','onboarding.py','maintenance_app.py','maintenance_mailbox.py',
+    'maintenance_protocol.py','private_store.py','maintenance_trial_fixture.py','maintenance_portable_fixture.py'))
+
+
+def service_log_diagnostic(body,sources):
+    """Extract only the latest typed traceback and verified source locations."""
+    if not isinstance(body,bytes) or len(body)>4096:return None
+    try:lines=body.decode('utf-8').splitlines()
+    except UnicodeError:return None
+    frames=None;result=None
+    for line in lines:
+        if line=='Traceback (most recent call last):':
+            frames=[];continue
+        if frames is None:continue
+        frame=re.fullmatch(r'  File "([^"\r\n]+)", line ([0-9]{1,5})(?:, in [^\r\n]*)?',line)
+        if frame:
+            source=sources.get(frame[1]);number=int(frame[2])
+            if source and type(source.get('lines')) is int and 1<=number<=source['lines']:
+                frames.append({'module':source['module'],'line':number});frames=frames[-8:]
+            continue
+        error=re.fullmatch(r'(?:[A-Za-z_][A-Za-z_0-9]*\.)*([A-Za-z_][A-Za-z_0-9]*)(?::.*)?',line)
+        if error and error[1] in SERVICE_ERROR_TYPES:
+            result={'type':error[1],'frames':frames};frames=None
+    return result
+
+
+def health_error_codes(value):
+    if type(value) is not str:return ['unavailable']
+    if not value:return []
+    try:
+        if len(value.encode('utf-8'))>4096:return ['unavailable']
+    except UnicodeError:return ['unavailable']
+    groups=(('connection_refused','ConnectionRefusedError'),('http_error','HTTPError'),
+            ('missing_file','FileNotFoundError'),('permission','PermissionError'),('assertion_failure','AssertionError'))
+    codes=[code for code,token in groups if token in value]
+    return codes or startup_error_codes(value)
+
+
+def service_source_locations(trial):
+    result={}
+    for name in sorted(SERVICE_SOURCE_FILES):
+        record=trial.report.get('source_files',{}).get(name)
+        if not isinstance(record,dict):continue
+        body=trial.paths.read(trial.root/'image-source'/name,limit=1048576)
+        require(hashlib.sha256(body).hexdigest()==record.get('fixture_sha256'),'Service diagnostic source differs')
+        result['/app/'+name]={'module':name,'lines':len(body.splitlines())}
+    return result
+
+
+def paired_service_diagnostic(trial,adapter,request,original_ids):
+    """Read only an exact original pair or this request's recreated pair."""
+    try:
+        require(set(original_ids)=={'keep-app','keep-digest'} and len(set(original_ids.values()))==2 and all(isinstance(value,str)
+            and re.fullmatch('[a-f0-9]{64}',value) for value in original_ids.values()),'Original service identities unavailable')
+        identities={request.expected.image_id}
+        if request.target:identities.add(request.target.image_id)
+        rows=adapter.discover(images=identities)
+        require(set(rows)=={'keep-app','keep-digest'},'Diagnostic service topology differs')
+        base_files=tuple(str(path) for path in adapter.profile.compose_files)
+        for service in ('keep-app','keep-digest'):
+            selected=rows[service];identifier=selected['Id']
+            require(isinstance(identifier,str) and re.fullmatch('[a-f0-9]{64}',identifier),'Diagnostic service identity differs')
+            if identifier!=original_ids[service]:
+                files=tuple((selected.get('Labels') or {}).get('com.docker.compose.project.config_files','').split(','))
+                require(files in (base_files+(str(adapter.operation/'activate.json'),),
+                    base_files+(str(adapter.operation/'restore.json'),)),'Recreated service belongs to another request')
+        sources=service_source_locations(trial)
+        result=[]
+        for service in ('keep-app','keep-digest'):
+            selected=rows[service];identifier=selected['Id']
+            format=INSPECT_CONTAINER[:-1]+(',"ExitCode":{{json .State.ExitCode}},"OOMKilled":{{json .State.OOMKilled}},'
+                '"StartupError":{{json (index .State "Error")}},'
+                '"HealthExitCode":{{$code := -1}}{{with index .State "Health"}}{{range index . "Log"}}{{$code = .ExitCode}}{{end}}{{end}}{{$code}},'
+                '"HealthOutput":{{$text := ""}}{{with index .State "Health"}}{{range index . "Log"}}{{$text = .Output}}{{end}}{{end}}{{json $text}}}')
+            observed=adapter.json('verified failed service state',(*adapter.plans.base,'inspect','--format',format,identifier),limit=65536)
+            require(observed.get('Id')==identifier and all(observed.get(key)==selected.get(key)
+                for key in ('Image','Source','Manifest','Labels','Mounts','Guard')),'Service diagnostic identity changed')
+            adapter.mounts(observed)
+            state=observed.get('State') or {}
+            require(state.get('Status') in ('created','running','paused','restarting','removing','exited','dead')
+                and type(state.get('Running')) is bool and type(state.get('Restarting')) is bool
+                and state.get('Health') in (None,'starting','healthy','unhealthy')
+                and type(observed.get('ExitCode')) is int and 0<=observed['ExitCode']<=255
+                and type(observed.get('OOMKilled')) is bool and type(observed.get('HealthExitCode')) is int
+                and -1<=observed['HealthExitCode']<=255,'Service diagnostic state differs')
+            row={'service':service,'container_id':identifier,'status':state['Status'],'running':state['Running'],
+                'restarting':state['Restarting'],'health':state.get('Health'),'exit_code':observed['ExitCode'],
+                'oom_killed':observed['OOMKilled'],'startup_error_codes':startup_error_codes(observed.pop('StartupError',None)),
+                'health_exit_code':observed['HealthExitCode'],'health_error_codes':health_error_codes(observed.pop('HealthOutput',None))}
+            try:
+                arguments=(sys.executable,'-B','-c',MERGE_DIAGNOSTIC_STREAMS,*adapter.plans.base,'logs','--tail','32',identifier)
+                body=adapter.runner.run(Plan('read fixed failed service diagnostic',arguments,30,4096))
+                row['traceback']=service_log_diagnostic(body,sources)
+            except Exception:row['traceback']=None
+            result.append(row)
+        return {'available':True,'services':result}
+    except Exception:return {'available':False}
 
 
 DIND_ENTRYPOINT='/usr/local/bin/dockerd-entrypoint.sh'
@@ -860,7 +961,7 @@ class NativeTrial:
             self.image_command('fixture-image-load',lambda:self.inner('image','load','--input',archive,timeout=300),version=version)
             mirror=self.name+'-registry:5000/brspoon/keep:native-'+str(schema)
             self.image_command('fixture-registry-tag',lambda:self.inner('image','tag',tag,mirror),version=version)
-            self.image_command('fixture-registry-push',lambda:self.inner('push',mirror,timeout=300),version=version)
+            self.image_command('fixture-registry-push',lambda:self.inner('push','--platform','linux/'+self.architecture,mirror,timeout=300),version=version)
             identities={}
             def verify_fixture():
                 identities['image']=self.resolver.register('native-'+str(schema),version,revision)
@@ -1038,12 +1139,25 @@ volumes:
     def execute(self,request,adapter_class=PosixDockerAdapter):
         adapter=adapter_class(self.paths,self.profile,self.backend.mailbox.enrollment,resolver=self.resolver,runner=self.backend.mailbox.runner)
         adapter.known_identities.update(self.backend.mailbox.adapter.known_identities)
+        original_ids={}
+        assertion=getattr(adapter,'assert_runtime',None)
+        if callable(assertion):
+            def observed_runtime(identity,profile):
+                value=assertion(identity,profile)
+                try:
+                    if not original_ids:original_ids.update({name:row['Id'] for name,row in adapter.containers.items()})
+                except Exception:pass
+                return value
+            adapter.assert_runtime=observed_runtime
         try:return HostEngine(self.paths,self.profile,adapter).execute(request)
         except Exception:
             # Diagnostic collection must never replace the original failure.
             try:diagnostic=snapshot_helper_diagnostic(adapter)
             except Exception:diagnostic={'available':False}
             self.report.setdefault('volume_diagnostics',[]).append(diagnostic)
+            try:services=paired_service_diagnostic(self,adapter,request,original_ids)
+            except Exception:services={'available':False}
+            self.report.setdefault('service_diagnostics',[]).append(services)
             raise
 
     def record(self,name,action):

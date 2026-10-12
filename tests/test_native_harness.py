@@ -120,7 +120,7 @@ class VolumeDiagnosticTests(unittest.TestCase):
             engine.return_value.execute.side_effect=original
             with self.assertRaises(trial.EngineError) as caught:value.execute(object(),adapter_class=lambda *args,**kwargs:adapter)
         self.assertIs(caught.exception,original)
-        self.assertEqual(value.report,{'volume_diagnostics':[{'available':False}]})
+        self.assertEqual(value.report,{'volume_diagnostics':[{'available':False}],'service_diagnostics':[{'available':False}]})
 
     def test_real_merged_stream_reader_is_bounded_and_does_not_use_a_shell(self):
         root=self.adapter.operation.parent
@@ -158,6 +158,100 @@ class StartupErrorClassifierTests(unittest.TestCase):
             self.assertNotIn('StartupError',case.adapter.json.return_value)
             self.assertNotIn('private',json.dumps(value));self.assertNotIn('/private',json.dumps(value))
         finally:case.doCleanups()
+
+
+class PairedServiceDiagnosticTests(unittest.TestCase):
+    def setUp(self):
+        temporary=tempfile.TemporaryDirectory(prefix='keep-service-diagnostic-',dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(temporary.cleanup)
+        paths=create_private_paths();root=create_root(paths,Path(temporary.name).resolve()/'private')
+        build=paths.mkdir(root/'image-source');body=b'# audited fixture\n'*100
+        paths.publish(build/'app.py',body)
+        operation=paths.mkdir(root/'operation')
+        self.trial=SimpleNamespace(paths=paths,root=root,report={'source_files':{'app.py':{
+            'fixture_sha256':hashlib.sha256(body).hexdigest()}}})
+        self.ids={'keep-app':'a'*64,'keep-digest':'b'*64}
+        self.rows={name:{'Id':identifier,'Image':'sha256:'+'1'*64,'Source':'brspoon/keep@sha256:'+'2'*64,
+            'Manifest':None,'Labels':{'com.docker.compose.project.config_files':str(root/'compose.yml')},
+            'Mounts':[],'Guard':{},'State':{'Running':False,'Restarting':False,'Status':'exited','Health':'unhealthy'},
+            'ExitCode':1,'OOMKilled':False,'StartupError':'','HealthExitCode':1,
+            'HealthOutput':'FileNotFoundError: /private/health-secret'} for name,identifier in self.ids.items()}
+        self.log=b'Traceback (most recent call last):\n  File "/app/app.py", line 18, in private_function\n    private_sql_and_values\nmaintenance_app.MaintenanceError: private-secret\n'
+        self.adapter=SimpleNamespace(operation=operation,profile=SimpleNamespace(compose_files=(root/'compose.yml',)),
+            plans=SimpleNamespace(base=('docker','--context','owned')),discover=Mock(return_value=self.rows),mounts=Mock(),
+            json=Mock(side_effect=lambda label,args,**kw:copy.deepcopy(next(row for row in self.rows.values() if row['Id']==args[-1]))),
+            runner=SimpleNamespace(run=Mock(return_value=self.log)))
+        self.request=SimpleNamespace(expected=SimpleNamespace(image_id='sha256:'+'1'*64),target=None)
+
+    def collect(self):return trial.paired_service_diagnostic(self.trial,self.adapter,self.request,self.ids)
+
+    def test_verified_pair_retains_state_and_source_lines_without_log_values(self):
+        value=self.collect()
+        self.assertTrue(value['available']);self.assertEqual(len(value['services']),2)
+        for row in value['services']:
+            self.assertEqual(row['traceback'],{'type':'MaintenanceError','frames':[{'module':'app.py','line':18}]})
+            self.assertEqual(row['health_error_codes'],['missing_file'])
+            self.assertEqual(row['health_exit_code'],1)
+        self.assertNotIn('private',json.dumps(value));self.assertNotIn('/app',json.dumps(value))
+        for call in self.adapter.runner.run.call_args_list:
+            self.assertEqual(call.args[0].output_limit,4096)
+            self.assertEqual(call.args[0].argv[-4:-1],('logs','--tail','32'))
+
+    def test_recreated_pair_requires_this_operation_before_any_log_read(self):
+        self.rows['keep-app']['Id']='c'*64
+        self.rows['keep-app']['Labels']['com.docker.compose.project.config_files']=str(self.adapter.profile.compose_files[0])+','+str(self.adapter.operation/'activate.json')
+        self.assertTrue(self.collect()['available'])
+        self.adapter.runner.run.reset_mock()
+        self.rows['keep-digest']['Id']='d'*64
+        self.rows['keep-digest']['Labels']['com.docker.compose.project.config_files']=str(self.adapter.profile.compose_files[0])+',/private/foreign/activate.json'
+        self.assertEqual(self.collect(),{'available':False})
+        self.adapter.runner.run.assert_not_called()
+
+    def test_source_drift_and_fresh_container_identity_drift_hold_collection(self):
+        self.trial.report['source_files']['app.py']['fixture_sha256']='f'*64
+        self.assertEqual(self.collect(),{'available':False});self.adapter.runner.run.assert_not_called()
+        self.trial.report['source_files']['app.py']['fixture_sha256']=hashlib.sha256((self.trial.root/'image-source/app.py').read_bytes()).hexdigest()
+        self.adapter.json.side_effect=lambda *args,**kw:{**self.rows['keep-app'],'Source':'private-foreign-source'}
+        self.assertEqual(self.collect(),{'available':False});self.adapter.runner.run.assert_not_called()
+
+    def test_trace_parser_ignores_unverified_filenames_and_out_of_bounds_lines(self):
+        sources=trial.service_source_locations(self.trial)
+        logs=(b'Traceback (most recent call last):\n  File "/private/secret.py", line 7, in leak\n'
+            b'  File "<string>", line 8, in leak\n  File "/app/app.py", line 101, in leak\n'
+            b'  File "/app/app.py", line 10, in leak\nValueError: private credential\n')
+        self.assertEqual(trial.service_log_diagnostic(logs,sources),{'type':'ValueError','frames':[{'module':'app.py','line':10}]})
+        self.assertIsNone(trial.service_log_diagnostic(b'ValueError: private credential',sources))
+        self.assertIsNone(trial.service_log_diagnostic(b'private'*1000,sources))
+        self.assertIsNone(trial.service_log_diagnostic(b'\xff',sources))
+
+    def test_bounded_trace_parser_retains_only_latest_allowed_exception(self):
+        sources=trial.service_source_locations(self.trial)
+        lines=b''.join(('  File "/app/app.py", line '+str(number)+', in private_name\n').encode() for number in range(1,16))
+        log=b'Traceback (most recent call last):\n'+lines+b'ValueError: private\n'
+        value=trial.service_log_diagnostic(log,sources)
+        self.assertEqual([row['line'] for row in value['frames']],list(range(8,16)))
+        self.assertNotIn('private',json.dumps(value))
+
+    def test_log_failure_keeps_safe_state_and_never_exposes_transport_error(self):
+        self.adapter.runner.run.side_effect=trial.EngineError('private raw daemon message')
+        value=self.collect()
+        self.assertTrue(value['available'])
+        self.assertTrue(all(row['traceback'] is None for row in value['services']))
+        self.assertNotIn('private',json.dumps(value))
+
+    def test_identity_observation_failure_does_not_change_successful_runtime_assertion(self):
+        value=trial.NativeTrial.__new__(trial.NativeTrial)
+        value.paths,value.profile,value.resolver=object(),object(),object();value.report={}
+        value.backend=SimpleNamespace(mailbox=SimpleNamespace(runner=object(),enrollment=object(),
+            adapter=SimpleNamespace(known_identities={})))
+        adapter=SimpleNamespace(known_identities={},assert_runtime=Mock(return_value='verified'),containers={'keep-app':{}})
+        def execute(request):
+            self.assertEqual(adapter.assert_runtime(object(),object()),'verified')
+            return {'phase':'success'}
+        with patch.object(trial,'HostEngine') as engine:
+            engine.return_value.execute.side_effect=execute
+            self.assertEqual(value.execute(object(),adapter_class=lambda *args,**kwargs:adapter),{'phase':'success'})
+        self.assertEqual(value.report,{})
 
 
 class Graph(trial.RegistryGraph):
@@ -460,6 +554,43 @@ class CandidateTests(unittest.TestCase):
 
 
 class ImageStagingTests(unittest.TestCase):
+    def test_each_fixture_push_selects_native_platform_before_reference(self):
+        for architecture in ('amd64','arm64'):
+            with self.subTest(architecture=architecture),tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve()) as temporary:
+                fixture=CandidateTests();members,inspected,_=fixture.hybrid(architecture=architecture)
+                archive=fixture.archive(members);self.addCleanup(fixture.doCleanups)
+                paths=create_private_paths();root=create_root(paths,Path(temporary).resolve()/'private')
+                value=trial.NativeTrial.__new__(trial.NativeTrial)
+                value.paths,value.tool_state=paths,paths.mkdir(root/'tool-state')
+                value.state=paths.mkdir(root/'state')
+                value.candidate,value.architecture='keep-ci:latest',architecture
+                value.name='keep-maintenance-native-012345abcdef';value.outer_images=[]
+                value.report={'source_files':{},'images':{}};value.registry_proof={'synthetic':True}
+                build=paths.mkdir(root/'image-source');value.stage_source=Mock(return_value=build)
+                def outer(*args,**kwargs):
+                    if args[:2]==('image','inspect'):return canonical([inspected])
+                    if args[:2]==('image','save'):
+                        paths.publish(Path(args[args.index('--output')+1]),archive.read_bytes())
+                        return b''
+                    if args[:2]==('image','tag') or args[0]=='build':return b''
+                    raise AssertionError('Unexpected staging transport')
+                value.outer=Mock(side_effect=outer);value.inner=Mock(return_value=b'')
+                def register(tag,version,revision):
+                    schema=int(version.rsplit('.',1)[1])
+                    return trial.ImageIdentity('sha256:'+str(schema)*64,'sha256:'+'b'*64,
+                        'sha256:'+'c'*64,version,revision,architecture)
+                value.resolver=SimpleNamespace(register=Mock(side_effect=register))
+                value.images()
+                pushes=[call for call in value.inner.call_args_list if call.args[0]=='push']
+                self.assertEqual(len(pushes),4)
+                for schema,call in enumerate(pushes,1):
+                    self.assertEqual(call.args,('push','--platform','linux/'+architecture,
+                        value.name+'-registry:5000/brspoon/keep:native-'+str(schema)))
+                    self.assertEqual(call.kwargs,{'timeout':300})
+                self.assertEqual(value.resolver.register.call_args_list,[
+                    unittest.mock.call('native-'+str(schema),'0.0.'+str(schema),'a'*40) for schema in (1,2,3,4)])
+                self.assertEqual(len(value.images_by_schema),4)
+
     def test_verified_hybrid_candidate_and_staging_failure_have_safe_specific_receipt(self):
         fixture=CandidateTests();members,inspected,digest=fixture.hybrid();archive=fixture.archive(members)
         self.addCleanup(fixture.doCleanups)
