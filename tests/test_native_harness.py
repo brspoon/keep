@@ -47,6 +47,94 @@ class FailureDiagnosticTests(unittest.TestCase):
         self.assertEqual(details[1]['frames'],[])
 
 
+class VolumeDiagnosticTests(unittest.TestCase):
+    def setUp(self):
+        temporary=tempfile.TemporaryDirectory(prefix='keep-native-diagnostic-',dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(temporary.cleanup)
+        paths=create_private_paths();root=create_root(paths,Path(temporary.name).resolve()/'private')
+        operation=paths.mkdir(root/'operation')
+        identifier='a'*64;source='line\n'*300;source_sha=hashlib.sha256(source.encode()).hexdigest()
+        paths.publish(operation/'helper-snapshot.json',canonical({'container_id':identifier,'source_sha256':source_sha}))
+        selected={'Id':identifier,'OpenStdin':True,'Tty':False,'ExitCode':1,'OOMKilled':False,'ErrorPresent':False}
+        self.body=trial.VOLUME_ERROR_PREFIX+canonical({'type':'VolumeError','lines':[235,217,50]})+b'\n'
+        self.adapter=SimpleNamespace(paths=paths,operation=operation,source=source,source_sha=source_sha,
+            plans=SimpleNamespace(base=('docker','--context','owned')),inspect=Mock(return_value=selected),
+            validate_helper=Mock(),json=Mock(return_value=selected),runner=SimpleNamespace(run=Mock(return_value=self.body)))
+
+    def test_exact_verified_snapshot_retains_only_typed_state_and_worker_lines(self):
+        value=trial.snapshot_helper_diagnostic(self.adapter)
+        self.assertEqual(value,{'available':True,'open_stdin':True,'tty':False,'exit_code':1,
+            'oom_killed':False,'error_present':False,'worker':{'type':'VolumeError','lines':[235,217,50]}})
+        self.assertEqual(self.adapter.validate_helper.call_count,2)
+        plan=self.adapter.runner.run.call_args.args[0]
+        self.assertEqual(plan.output_limit,1024);self.assertEqual(plan.timeout,30)
+        self.assertEqual(plan.argv[-4:],('logs','--tail','1','a'*64))
+        self.assertNotIn('source',value)
+
+    def test_original_source_id_or_isolation_drift_blocks_log_collection(self):
+        record=self.adapter.operation/'helper-snapshot.json'
+        self.adapter.paths.publish(record,canonical({'container_id':'a'*64,'source_sha256':'b'*64}),overwrite=True)
+        self.assertEqual(trial.snapshot_helper_diagnostic(self.adapter),{'available':False})
+        self.adapter.inspect.assert_not_called();self.adapter.runner.run.assert_not_called()
+        self.adapter.paths.publish(record,canonical({'container_id':'a'*64,'source_sha256':self.adapter.source_sha}),overwrite=True)
+        self.adapter.inspect.return_value={'Id':'b'*64}
+        self.assertEqual(trial.snapshot_helper_diagnostic(self.adapter),{'available':False})
+        self.adapter.runner.run.assert_not_called()
+        self.adapter.inspect.return_value={'Id':'a'*64}
+        self.adapter.validate_helper.side_effect=ValueError('private altered command')
+        self.assertEqual(trial.snapshot_helper_diagnostic(self.adapter),{'available':False})
+        self.adapter.runner.run.assert_not_called()
+
+    def test_malformed_foreign_or_excessive_log_bytes_are_discarded(self):
+        cases=[b'private raw output',self.body+b'private extra line\n',b'x'*1025,
+            trial.VOLUME_ERROR_PREFIX+b'{"type":"ValueError","type":"VolumeError","lines":[]}',
+            trial.VOLUME_ERROR_PREFIX+canonical({'type':'private-secret','lines':[]}),
+            trial.VOLUME_ERROR_PREFIX+canonical({'type':['private-secret'],'lines':[]}),
+            trial.VOLUME_ERROR_PREFIX+canonical({'type':'VolumeError','lines':[True]}),
+            trial.VOLUME_ERROR_PREFIX+canonical({'type':'VolumeError','lines':[301]}),
+            trial.VOLUME_ERROR_PREFIX+canonical({'type':'VolumeError','lines':[1]*9}),
+            trial.VOLUME_ERROR_PREFIX+canonical({'type':'VolumeError','lines':[],'secret':'private'})]
+        for body in cases:
+            with self.subTest(body=body):
+                self.assertIsNone(trial.volume_error_diagnostic(body,self.adapter.source))
+                self.adapter.runner.run.return_value=body
+                value=trial.snapshot_helper_diagnostic(self.adapter)
+                self.assertIsNone(value['worker'])
+                self.assertNotIn('private',json.dumps(value))
+
+    def test_state_types_and_log_capture_errors_are_unavailable_without_details(self):
+        self.adapter.json.return_value={**self.adapter.inspect.return_value,'ExitCode':True}
+        self.assertEqual(trial.snapshot_helper_diagnostic(self.adapter),{'available':False})
+        self.adapter.runner.run.assert_not_called()
+        self.adapter.json.return_value=self.adapter.inspect.return_value
+        self.adapter.runner.run.side_effect=RuntimeError('private raw process output')
+        self.assertEqual(trial.snapshot_helper_diagnostic(self.adapter),{'available':False})
+
+    def test_diagnostic_failure_does_not_replace_original_engine_error(self):
+        value=trial.NativeTrial.__new__(trial.NativeTrial)
+        value.paths,value.profile,value.resolver=object(),object(),object();value.report={}
+        value.backend=SimpleNamespace(mailbox=SimpleNamespace(runner=object(),enrollment=object(),
+            adapter=SimpleNamespace(known_identities={})))
+        adapter=SimpleNamespace(known_identities={});original=trial.EngineError('original operation failure')
+        with patch.object(trial,'HostEngine') as engine,patch.object(trial,'snapshot_helper_diagnostic',side_effect=ValueError('private')):
+            engine.return_value.execute.side_effect=original
+            with self.assertRaises(trial.EngineError) as caught:value.execute(object(),adapter_class=lambda *args,**kwargs:adapter)
+        self.assertIs(caught.exception,original)
+        self.assertEqual(value.report,{'volume_diagnostics':[{'available':False}]})
+
+    def test_real_merged_stream_reader_is_bounded_and_does_not_use_a_shell(self):
+        root=self.adapter.operation.parent
+        profile=SimpleNamespace(installation=root,state=root,docker_config=root)
+        runner=trial.BoundedRunner(profile,paths=self.adapter.paths)
+        code='import sys;sys.stderr.buffer.write('+repr(self.body)+');sys.stderr.flush()'
+        arguments=(sys.executable,'-B','-c',trial.MERGE_DIAGNOSTIC_STREAMS,sys.executable,'-B','-c',code)
+        observed=runner.run(trial.Plan('synthetic stderr diagnostic',arguments,5,1024))
+        self.assertEqual(trial.volume_error_diagnostic(observed,self.adapter.source),{'type':'VolumeError','lines':[235,217,50]})
+        arguments=(sys.executable,'-B','-c',trial.MERGE_DIAGNOSTIC_STREAMS,sys.executable,'-B','-c','print("private"*10000)')
+        with self.assertRaises(trial.EngineError) as error:runner.run(trial.Plan('synthetic overflowing log',arguments,5,1024))
+        self.assertNotIn('private',str(error.exception))
+
+
 class Graph(trial.RegistryGraph):
     def __init__(self):
         super().__init__(12345, 'amd64')

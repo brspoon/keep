@@ -49,9 +49,9 @@ HOST_SOURCE = helper_source(__file__)
 NEUTRAL_SOURCE = neutral_source(__file__)
 sys.path.insert(0, str(HOST_SOURCE))
 
-from docker_adapter import PosixDockerAdapter
+from docker_adapter import INSPECT_HELPER, PosixDockerAdapter
 from host_cli import HostState, enroll, load_backend
-from host_engine import BoundedRunner, EngineError, HostEngine
+from host_engine import BoundedRunner, EngineError, HostEngine, Plan
 from host_mailbox import HostMailbox
 from maintenance_protocol import ImageIdentity, canonical, canonical_uuid, parse_json
 from private_store import Journal, Profile, create_private_paths
@@ -115,6 +115,62 @@ def failure_details(error):
         result.append(entry)
         error=error.__cause__ or (error.__context__ if not error.__suppress_context__ else None)
     return result
+
+
+VOLUME_ERROR_TYPES=frozenset(('VolumeError','JSONDecodeError','OSError','FileNotFoundError','PermissionError',
+    'FileExistsError','IsADirectoryError','NotADirectoryError','Error','DatabaseError','OperationalError',
+    'IntegrityError','ValueError','TypeError','UnicodeDecodeError','MemoryError','OverflowError',
+    'RecursionError','RuntimeError','AssertionError','Exception'))
+VOLUME_ERROR_PREFIX=b'Fixed Keep volume operation failed '
+MERGE_DIAGNOSTIC_STREAMS=('import subprocess,sys\n'
+    'p=subprocess.Popen(sys.argv[1:],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)\n'
+    'while body:=p.stdout.read(256):\n'
+    ' sys.stdout.buffer.write(body);sys.stdout.buffer.flush()\n'
+    'p.stdout.close();sys.exit(p.wait())\n')
+
+
+def volume_error_diagnostic(body,source):
+    """Discard every byte unless it is the fixed bounded worker diagnostic."""
+    if not isinstance(body,bytes) or len(body)>1024 or not body.startswith(VOLUME_ERROR_PREFIX):return None
+    line=body.removesuffix(b'\n')
+    if b'\n' in line or b'\r' in line:return None
+    try:value=parse_json(line[len(VOLUME_ERROR_PREFIX):],1024)
+    except Exception:return None
+    if (not isinstance(value,dict) or set(value)!={'type','lines'} or not isinstance(value['type'],str) or value['type'] not in VOLUME_ERROR_TYPES
+            or not isinstance(value['lines'],list) or len(value['lines'])>8
+            or any(type(number) is not int or not 1<=number<=len(source.splitlines()) for number in value['lines'])):return None
+    return value
+
+
+def snapshot_helper_diagnostic(adapter):
+    """Read only the original verified helper, before trial cleanup."""
+    unavailable={'available':False}
+    try:
+        original=parse_json(adapter.paths.read(adapter.operation/'helper-snapshot.json',limit=4096))
+        require(isinstance(original,dict) and set(original)=={'container_id','source_sha256'}
+            and original['source_sha256']==adapter.source_sha
+            and re.fullmatch('[a-f0-9]{64}',original['container_id'] or ''), 'Original snapshot diagnostic identity differs')
+        identifier=original['container_id']
+        selected=adapter.inspect(identifier,helper=True)
+        require(selected.get('Id')==identifier,'Snapshot diagnostic selected another helper')
+        adapter.validate_helper(selected,'snapshot',stopped=False)
+        format=INSPECT_HELPER[:-1]+(',"OpenStdin":{{json .Config.OpenStdin}},"Tty":{{json .Config.Tty}},'
+            '"ExitCode":{{json .State.ExitCode}},"OOMKilled":{{json .State.OOMKilled}},'
+            '"ErrorPresent":{{if index .State "Error"}}true{{else}}false{{end}}}')
+        observed=adapter.json('verified snapshot diagnostic state',(*adapter.plans.base,'inspect','--format',format,identifier),limit=65536)
+        require(observed.get('Id')==identifier,'Snapshot diagnostic identity changed')
+        adapter.validate_helper(observed,'snapshot',stopped=False)
+        require(all(type(observed.get(key)) is bool for key in ('OpenStdin','Tty','OOMKilled','ErrorPresent'))
+            and type(observed.get('ExitCode')) is int and 0<=observed['ExitCode']<=255,'Snapshot diagnostic fields differ')
+        # The fixed wrapper preserves the CLI's process group and forwards both
+        # log channels into the existing bounded runner. No shell or raw log is
+        # recorded; malformed, foreign or excessive output is discarded.
+        arguments=(sys.executable,'-B','-c',MERGE_DIAGNOSTIC_STREAMS,*adapter.plans.base,'logs','--tail','1',identifier)
+        body=adapter.runner.run(Plan('read fixed snapshot helper diagnostic',arguments,30,1024))
+        return {'available':True,'open_stdin':observed['OpenStdin'],'tty':observed['Tty'],
+            'exit_code':observed['ExitCode'],'oom_killed':observed['OOMKilled'],'error_present':observed['ErrorPresent'],
+            'worker':volume_error_diagnostic(body,adapter.source)}
+    except Exception:return unavailable
 
 
 def pinned_tool_identity(inspected, tool, architecture):
@@ -943,7 +999,13 @@ volumes:
     def execute(self,request,adapter_class=PosixDockerAdapter):
         adapter=adapter_class(self.paths,self.profile,self.backend.mailbox.enrollment,resolver=self.resolver,runner=self.backend.mailbox.runner)
         adapter.known_identities.update(self.backend.mailbox.adapter.known_identities)
-        return HostEngine(self.paths,self.profile,adapter).execute(request)
+        try:return HostEngine(self.paths,self.profile,adapter).execute(request)
+        except Exception:
+            # Diagnostic collection must never replace the original failure.
+            try:diagnostic=snapshot_helper_diagnostic(adapter)
+            except Exception:diagnostic={'available':False}
+            self.report.setdefault('volume_diagnostics',[]).append(diagnostic)
+            raise
 
     def record(self,name,action):
         entry={'name':name,'status':'running'};self.report['phases'].append(entry)

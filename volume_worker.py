@@ -30,10 +30,28 @@ TABLES = frozenset((
 VOLATILE = {'user_profiles':frozenset(('plex_checked_at','last_login')),
             'api_keys':frozenset(('last_used_at',))}
 MAX_DB = 4*1024**3
+DIAGNOSTIC_PREFIX = 'Fixed Keep volume operation failed '
 
 
 class VolumeError(RuntimeError):
     pass
+
+
+def error_diagnostic(error):
+    """Only fixed exception names and this audited worker's line numbers."""
+    names={VolumeError:'VolumeError',json.JSONDecodeError:'JSONDecodeError',
+           OSError:'OSError',FileNotFoundError:'FileNotFoundError',PermissionError:'PermissionError',
+           FileExistsError:'FileExistsError',IsADirectoryError:'IsADirectoryError',NotADirectoryError:'NotADirectoryError',
+           sqlite3.Error:'Error',sqlite3.DatabaseError:'DatabaseError',sqlite3.OperationalError:'OperationalError',
+           sqlite3.IntegrityError:'IntegrityError',ValueError:'ValueError',TypeError:'TypeError',
+           UnicodeDecodeError:'UnicodeDecodeError',MemoryError:'MemoryError',OverflowError:'OverflowError',
+           RecursionError:'RecursionError',RuntimeError:'RuntimeError',AssertionError:'AssertionError'}
+    lines=[];trace=error.__traceback__;remaining=64
+    while trace is not None and remaining:
+        if trace.tb_frame.f_code.co_filename==error_diagnostic.__code__.co_filename and 1<=trace.tb_lineno<=65536:
+            lines.append(trace.tb_lineno);lines=lines[-8:]
+        trace=trace.tb_next;remaining-=1
+    return {'type':names.get(type(error),'Exception'),'lines':lines}
 
 
 def identifier(value):
@@ -234,9 +252,11 @@ def main(root=Path('/app/data')):
         if len(data)>65536:raise VolumeError('Volume command exceeds its bound')
         result=dispatch(json.loads(data),root,upload_stream=__import__('sys').stdin.buffer)
         print(json.dumps(result,separators=(',',':'),sort_keys=True))
-    except Exception:
-        # Fixed message only; SQL/configuration/path details never leave this tool.
-        __import__('sys').stderr.write('Fixed Keep volume operation failed\n')
+    except Exception as error:
+        # Keep the fixed failure and exit status. The bounded operator diagnostic
+        # contains no exception messages, function/path names, SQL or values.
+        __import__('sys').stderr.write(DIAGNOSTIC_PREFIX+json.dumps(error_diagnostic(error),separators=(',',':'),sort_keys=True)+'\n')
+        __import__('sys').stderr.flush()
         raise SystemExit(1)
 
 
