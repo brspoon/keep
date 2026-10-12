@@ -1,0 +1,64 @@
+name: Publish project site
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/branding/social-preview.png'
+      - 'docs/screenshots/leaving.png'
+      - 'docs/screenshots/leaving-mobile.png'
+      - 'docs/screenshots/kept.png'
+      - 'docs/screenshots/manage-library.png'
+      - 'static/keep-icon.svg'
+      - 'static/favicon-32.png'
+      - 'static/apple-touch-icon.png'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        with:
+          enablement: false
+      - name: Assemble static site
+        run: |
+          mkdir -p _site/assets
+          cp site/index.html site/styles.css _site/
+          cp static/keep-icon.svg static/favicon-32.png static/apple-touch-icon.png _site/assets/
+          cp docs/branding/social-preview.png _site/assets/
+          cp docs/screenshots/leaving.png docs/screenshots/leaving-mobile.png docs/screenshots/kept.png docs/screenshots/manage-library.png _site/assets/
+      - name: Upload site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+          retention-days: 1
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
