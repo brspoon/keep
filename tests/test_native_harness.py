@@ -25,7 +25,7 @@ import maintenance_trial_fixture as fixture
 from maintenance_protocol import canonical
 from maintenance_protocol import signed
 from private_store import create_private_paths
-from helper_bundle import create_root
+from helper_bundle import FILES as HELPER_FILES, create_root
 
 
 class Graph(trial.RegistryGraph):
@@ -401,7 +401,13 @@ class ComposeSetupTests(unittest.TestCase):
 
     def test_generated_tmpfs_is_one_parsed_scalar_and_enrollment_stages_are_recorded(self):
         identifier='12345678-1234-4234-8234-123456789abc'
-        with patch.object(trial,'enroll',return_value={'install_id':identifier}) as enroll, \
+        # Native tests read a host-owned /workspace mount as UID10001. Enrolled
+        # source must instead be an owned fixture with the exact helper bytes.
+        source=self.value.paths.mkdir(self.value.state.parent/'helper-source')
+        for name in HELPER_FILES:
+            self.value.paths.publish(source/name,(trial.DRAFT/name).read_bytes())
+        with patch.object(trial,'DRAFT',source), \
+             patch.object(trial,'enroll',return_value={'install_id':identifier}) as enroll, \
              patch.object(trial,'load_backend',return_value=(Mock(),Mock())):
             self.value.compose()
         self.assertEqual([row['step'] for row in self.value.report['compose_setup']],[
