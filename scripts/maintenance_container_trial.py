@@ -67,13 +67,21 @@ TOOLING = [
   'native':{'amd64':'sha256:3d527cee870ddd0fc8a31f99b2fdfb6451801a8dd4f5a92c1ec36dae24c14274','arm64':'sha256:16c9340cae30cbf9b5ced3f3e77340f3bf4064971685540f4257a0254069c6b2'}}]
 
 
+FAILURE_CODES = frozenset(('validation_failed', 'command_failed', 'command_timeout',
+    'command_unavailable', 'metadata_invalid', 'host_not_native', 'daemon_not_native',
+    'tool_not_native', 'tool_identity_unavailable'))
+
+
 class TrialError(RuntimeError):
-    pass
+    def __init__(self, message, *, code='validation_failed', returncode=None):
+        super().__init__(message)
+        self.code = code if code in FAILURE_CODES else 'validation_failed'
+        self.returncode = returncode if type(returncode) is int and -255 <= returncode <= 255 else None
 
 
-def require(value, message):
+def require(value, message, *, code='validation_failed'):
     if not value:
-        raise TrialError(message)
+        raise TrialError(message, code=code)
 
 
 def pinned_tool_identity(inspected, tool, architecture):
@@ -81,19 +89,27 @@ def pinned_tool_identity(inspected, tool, architecture):
     if inspected.get('Architecture') != architecture or inspected.get('Os') != 'linux':
         return False
     digest, native = tool['index_digest'], tool['native'][architecture]
-    descriptor = inspected.get('Descriptor')
-    if descriptor is not None:
-        if (not isinstance(descriptor, dict) or descriptor.get('digest') != inspected.get('Id')
-                or not (inspected['Id'] == digest and descriptor.get('mediaType') in
-                    (INDEX, 'application/vnd.docker.distribution.manifest.list.v2+json')
-                    or inspected['Id'] == native and descriptor.get('mediaType') in
-                    (MANIFEST, 'application/vnd.docker.distribution.manifest.v2+json'))):
-            return False
-        return True
+    identifier = inspected.get('Id')
+    if not isinstance(identifier, str) or not DIGEST.fullmatch(identifier):
+        return False
     repository=tool['repository'];familiar=repository.removeprefix('library/')
     allowed={name+'@'+digest for name in (familiar,repository,'docker.io/'+repository,'index.docker.io/'+repository)}
-    return bool(isinstance(inspected.get('Id'),str) and DIGEST.fullmatch(inspected['Id'])
-        and allowed.intersection(inspected.get('RepoDigests') or []))
+    references = inspected.get('RepoDigests') or []
+    if not isinstance(references, list) or not all(isinstance(value, str) for value in references):
+        return False
+    index_bound = bool(allowed.intersection(references))
+    descriptor = inspected.get('Descriptor')
+    if descriptor is not None:
+        if (not isinstance(descriptor, dict)
+                or not (descriptor.get('digest') == digest and descriptor.get('mediaType') in
+                    (INDEX, 'application/vnd.docker.distribution.manifest.list.v2+json')
+                    or descriptor.get('digest') == native and descriptor.get('mediaType') in
+                    (MANIFEST, 'application/vnd.docker.distribution.manifest.v2+json'))):
+            return False
+        # Some daemon/client pairs retain a config Id alongside the selected
+        # descriptor. That shape additionally needs the approved index name.
+        return identifier == descriptor['digest'] if identifier in (digest, native) else index_bound
+    return index_bound
 
 
 def candidate_configuration(archive_path, inspected):
@@ -145,10 +161,13 @@ def run(argv, *, env=None, timeout=120, stdin=None, stdout=None):
         result = subprocess.run([str(arg) for arg in argv], stdin=stdin,
             stdout=stdout or subprocess.PIPE, stderr=subprocess.PIPE, env=env,
             timeout=timeout, check=False)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise TrialError('Bounded trial command could not complete') from error
+    except subprocess.TimeoutExpired as error:
+        raise TrialError('Bounded trial command could not complete', code='command_timeout') from error
+    except OSError as error:
+        raise TrialError('Bounded trial command could not complete', code='command_unavailable') from error
     if result.returncode:
-        raise TrialError('Trial command failed; preserve its private evidence')
+        raise TrialError('Trial command failed; preserve its private evidence',
+            code='command_failed', returncode=result.returncode)
     return result.stdout
 
 
@@ -329,16 +348,64 @@ class NativeTrial:
         return run((self.profile.docker_executable, '--context', self.profile.docker_context, *args),
             env={'PATH':self.env['PATH'],'HOME':str(self.root),'DOCKER_CONFIG':str(self.config)}, **kwargs)
 
-    def tooling(self):
-        require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(platform.machine()) == self.architecture, 'Host CPU is not native')
-        outer_arch = self.outer('info','--format','{{.Architecture}}').decode().strip()
-        require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(outer_arch) == self.architecture, 'Runner is not native')
+    def tooling_probe(self, step, action, *, reference=None):
+        # These probes precede enrollment and inspect only public tooling. Keep
+        # fixed status codes and selected metadata; never copy stderr or argv.
+        entry={'step':step,'status':'running'}
+        if reference is not None:entry['reference']=reference
+        self.report.setdefault('tooling_preflight', []).append(entry)
+        try:
+            value=action()
+            entry.update(value)
+            entry['status']='passed'
+            return value
+        except Exception as error:
+            entry['status']='failed'
+            entry['error_code']=error.code if isinstance(error,TrialError) else 'metadata_invalid'
+            if isinstance(error,TrialError) and error.returncode is not None:
+                entry['exit_code']=error.returncode
+            raise
+
+    def tooling_preflight(self):
+        architectures={'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}
+        def host_native():
+            actual=architectures.get(platform.machine())
+            require(actual == self.architecture, 'Host CPU is not native', code='host_not_native')
+            return {'architecture':actual}
+        self.tooling_probe('host-native-architecture',host_native)
+        def client_version():
+            value=parse_json(self.outer('version','--format','{{json .Client.Version}}'),256)
+            require(isinstance(value,str) and re.fullmatch(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}[A-Za-z0-9_.+-]{0,32}',value),
+                'Invalid tooling client version', code='metadata_invalid')
+            return {'client_version':value}
+        self.tooling_probe('outer-client-version',client_version)
+        def daemon_native():
+            outer_arch=self.outer('info','--format','{{.Architecture}}').decode().strip()
+            actual=architectures.get(outer_arch)
+            require(actual == self.architecture, 'Runner is not native', code='daemon_not_native')
+            return {'architecture':actual}
+        self.tooling_probe('outer-native-architecture',daemon_native)
         for tool in TOOLING:
             ref = tool['repository']+'@'+tool['index_digest']
-            inspected = json.loads(self.outer('image','inspect','--platform','linux/'+self.architecture,ref))[0]
-            require(inspected['Architecture'] == self.architecture and inspected['Os'] == 'linux', 'Tooling is not native')
-            require(pinned_tool_identity(inspected,tool,self.architecture), 'Pinned tooling index identity unavailable')
-            self.report.setdefault('tooling', []).append({'reference':ref,'native_digest':tool['native'][self.architecture], 'local_id':inspected['Id']})
+            def inspect_tool():
+                # Tooling was already pulled on this native runner. Older outer
+                # clients cannot accept image-inspect --platform; validate the
+                # observed native platform and immutable identity explicitly.
+                rows=parse_json(self.outer('image','inspect',ref),1048576)
+                require(isinstance(rows,list) and len(rows)==1 and isinstance(rows[0],dict),
+                    'Invalid tooling inspection', code='metadata_invalid')
+                inspected=rows[0]
+                require(inspected.get('Architecture') == self.architecture and inspected.get('Os') == 'linux',
+                    'Tooling is not native', code='tool_not_native')
+                require(pinned_tool_identity(inspected,tool,self.architecture),
+                    'Pinned tooling index identity unavailable', code='tool_identity_unavailable')
+                return {'reference':ref,'native_digest':tool['native'][self.architecture],
+                    'local_id':inspected['Id'],'architecture':self.architecture,'os':'linux'}
+            result=self.tooling_probe('outer-tool-image-inspect',inspect_tool,reference=ref)
+            self.report.setdefault('tooling', []).append(result)
+
+    def tooling(self):
+        self.tooling_preflight()
         self.network = self.outer('network','create','--internal','--label','io.keep.maintenance.trial='+self.name,self.name).decode().strip()
         registry_data=self.paths.mkdir(self.tool_state/'registry-data')
         daemon_data=self.paths.mkdir(self.tool_state/'daemon-data')
@@ -583,6 +650,7 @@ volumes:
             entry['status']='passed'
         except Exception as error:
             entry['status']='failed';entry['error_type']=type(error).__name__
+            if isinstance(error,TrialError):entry['error_code']=error.code
             raise
 
     def restart_and_drain(self):

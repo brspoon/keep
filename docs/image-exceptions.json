@@ -30,7 +30,7 @@
     "scripts/package_maintenance_helper.py": "69bf370bc478112e11f5bb25c89e2ba5e4f4d301b31f1fcf5aec765d941a51c9",
     ".github/workflows/native-image.yml": "d9269ee215a803e4a603a08d50e8527274c7effa1ab459c72ff4956be1df29da",
     "scripts/validated_build.py": "8825708adaba054dd0a898a08e528484ff2af9f12abd2631842bab260f0c4dd6",
-    "scripts/maintenance_container_trial.py": "8e39b13b07e9ccc7c653359efe09f2593bf7cf47c54cbaa201c3cdf215be456f",
+    "scripts/maintenance_container_trial.py": "ea8ecacc823957117cdfdb2da9786939ae0847ceaade8b70f832c78fca7d2229",
     "tests/maintenance_trial_fixture.py": "31f9eee827dc28c8fd01b9c4b1859e93bfd924832841ce604890c68ef40845c4"
   },
   "exceptions": {

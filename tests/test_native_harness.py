@@ -257,6 +257,104 @@ class ToolIdentityTests(unittest.TestCase):
             selected['Descriptor']['digest']='sha256:'+'b'*64
             self.assertFalse(trial.pinned_tool_identity(selected,tool,'amd64'))
 
+    def test_index_descriptors_and_config_id_hybrids_keep_exact_pins(self):
+        for architecture in ('amd64','arm64'):
+            for tool in trial.TOOLING:
+                index=tool['index_digest'];native=tool['native'][architecture]
+                base={'Architecture':architecture,'Os':'linux','Id':'sha256:'+'a'*64,
+                    'RepoDigests':[tool['repository']+'@'+index]}
+                for digest,mime in ((index,trial.INDEX),(native,trial.MANIFEST)):
+                    descriptor={'digest':digest,'mediaType':mime}
+                    self.assertTrue(trial.pinned_tool_identity({**base,'Descriptor':descriptor},tool,architecture))
+                    self.assertTrue(trial.pinned_tool_identity({**base,'Id':digest,'Descriptor':descriptor},tool,architecture))
+                    self.assertFalse(trial.pinned_tool_identity({**base,'RepoDigests':[],
+                        'Descriptor':descriptor},tool,architecture))
+                    self.assertFalse(trial.pinned_tool_identity({**base,'Descriptor':{**descriptor,
+                        'digest':'sha256:'+'f'*64}},tool,architecture))
+                    self.assertFalse(trial.pinned_tool_identity({**base,'Descriptor':{**descriptor,
+                        'mediaType':trial.MANIFEST if mime==trial.INDEX else trial.INDEX}},tool,architecture))
+                self.assertFalse(trial.pinned_tool_identity({**base,'Id':native,
+                    'Descriptor':{'digest':index,'mediaType':trial.INDEX}},tool,architecture))
+                self.assertFalse(trial.pinned_tool_identity({**base,'Architecture':
+                    'arm64' if architecture=='amd64' else 'amd64'},tool,architecture))
+                self.assertFalse(trial.pinned_tool_identity({**base,'Os':'windows'},tool,architecture))
+
+
+class ToolPreflightTests(unittest.TestCase):
+    def value(self, architecture='amd64'):
+        value=trial.NativeTrial.__new__(trial.NativeTrial)
+        value.architecture,value.report=architecture,{}
+        return value
+
+    def test_older_outer_client_inspects_preloaded_native_pins_without_platform_flag(self):
+        for architecture,machine in (('amd64','x86_64'),('arm64','aarch64')):
+            value=self.value(architecture)
+            def outer(*args):
+                self.assertNotIn('--platform',args)
+                if args==('version','--format','{{json .Client.Version}}'):return b'"28.0.4"\n'
+                if args==('info','--format','{{.Architecture}}'):return machine.encode()
+                for tool in trial.TOOLING:
+                    reference=tool['repository']+'@'+tool['index_digest']
+                    if args==('image','inspect',reference):
+                        return canonical([{'Id':'sha256:'+'a'*64,'Architecture':architecture,'Os':'linux',
+                            'RepoDigests':[tool['repository'].removeprefix('library/')+'@'+tool['index_digest']]}])
+                raise AssertionError('Unexpected preflight command')
+            value.outer=Mock(side_effect=outer)
+            with patch.object(trial.platform,'machine',return_value=machine):value.tooling_preflight()
+            self.assertEqual(len(value.report['tooling']),2)
+            self.assertTrue(all(row['status']=='passed' for row in value.report['tooling_preflight']))
+            self.assertEqual(value.report['tooling_preflight'][1]['client_version'],'28.0.4')
+            self.assertEqual([row['native_digest'] for row in value.report['tooling']],
+                [tool['native'][architecture] for tool in trial.TOOLING])
+
+    def test_failed_public_tool_inspect_records_bounded_code_without_stderr_or_environment(self):
+        value=self.value()
+        secret='private-token-that-must-not-be-reported'
+        def process(argv,**kwargs):
+            if 'version' in argv:return SimpleNamespace(returncode=0,stdout=b'"28.0.4"\n')
+            if 'info' in argv:return SimpleNamespace(returncode=0,stdout=b'x86_64\n')
+            return SimpleNamespace(returncode=1,stdout=secret.encode(),stderr=secret.encode())
+        value.outer=lambda *args:trial.run(('docker','--host','unix:///var/run/docker.sock',*args),
+            env={'PRIVATE_TOKEN':secret})
+        with patch.object(trial.platform,'machine',return_value='x86_64'),patch.object(trial.subprocess,'run',side_effect=process):
+            with self.assertRaises(trial.TrialError) as raised:value.tooling_preflight()
+        self.assertEqual(raised.exception.code,'command_failed')
+        failed=value.report['tooling_preflight'][-1]
+        self.assertEqual(failed,{'step':'outer-tool-image-inspect','status':'failed',
+            'reference':trial.TOOLING[0]['repository']+'@'+trial.TOOLING[0]['index_digest'],
+            'error_code':'command_failed','exit_code':1})
+        self.assertNotIn(secret,json.dumps(value.report))
+        self.assertNotIn('PRIVATE_TOKEN',json.dumps(value.report))
+        self.assertNotIn('tooling',value.report)
+
+    def test_wrong_native_platform_and_unbound_reference_fail_before_resources(self):
+        for change,code in (({'Architecture':'arm64'},'tool_not_native'),
+                ({'RepoDigests':['unrelated/image@'+trial.TOOLING[0]['index_digest']]},'tool_identity_unavailable')):
+            value=self.value()
+            def outer(*args):
+                if args[0]=='version':return b'"28.0.4"'
+                if args[0]=='info':return b'x86_64'
+                self.assertEqual(args[:2],('image','inspect'))
+                return canonical([{'Id':'sha256:'+'a'*64,'Architecture':'amd64','Os':'linux',
+                    'RepoDigests':['docker@'+trial.TOOLING[0]['index_digest']],**change}])
+            value.outer=Mock(side_effect=outer)
+            with patch.object(trial.platform,'machine',return_value='x86_64'):
+                with self.assertRaises(trial.TrialError):value.tooling_preflight()
+            self.assertEqual(value.report['tooling_preflight'][-1]['error_code'],code)
+            self.assertNotIn('tooling',value.report)
+
+    def test_command_timeout_unavailable_and_invalid_version_have_fixed_codes(self):
+        for error,code in ((trial.subprocess.TimeoutExpired(['private'],1), 'command_timeout'),
+                (OSError('private filesystem error'),'command_unavailable')):
+            with patch.object(trial.subprocess,'run',side_effect=error):
+                with self.assertRaises(trial.TrialError) as raised:trial.run(('docker','version'))
+            self.assertEqual(raised.exception.code,code)
+        value=self.value();value.outer=Mock(return_value=b'"private invalid version"')
+        with patch.object(trial.platform,'machine',return_value='x86_64'):
+            with self.assertRaises(trial.TrialError):value.tooling_preflight()
+        self.assertEqual(value.report['tooling_preflight'][-1]['error_code'],'metadata_invalid')
+        self.assertNotIn('private invalid version',json.dumps(value.report))
+
 
 class CleanupTests(unittest.TestCase):
     def test_unlabeled_foreign_container_before_enrollment_holds_all_cleanup_untouched(self):
