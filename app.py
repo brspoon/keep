@@ -16,9 +16,14 @@ import seerr
 import connection_monitor
 import background_jobs
 import release_updates
+import notifications
+import notification_settings
+import notifications_routes
+import notifications_app
+import pushover
 import email_templates
 import api_v1
-MASKED_CONNECTION_FIELDS = SECRETS + ("PLEX_MACHINE_IDENTIFIER",)
+MASKED_CONNECTION_FIELDS = tuple(name for name in SECRETS if name != 'PUSHOVER_APP_TOKEN') + ("PLEX_MACHINE_IDENTIFIER",)
 from contextvars import ContextVar
 from service_discovery import discover_collections, test_plex
 import smtplib
@@ -46,6 +51,7 @@ from functools import wraps
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
@@ -208,6 +214,35 @@ def recipient_collection_ids():
 
 def email_enabled():
     return connection_value('EMAIL_ENABLED') == 'true'
+
+
+def notification_actor():
+    profile = current_profile()
+    user = session.get('plex_user') or {}
+    return notification_settings.Actor(str(user.get('id', '')),
+        bool(profile and profile['status'] == 'active' and plex_account_access_active(profile)),
+        bool(profile and str(profile['plex_id']) == owner_id()),
+        session_version=user.get('session_version', -1))
+
+
+def notification_settings_store(*, initialize=False):
+    return notification_settings.Settings(KEEP_DB_PATH, initialize=initialize,
+        connections=connection_settings, owner_id=owner_id,
+        profile_access=plex_account_access_active)
+
+
+def notification_store(*, read_only=False):
+    if read_only:
+        return notifications.Store(KEEP_DB_PATH, initialize=False)
+    store = app.extensions.get('keep_notifications')
+    if store is None or store.path != Path(KEEP_DB_PATH):
+        store = notifications.Store(KEEP_DB_PATH)
+        app.extensions['keep_notifications'] = store
+    return store
+
+
+def notification_enabled_providers():
+    return notification_runtime().enabled_providers()
 
 
 @app.before_request
@@ -1418,11 +1453,13 @@ def get_recipient_delivery_preferences():
     with closing(attribution_db()) as db:
         rows = db.execute("""SELECT r.email, s.collection_id
             FROM email_recipients r
-            JOIN recipient_subscriptions s ON s.email = r.email AND s.enabled = 1
+            LEFT JOIN recipient_subscriptions s ON s.email = r.email AND s.enabled = 1
             WHERE r.enabled = 1 ORDER BY r.email COLLATE NOCASE, s.collection_id""").fetchall()
     preferences = {}
     for row in rows:
-        preferences.setdefault(row["email"], set()).add(row["collection_id"])
+        selected = preferences.setdefault(row["email"], set())
+        if row["collection_id"] is not None:
+            selected.add(row["collection_id"])
     return preferences
 
 
@@ -1460,6 +1497,29 @@ def send_email(to_addresses, subject, html_body, text_body):
         refused = smtp.send_message(msg)
         if refused:
             raise RuntimeError("SMTP rejected one or more digest recipients")
+
+
+def send_notification_email(to_addresses, subject, html_body, text_body):
+    """Recheck effective SMTP settings immediately before delivery."""
+    token = _settings_snapshot.set(connection_settings.snapshot())
+    try:
+        return send_email(to_addresses, subject, html_body, text_body)
+    finally:
+        _settings_snapshot.reset(token)
+
+
+def send_notification_email_test(address):
+    subject, body, plain = email_templates.notification_email(
+        'Keep test notification', 'Your Keep email notifications are working.',
+        connection_settings.get('KEEP_URL', KEEP_URL))
+    send_notification_email([address], subject, body, plain)
+    return notifications.Outcome('accepted')
+
+
+def send_notification_push_test(credentials):
+    return pushover.send(credentials.app_token, credentials.user_key,
+        'Your Keep Pushover notifications are working.', title='Keep test notification',
+        device=credentials.device)
 
 
 def send_local_setup_email(profile, token, reset=False):
@@ -3026,14 +3086,16 @@ def require_owner():
 
 def redirect_to_settings_with_notice(notice_key):
     session["settings_notice"] = notice_key
-    section = "email" if notice_key in ("recipient", "subscriptions") else "users"
+    if notice_key in ("recipient", "subscriptions"):
+        return redirect('/settings/notifications')
+    section = "users"
     return redirect(url_for(f"settings_{section}"))
 
 
 def redirect_to_settings_with_error(message, email_address=""):
     session["settings_error"] = message
     session["settings_error_email"] = email_address
-    return redirect(url_for("settings_email"))
+    return redirect('/settings/notifications')
 
 
 def require_form_csrf():
@@ -3866,49 +3928,83 @@ def email_preferences_page():
     email_address = ((profile["email"] if profile else "") or user.get("email") or "").strip().lower()
     theme = profile['theme_mode'] if profile else 'system'
     error = None
+    test_feedback = None
     saved = request.args.get("saved") == "1"
 
     if request.method == "POST":
         csrf_error = require_form_csrf()
         if csrf_error:
             return csrf_error
-        requested_theme = request.form.get('theme_mode', theme)
-        if requested_theme in ('system', 'light', 'dark'):
-            theme = requested_theme
-        receive_email = request.form.get("receive_email") == "1"
-        try:
-            selected = {int(value) for value in request.form.getlist("collection_id")}
-        except ValueError:
-            selected = set()
-        if requested_theme not in ('system', 'light', 'dark'):
-            error = 'Choose System, Light, or Dark appearance.'
-        elif not profile:
-            error = 'Your account is unavailable. Sign in again.'
-        elif receive_email and not valid_email_address(email_address):
-            error = "Your Keep account does not have an email address. Ask the owner to add one."
-        elif receive_email and (not selected or not selected.issubset(set(recipient_collection_ids()))):
-            error = "Select at least one collection or turn off email delivery."
-        elif selected and not selected.issubset(set(recipient_collection_ids())):
-            error = "Invalid collection preference."
+        action = request.form.get('action', 'email')
+        personal = notification_routes.handle_personal(action)
+        if personal['response'] is not None:
+            return personal['response']
+        if personal['handled']:
+            error, test_feedback, saved = personal['error'], personal['test_feedback'], False
+            if personal['saved']:
+                return redirect(url_for('email_preferences_page', saved='1', **({'fragment': '1'} if request.args.get('fragment') == '1' else {})))
+        elif action != 'email':
+            return 'Unknown preferences action', 400
         else:
-            with closing(attribution_db()) as db, db:
-                db.execute('UPDATE user_profiles SET theme_mode=? WHERE plex_id=?',
-                           (requested_theme, str(user['id'])))
-                if receive_email:
-                    db.execute("""INSERT INTO email_recipients(email, enabled) VALUES (?, 1)
-                        ON CONFLICT(email) DO UPDATE SET enabled = 1""", (email_address,))
-                    ensure_recipient_subscriptions(db, email_address)
-                    db.execute("UPDATE recipient_subscriptions SET enabled = 0 WHERE email = ?",
-                               (email_address,))
-                    db.executemany("""UPDATE recipient_subscriptions SET enabled = 1
-                        WHERE email = ? AND collection_id = ?""",
-                        ((email_address, collection_id) for collection_id in selected))
-                elif email_address:
-                    # Allow opting out of an address saved under older validation rules.
-                    db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?",
-                               (email_address,))
-            log_activity('personal-preferences-updated', 'Updated personal preferences')
-            return redirect(url_for("email_preferences_page", saved="1", **({"fragment": "1"} if request.args.get("fragment") == "1" else {})))
+            if not current_account_session():
+                return 'Your account is unavailable. Sign in again.', 403
+            actor = notification_actor()
+            settings = notification_settings_store()
+            previous_events = settings.email_event_preferences(email_address)['events'] if email_address else notifications.MEDIA_EVENTS
+            chosen_events = (set(request.form.getlist('email_event'))
+                             if 'email_event_present' in request.form or 'email_event' in request.form else set(previous_events))
+            receive_email = request.form.get('receive_email') == '1'
+            requested_theme = request.form.get('theme_mode', theme)
+            if requested_theme in ('system', 'light', 'dark'):
+                theme = requested_theme
+            with closing(attribution_db()) as db:
+                previous_collections = {row[0] for row in db.execute(
+                    'SELECT collection_id FROM recipient_subscriptions WHERE email=? AND enabled=1', (email_address,))}
+            try:
+                selected = ({int(value) for value in request.form.getlist('collection_id')}
+                            if receive_email or 'collection_id' in request.form else previous_collections)
+            except ValueError:
+                selected = set()
+                error = 'Invalid collection preference.'
+            allowed_events = notifications.EVENTS if actor.owner else notifications.MEDIA_EVENTS
+            if requested_theme not in ('system', 'light', 'dark'):
+                error = 'Choose System, Light, or Dark appearance.'
+            elif not chosen_events.issubset(allowed_events):
+                error = 'Choose events available to your account.'
+            elif receive_email and not valid_email_address(email_address):
+                error = 'Your Keep account does not have an email address. Ask the owner to add one.'
+            elif receive_email and not chosen_events:
+                error = 'Select at least one event or turn off email notifications.'
+            elif receive_email and chosen_events & notifications.MEDIA_EVENTS and not selected:
+                error = 'Select at least one collection or turn off email delivery.'
+            elif not selected.issubset(set(recipient_collection_ids())):
+                error = 'Invalid collection preference.'
+            if not error:
+                try:
+                    with closing(attribution_db()) as db, db:
+                        db.execute('BEGIN IMMEDIATE')
+                        settings.validate_actor(actor, db=db)
+                        db.execute('UPDATE user_profiles SET theme_mode=? WHERE plex_id=?',
+                                   (requested_theme, str(user['id'])))
+                        if receive_email:
+                            db.execute('''INSERT INTO email_recipients(email, enabled) VALUES (?,1)
+                                ON CONFLICT(email) DO UPDATE SET enabled=1''', (email_address,))
+                            ensure_recipient_subscriptions(db, email_address)
+                        elif email_address:
+                            db.execute('UPDATE email_recipients SET enabled=0 WHERE email=?', (email_address,))
+                        if email_address:
+                            db.execute('UPDATE recipient_subscriptions SET enabled=0 WHERE email=?', (email_address,))
+                            db.executemany('UPDATE recipient_subscriptions SET enabled=1 WHERE email=? AND collection_id=?',
+                                           ((email_address, cid) for cid in selected))
+                            if db.execute('SELECT 1 FROM email_recipients WHERE email=?', (email_address,)).fetchone():
+                                settings.save_email_events(actor, email_address, chosen_events, db=db)
+                except (PermissionError, ValueError):
+                    error = 'Your account changed. Refresh Preferences and try again.'
+                except (sqlite3.Error, OSError):
+                    error = 'Keep could not save your preferences. Try again shortly.'
+                else:
+                    log_activity('personal-preferences-updated', 'Updated personal preferences')
+                    return redirect(url_for('email_preferences_page', saved='1', **({'fragment': '1'} if request.args.get('fragment') == '1' else {})))
 
     enabled = False
     selected = set(recipient_collection_ids())
@@ -3922,10 +4018,18 @@ def email_preferences_page():
         if rows:
             selected = {row["collection_id"] for row in rows}
 
+    try:
+        notification_context = notification_routes.preferences_context(email_address)
+    except PermissionError:
+        return render_auth_page(title='Sign in again',
+            message='Your account changed. Sign in again to continue.',
+            button_label='Sign in', button_url=url_for('login')), 403
+    except (sqlite3.Error, OSError, ValueError):
+        return 'Keep could not read your notification preferences. Try again shortly.', 503
     if request.args.get("fragment") == "1":
         return render_template("preferences_form.html", preference_id_prefix="dialog-", email=email_address, enabled=enabled,
             selected=selected, collections=get_collections(), error=error, saved=saved, theme=theme,
-            csrf_token=get_csrf_token())
+            test_feedback=test_feedback, csrf_token=get_csrf_token(), **notification_context)
 
     return render_template_string("""
 <!doctype html><html lang="en" data-theme="{{ theme_mode }}"><head><meta charset="utf-8">
@@ -3967,18 +4071,12 @@ def email_preferences_page():
 </head><body class="preferences-ui"><main>
   {% include 'shared_header.html' %}
   {% include 'shared_whats_new.html' %}
-  <div class="page-heading"><h1>Preferences</h1><p class="subtitle">Choose Keep’s appearance and your email reminders.</p></div>
+  <div class="page-heading"><h1>Preferences</h1><p class="subtitle">Choose Keep’s appearance and your notifications.</p></div>
   {% include 'preferences_form.html' %}
   <a class="back" href="/">Back to Keep</a>
-  <script>
-    const receiveEmail = document.getElementById("receive-email");
-    const emailTopics = document.getElementById("email-topics");
-    receiveEmail.addEventListener("change", () => {
-      emailTopics.disabled = !receiveEmail.checked;
-    });
-  </script>
 </main></body></html>""", email=email_address, enabled=enabled, selected=selected, theme=theme,
-        collections=get_collections(), error=error, saved=saved, csrf_token=get_csrf_token())
+        collections=get_collections(), error=error, saved=saved, test_feedback=test_feedback,
+        csrf_token=get_csrf_token(), **notification_context)
 
 
 @app.get("/settings")
@@ -4455,7 +4553,7 @@ def settings_users():
 
 @app.get("/settings/email")
 def settings_email():
-    return render_settings_section("email")
+    return notification_routes.legacy_email_redirect()
 
 
 @app.get("/settings/activity")
@@ -5229,10 +5327,8 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
 
 
 def recipient_settings_error(message, address='', status=400, new_recipient_email=''):
-    response = app.make_response((render_settings_section('email', error=message,
-        expanded_recipient=address, new_recipient_email=new_recipient_email), status))
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+    return notification_routes.render_page(error=message, status=status,
+        expanded_recipient=address, new_recipient_email=new_recipient_email)
 
 
 @app.post("/settings/users/<plex_id>")
@@ -5384,6 +5480,7 @@ def update_user_access(user_id):
         with closing(attribution_db()) as db, db:
             db.execute("DELETE FROM user_library_permissions WHERE user_id = ?", (user_id,))
             db.execute("DELETE FROM user_feature_acknowledgements WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM pushover_preferences WHERE user_id = ?", (user_id,))
             db.execute("DELETE FROM user_profiles WHERE plex_id = ?", (user_id,))
         log_activity("user-deleted", f"Deleted local user {label}")
         return redirect_to_settings_with_notice("deleted")
@@ -5435,12 +5532,7 @@ def save_recipient_settings():
             if not recipient:
                 validation_error, error_status = 'Recipient not found', 404
             else:
-                enabled_count = db.execute(
-                    "SELECT COUNT(*) FROM email_recipients WHERE enabled = 1"
-                ).fetchone()[0]
-                if recipient["enabled"] and enabled_count <= 1:
-                    validation_error = 'At least one email recipient must remain enabled'
-                elif action == "disable":
+                if action == "disable":
                     db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?", (address,))
                 else:
                     db.execute("DELETE FROM email_recipients WHERE email = ?", (address,))
@@ -5797,9 +5889,13 @@ def background_maintenance_once(state):
         result_fn=lambda count: ('success', f'Removed {count} titles'))
     if removed:
         app.logger.warning("Removed %s stale titles from the digest queue", removed)
+    try:
+        observe_notification_status()
+    except (sqlite3.Error, OSError, ValueError):
+        app.logger.warning('Notification observations deferred; continuing delivery')
     result = run_maintenance_job(jobs, 'email-digest', process_digest, result_fn=digest_job_result)
     if result == 'review':
-        app.logger.error("Digest delivery requires review; automatic sending paused")
+        app.logger.warning('Some notification deliveries need review')
 
 
 def run_maintenance_job(jobs, job_id, callback, *, fallback=None, **options):
@@ -5815,7 +5911,7 @@ def digest_job_result(state):
     if state == 'review':
         return 'review', 'Delivery needs review'
     if state == 'disabled':
-        return 'disabled', 'Email is disabled'
+        return 'disabled', 'Notifications are disabled'
     if state == 'sent':
         return 'success', 'Completed'
     if state == 'empty':
@@ -6060,10 +6156,10 @@ def reconcile_reminder_queue():
 def queue_due_reminders(now=None):
     """Catch up active, unprotected titles with at most seven days remaining.
 
-    Only queues mail; normal recipient preferences, batching and SMTP safeguards
+    Only queues notifications; recipient preferences and batching safeguards
     still apply. Dates, retention and collection membership must be known.
     """
-    if not email_enabled():
+    if not notification_enabled_providers():
         return 0
     now = time.time() if now is None else now
     reconcile_reminder_queue()
@@ -6120,6 +6216,7 @@ def resolve_digest(events):
             add_date = item.get("addDate")
             resolved[key] = {
                 "collection_id": cid,
+                "media_id": str(event['media_id']),
                 "collection": get_collections()[cid].replace(" Leaving Plex Soon", ""),
                 "title": media.get("title") or f"Plex item {event['media_id']}",
                 "year": media.get("year"),
@@ -6135,75 +6232,54 @@ def build_digest_email(items, keep_url):
     return email_templates.digest_email(items, keep_url)
 
 
+def fresh_notification_call(callback, *args):
+    token = _settings_snapshot.set(connection_settings.snapshot())
+    try:
+        return callback(*args)
+    finally:
+        _settings_snapshot.reset(token)
+
+
+def notification_runtime():
+    return notifications_app.Runtime(notifications_app.Helpers(
+        store=lambda: notification_store(), settings=lambda: notification_settings_store(),
+        collections=lambda: fresh_notification_call(get_collections),
+        email_preferences=lambda: get_recipient_delivery_preferences(),
+        email_enabled=lambda: fresh_notification_call(email_enabled),
+        value=lambda name: fresh_notification_call(connection_value, name),
+        reconcile=lambda: reconcile_reminder_queue(), resolve=lambda events: resolve_digest(events),
+        build_email=lambda items, url: build_digest_email(items, url),
+        build_event_email=lambda title, message, url: email_templates.notification_email(title, message, url),
+        send_email=lambda addresses, subject, body, plain: send_notification_email(addresses, subject, body, plain)))
+
+
+def observe_notification_status():
+    settings = connection_settings.snapshot()
+    getter = lambda name: settings.get(name, globals().get(name, ''))
+    scopes = {service: connection_settings.connection_fingerprint(service, getter)
+              for service in notifications.CONNECTIONS
+              if service != 'pushover' and connection_settings.configured(service, getter)
+              and (service != 'email' or getter('EMAIL_ENABLED') == 'true')}
+    job_scopes = {job_id: None for job_id in background_jobs.JOB_IDS}
+    if connection_settings.configured('seerr', getter):
+        job_scopes.update({job_id: seerr.namespace(getter)
+                           for job_id in ('seerr-history', 'seerr-availability')})
+    else:
+        for job_id in ('seerr-history', 'seerr-availability'):
+            job_scopes.pop(job_id, None)
+    return notification_runtime().observe_recorded(
+        connections=notifications_app.recorded_connections(KEEP_DB_PATH),
+        jobs=background_jobs.Store(KEEP_DB_PATH, initialize=False).records(read_only=True),
+        releases=release_updates.Store(KEEP_DB_PATH, initialize=False).snapshot(APP_VERSION),
+        current_connection_scopes=scopes, current_job_scopes=job_scopes)
+
+
 def process_digest(now=None):
-    if not email_enabled():
-        return "disabled"
-    # A filesystem lock in digest_worker prevents two workers from claiming/sending.
-    now = time.time() if now is None else now
-    reconcile_reminder_queue()
-    with closing(attribution_db()) as db, db:
-        db.execute("BEGIN IMMEDIATE")
-        # SMTP cannot guarantee exactly-once delivery after a crash. Hold uncertain
-        # batches for review rather than resend a potentially delivered email.
-        db.execute("UPDATE notification_batches SET status = 'review', detail = 'Worker interrupted during SMTP delivery' WHERE status = 'sending'")
-        if db.execute("SELECT 1 FROM notification_batches WHERE status = 'review'").fetchone():
-            return "review"
-        batch = db.execute("SELECT id FROM notification_batches WHERE status = 'building' ORDER BY created_at LIMIT 1").fetchone()
-        if batch:
-            batch_id = batch["id"]
-        else:
-            newest = db.execute("SELECT MAX(received_at) FROM notification_queue WHERE batch_id IS NULL").fetchone()[0]
-            if newest is None or now - newest < DIGEST_QUIET_SECONDS:
-                return "waiting"
-            batch_id = uuid.uuid4().hex
-            db.execute("INSERT INTO notification_batches(id, status, created_at) VALUES (?, 'building', ?)", (batch_id, now))
-            db.execute("UPDATE notification_queue SET batch_id = ? WHERE batch_id IS NULL", (batch_id,))
-        events = [dict(row) for row in db.execute("SELECT * FROM notification_queue WHERE batch_id = ?", (batch_id,))]
-    items = resolve_digest(events)  # Failures here are safe to retry; no mail sent.
-    delivery_target_count = 0
-    if items:
-        preferences = get_recipient_delivery_preferences()
-        if preferences and not connection_value('KEEP_URL'):
-            raise RuntimeError('Digest needs KEEP_URL')
-        with closing(attribution_db()) as db:
-            delivered = {row["email"].casefold() for row in db.execute(
-                "SELECT email FROM notification_deliveries WHERE batch_id = ?", (batch_id,)
-            )}
-        for email_address, collection_ids in preferences.items():
-            recipient_items = [item for item in items
-                               if item["collection_id"] in collection_ids]
-            if recipient_items:
-                delivery_target_count += 1
-            if not recipient_items or email_address.casefold() in delivered:
-                continue
-            subject, body, plain = build_digest_email(recipient_items, connection_value('KEEP_URL'))
-            with closing(attribution_db()) as db, db:
-                db.execute("UPDATE notification_batches SET status = 'sending' WHERE id = ?",
-                           (batch_id,))
-            try:
-                send_email([email_address], subject, body, plain)
-            except Exception:
-                with closing(attribution_db()) as db, db:
-                    db.execute("""UPDATE notification_batches SET status = 'review',
-                        detail = 'SMTP delivery failed or is uncertain; check logs before retrying'
-                        WHERE id = ?""", (batch_id,))
-                app.logger.error("Digest %s held for review after SMTP error", batch_id)
-                return "review"
-            with closing(attribution_db()) as db, db:
-                db.execute("""INSERT OR IGNORE INTO notification_deliveries
-                    (batch_id, email, sent_at) VALUES (?, ?, ?)""",
-                    (batch_id, email_address, time.time()))
-                db.execute("UPDATE notification_batches SET status = 'building' WHERE id = ?",
-                           (batch_id,))
-    with closing(attribution_db()) as db, db:
-        db.execute("UPDATE notification_batches SET status = 'sent', detail = ? WHERE id = ?", (f"{len(items)} titles", batch_id))
-        db.execute("DELETE FROM notification_queue WHERE batch_id = ?", (batch_id,))
-        db.execute("DELETE FROM notification_deliveries WHERE batch_id = ?", (batch_id,))
-    app.logger.warning("Digest %s completed: %s titles", batch_id, len(items))
-    log_activity("digest-completed",
-                 f"Completed digest with {len(items)} titles for {delivery_target_count} recipients",
-                 actor={"username": "Keep email worker"})
-    return "sent" if delivery_target_count else "empty"
+    result = notification_runtime().process_digest(now=now, quiet_seconds=DIGEST_QUIET_SECONDS)
+    if result == 'sent':
+        log_activity('digest-completed', 'Delivered queued notifications',
+                     actor={'username': 'Keep background worker'})
+    return result
 
 
 def update_digest_worker_heartbeat(now=None):
@@ -6357,6 +6433,7 @@ def digest_worker():
     lock_path = os.path.join(os.path.dirname(KEEP_DB_PATH), "digest-worker.lock")
     with open(lock_path, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        notification_runtime().recover_after_lock()
         job_store().interrupt_running()
         app.logger.warning("Digest worker started; quiet window %s seconds", DIGEST_QUIET_SECONDS)
         import threading
@@ -6391,6 +6468,17 @@ def connection_monitor_worker():
         time.sleep(30)
 
 
+notification_settings_store(initialize=True)
+notification_routes = notifications_routes.register_routes(app, SimpleNamespace(
+    require_owner=lambda: require_owner(), require_csrf=lambda: require_form_csrf(),
+    current_account_session=lambda: current_account_session(), actor=lambda: notification_actor(),
+    settings_store=lambda **kwargs: notification_settings_store(**kwargs),
+    core_store=lambda **kwargs: notification_store(**kwargs), db=lambda: attribution_db(),
+    collections=lambda: get_collections(), csrf_token=lambda: get_csrf_token(),
+    log_activity=lambda action, description: log_activity(action, description),
+    connections=connection_settings, quiet_seconds=DIGEST_QUIET_SECONDS,
+    send_email_test=lambda address: send_notification_email_test(address),
+    send_push_test=lambda credentials: send_notification_push_test(credentials)))
 job_store()
 api_v1.ApiV1(sys.modules[__name__])
 # Keep browser recovery branded after the API installs its HTTP error handlers.

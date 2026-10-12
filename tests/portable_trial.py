@@ -30,6 +30,14 @@ FIXTURE_PASSWORD = "synthetic-recovery-trial-password-2026"
 COLLECTIONS = {"901": "Recovery Trial Movies", "902": "Recovery Trial Series"}
 LOCAL_ID = "local-trial"
 LOCAL_EMAIL = "local-trial@example.com"
+OWNER_EMAIL = "owner-trial@example.com"
+NOTIFICATION_TIME = 1_798_200_000.0
+TRIAL_PUSH_TOKEN = "P" * 30
+TRIAL_PUSH_KEYS = {LOCAL_ID: "L" * 30, "7": "O" * 30}
+TRIAL_PUSH_SCOPE = hashlib.sha256(json.dumps(
+    ("pushover", TRIAL_PUSH_TOKEN), separators=(",", ":")).encode()).hexdigest()
+TRIAL_PUSH_FINGERPRINT = hashlib.sha256(json.dumps(
+    (False, TRIAL_PUSH_TOKEN), separators=(",", ":")).encode()).hexdigest()
 # Public deterministic API bearers belong only to the isolated offline fixture.
 # Production key generation uses secrets.token_urlsafe; these values never go
 # into a deployment environment, image or reported database output.
@@ -107,6 +115,20 @@ FINGERPRINT_COLUMNS = {
     "background_jobs": ("job_id", "run_token", "started", "finished", "last_success",
                         "duration", "status", "result", "next_run", "scope"),
     "portable_trial_jobs_marker": ("fixture_id",),
+    "portable_trial_notifications_marker": ("fixture_id",),
+    "pushover_preferences": ("user_id", "enabled", "user_key", "device", "collections_json",
+                             "events_json", "generation", "provider_generation", "after_queue_id", "updated_at"),
+    "notification_provider_generations": ("provider", "fingerprint", "generation", "synchronized_at"),
+    "notification_email_events": ("email", "events_json", "owner_alerts_activated_at"),
+    "notification_destination_epochs": ("provider", "destination_id", "generation", "after_queue_id",
+                                        "after_event_id", "activated_at"),
+    "notification_runs": ("batch_id", "legacy", "finished_at"),
+    "notification_dispatches": ("batch_id", "provider", "destination_id", "generation", "provider_generation",
+                                "state", "created_at", "last_attempt", "next_attempt", "attempts",
+                                "accepted_at", "error_code", "request_id"),
+    "notification_cooldowns": ("provider", "generation", "until_at"),
+    "notification_test_attempts": ("id", "user_id", "kind", "credential_scope", "destination_generation",
+                                   "reserved_at", "finished_at", "state", "error_code", "request_id"),
 }
 
 
@@ -160,6 +182,8 @@ def configure_synthetic_environment(path):
     ):
         os.environ[name] = TRIAL_SETTINGS[name]
     os.environ["EMAIL_ENABLED"] = "false"
+    os.environ["PUSHOVER_ENABLED"] = "false"
+    os.environ["PUSHOVER_APP_TOKEN"] = TRIAL_PUSH_TOKEN
 
 
 def app_module():
@@ -175,7 +199,7 @@ def seed(app):
         return
     # App import initialized all current schemas. Initialize Seerr's durable store too.
     app.seerr_store()
-    now = 1_798_200_000.0
+    now = NOTIFICATION_TIME
     with closing(sqlite3.connect(path)) as db, db:
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("CREATE TABLE portable_trial_marker (fixture_id TEXT PRIMARY KEY NOT NULL)")
@@ -255,6 +279,8 @@ def seed(app):
                     VALUES (?,?,?,?,?,?,?,?,?)''',
                     (job_id, 'synthetic-recovery-run', now, now + 2,
                      now + 2 if status == 'success' else None, 2, status, result, now + 32))
+    if hasattr(app, 'notification_settings_store'):
+        seed_notification_preferences(app)
     assert_saved_state(app)
     print("Recovery trial fixture seeded. Synthetic SMTP is disabled; no services were contacted.")
 
@@ -267,6 +293,130 @@ def require(condition, message):
 def api_request_hash(payload):
     return hashlib.sha256(json.dumps(['POST', '/api/v1/keeps', payload],
         sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def seed_notification_preferences(app):
+    """Create disabled synthetic channels and durable proof without transport."""
+    import notification_settings
+    settings = app.notification_settings_store()
+    now = NOTIFICATION_TIME
+    with closing(sqlite3.connect(app.KEEP_DB_PATH)) as db, db:
+        db.executemany('INSERT OR REPLACE INTO connection_settings(name,value) VALUES (?,?)',
+                       (('PUSHOVER_ENABLED', 'false'), ('PUSHOVER_APP_TOKEN', TRIAL_PUSH_TOKEN)))
+        db.execute('INSERT INTO email_recipients(email,enabled,created_at) VALUES (?,0,?)',
+                   (OWNER_EMAIL, '2026-10-01 12:00:00'))
+    # Synchronize before saving preferences. Worker startup must see exactly
+    # this provider state, rather than rotate restored destination generations.
+    settings.synchronize(now=now)
+    for user_id, selected, events, device in (
+        (LOCAL_ID, {901}, {'MEDIA_ADDED_TO_COLLECTION'}, 'trial-phone'),
+        ('7', {902}, {'MEDIA_ABOUT_TO_BE_HANDLED', 'UPDATE_AVAILABLE'}, 'trial-tablet'),
+    ):
+        actor = notification_settings.Actor(user_id, True, owner=user_id == '7')
+        settings.save_preferences(actor, enabled=False, collections=selected, events=events,
+            available_collections={901, 902}, key_mode='replace', user_key=TRIAL_PUSH_KEYS[user_id],
+            device=device, now=now)
+        settings.save_email_events(actor, LOCAL_EMAIL if user_id == LOCAL_ID else OWNER_EMAIL,
+                                  events, now=now)
+    with closing(sqlite3.connect(app.KEEP_DB_PATH)) as db, db:
+        db.execute('CREATE TABLE portable_trial_notifications_marker (fixture_id TEXT PRIMARY KEY)')
+        db.execute('INSERT INTO portable_trial_notifications_marker VALUES (?)', (FIXTURE_ID,))
+        generations = dict(db.execute('SELECT user_id,generation FROM pushover_preferences'))
+        # The held legacy batch is already migrated. Accepted receipts and an
+        # unknown remainder must survive restart without being retried/relabelled.
+        db.execute("INSERT INTO notification_runs VALUES ('trial-held-batch',1,NULL)")
+        for provider, destination, generation, provider_generation, state, accepted, code, request in (
+            ('email', 'review-recipient@example.com', 'legacy', '', 'accepted', now + 20, None, None),
+            ('email', 'legacy-held', 'legacy', '', 'review', None, 'worker_interrupted', None),
+            ('pushover', LOCAL_ID, generations[LOCAL_ID], TRIAL_PUSH_SCOPE, 'accepted', now + 20,
+             None, '11111111-1111-4111-8111-111111111111'),
+            ('pushover', '7', generations['7'], TRIAL_PUSH_SCOPE, 'review', None,
+             'response_uncertain', '22222222-2222-4222-8222-222222222222'),
+        ):
+            db.execute('''INSERT INTO notification_dispatches
+                (batch_id,provider,destination_id,generation,provider_generation,state,created_at,
+                 last_attempt,next_attempt,attempts,accepted_at,error_code,request_id)
+                VALUES ('trial-held-batch',?,?,?,?,?,?,?,0,1,?,?,?)''',
+                (provider, destination, generation, provider_generation, state, now, now + 10,
+                 accepted, code, request))
+        db.execute('INSERT INTO notification_cooldowns VALUES (?,?,?)',
+                   ('pushover', TRIAL_PUSH_SCOPE, now + 300))
+        for test_id, user_id, state, code, request in (
+            ('trial-accepted-test', LOCAL_ID, 'accepted', None, '33333333-3333-4333-8333-333333333333'),
+            ('trial-held-test', '7', 'review', 'response_uncertain', '44444444-4444-4444-8444-444444444444'),
+        ):
+            db.execute('''INSERT INTO notification_test_attempts
+                (id,user_id,kind,credential_scope,destination_generation,reserved_at,finished_at,state,error_code,request_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                       (test_id, user_id, 'notification', TRIAL_PUSH_SCOPE, generations[user_id],
+                        now + 10, now + 20, state, code, request))
+
+
+def assert_saved_notification_state(db):
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='portable_trial_notifications_marker'").fetchone():
+        return
+    require(tuple(db.execute('SELECT fixture_id FROM portable_trial_notifications_marker').fetchone()) ==
+            (FIXTURE_ID,), 'trial notification marker does not match')
+    require(dict(db.execute("SELECT name,value FROM connection_settings WHERE name LIKE 'PUSHOVER_%'")) ==
+            {'PUSHOVER_ENABLED': 'false', 'PUSHOVER_APP_TOKEN': TRIAL_PUSH_TOKEN},
+            'trial Pushover configuration changed')
+    provider = db.execute('SELECT provider,fingerprint,generation,synchronized_at FROM notification_provider_generations').fetchall()
+    require([tuple(row) for row in provider] ==
+            [('pushover', TRIAL_PUSH_FINGERPRINT, TRIAL_PUSH_SCOPE, NOTIFICATION_TIME)],
+            'trial notification provider generation changed')
+    rows = {row['user_id']: row for row in db.execute('SELECT * FROM pushover_preferences')}
+    require(set(rows) == {LOCAL_ID, '7'}, 'trial Pushover preferences are missing')
+    for user_id, collections, events, device in (
+        (LOCAL_ID, [901], ['MEDIA_ADDED_TO_COLLECTION'], 'trial-phone'),
+        ('7', [902], ['MEDIA_ABOUT_TO_BE_HANDLED', 'UPDATE_AVAILABLE'], 'trial-tablet'),
+    ):
+        row = rows[user_id]
+        require((row['enabled'], row['user_key'], row['device'], json.loads(row['collections_json']),
+                 json.loads(row['events_json']), row['provider_generation'], row['after_queue_id'], row['updated_at']) ==
+                (0, TRIAL_PUSH_KEYS[user_id], device, collections, events, TRIAL_PUSH_SCOPE, 88002, NOTIFICATION_TIME),
+                'trial personal Pushover preferences changed')
+        require(len(row['generation']) == 32 and all(c in '0123456789abcdef' for c in row['generation']),
+                'trial destination generation is invalid')
+    require(rows[LOCAL_ID]['generation'] != rows['7']['generation'],
+            'trial destination generations are not distinct')
+    email = {row['email']: (json.loads(row['events_json']), row['owner_alerts_activated_at'])
+             for row in db.execute('SELECT * FROM notification_email_events')}
+    require(email == {LOCAL_EMAIL: (['MEDIA_ADDED_TO_COLLECTION'], None),
+                     OWNER_EMAIL: (['MEDIA_ABOUT_TO_BE_HANDLED', 'UPDATE_AVAILABLE'], NOTIFICATION_TIME)},
+            'trial personal Email event settings changed')
+    epochs = {tuple(row) for row in db.execute('SELECT * FROM notification_destination_epochs')}
+    email_generation = hashlib.sha256(('email-destination:' + OWNER_EMAIL).encode()).hexdigest()
+    require(epochs == {
+        ('pushover', LOCAL_ID, rows[LOCAL_ID]['generation'], 88002, 0, NOTIFICATION_TIME),
+        ('pushover', '7', rows['7']['generation'], 88002, 0, NOTIFICATION_TIME),
+        ('email', OWNER_EMAIL, email_generation, 0, 0, NOTIFICATION_TIME),
+    }, 'trial notification activation boundaries changed')
+    require([tuple(row) for row in db.execute('SELECT * FROM notification_runs')] ==
+            [('trial-held-batch', 1, None)], 'trial notification run proof changed')
+    dispatches = {tuple(row) for row in db.execute('SELECT ' +
+        ','.join(FINGERPRINT_COLUMNS['notification_dispatches']) + ' FROM notification_dispatches')}
+    expected = set()
+    for provider, destination, generation, scope, state, accepted, code, request in (
+        ('email', 'review-recipient@example.com', 'legacy', '', 'accepted', NOTIFICATION_TIME + 20, None, None),
+        ('email', 'legacy-held', 'legacy', '', 'review', None, 'worker_interrupted', None),
+        ('pushover', LOCAL_ID, rows[LOCAL_ID]['generation'], TRIAL_PUSH_SCOPE, 'accepted', NOTIFICATION_TIME + 20,
+         None, '11111111-1111-4111-8111-111111111111'),
+        ('pushover', '7', rows['7']['generation'], TRIAL_PUSH_SCOPE, 'review', None,
+         'response_uncertain', '22222222-2222-4222-8222-222222222222'),
+    ):
+        expected.add(('trial-held-batch', provider, destination, generation, scope, state,
+                      NOTIFICATION_TIME, NOTIFICATION_TIME + 10, 0, 1, accepted, code, request))
+    require(dispatches == expected, 'trial accepted or held delivery proof changed')
+    require([tuple(row) for row in db.execute('SELECT * FROM notification_cooldowns')] ==
+            [('pushover', TRIAL_PUSH_SCOPE, NOTIFICATION_TIME + 300)], 'trial Pushover cooldown changed')
+    attempts = {tuple(row) for row in db.execute('SELECT ' +
+        ','.join(FINGERPRINT_COLUMNS['notification_test_attempts']) + ' FROM notification_test_attempts')}
+    require(attempts == {
+        ('trial-accepted-test', LOCAL_ID, 'notification', TRIAL_PUSH_SCOPE, rows[LOCAL_ID]['generation'],
+         NOTIFICATION_TIME + 10, NOTIFICATION_TIME + 20, 'accepted', None, '33333333-3333-4333-8333-333333333333'),
+        ('trial-held-test', '7', 'notification', TRIAL_PUSH_SCOPE, rows['7']['generation'],
+         NOTIFICATION_TIME + 10, NOTIFICATION_TIME + 20, 'review', 'response_uncertain', '44444444-4444-4444-8444-444444444444'),
+    }, 'trial saved test delivery proof changed')
 
 
 def seed_api_credentials(db):
@@ -421,6 +571,7 @@ def assert_saved_state(app, *, worker_started=False):
                 "trial delivery state is missing")
         require(db.execute("SELECT COUNT(*) FROM notification_reminders WHERE queue_id=88002").fetchone()[0] == 1,
                 "trial reminder claim is missing")
+        assert_saved_notification_state(db)
         # Seeded observations are checked before starting the actual worker. Its
         # ordinary runs replace these rows; exact restore proof is provided by
         # the runner's full stopped-database fingerprints before each startup.

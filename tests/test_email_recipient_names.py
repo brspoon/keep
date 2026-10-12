@@ -69,7 +69,7 @@ class EmailRecipientNameTests(TestCase):
                 VALUES (?, ?, ?, ?, ?)''', (user_id, email, full_name, display_name, username))
 
     def cards(self):
-        response = self.client.get('/settings/email')
+        response = self.client.get('/settings/notifications')
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         return RecipientCards(html).cards, html

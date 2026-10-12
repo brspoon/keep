@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.26.0 — 2026-10-12
+
+- Add Admin Notifications with email and Pushover settings, test notifications, and delivery history.
+- Let users choose notification channels, events, and collections in Preferences. The owner can also receive connection, job, and update alerts.
+- Keep uncertain deliveries for review without pausing other recipients or channels.
+
 ## 2.25.0 — 2026-10-11
 
 - Add letter navigation to Manage Library, Leaving, and Kept, with a desktop side index and a mobile drag handle that follow searches and filters.

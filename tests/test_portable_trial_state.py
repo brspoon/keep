@@ -175,6 +175,7 @@ class PortableTrialStateTests(unittest.TestCase):
                     before = io.StringIO()
                     with redirect_stdout(before):
                         fixture.fingerprints(app)
+                    app.notification_runtime().recover_after_lock()
                     try:
                         app.background_maintenance_once({'plex_sync': 0, 'reminder_scan': None})
                     except app.requests.ConnectionError:
@@ -200,6 +201,101 @@ class PortableTrialStateTests(unittest.TestCase):
                                 capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Full recovery fixture and observed worker pass verified.', result.stdout)
+
+    def test_notification_preferences_and_delivery_proof_survive_portable_recovery(self):
+        code = textwrap.dedent('''
+            from contextlib import redirect_stdout
+            import io
+            import json
+            from pathlib import Path
+            import sqlite3
+            import sys
+            import tempfile
+            from types import SimpleNamespace
+            from unittest.mock import patch
+            sys.path[:0] = ['tests', 'scripts']
+            import portable_trial as fixture
+            import portable_backup
+            import notification_settings
+            from portable_container_trial import Trial, TrialError
+            def fingerprint(app):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    fixture.fingerprints(app)
+                return json.loads(output.getvalue())
+            protected = ('pushover_preferences', 'notification_provider_generations',
+                'notification_email_events', 'notification_destination_epochs',
+                'notification_runs', 'notification_dispatches', 'notification_cooldowns',
+                'notification_test_attempts', 'portable_trial_notifications_marker')
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                fixture.configure_synthetic_environment(root / 'keep.sqlite3')
+                app = fixture.app_module()
+                blocked = AssertionError('Portable notification recovery attempted network I/O')
+                with patch.object(app.requests, 'get', side_effect=blocked), \\
+                     patch.object(app.requests, 'post', side_effect=blocked), \\
+                     patch.object(app.requests, 'delete', side_effect=blocked), \\
+                     redirect_stdout(io.StringIO()):
+                    fixture.seed(app)
+                    before = fingerprint(app)
+                    assert all(before['tables'][name]['rows'] > 0 for name in protected)
+                    assert fixture.TRIAL_PUSH_TOKEN not in json.dumps(before)
+                    assert all(key not in json.dumps(before) for key in fixture.TRIAL_PUSH_KEYS.values())
+                    snapshot = root / 'snapshot.sqlite3'
+                    portable_backup.backup(Path(app.KEEP_DB_PATH), snapshot)
+                    restored = root / 'restored.sqlite3'
+                    portable_backup.restore(snapshot, restored)
+                    recovered = SimpleNamespace(KEEP_DB_PATH=restored, password_hasher=app.password_hasher)
+                    fixture.assert_saved_state(recovered)
+                    Trial.compare_fingerprints(before, fingerprint(recovered), label='notification stopped restore')
+                    settings = notification_settings.Settings(restored, owner_id=lambda:'7',
+                        profile_access=lambda profile:profile['status'] == 'active')
+                    settings.synchronize(now=fixture.NOTIFICATION_TIME + 60)
+                    Trial.compare_fingerprints(before, fingerprint(recovered), label='synchronized restored provider')
+                    local = settings.preferences_view(notification_settings.Actor(fixture.LOCAL_ID, True),
+                        available_collections={901,902})
+                    owner = settings.preferences_view(notification_settings.Actor('7', True, owner=True),
+                        available_collections={901,902})
+                    assert local['configured'] and not local['enabled'] and local['user_key'] == ''
+                    assert local['collections'] == {901} and local['events'] == {'MEDIA_ADDED_TO_COLLECTION'}
+                    assert owner['configured'] and not owner['enabled'] and owner['user_key'] == ''
+                    assert owner['collections'] == {902} and owner['events'] == {'MEDIA_ABOUT_TO_BE_HANDLED','UPDATE_AVAILABLE'}
+                    assert settings.email_event_preferences(fixture.LOCAL_EMAIL)['events'] == {'MEDIA_ADDED_TO_COLLECTION'}
+                    assert settings.email_event_preferences(fixture.OWNER_EMAIL)['events'] == {'MEDIA_ABOUT_TO_BE_HANDLED','UPDATE_AVAILABLE'}
+                    assert settings.installation_view()['ready'] is False
+                    # Every persisted field is protected, both at the stopped
+                    # boundary and after mutable worker observations are allowed.
+                    for table in protected:
+                        for column in fixture.FINGERPRINT_COLUMNS[table]:
+                            mutated = root / f'{table}-{column}.sqlite3'
+                            portable_backup.restore(snapshot, mutated)
+                            with sqlite3.connect(mutated) as db:
+                                row = db.execute(f'SELECT rowid,"{column}" FROM "{table}" LIMIT 1').fetchone()
+                                value = row[1]
+                                replacement = (1-value if column == 'enabled' else value+1) if isinstance(value,(int,float)) else str(value or '')+'-changed'
+                                db.execute(f'UPDATE "{table}" SET "{column}"=? WHERE rowid=?', (replacement,row[0]))
+                            actual = fingerprint(SimpleNamespace(KEEP_DB_PATH=mutated))
+                            for worker_started in (False,True):
+                                try:
+                                    Trial.compare_fingerprints(before,actual,label='changed notification state',
+                                        worker_started=worker_started)
+                                except TrialError as error:
+                                    assert table in str(error)
+                                else:
+                                    raise AssertionError(f'{table}.{column} escaped recovery protection')
+                    # Operational observations may add their own transition and
+                    # outbox rows without weakening any protected settings/ledger.
+                    with sqlite3.connect(restored) as db:
+                        db.execute("INSERT INTO notification_transitions VALUES ('job','keep-expiry','', 'failed',1)")
+                        db.execute("INSERT INTO notification_operational_events(event_key,kind,payload_json,created_at) VALUES ('trial-new-observation','JOB_FAILED','{}',1)")
+                    Trial.compare_fingerprints(before,fingerprint(recovered),label='new operational observation',
+                        worker_started=True)
+            print('Notification preferences, generations, epochs and delivery proof round trip verified.')
+        ''')
+        result = subprocess.run([sys.executable, '-B', '-c', code], cwd=ROOT,
+                                capture_output=True, text=True, timeout=45)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Notification preferences, generations, epochs and delivery proof round trip verified.', result.stdout)
 
 
 if __name__ == '__main__':

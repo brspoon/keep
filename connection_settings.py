@@ -15,8 +15,9 @@ CONNECTION_FIELDS = (
     'SEERR_URL', 'SEERR_API_KEY', 'TAUTULLI_URL', 'TAUTULLI_API_KEY',
 )
 EMAIL_FIELDS = ('EMAIL_ENABLED', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURITY', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM', 'SMTP_SENDER_NAME')
-FIELDS = CONNECTION_FIELDS + EMAIL_FIELDS + ('KEEP_URL', 'KEEP_COLLECTIONS')
-SECRETS = ('PLEX_ADMIN_TOKEN', 'RADARR_API_KEY', 'SONARR_API_KEY', 'SEERR_API_KEY', 'TAUTULLI_API_KEY', 'SMTP_PASSWORD')
+PUSHOVER_FIELDS = ('PUSHOVER_ENABLED', 'PUSHOVER_APP_TOKEN')
+FIELDS = CONNECTION_FIELDS + EMAIL_FIELDS + PUSHOVER_FIELDS + ('KEEP_URL', 'KEEP_COLLECTIONS')
+SECRETS = ('PLEX_ADMIN_TOKEN', 'RADARR_API_KEY', 'SONARR_API_KEY', 'SEERR_API_KEY', 'TAUTULLI_API_KEY', 'SMTP_PASSWORD', 'PUSHOVER_APP_TOKEN')
 PLEX_FIELDS = ('PLEX_SERVER_URL', 'PLEX_MACHINE_IDENTIFIER', 'PLEX_ADMIN_TOKEN')
 SERVICE_FIELDS = {
     'plex': PLEX_FIELDS,
@@ -129,6 +130,10 @@ def validate(name, value):
         return json.dumps(parsed, sort_keys=True)
     if name == 'EMAIL_ENABLED' and value not in ('true', 'false'):
         raise ValueError('Email enabled must be true or false')
+    if name == 'PUSHOVER_ENABLED' and value not in ('true', 'false'):
+        raise ValueError('Pushover enabled must be true or false')
+    if name == 'PUSHOVER_APP_TOKEN' and value and not re.fullmatch(r'[A-Za-z0-9]{30}', value):
+        raise ValueError('Enter a valid Pushover application token')
     if name == 'SMTP_PORT' and (not value.isdigit() or not 1 <= int(value) <= 65535):
         raise ValueError('Invalid SMTP port')
     if name == 'SMTP_SECURITY' and value not in ('ssl', 'starttls'):
@@ -326,9 +331,21 @@ class ConnectionSettings:
         for name in FIELDS:
             if name in os.environ and name not in overrides:
                 values[name] = os.environ[name]
-        return {name: validate(name, value) for name, value in values.items() if name in FIELDS}
+        snapshot = {}
+        for name, value in values.items():
+            if name not in FIELDS:
+                continue
+            try:
+                snapshot[name] = validate(name, value)
+            except ValueError:
+                if name not in PUSHOVER_FIELDS:
+                    raise
+                # Optional Push configuration must not disable unrelated app
+                # work. Its provider reads the original setting and fails closed.
+                snapshot[name] = 'false' if name == 'PUSHOVER_ENABLED' else ''
+        return snapshot
 
-    def save(self, values, *, clear=(), plex_override=False):
+    def save(self, values, *, clear=(), plex_override=False, guard=None):
         clear = set(clear)
         editable = set(PLEX_FIELDS) if plex_override else set()
         if any(name not in SECRETS or name in os.environ and name not in editable
@@ -344,6 +361,9 @@ class ConnectionSettings:
         # An explicitly cleared Plex credential must not fall back to an env token.
         clean.update({name: '' for name in clear if name in PLEX_FIELDS})
         with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            if guard is not None:
+                guard(db)
             db.executemany('DELETE FROM connection_settings WHERE name=?',
                            ((name,) for name in clear if name not in PLEX_FIELDS))
             db.executemany('INSERT INTO connection_settings VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value=excluded.value', clean.items())

@@ -76,6 +76,18 @@ def account_email(name, setup_url, reset=False):
     return subject, layout(subject, content, intro), plain
 
 
+def notification_email(title, message, url=''):
+    """A short operational alert or explicitly requested delivery test."""
+    content = f'''<table role="presentation" width="100%" cellpadding="0" cellspacing="0" {style('surface')}>
+<tr><td class="mail-hero" style="padding:26px">
+<h1 {style('text', 'margin:0 0 16px;font-size:26px;line-height:34px;')}>{escape(title)}</h1>
+<p {style('muted', 'margin:0;line-height:1.6;font-size:15px;')}>{escape(message)}</p>
+{('<p style="margin:24px 0">' + action(url, 'Open Keep') + '</p>') if url else ''}
+</td></tr></table>'''
+    subject = title if title.startswith('Keep: ') else 'Keep: ' + title
+    return subject, layout(title, content, message), message + ('\n\n' + url if url else '')
+
+
 def date_label(value):
     if not value:
         return ''
