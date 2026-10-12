@@ -1,11 +1,34 @@
 import copy
 import re
 import unittest
+from html.parser import HTMLParser
 from unittest.mock import patch
 
 import test_keep
 
 keep = test_keep.keep
+
+
+class AlphabetMarkup(HTMLParser):
+    def __init__(self, page):
+        super().__init__()
+        self.current_section = None
+        self.sections = {}
+        self.feed(page)
+
+    def handle_starttag(self, tag, attributes):
+        attrs = dict(attributes)
+        if tag == 'section' and attrs.get('id', '').startswith(('collection-', 'library-')):
+            self.current_section = attrs['id']
+            self.sections[self.current_section] = {'navigation': [], 'titles': []}
+        if self.current_section and tag == 'nav' and 'data-alphabet-nav' in attrs:
+            self.sections[self.current_section]['navigation'].append(attrs)
+        if self.current_section and tag == 'article' and 'card' in attrs.get('class', '').split():
+            self.sections[self.current_section]['titles'].append(attrs.get('data-title'))
+
+    def handle_endtag(self, tag):
+        if tag == 'section':
+            self.current_section = None
 
 
 class BrowseCollectionsTests(unittest.TestCase):
@@ -53,6 +76,19 @@ class BrowseCollectionsTests(unittest.TestCase):
                 self.assertEqual(re.findall(r'class="title-details-name"[^>]*>([^<]+)', page),
                                  ['alpha', 'Alpha', 'beta', 'Zulu'])
 
+    def test_browse_alphabet_context_and_title_metadata_preserve_escaped_names(self):
+        title = '"Alpha <Beta> & Gamma"'
+        item = {**self.item, 'mediaData': {'title': title, 'year': 2026}}
+        for path, context in (('/', 'Movies Leaving Plex Soon'), ('/kept', 'Movies Kept')):
+            with self.subTest(path=path):
+                markup = AlphabetMarkup(self.page(path, [item]))
+                self.assertEqual(list(markup.sections), [f'collection-{self.cid}'])
+                section = markup.sections[f'collection-{self.cid}']
+                self.assertEqual(section['titles'], [title])
+                self.assertEqual(len(section['navigation']), 1)
+                self.assertEqual(section['navigation'][0]['aria-label'], f'{context} title initials')
+                self.assertIn('hidden', section['navigation'][0])
+
     def library_page(self, sections):
         with patch.object(keep, 'granted_library_keys', return_value=['radarr:1']), \
              patch.object(keep, 'build_library_sections', return_value=sections):
@@ -86,6 +122,26 @@ class BrowseCollectionsTests(unittest.TestCase):
         self.assertNotIn('<h2>Empty</h2>', page)
         self.assertEqual(re.findall(r'<section id="library-([^\"]+)"', page), ['1'])
         self.assertEqual(re.findall(r'href="#library-([^\"]+)"', page), ['1'])
+
+    def test_library_alphabet_context_is_independent_for_each_rendered_section(self):
+        def section(name, key, title, item_id):
+            return {'library_key': key, 'name': name, 'error': '', 'access_unavailable': False,
+                    'items': [{'id': item_id, 'title': title, 'year': 2026, 'service': 'radarr',
+                               'library_key': key, 'size': '1 GB', 'episode_count': None,
+                               'can_delete': True, 'badge': None}]}
+
+        markup = AlphabetMarkup(self.library_page([
+            section('Movies & More', 'radarr:1', 'Alpha', 1),
+            section('Shows', 'radarr:2', 'Zulu', 2),
+        ]))
+        self.assertEqual(list(markup.sections), ['library-1', 'library-2'])
+        for section_id, name, title in (('library-1', 'Movies & More', 'Alpha'),
+                                        ('library-2', 'Shows', 'Zulu')):
+            rendered = markup.sections[section_id]
+            self.assertEqual(rendered['titles'], [title])
+            self.assertEqual(len(rendered['navigation']), 1)
+            self.assertEqual(rendered['navigation'][0]['aria-label'], f'{name} title initials')
+            self.assertIn('hidden', rendered['navigation'][0])
 
     def test_manage_library_empty_and_unavailable_have_distinct_notes(self):
         section = {'library_key': 'radarr:1', 'name': 'Movies', 'items': [],
