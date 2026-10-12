@@ -64,7 +64,7 @@ class VolumeDiagnosticTests(unittest.TestCase):
     def test_exact_verified_snapshot_retains_only_typed_state_and_worker_lines(self):
         value=trial.snapshot_helper_diagnostic(self.adapter)
         self.assertEqual(value,{'available':True,'open_stdin':True,'tty':False,'exit_code':1,
-            'oom_killed':False,'error_present':False,'worker':{'type':'VolumeError','lines':[235,217,50]}})
+            'oom_killed':False,'error_present':False,'startup_error_codes':[],'worker':{'type':'VolumeError','lines':[235,217,50]}})
         self.assertEqual(self.adapter.validate_helper.call_count,2)
         plan=self.adapter.runner.run.call_args.args[0]
         self.assertEqual(plan.output_limit,1024);self.assertEqual(plan.timeout,30)
@@ -133,6 +133,31 @@ class VolumeDiagnosticTests(unittest.TestCase):
         arguments=(sys.executable,'-B','-c',trial.MERGE_DIAGNOSTIC_STREAMS,sys.executable,'-B','-c','print("private"*10000)')
         with self.assertRaises(trial.EngineError) as error:runner.run(trial.Plan('synthetic overflowing log',arguments,5,1024))
         self.assertNotIn('private',str(error.exception))
+
+
+class StartupErrorClassifierTests(unittest.TestCase):
+    def test_runtime_cgroup_resource_and_permission_errors_have_only_fixed_codes(self):
+        text='OCI runtime create failed: runc create: cgroup memory.max and pids.max: permission denied /private/secret password=secret SQL=private'
+        self.assertEqual(trial.startup_error_codes(text),['oci_runtime','cgroup','pids_limit','memory_limit','permission'])
+        self.assertNotIn('private',json.dumps(trial.startup_error_codes(text)))
+        self.assertNotIn('password',json.dumps(trial.startup_error_codes(text)))
+
+    def test_empty_unknown_invalid_and_oversized_errors_retain_no_text(self):
+        for text,wanted in ((None,[]),('',[]),('private unrecognized startup error',['unclassified']),
+            ({'private':'data'},['unavailable']),('permission denied'+('private'*1000),['unavailable']),
+            ('private'+chr(0xd800),['unavailable'])):
+            with self.subTest(wanted=wanted):self.assertEqual(trial.startup_error_codes(text),wanted)
+
+    def test_snapshot_classification_discards_the_raw_field(self):
+        case=VolumeDiagnosticTests();case.setUp()
+        try:
+            case.adapter.json.return_value={**case.adapter.inspect.return_value,'ErrorPresent':True,
+                'StartupError':'OCI runtime create failed: cgroup pids.max: operation not permitted /private/secret'}
+            value=trial.snapshot_helper_diagnostic(case.adapter)
+            self.assertEqual(value['startup_error_codes'],['oci_runtime','cgroup','pids_limit','permission'])
+            self.assertNotIn('StartupError',case.adapter.json.return_value)
+            self.assertNotIn('private',json.dumps(value));self.assertNotIn('/private',json.dumps(value))
+        finally:case.doCleanups()
 
 
 class Graph(trial.RegistryGraph):
@@ -770,13 +795,16 @@ class ToolSetupTests(unittest.TestCase):
             if args[0]=='run':
                 self.assertEqual(args[args.index('--network')+1],value.name)
                 if args[args.index('--name')+1]==value.name+'-registry':return proof['container_id'].encode()
-                self.assertEqual(args[args.index('--entrypoint')+1],'dockerd')
+                self.assertEqual(args[args.index('--entrypoint')+1],trial.DIND_ENTRYPOINT)
+                image=trial.TOOLING[0]['repository']+'@'+trial.TOOLING[0]['index_digest']
+                self.assertEqual(list(args[args.index(image)+1:]),trial.dind_arguments(value.name))
                 self.assertIn('--host=unix:///trial-socket/docker.sock',args)
                 if self.fail_dind:raise trial.TrialError('private command error',code='command_failed',returncode=125)
                 paths.publish(value.socket/'docker.sock',b'fixture socket')
                 return self.dind.encode()
             if args==('network','inspect',proof['network_id']):return canonical([self.network])
             if args==('inspect',proof['container_id']):return canonical([self.registry])
+            if args==('inspect',self.dind):return canonical([{'Id':self.dind,'Config':{'Entrypoint':[trial.DIND_ENTRYPOINT],'Cmd':trial.dind_arguments(value.name)}}])
             if args[0]=='cp':
                 paths.publish(Path(args[-1]),b'private fixture executable')
                 return b''
@@ -816,6 +844,38 @@ class ToolSetupTests(unittest.TestCase):
         self.assertEqual(self.value.tools,['b'*64])
         self.assertNotIn('private command error',json.dumps(self.value.report))
         self.assertFalse(any(call.args[0]=='cp' for call in self.value.outer.call_args_list))
+
+
+class DindStartupTests(unittest.TestCase):
+    def test_pinned_wrapper_requires_explicit_daemon_and_only_fixed_unix_arguments(self):
+        registry='keep-maintenance-native-012345abcdef'
+        for selected in (None,registry):
+            row={'Config':{'Entrypoint':[trial.DIND_ENTRYPOINT],'Cmd':trial.dind_arguments(selected)}}
+            self.assertTrue(trial.dind_startup_matches(row,selected))
+            for mutation in (lambda value:value['Config'].update(Entrypoint=['dockerd']),
+                lambda value:value['Config']['Cmd'].pop(0),
+                lambda value:value['Config']['Cmd'].append('--host=tcp://0.0.0.0:2375'),
+                lambda value:value['Config']['Cmd'].__setitem__(1,'--host=unix:///var/run/docker.sock')):
+                changed=copy.deepcopy(row);mutation(changed)
+                self.assertFalse(trial.dind_startup_matches(changed,selected))
+        with self.assertRaises(trial.TrialError):trial.dind_arguments('foreign-host')
+
+    def test_empty_store_path_creates_the_same_wrapper_without_registry_or_network(self):
+        case=ToolSetupTests();case.setUp()
+        try:
+            value=case.value
+            value.reacquire_request=SimpleNamespace(expected=object(),request_id='12345678-1234-4234-8234-123456789abc')
+            class Captured(Exception):pass
+            def capture(*args,**kwargs):
+                self.assertEqual(args[args.index('--network')+1],'none')
+                self.assertEqual(args[args.index('--entrypoint')+1],trial.DIND_ENTRYPOINT)
+                image=trial.TOOLING[0]['repository']+'@'+trial.TOOLING[0]['index_digest']
+                self.assertEqual(list(args[args.index(image)+1:]),trial.dind_arguments())
+                raise Captured()
+            value.outer=Mock(side_effect=capture)
+            with patch.object(trial,'ArchiveOnlyResolver'),self.assertRaises(Captured):value.empty_store_reacquisition()
+            self.assertEqual(value.outer.call_count,1)
+        finally:case.doCleanups()
 
 
 class CleanupTests(unittest.TestCase):

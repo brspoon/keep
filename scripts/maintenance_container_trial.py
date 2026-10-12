@@ -142,6 +142,22 @@ def volume_error_diagnostic(body,source):
     return value
 
 
+def startup_error_codes(value):
+    """Fixed classifications only; never return or retain runtime error text."""
+    if value is None or value=='':return []
+    if type(value) is not str:return ['unavailable']
+    try:
+        if len(value.encode('utf-8'))>4096:return ['unavailable']
+    except UnicodeError:return ['unavailable']
+    text=value.lower()
+    groups=(('oci_runtime',('oci runtime','runc create','failed to create task')),
+            ('cgroup',('cgroup',)),('pids_limit',('pids.max','pids limit','pids controller')),
+            ('memory_limit',('memory.max','memory limit','memory controller','memory cgroup')),
+            ('permission',('permission denied','operation not permitted')))
+    codes=[code for code,tokens in groups if any(token in text for token in tokens)]
+    return codes or ['unclassified']
+
+
 def snapshot_helper_diagnostic(adapter):
     """Read only the original verified helper, before trial cleanup."""
     unavailable={'available':False}
@@ -156,10 +172,11 @@ def snapshot_helper_diagnostic(adapter):
         adapter.validate_helper(selected,'snapshot',stopped=False)
         format=INSPECT_HELPER[:-1]+(',"OpenStdin":{{json .Config.OpenStdin}},"Tty":{{json .Config.Tty}},'
             '"ExitCode":{{json .State.ExitCode}},"OOMKilled":{{json .State.OOMKilled}},'
-            '"ErrorPresent":{{if index .State "Error"}}true{{else}}false{{end}}}')
+            '"ErrorPresent":{{if index .State "Error"}}true{{else}}false{{end}},"StartupError":{{json (index .State "Error")}}}')
         observed=adapter.json('verified snapshot diagnostic state',(*adapter.plans.base,'inspect','--format',format,identifier),limit=65536)
         require(observed.get('Id')==identifier,'Snapshot diagnostic identity changed')
         adapter.validate_helper(observed,'snapshot',stopped=False)
+        startup_errors=startup_error_codes(observed.pop('StartupError',None))
         require(all(type(observed.get(key)) is bool for key in ('OpenStdin','Tty','OOMKilled','ErrorPresent'))
             and type(observed.get('ExitCode')) is int and 0<=observed['ExitCode']<=255,'Snapshot diagnostic fields differ')
         # The fixed wrapper preserves the CLI's process group and forwards both
@@ -169,8 +186,29 @@ def snapshot_helper_diagnostic(adapter):
         body=adapter.runner.run(Plan('read fixed snapshot helper diagnostic',arguments,30,1024))
         return {'available':True,'open_stdin':observed['OpenStdin'],'tty':observed['Tty'],
             'exit_code':observed['ExitCode'],'oom_killed':observed['OOMKilled'],'error_present':observed['ErrorPresent'],
+            'startup_error_codes':startup_errors,
             'worker':volume_error_diagnostic(body,adapter.source)}
     except Exception:return unavailable
+
+
+DIND_ENTRYPOINT='/usr/local/bin/dockerd-entrypoint.sh'
+
+
+def dind_arguments(registry=None):
+    # An explicit first dockerd argument skips the vendor script's default TCP
+    # listener injection while preserving its pinned Dind/cgroup startup wrapper.
+    arguments=['dockerd','--host=unix:///trial-socket/docker.sock']
+    if registry is not None:
+        require(isinstance(registry,str) and re.fullmatch('keep-maintenance-native-[a-f0-9]{12}',registry),
+            'Owned daemon registry identity differs')
+        arguments+=['--registry-mirror=http://'+registry+'-registry:5000',
+                    '--insecure-registry='+registry+'-registry:5000']
+    return arguments
+
+
+def dind_startup_matches(record,registry=None):
+    config=record.get('Config') if isinstance(record,dict) else None
+    return isinstance(config,dict) and config.get('Entrypoint')==[DIND_ENTRYPOINT] and config.get('Cmd')==dind_arguments(registry)
 
 
 def pinned_tool_identity(inspected, tool, architecture):
@@ -693,11 +731,12 @@ class NativeTrial:
         self.tooling_probe('owned-registry-http-ready',registry_ready)
         def start_dind():
             dind=self.outer('run','--detach','--privileged','--name',self.name+'-daemon','--label','io.keep.maintenance.trial='+self.name,
-                '--network',self.name,'--entrypoint','dockerd','--env','DOCKER_TLS_CERTDIR=', '--mount','type=bind,source='+str(daemon_data)+',target=/var/lib/docker','--mount','type=bind,source='+str(self.socket)+',target=/trial-socket',
-                TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],'--host=unix:///trial-socket/docker.sock',
-                '--registry-mirror=http://'+self.name+'-registry:5000','--insecure-registry='+self.name+'-registry:5000').decode().strip()
+                '--network',self.name,'--entrypoint',DIND_ENTRYPOINT,'--env','DOCKER_TLS_CERTDIR=', '--mount','type=bind,source='+str(daemon_data)+',target=/var/lib/docker','--mount','type=bind,source='+str(self.socket)+',target=/trial-socket',
+                TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],*dind_arguments(self.name)).decode().strip()
             require(re.fullmatch('[a-f0-9]{64}',dind),'Invalid owned daemon identity',code='metadata_invalid')
             self.tools.append(dind)
+            row=json.loads(self.outer('inspect',dind))[0]
+            require(row.get('Id')==dind and dind_startup_matches(row,self.name),'Owned daemon startup wrapper differs')
             self.registry_proof['members']=list(self.tools)
             return {'container_id':dind,'control_transport':'unix'}
         dind=self.tooling_probe('owned-dind-container-start',start_dind)['container_id']
@@ -1133,11 +1172,13 @@ volumes:
         data=self.paths.mkdir(self.tool_state/'empty-store-daemon-data')
         name=self.name+'-empty-daemon'
         daemon=self.outer('run','--detach','--privileged','--name',name,'--label','io.keep.maintenance.trial='+self.name,
-            '--network','none','--entrypoint','dockerd','--env','DOCKER_TLS_CERTDIR=',
+            '--network','none','--entrypoint',DIND_ENTRYPOINT,'--env','DOCKER_TLS_CERTDIR=',
             '--mount','type=bind,source='+str(socket)+',target=/trial-socket',
             '--mount','type=bind,source='+str(data)+',target=/var/lib/docker',
-            TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],'--host=unix:///trial-socket/docker.sock').decode().strip()
+            TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],*dind_arguments()).decode().strip()
         self.tools.append(daemon)
+        row=json.loads(self.outer('inspect',daemon))[0]
+        require(row.get('Id')==daemon and dind_startup_matches(row),'Empty-store startup wrapper differs')
         deadline=time.monotonic()+90
         while not (socket/'docker.sock').exists():
             require(time.monotonic()<deadline,'Empty-store socket did not appear');time.sleep(.2)
@@ -1272,8 +1313,10 @@ volumes:
             require(not self.inner('volume','ls','--format','{{.Name}}').strip(),'Isolated trial volumes remain')
             self.report['cleanup']['owned_service_helper_ids']=containers
             self.report['cleanup']['project']=self.name
-        for identifier in reversed(self.tools):
+        for index,identifier in reversed(list(enumerate(self.tools))):
             row=json.loads(self.outer('inspect',identifier))[0]
+            if index:
+                require(dind_startup_matches(row,self.name if index==1 else None),'Owned daemon startup changed')
             require((row.get('Config',{}).get('Labels') or {}).get('io.keep.maintenance.trial')==self.name,'Tooling identity changed')
             self.outer('stop','--time','15',identifier,timeout=30)
             self.outer('rm',identifier)
