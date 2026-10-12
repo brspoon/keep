@@ -369,6 +369,77 @@ class ImageStagingTests(unittest.TestCase):
         self.assertNotIn('candidate',value.report)
 
 
+class ComposeSetupTests(unittest.TestCase):
+    def setUp(self):
+        directory=tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve());self.addCleanup(directory.cleanup)
+        paths=create_private_paths();root=create_root(paths,Path(directory.name).resolve()/'private')
+        value=trial.NativeTrial.__new__(trial.NativeTrial)
+        value.paths,value.state=paths,paths.mkdir(root/'state')
+        value.installation=paths.mkdir(root/'installation');config=paths.mkdir(root/'docker-config')
+        executable=root/'docker';paths.publish(executable,b'fixture docker');executable.chmod(0o500)
+        value.name='keep-maintenance-native-012345abcdef'
+        value.profile=trial.Profile(value.installation,value.state,executable,config,'trial',
+            'unix:///private/tmp/fixture.sock','synthetic-daemon',value.name,value.name+'_keep-data',
+            (value.installation/'compose.yml',),value.installation/'.env')
+        value.images_by_schema={1:trial.ImageIdentity('sha256:'+'a'*64,'sha256:'+'b'*64,'sha256:'+'c'*64,
+            '0.0.1','d'*40,'amd64')}
+        value.report={};value.wait=Mock();value.resolver=Mock()
+        self.parsed={'services':{name:{'tmpfs':['/tmp:size=64m,mode=1777']} for name in ('keep-app','keep-digest')}}
+        self.fail_create=False
+        def inner(*args,**kwargs):
+            if args[-3:]==('config','--format','json'):
+                # The generated YAML flow value is a JSON-compatible list. Parse
+                # it rather than comparing an implementation string literally.
+                composition=value.profile.compose_files[0].read_text()
+                line=next(line for line in composition.splitlines() if line.strip().startswith('tmpfs:'))
+                self.assertEqual(json.loads(line.split(':',1)[1]),['/tmp:size=64m,mode=1777'])
+                return canonical(self.parsed)
+            if args[-3:]==('create','--pull','never') and self.fail_create:
+                raise trial.TrialError('private Docker detail',code='command_failed',returncode=1)
+            return b''
+        value.inner=Mock(side_effect=inner);self.value=value
+
+    def test_generated_tmpfs_is_one_parsed_scalar_and_enrollment_stages_are_recorded(self):
+        identifier='12345678-1234-4234-8234-123456789abc'
+        with patch.object(trial,'enroll',return_value={'install_id':identifier}) as enroll, \
+             patch.object(trial,'load_backend',return_value=(Mock(),Mock())):
+            self.value.compose()
+        self.assertEqual([row['step'] for row in self.value.report['compose_setup']],[
+            'fixture-configuration-prepare','fixture-compose-config-verify','fixture-compose-create',
+            'fixture-database-seed','fixture-compose-start','fixture-paired-health',
+            'helper-source-package','helper-source-stage','helper-source-proof','signed-enrollment','enrolled-host-reload'])
+        self.assertTrue(all(row['status']=='passed' for row in self.value.report['compose_setup']))
+        self.assertEqual(self.value.report['activation']['install_id'],identifier)
+        enroll.assert_called_once()
+        self.assertNotIn('FLASK_SECRET_KEY',json.dumps(self.value.report))
+        self.assertNotIn('synthetic-maintenance-native-fixture',json.dumps(self.value.report))
+
+    def test_compose_parser_two_mount_result_is_held_before_creation(self):
+        self.parsed['services']['keep-app']['tmpfs']=['/tmp:size=64m','mode=1777']
+        with self.assertRaises(trial.TrialError):self.value.compose()
+        self.assertEqual(self.value.report['compose_setup'][-1],{
+            'step':'fixture-compose-config-verify','status':'failed','error_code':'metadata_invalid'})
+        self.assertEqual(self.value.inner.call_count,1)
+        self.value.wait.assert_not_called()
+
+    def test_compose_creation_failure_has_safe_stage_and_never_starts_seed_or_enrollment(self):
+        self.fail_create=True
+        with patch.object(trial,'enroll') as enroll:
+            with self.assertRaises(trial.TrialError):self.value.compose()
+        self.assertEqual(self.value.report['compose_setup'][-1],{
+            'step':'fixture-compose-create','status':'failed','error_code':'command_failed','exit_code':1})
+        self.assertEqual(self.value.inner.call_count,2);enroll.assert_not_called()
+        self.assertNotIn('private Docker detail',json.dumps(self.value.report))
+
+    def test_parsed_fixture_services_missing_mounts_or_extra_mounts_are_rejected(self):
+        invalid=(None,{'services':{}},{'services':{'keep-app':{'tmpfs':['/tmp:size=64m,mode=1777']}}},
+            {'services':{'keep-app':{'tmpfs':[]},'keep-digest':{'tmpfs':['/tmp:size=64m,mode=1777']}}},
+            {'services':{'keep-app':{'tmpfs':['/tmp:size=64m,mode=1777','/other']},
+                'keep-digest':{'tmpfs':['/tmp:size=64m,mode=1777']}}})
+        for value in invalid:
+            with self.subTest(value=value),self.assertRaises(trial.TrialError):trial.validate_fixture_tmpfs(value)
+
+
 class FreshProcessTests(unittest.TestCase):
     def test_fixed_child_dispatch_and_network_free_recovery_boundary(self):
         identifier='12345678-1234-4234-8234-123456789abc'

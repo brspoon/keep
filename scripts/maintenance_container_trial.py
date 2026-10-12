@@ -225,6 +225,17 @@ def run(argv, *, env=None, timeout=120, stdin=None, stdout=None):
     return result.stdout
 
 
+def validate_fixture_tmpfs(configuration):
+    """Check the actual Compose parser result before creating any resources."""
+    services=configuration.get('services') if isinstance(configuration,dict) else None
+    require(isinstance(services,dict) and set(services)=={'keep-app','keep-digest'},
+        'Parsed fixture services differ',code='metadata_invalid')
+    for service in services.values():
+        tmpfs=service.get('tmpfs') if isinstance(service,dict) else None
+        require(tmpfs in (['/tmp:size=64m,mode=1777'],'/tmp:size=64m,mode=1777'),
+            'Parsed fixture tmpfs differs',code='metadata_invalid')
+
+
 def registry_resource_proof(proof):
     def checked(value):
         require(value, 'Owned registry endpoint proof differs', code='registry_endpoint_invalid')
@@ -507,6 +518,15 @@ class NativeTrial:
             return {'completed':True}
         return self.image_probe(step,complete,version=version)
 
+    def compose_probe(self, step, action):
+        return self.tooling_probe(step,action,records='compose_setup')
+
+    def compose_command(self, step, action):
+        def complete():
+            action()
+            return {'completed':True}
+        return self.compose_probe(step,complete)
+
     def tooling_preflight(self):
         architectures={'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}
         def host_native():
@@ -777,7 +797,7 @@ x-keep: &keep
   network_mode: none
   volumes: [keep-data:/app/data]
   read_only: true
-  tmpfs: [/tmp:size=64m,mode=1777]
+  tmpfs: ["/tmp:size=64m,mode=1777"]
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
 services:
@@ -803,15 +823,23 @@ volumes:
   keep-data:
 '''%self.name
         self.paths.publish(self.profile.compose_files[0],composition.encode())
-        self.profile.validate(self.paths)
+        def prepare_configuration():
+            self.profile.validate(self.paths)
+            return {'services':2,'data_volumes':1}
+        self.compose_probe('fixture-configuration-prepare',prepare_configuration)
         self.compose_args=('compose','--project-name',self.profile.project,'--project-directory',str(self.installation),
             '--env-file',str(self.profile.env_file),'--file',str(self.profile.compose_files[0]))
-        self.inner(*self.compose_args,'create','--pull','never')
-        self.inner('run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true',
+        def validate_configuration():
+            parsed=parse_json(self.inner(*self.compose_args,'config','--format','json'),1048576)
+            validate_fixture_tmpfs(parsed)
+            return {'services':2,'tmpfs_mounts_per_service':1}
+        self.compose_probe('fixture-compose-config-verify',validate_configuration)
+        self.compose_command('fixture-compose-create',lambda:self.inner(*self.compose_args,'create','--pull','never'))
+        self.compose_command('fixture-database-seed',lambda:self.inner('run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true',
             '--env-file',self.profile.env_file,'--mount','type=volume,source='+self.profile.volume+',target=/app/data',
-            '--tmpfs','/tmp:size=64m,mode=1777','--entrypoint','python',previous.reference,'-B','/app/maintenance_trial_fixture.py','seed',timeout=120)
-        self.inner(*self.compose_args,'up','--detach','--no-build','--pull','never')
-        self.wait(previous)
+            '--tmpfs','/tmp:size=64m,mode=1777','--entrypoint','python',previous.reference,'-B','/app/maintenance_trial_fixture.py','seed',timeout=120))
+        self.compose_command('fixture-compose-start',lambda:self.inner(*self.compose_args,'up','--detach','--no-build','--pull','never'))
+        self.compose_command('fixture-paired-health',lambda:self.wait(previous))
         resolver=self.resolver
         def factory(paths,profile,enrollment=None):
             class Backend:
@@ -824,14 +852,32 @@ volumes:
                     return HostEngine(paths,profile,adapter)
             return Backend()
         self.factory=factory
-        bundle=source_bundle(self.paths,DRAFT,version=previous.version,revision=previous.revision)
-        staged=stage_bundle(self.paths,self.state,bundle,version=previous.version,revision=previous.revision,
-            expected_sha256=hashlib.sha256(bundle).hexdigest())
-        source_proof=HostState(self.paths,self.state).source_proof(staged)
+        prepared={}
+        def package_source():
+            prepared['bundle']=source_bundle(self.paths,DRAFT,version=previous.version,revision=previous.revision)
+            return {'sha256':hashlib.sha256(prepared['bundle']).hexdigest()}
+        self.compose_probe('helper-source-package',package_source)
+        def stage_source():
+            prepared['staged']=stage_bundle(self.paths,self.state,prepared['bundle'],version=previous.version,
+                revision=previous.revision,expected_sha256=hashlib.sha256(prepared['bundle']).hexdigest())
+            return {'staged':True}
+        self.compose_probe('helper-source-stage',stage_source)
+        def read_source_proof():
+            prepared['proof']=HostState(self.paths,self.state).source_proof(prepared['staged'])
+            return {'sha256':prepared['proof']['archive_sha256']}
+        self.compose_probe('helper-source-proof',read_source_proof)
+        source_proof=prepared['proof']
         self.report['helper_bundle_sha256']=source_proof['archive_sha256']
         self.report['helper_sources']=source_proof['manifest']['files']
-        activation=enroll(self.paths,self.profile,source_proof=source_proof,backend_factory=factory)
-        self.host_state,self.backend=load_backend(self.paths,self.state,backend_factory=factory)
+        def enroll_source():
+            prepared['activation']=enroll(self.paths,self.profile,source_proof=source_proof,backend_factory=factory)
+            return {'install_id':prepared['activation']['install_id']}
+        self.compose_probe('signed-enrollment',enroll_source)
+        activation=prepared['activation']
+        def reload_source():
+            self.host_state,self.backend=load_backend(self.paths,self.state,backend_factory=factory)
+            return {'enrolled':True}
+        self.compose_probe('enrolled-host-reload',reload_source)
         self.report['activation']={'install_id':activation['install_id'],'context':self.profile.docker_context,'daemon_id':self.profile.daemon_id}
 
     def wait(self,image):
