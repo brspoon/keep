@@ -78,16 +78,6 @@ jobs:
       - name: Verify installation tools are absent and runtime libraries work
         run: |
           docker run --rm --network none keep-ci python -c "import importlib.util, zlib, sqlite3, ssl; assert all(importlib.util.find_spec(name) is None for name in ('pip', 'ensurepip', 'setuptools', 'msgpack')); assert zlib.decompress(zlib.compress(b'keep')) == b'keep'; assert sqlite3.connect(':memory:').execute('select 1').fetchone() == (1,); assert ssl.create_default_context().get_ca_certs()"
-      - name: Validate portable Compose
-        run: |
-          cp .env.example .env
-          docker compose config --quiet
-      - name: Smoke-test packaged web and worker with durable data
-        run: sh scripts/smoke_container.sh keep-ci
-      - name: Exercise portable installation, restore and failed-upgrade recovery
-        run: python3 scripts/portable_container_trial.py --candidate-image keep-ci:latest --evidence portable-recovery-${{ matrix.arch }}.json
-      - name: Exercise one-command installation and owner-preserving reruns
-        run: python3 scripts/installer_container_trial.py --candidate-image keep-ci:latest --evidence installer-trial-${{ matrix.arch }}.json
       - name: Set up the optional host helper runtime
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -107,6 +97,16 @@ jobs:
           path: maintenance-native-${{ matrix.arch }}.json
           if-no-files-found: error
           retention-days: 30
+      - name: Validate portable Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+      - name: Smoke-test packaged web and worker with durable data
+        run: sh scripts/smoke_container.sh keep-ci
+      - name: Exercise portable installation, restore and failed-upgrade recovery
+        run: python3 scripts/portable_container_trial.py --candidate-image keep-ci:latest --evidence portable-recovery-${{ matrix.arch }}.json
+      - name: Exercise one-command installation and owner-preserving reruns
+        run: python3 scripts/installer_container_trial.py --candidate-image keep-ci:latest --evidence installer-trial-${{ matrix.arch }}.json
       - name: Capture verified vendor evidence and Scout assessment
         id: provenance
         env:

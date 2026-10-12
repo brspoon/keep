@@ -115,6 +115,9 @@ def pinned_tool_identity(inspected, tool, architecture):
 
 def candidate_configuration(archive_path, inspected):
     """Derive the canonical config digest from actual Docker-save bytes."""
+    require(isinstance(inspected,dict) and isinstance(inspected.get('Id'),str) and DIGEST.fullmatch(inspected['Id'])
+        and inspected.get('Architecture') in ('amd64','arm64') and inspected.get('Os')=='linux'
+        and isinstance(inspected.get('Config'),dict),'Candidate inspection is invalid')
     require(archive_path.stat().st_size<=32*1024**3,'Candidate export exceeded bound')
     with tarfile.open(archive_path,mode='r:') as archive:
         members={}
@@ -122,38 +125,88 @@ def candidate_configuration(archive_path, inspected):
             require(len(members)<4096 and member.name not in members,'Candidate archive inventory invalid')
             members[member.name]=member
         def small(name,limit=524288):
+            require(isinstance(name,str) and name in members,'Candidate metadata unavailable')
             member=members[name]
             require(member.isfile() and 0<member.size<=limit,'Candidate metadata exceeded bound')
             value=archive.extractfile(member).read(limit+1)
             require(len(value)==member.size,'Candidate metadata truncated')
             return value
         def blob(descriptor):
-            digest=descriptor['digest'];require(DIGEST.fullmatch(digest),'Candidate descriptor invalid')
+            require(isinstance(descriptor,dict) and isinstance(descriptor.get('digest'),str)
+                and DIGEST.fullmatch(descriptor['digest']) and type(descriptor.get('size')) is int
+                and 0<descriptor['size']<=524288,'Candidate descriptor invalid')
+            digest=descriptor['digest']
             value=small('blobs/sha256/'+digest[7:])
             require(len(value)==descriptor['size'] and 'sha256:'+hashlib.sha256(value).hexdigest()==digest,'Candidate descriptor bytes differ')
             return parse_json(value,524288),digest
         if 'oci-layout' in members:
+            layout=parse_json(small('oci-layout'))
+            require(isinstance(layout,dict) and layout.get('imageLayoutVersion')=='1.0.0','Candidate OCI layout invalid')
             wrapper=parse_json(small('index.json'))
-            selected=[row for row in wrapper['manifests'] if row.get('digest')==inspected['Id']]
-            require(len(selected)==1,'Candidate original descriptor unavailable')
-            document,_=blob(selected[0])
-            if document.get('mediaType') in (INDEX,'application/vnd.docker.distribution.manifest.list.v2+json'):
-                selected=[row for row in document['manifests'] if row.get('platform',{}).get('os')=='linux'
-                    and row.get('platform',{}).get('architecture')==inspected['Architecture']]
-                require(len(selected)==1,'Candidate native descriptor unavailable')
-                document,_=blob(selected[0])
-            configuration,digest=blob(document['config'])
+            require(isinstance(wrapper,dict) and type(wrapper.get('schemaVersion')) is int and wrapper['schemaVersion']==2
+                and isinstance(wrapper.get('manifests'),list) and 1<=len(wrapper['manifests'])<=16,'Candidate OCI wrapper invalid')
+            index_types=(INDEX,'application/vnd.docker.distribution.manifest.list.v2+json')
+            native_types=(MANIFEST,'application/vnd.docker.distribution.manifest.v2+json')
+            candidates=[]
+            for root_descriptor in wrapper['manifests']:
+                document,root_digest=blob(root_descriptor)
+                require(isinstance(document,dict) and type(document.get('schemaVersion')) is int
+                    and document['schemaVersion']==2 and document.get('mediaType') in index_types+native_types,
+                    'Candidate OCI root invalid')
+                root_type=document['mediaType']
+                require(root_descriptor.get('mediaType',root_type)==root_type,'Candidate OCI root type differs')
+                if 'platform' in root_descriptor:
+                    platform_info=root_descriptor['platform']
+                    require(isinstance(platform_info,dict) and platform_info.get('os')=='linux'
+                        and platform_info.get('architecture')==inspected['Architecture'],'Candidate OCI root platform differs')
+                native_digest,native_type=root_digest,root_type
+                if root_type in index_types:
+                    children=document.get('manifests')
+                    require(isinstance(children,list) and 1<=len(children)<=16,'Candidate index inventory invalid')
+                    require(all(isinstance(row,dict) and isinstance(row.get('platform'),dict) for row in children),
+                        'Candidate native platform invalid')
+                    selected=[row for row in children if row['platform'].get('os')=='linux'
+                        and row['platform'].get('architecture')==inspected['Architecture']]
+                    require(len(selected)==1,'Candidate native descriptor unavailable or ambiguous')
+                    document,native_digest=blob(selected[0])
+                    require(isinstance(document,dict) and type(document.get('schemaVersion')) is int
+                        and document['schemaVersion']==2 and document.get('mediaType') in native_types,
+                        'Candidate native manifest invalid')
+                    native_type=document['mediaType']
+                    require(selected[0].get('mediaType',native_type)==native_type,'Candidate native type differs')
+                config_descriptor=document.get('config')
+                require(isinstance(config_descriptor,dict) and config_descriptor.get('mediaType',
+                    'application/vnd.oci.image.config.v1+json') in ('application/vnd.oci.image.config.v1+json',
+                    'application/vnd.docker.container.image.v1+json'),'Candidate configuration descriptor invalid')
+                configuration,digest=blob(config_descriptor)
+                if inspected['Id'] in (root_digest,native_digest,digest):
+                    candidates.append((configuration,digest,{root_digest:root_type,native_digest:native_type}))
+            require(len(candidates)==1,'Candidate immutable graph unavailable or ambiguous')
+            configuration,digest,descriptors=candidates[0]
+            observed=inspected.get('Descriptor')
+            if observed is not None:
+                require(isinstance(observed,dict) and observed.get('digest') in descriptors
+                    and observed.get('mediaType')==descriptors[observed['digest']],'Candidate live descriptor differs')
         else:
             manifests=parse_json(small('manifest.json'))
-            require(len(manifests)==1,'Candidate export must contain one image')
+            require(isinstance(manifests,list) and len(manifests)==1 and isinstance(manifests[0],dict),
+                'Candidate export must contain one image')
             raw=small(manifests[0]['Config'])
             digest='sha256:'+hashlib.sha256(raw).hexdigest()
             require(digest==inspected['Id'],'Candidate classic config identity differs')
             configuration=parse_json(raw,524288)
-        config=configuration.get('config') or {}
-        require(configuration.get('architecture')==inspected['Architecture'] and configuration.get('os')=='linux'
+        require(isinstance(configuration,dict) and isinstance(configuration.get('config'),dict),'Candidate configuration invalid')
+        config=configuration['config']
+        require(isinstance(config.get('User'),str) and isinstance(config.get('Labels'),dict)
+            and configuration.get('architecture')==inspected['Architecture'] and configuration.get('os')==inspected['Os']
             and config.get('User')==inspected['Config'].get('User')
             and config.get('Labels')==inspected['Config'].get('Labels'),'Candidate archive and live configuration differ')
+        if 'RootFS' in inspected:
+            actual=inspected['RootFS'];rootfs=configuration.get('rootfs')
+            require(isinstance(actual,dict) and actual.get('Type')=='layers' and isinstance(actual.get('Layers'),list)
+                and len(actual['Layers'])<=1024 and all(isinstance(value,str) and DIGEST.fullmatch(value) for value in actual['Layers'])
+                and isinstance(rootfs,dict) and rootfs.get('type')=='layers' and rootfs.get('diff_ids')==actual['Layers'],
+                'Candidate archive and live root filesystem differ')
         return digest
 
 
@@ -426,12 +479,13 @@ class NativeTrial:
         return run((self.profile.docker_executable, '--context', self.profile.docker_context, *args),
             env={'PATH':self.env['PATH'],'HOME':str(self.root),'DOCKER_CONFIG':str(self.config)}, **kwargs)
 
-    def tooling_probe(self, step, action, *, reference=None):
+    def tooling_probe(self, step, action, *, reference=None, records='tooling_preflight', version=None):
         # These probes precede enrollment and inspect only public tooling. Keep
         # fixed status codes and selected metadata; never copy stderr or argv.
         entry={'step':step,'status':'running'}
         if reference is not None:entry['reference']=reference
-        self.report.setdefault('tooling_preflight', []).append(entry)
+        if version is not None:entry['version']=version
+        self.report.setdefault(records, []).append(entry)
         try:
             value=action()
             entry.update(value)
@@ -443,6 +497,15 @@ class NativeTrial:
             if isinstance(error,TrialError) and error.returncode is not None:
                 entry['exit_code']=error.returncode
             raise
+
+    def image_probe(self, step, action, *, version=None):
+        return self.tooling_probe(step,action,records='image_staging',version=version)
+
+    def image_command(self, step, action, *, version=None):
+        def complete():
+            action()
+            return {'completed':True}
+        return self.image_probe(step,complete,version=version)
 
     def tooling_preflight(self):
         architectures={'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}
@@ -586,44 +649,79 @@ class NativeTrial:
         self.tooling_probe('isolated-native-platform-verify',daemon_native)
 
     def images(self):
-        base = json.loads(self.outer('image','inspect',self.candidate))[0]
-        require(base['Architecture'] == self.architecture and base['Os'] == 'linux', 'Source-packaged base is not native')
-        revision = (base.get('Config',{}).get('Labels') or {}).get('org.opencontainers.image.revision')
-        require(isinstance(revision,str) and re.fullmatch('[a-f0-9]{40}',revision), 'Base image needs its full source revision')
+        base={}
+        def inspect_base():
+            rows=parse_json(self.outer('image','inspect',self.candidate),1048576)
+            require(isinstance(rows,list) and len(rows)==1 and isinstance(rows[0],dict),'Candidate inspection invalid',code='metadata_invalid')
+            base.update(rows[0])
+            require(isinstance(base.get('Id'),str) and DIGEST.fullmatch(base['Id']),'Candidate image identity invalid',code='metadata_invalid')
+            require(base.get('Architecture')==self.architecture and base.get('Os')=='linux','Source-packaged base is not native')
+            labels=base.get('Config',{}).get('Labels') or {}
+            revision=labels.get('org.opencontainers.image.revision');version=labels.get('org.opencontainers.image.version')
+            require(isinstance(revision,str) and re.fullmatch('[a-f0-9]{40}',revision),'Base image needs its full source revision')
+            require(isinstance(version,str) and re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version)
+                and len(version)<=32,'Candidate version invalid',code='metadata_invalid')
+            return {'image_id':base['Id'],'version':version,'revision':revision,'architecture':self.architecture,'os':'linux'}
+        observed=self.image_probe('candidate-inspect',inspect_base)
+        revision=observed['revision']
         archive=self.tool_state/'source-packaged-base.tar'
-        self.outer('image','save','--output',archive,self.candidate,timeout=300)
-        config_digest=candidate_configuration(archive,base)
-        require(json.loads(self.outer('image','inspect',self.candidate))[0]['Id']==base['Id'],'Source-packaged candidate changed during export')
+        def export_base():
+            self.outer('image','save','--output',archive,self.candidate,timeout=300)
+            require(archive.is_file() and 0<archive.stat().st_size<=32*1024**3,'Candidate export unavailable')
+            return {'archive_created':True,'bytes':archive.stat().st_size}
+        self.image_probe('candidate-export',export_base)
+        config_digest=self.image_probe('candidate-export-verify',lambda:{'config_digest':candidate_configuration(archive,base)})['config_digest']
+        def revalidate_base(reference):
+            require(json.loads(self.outer('image','inspect',reference))[0]['Id']==base['Id'],'Source-packaged candidate alias changed')
+            return {'image_id':base['Id']}
+        self.image_probe('candidate-reinspect',lambda:revalidate_base(self.candidate))
         self.report['candidate']={'version':base['Config']['Labels'].get('org.opencontainers.image.version'),
             'revision':revision,'architecture':self.architecture,'os':'linux','image_id':config_digest}
         self.report['base_image'] = {'id':base['Id'], 'config_digest':config_digest,'revision':revision,'reference':self.candidate,
             'version':base['Config']['Labels'].get('org.opencontainers.image.version')}
         self.base_alias=self.name+'-base:source'
-        self.outer('image','tag',self.candidate,self.base_alias)
-        self.outer_images.append((self.base_alias,base['Id']))
+        def tag_base():
+            self.outer('image','tag',self.candidate,self.base_alias)
+            self.outer_images.append((self.base_alias,base['Id']))
+            return revalidate_base(self.base_alias)
+        self.image_probe('owned-base-alias-create',tag_base)
         base['fixture_reference']=self.base_alias
-        build=self.stage_source(base)
+        staged={}
+        def stage_fixture():
+            staged['build']=self.stage_source(base)
+            return {'files':len(self.report['source_files'])}
+        self.image_probe('fixture-source-stage',stage_fixture)
+        build=staged['build']
         self.images_by_schema={}
         for schema in (1,2,3,4):
             version='0.0.'+str(schema)
             self.paths.publish(build/'VERSION',(version+'\n').encode(),overwrite=schema>1)
             self.paths.publish(build/'TRIAL_SCHEMA',(str(schema)+'\n').encode(),overwrite=schema>1)
             tag=self.name+'-image:'+version
-            require(json.loads(self.outer('image','inspect',self.base_alias))[0]['Id']==base['Id'],'Owned source base alias changed')
-            self.outer('build','--network','none','--pull=false','--label','org.opencontainers.image.version='+version,
-                '--label','org.opencontainers.image.revision='+revision,'--tag',tag,str(build),timeout=300)
-            metadata=json.loads(self.outer('image','inspect',tag))[0]
-            require(json.loads(self.outer('image','inspect',self.base_alias))[0]['Id']==base['Id'],'Owned source base alias changed during build')
-            self.outer_images.append((tag,metadata['Id']))
+            self.image_probe('fixture-base-alias-revalidate',lambda:revalidate_base(self.base_alias),version=version)
+            def build_fixture():
+                self.outer('build','--network','none','--pull=false','--label','org.opencontainers.image.version='+version,
+                    '--label','org.opencontainers.image.revision='+revision,'--tag',tag,str(build),timeout=300)
+                metadata=json.loads(self.outer('image','inspect',tag))[0]
+                require(isinstance(metadata.get('Id'),str) and DIGEST.fullmatch(metadata['Id']),'Fixture image identity invalid')
+                self.outer_images.append((tag,metadata['Id']))
+                revalidate_base(self.base_alias)
+                return {'image_id':metadata['Id']}
+            self.image_probe('fixture-image-build',build_fixture,version=version)
             archive=self.tool_state/('source-'+version+'.tar')
-            self.outer('image','save','--output',archive,tag,timeout=300)
-            self.inner('image','load','--input',archive,timeout=300)
+            self.image_command('fixture-image-export',lambda:self.outer('image','save','--output',archive,tag,timeout=300),version=version)
+            self.image_command('fixture-image-load',lambda:self.inner('image','load','--input',archive,timeout=300),version=version)
             mirror=self.name+'-registry:5000/brspoon/keep:native-'+str(schema)
-            self.inner('image','tag',tag,mirror)
-            self.inner('push',mirror,timeout=300)
-            identity=self.resolver.register('native-'+str(schema),version,revision)
+            self.image_command('fixture-registry-tag',lambda:self.inner('image','tag',tag,mirror),version=version)
+            self.image_command('fixture-registry-push',lambda:self.inner('push',mirror,timeout=300),version=version)
+            identities={}
+            def verify_fixture():
+                identities['image']=self.resolver.register('native-'+str(schema),version,revision)
+                return {'image_id':identities['image'].image_id,'native_digest':identities['image'].native_digest}
+            self.image_probe('fixture-registry-graph-verify',verify_fixture,version=version)
+            identity=identities['image']
             # Resolve official-name immutable URI through the internal mirror.
-            self.inner('pull',identity.reference,timeout=300)
+            self.image_command('fixture-immutable-pull',lambda:self.inner('pull',identity.reference,timeout=300),version=version)
             self.images_by_schema[schema]=identity
             self.report['images'][version]=identity.as_dict()
         self.paths.publish(self.state/'trial-registry-graph.json',canonical({'schema':'keep.maintenance-trial-graph.v1',

@@ -1,6 +1,7 @@
 """Offline graph/source tests. Never execute Docker or contact a registry."""
 import hashlib
 import importlib.util
+import copy
 import os
 import json
 import io
@@ -216,6 +217,92 @@ class PackagingTests(unittest.TestCase):
 
 
 class CandidateTests(unittest.TestCase):
+    def hybrid(self, *, root_kind='index', architecture='amd64'):
+        configuration={'architecture':architecture,'os':'linux',
+            'config':{'User':'10001:10001','Labels':{'org.opencontainers.image.version':'2.26.0',
+                'org.opencontainers.image.revision':'a'*40}},
+            'rootfs':{'type':'layers','diff_ids':['sha256:'+'e'*64]}}
+        raw=canonical(configuration);config_digest='sha256:'+hashlib.sha256(raw).hexdigest()
+        manifest=canonical({'schemaVersion':2,'mediaType':trial.MANIFEST,
+            'config':{'digest':config_digest,'size':len(raw),'mediaType':'application/vnd.oci.image.config.v1+json'},
+            'layers':[{'digest':'sha256:'+'f'*64,'size':42,'mediaType':'application/vnd.oci.image.layer.v1.tar+gzip'}]})
+        native='sha256:'+hashlib.sha256(manifest).hexdigest()
+        index=canonical({'schemaVersion':2,'mediaType':trial.INDEX,'manifests':[{'mediaType':trial.MANIFEST,
+            'digest':native,'size':len(manifest),'platform':{'os':'linux','architecture':architecture}}]})
+        indexed='sha256:'+hashlib.sha256(index).hexdigest()
+        root_digest,root_body,root_type=(indexed,index,trial.INDEX) if root_kind=='index' else (native,manifest,trial.MANIFEST)
+        members={'oci-layout':canonical({'imageLayoutVersion':'1.0.0'}),
+            'index.json':canonical({'schemaVersion':2,'manifests':[{'digest':root_digest,'size':len(root_body),'mediaType':root_type}]}),
+            'blobs/sha256/'+indexed[7:]:index,'blobs/sha256/'+native[7:]:manifest,'blobs/sha256/'+config_digest[7:]:raw}
+        inspected={'Id':config_digest,'Architecture':architecture,'Os':'linux','Config':configuration['config'],
+            'RootFS':{'Type':'layers','Layers':configuration['rootfs']['diff_ids']},
+            'Descriptor':{'digest':root_digest,'mediaType':root_type}}
+        return members,inspected,config_digest
+
+    def archive(self,members):
+        temporary=tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(temporary.cleanup)
+        archive=Path(temporary.name).resolve()/'candidate.tar'
+        with tarfile.open(archive,'w') as package:
+            for name,data in members.items():
+                member=tarfile.TarInfo(name);member.size=len(data);package.addfile(member,io.BytesIO(data))
+        return archive
+
+    def test_oci_export_with_classic_config_id_selects_one_verified_native_or_index_graph(self):
+        for architecture in ('amd64','arm64'):
+            for root_kind in ('native','index'):
+                members,inspected,digest=self.hybrid(root_kind=root_kind,architecture=architecture)
+                with self.subTest(architecture=architecture,root_kind=root_kind):
+                    self.assertEqual(trial.candidate_configuration(self.archive(members),inspected),digest)
+                    without_descriptor={key:value for key,value in inspected.items() if key!='Descriptor'}
+                    self.assertEqual(trial.candidate_configuration(self.archive(members),without_descriptor),digest)
+
+    def test_hybrid_cannot_fall_back_to_similar_metadata_or_ignore_live_descriptor_and_rootfs(self):
+        mutations=(
+            lambda value:value.update(Id='sha256:'+'f'*64),
+            lambda value:value.update(Architecture='arm64'),
+            lambda value:value.update(Os='windows'),
+            lambda value:value['Config'].update(User='0:0'),
+            lambda value:value['Config']['Labels'].update({'org.opencontainers.image.revision':'b'*40}),
+            lambda value:value['Descriptor'].update(digest='sha256:'+'f'*64),
+            lambda value:value['Descriptor'].update(mediaType=trial.MANIFEST),
+            lambda value:value['RootFS'].update(Layers=['sha256:'+'f'*64]),
+            lambda value:value['RootFS'].update(Type='other'),
+        )
+        for mutate in mutations:
+            members,inspected,_=self.hybrid();mutate(inspected)
+            with self.subTest(mutate=mutate),self.assertRaises(trial.TrialError):
+                trial.candidate_configuration(self.archive(members),inspected)
+
+    def test_malformed_blob_descriptor_and_ambiguous_oci_graphs_are_held(self):
+        for kind in ('tampered-config','missing-config','wrong-size','boolean-size','duplicate-root','duplicate-native','foreign-graph'):
+            members,inspected,digest=self.hybrid()
+            if kind=='tampered-config':members['blobs/sha256/'+digest[7:]]+=b' '
+            elif kind=='missing-config':members.pop('blobs/sha256/'+digest[7:])
+            else:
+                wrapper=json.loads(members['index.json'])
+                root=wrapper['manifests'][0]
+                if kind=='wrong-size':root['size']+=1
+                elif kind=='boolean-size':root['size']=True
+                elif kind=='duplicate-root':wrapper['manifests'].append(copy.deepcopy(root))
+                elif kind=='duplicate-native':
+                    index=json.loads(members['blobs/sha256/'+root['digest'][7:]])
+                    index['manifests'].append(copy.deepcopy(index['manifests'][0]))
+                    raw=canonical(index);new_digest='sha256:'+hashlib.sha256(raw).hexdigest()
+                    members['blobs/sha256/'+new_digest[7:]]=raw
+                    root.update(digest=new_digest,size=len(raw));inspected['Descriptor'].update(digest=new_digest)
+                else:
+                    index=json.loads(members['blobs/sha256/'+root['digest'][7:]])
+                    native=index['manifests'][0]
+                    manifest=json.loads(members['blobs/sha256/'+native['digest'][7:]])
+                    manifest['annotations']={'fixture':'different immutable native sharing the same config'}
+                    raw=canonical(manifest);new_digest='sha256:'+hashlib.sha256(raw).hexdigest()
+                    members['blobs/sha256/'+new_digest[7:]]=raw
+                    wrapper['manifests'].append({'digest':new_digest,'size':len(raw),'mediaType':trial.MANIFEST})
+                members['index.json']=canonical(wrapper)
+            with self.subTest(kind=kind),self.assertRaises(trial.TrialError):
+                trial.candidate_configuration(self.archive(members),inspected)
+
     def test_classic_and_containerd_exports_identify_the_same_canonical_config(self):
         config={'architecture':'amd64','os':'linux','config':{'User':'10001:10001','Labels':{'org.opencontainers.image.version':'2.26.0'}}}
         raw=canonical(config);digest='sha256:'+hashlib.sha256(raw).hexdigest()
@@ -235,9 +322,51 @@ class CandidateTests(unittest.TestCase):
                 with tarfile.open(archive,'w') as package:
                     for name,data in members.items():
                         member=tarfile.TarInfo(name);member.size=len(data);package.addfile(member,io.BytesIO(data))
-                inspected={'Id':identifier,'Architecture':'amd64','Config':config['config']}
+                inspected={'Id':identifier,'Architecture':'amd64','Os':'linux','Config':config['config']}
                 self.assertEqual(trial.candidate_configuration(archive,inspected),digest)
                 with self.assertRaises(trial.TrialError):trial.candidate_configuration(archive,{**inspected,'Architecture':'arm64'})
+
+
+class ImageStagingTests(unittest.TestCase):
+    def test_verified_hybrid_candidate_and_staging_failure_have_safe_specific_receipt(self):
+        fixture=CandidateTests();members,inspected,digest=fixture.hybrid();archive=fixture.archive(members)
+        self.addCleanup(fixture.doCleanups)
+        with tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve()) as temporary:
+            paths=create_private_paths();root=create_root(paths,Path(temporary).resolve()/'private')
+            value=trial.NativeTrial.__new__(trial.NativeTrial)
+            value.paths,value.tool_state=paths,paths.mkdir(root/'tool-state')
+            value.candidate,value.architecture='keep-ci:latest','amd64'
+            value.name='keep-maintenance-native-012345abcdef';value.outer_images=[]
+            value.report={'source_files':{},'images':{}}
+            inspected=copy.deepcopy(inspected);inspected['Config']['Env']=['PRIVATE_TOKEN=do-not-report']
+            def outer(*args,**kwargs):
+                if args[:2]==('image','inspect'):return canonical([inspected])
+                if args[:2]==('image','save'):
+                    paths.publish(Path(args[args.index('--output')+1]),archive.read_bytes())
+                    return b''
+                if args[:2]==('image','tag'):return b''
+                raise AssertionError('Unexpected staging transport')
+            value.outer=Mock(side_effect=outer)
+            value.stage_source=Mock(side_effect=trial.TrialError('private staging detail',code='command_failed',returncode=1))
+            with self.assertRaises(trial.TrialError):value.images()
+            self.assertEqual(value.report['candidate']['image_id'],digest)
+            self.assertEqual(value.report['base_image']['config_digest'],digest)
+            self.assertEqual([row['step'] for row in value.report['image_staging']],[
+                'candidate-inspect','candidate-export','candidate-export-verify','candidate-reinspect',
+                'owned-base-alias-create','fixture-source-stage'])
+            self.assertEqual(value.report['image_staging'][-1],{
+                'step':'fixture-source-stage','status':'failed','error_code':'command_failed','exit_code':1})
+            self.assertNotIn('PRIVATE_TOKEN',json.dumps(value.report))
+            self.assertNotIn('private staging detail',json.dumps(value.report))
+
+    def test_candidate_metadata_is_held_before_export_or_alias_creation(self):
+        value=trial.NativeTrial.__new__(trial.NativeTrial)
+        value.candidate,value.architecture='keep-ci:latest','amd64';value.report={}
+        value.outer=Mock(return_value=canonical([{'Id':'sha256:'+'a'*64,'Architecture':'arm64','Os':'linux'}]))
+        with self.assertRaises(trial.TrialError):value.images()
+        self.assertEqual(value.report['image_staging'][-1]['step'],'candidate-inspect')
+        self.assertEqual(value.outer.call_count,1)
+        self.assertNotIn('candidate',value.report)
 
 
 class FreshProcessTests(unittest.TestCase):
