@@ -28,6 +28,25 @@ from private_store import create_private_paths
 from helper_bundle import FILES as HELPER_FILES, create_root
 
 
+class FailureDiagnosticTests(unittest.TestCase):
+    def test_only_reviewed_literal_engine_errors_are_retained(self):
+        known=trial.EngineError('Docker command failed; operation needs reconciliation')
+        self.assertEqual(trial.failure_details(known)[0]['literal'],str(known))
+        private=trial.EngineError('private endpoint and credential')
+        self.assertNotIn('literal',trial.failure_details(private)[0])
+        self.assertNotIn('private',json.dumps(trial.failure_details(private)))
+
+    def test_cause_chain_is_bounded_and_does_not_expose_raw_messages(self):
+        original=ValueError('private DB path and secret')
+        wrapped=trial.EngineError('Maintenance did not complete; inspect durable progress')
+        wrapped.__cause__=original
+        original.__cause__=wrapped
+        details=trial.failure_details(wrapped)
+        self.assertEqual([row['type'] for row in details],['EngineError','ValueError'])
+        self.assertNotIn('secret',json.dumps(details))
+        self.assertEqual(details[1]['frames'],[])
+
+
 class Graph(trial.RegistryGraph):
     def __init__(self):
         super().__init__(12345, 'amd64')

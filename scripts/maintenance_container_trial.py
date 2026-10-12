@@ -10,6 +10,7 @@ test substitutions. Importing this file does not invoke Docker or the network.
 from __future__ import annotations
 
 import argparse
+import ast
 from dataclasses import replace
 import hashlib
 import http.client
@@ -83,6 +84,37 @@ class TrialError(RuntimeError):
 def require(value, message, *, code='validation_failed'):
     if not value:
         raise TrialError(message, code=code)
+
+
+def failure_details(error):
+    """Retain fixed source locations and literal errors, never process output."""
+    names=('host_engine.py','docker_adapter.py','host_mailbox.py')
+    literals=set()
+    for name in names:
+        tree=ast.parse((HOST_SOURCE/name).read_bytes())
+        for node in ast.walk(tree):
+            if (isinstance(node,ast.Call) and isinstance(node.func,ast.Name)
+                    and node.func.id=='EngineError' and node.args
+                    and isinstance(node.args[0],ast.Constant)
+                    and isinstance(node.args[0].value,str)):
+                literals.add(node.args[0].value)
+    allowed={str((HOST_SOURCE/name).resolve()):name for name in names}
+    allowed[str(Path(__file__).resolve())]=Path(__file__).name
+    result=[];seen=set()
+    while error is not None and id(error) not in seen and len(result)<8:
+        seen.add(id(error));entry={'type':type(error).__name__,'frames':[]}
+        if type(error) is EngineError and str(error) in literals:entry['literal']=str(error)
+        trace=error.__traceback__
+        while trace is not None:
+            code=trace.tb_frame.f_code
+            module=allowed.get(str(Path(code.co_filename).resolve()))
+            if module and re.fullmatch('[A-Za-z_][A-Za-z_0-9]{0,80}',code.co_name):
+                entry['frames'].append({'module':module,'function':code.co_name,'line':trace.tb_lineno})
+                entry['frames']=entry['frames'][-12:]
+            trace=trace.tb_next
+        result.append(entry)
+        error=error.__cause__ or (error.__context__ if not error.__suppress_context__ else None)
+    return result
 
 
 def pinned_tool_identity(inspected, tool, architecture):
@@ -921,6 +953,7 @@ volumes:
             entry['status']='passed'
         except Exception as error:
             entry['status']='failed';entry['error_type']=type(error).__name__
+            entry['failure_details']=failure_details(error)
             if isinstance(error,TrialError):entry['error_code']=error.code
             raise
 
@@ -1228,6 +1261,7 @@ volumes:
             try:self.cleanup()
             except Exception as error:
                 self.report['outcome']='failed';self.report['cleanup']['held']=type(error).__name__
+                self.report['cleanup']['failure_details']=failure_details(error)
             self.report['private_evidence_directory']=str(self.root)
             self.evidence.parent.mkdir(parents=True,exist_ok=True)
             self.evidence.write_bytes(canonical(self.report)+b'\n')
