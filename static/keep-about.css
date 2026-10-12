@@ -1,0 +1,39 @@
+.about-ui [hidden] { display:none!important; }
+.about-ui .about-panel { margin:24px 0; padding:20px; border:1px solid var(--border); border-radius:11px; background:var(--surface); }
+.about-ui .about-section-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+.about-ui .about-section-heading h2 { margin:0; font-size:20px; }
+.about-ui .about-section-heading form { margin:0; }
+.about-ui .about-button,.about-ui .about-link { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; margin:0; padding:10px 14px; border:1px solid transparent; border-radius:8px; color:var(--on-accent); background:var(--accent); font:inherit; font-size:13px; font-weight:650; line-height:1.4; text-decoration:none; cursor:pointer; }
+.about-ui :is(.about-button,.about-link).secondary { border-color:var(--border); background:var(--surface-hover); color:var(--text); }
+.about-ui .about-link:visited { color:var(--text); }
+.about-ui :is(.about-button,.about-link):hover { border-color:var(--border-hover); transform:none; }
+.about-ui :is(.about-button,.about-link):not(.secondary):hover { background:var(--accent-hover); }
+.about-ui :is(.about-button,.about-link):focus-visible,.about-ui summary:focus-visible { outline:2px solid var(--focus,var(--accent)); outline-offset:3px; }
+.about-ui .about-version-details { display:grid; gap:0; margin:0; }
+.about-ui .about-version-details>div { display:grid; grid-template-columns:140px minmax(0,1fr); align-items:center; gap:12px; padding:13px 0; border-top:1px solid var(--border); }
+.about-ui .about-version-details dt { color:var(--muted); font-size:13px; font-weight:500; }
+.about-ui .about-version-details dd { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:0; font-size:14px; font-variant-numeric:tabular-nums; }
+.about-ui .about-version-details strong { font-weight:650; }
+.about-ui .about-badge { display:inline-flex; align-items:center; padding:3px 7px; border:1px solid var(--border); border-radius:6px; background:var(--surface-hover); color:var(--muted); font-size:11px; font-weight:600; line-height:1.5; }
+.about-ui .about-badge.is-update { border-color:var(--option-accent-border); background:var(--accent-soft); color:var(--accent-ink); }
+.about-ui .about-check-reason,.about-ui .about-empty { margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.5; }
+.about-ui .about-feedback { margin:20px 0; padding:13px 16px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font-size:13px; line-height:1.5; }
+.about-ui .about-feedback.is-error { border-color:var(--negative-border); background:var(--negative-surface); color:var(--negative); }
+.about-ui #about-refresh { margin-top:12px; }
+.about-ui .about-release-list { display:grid; }
+.about-ui .about-release { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:15px 0; border-top:1px solid var(--border); }
+.about-ui .about-release:last-child { padding-bottom:0; }
+.about-ui .about-release-title { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.about-ui .about-release-title h3 { margin:0; font-size:15px; font-weight:650; }
+.about-ui .about-release time { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
+.about-ui .about-resources { display:flex; flex-wrap:wrap; gap:8px; }
+.about-ui .about-copy-feedback { margin:0 0 12px; color:var(--muted); font-size:13px; }
+.about-ui #about-diagnostics-details>summary { width:fit-content; min-height:44px; padding:10px 0; color:var(--text); font-size:13px; cursor:pointer; }
+.about-ui #about-diagnostics { display:block; box-sizing:border-box; width:100%; margin-top:8px; padding:12px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.6; resize:vertical; }
+@media(max-width:600px) {
+  .about-ui .about-panel { padding:16px; }
+  .about-ui .about-version-details>div { grid-template-columns:105px minmax(0,1fr); gap:8px; }
+  .about-ui .about-release { align-items:flex-start; }
+  .about-ui .about-release-main { flex:1 1 150px; }
+  .about-ui .about-section-heading h2 { font-size:18px; }
+}

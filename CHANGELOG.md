@@ -3,6 +3,8 @@
 ## 2.25.0 — 2026-10-11
 
 - Add letter navigation to Manage Library, Leaving, and Kept, with a desktop side index and a mobile drag handle that follow searches and filters.
+- Add an Admin About page with update checks, recent releases, support links, and copyable diagnostics.
+- Remove the note at the bottom of Jobs.
 
 ## 2.24.0 — 2026-10-11
 

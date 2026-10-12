@@ -19,6 +19,7 @@ and work on Keep itself.
 
 The in-app FAQ covers day-to-day use. Owners can view background work under
 **Admin → Jobs** and manage integration keys under **Admin → API keys**.
+**Admin → About** shows version information, update checks, and support links.
 
 ## Contribute and release
 
