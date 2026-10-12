@@ -12,7 +12,7 @@ from maintenance_protocol import ProtocolError, canonical
 from private_store import StorageError
 from maintenance_app import Controller, MaintenanceError, Store, dispatch, fixed_hooks
 
-RUNTIME_QUALIFIED = False
+RUNTIME_QUALIFIED = True
 VERBS = ('hello', 'enroll', 'queue', 'claim', 'revalidate', 'drain', 'status', 'complete', 'abort')
 MAX_STDIN = 65536
 
