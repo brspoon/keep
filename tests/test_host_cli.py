@@ -34,7 +34,11 @@ class CliTests(unittest.TestCase):
         self.config = self.paths.mkdir(self.root / 'docker-config')
         for name, body in (('.env', b'KEEP_IMAGE=brspoon/keep:2.26.0\n'), ('compose.yml', b'name: keep\n')):
             self.paths.publish(self.installation / name, body)
-        self.executable = Path(__import__('sys').executable).resolve()
+        # Docker transport is mocked; the enrolled executable belongs to this
+        # fixture rather than depending on hosted Python's installation mode.
+        self.executable = self.root / ('docker.exe' if os.name == 'nt' else 'docker')
+        self.paths.publish(self.executable, b'#!/bin/sh\nexit 99\n')
+        os.chmod(self.executable, 0o500)
         self.profile = Profile(self.installation, self.state, self.executable, self.config, 'default',
             'npipe:////./pipe/docker_engine' if os.name == 'nt' else 'unix:///private/tmp/synthetic-docker.sock',
             'synthetic-daemon', 'keep', 'keep_keep-data', (self.installation / 'compose.yml',), self.installation / '.env')

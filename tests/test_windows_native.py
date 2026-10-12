@@ -8,6 +8,8 @@ It proves neither power-loss durability nor Docker Desktop end-to-end behavior.
 from contextlib import contextmanager
 import ctypes as C
 from dataclasses import dataclass
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -20,6 +22,7 @@ import time
 import unittest
 from unittest.mock import patch
 import uuid
+import zipfile
 
 from host_engine import BoundedRunner, EngineError, Plan
 from private_store import Journal, StorageError, create_private_paths, operation_lock
@@ -111,10 +114,91 @@ class WindowsStorageTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name=='nt','Requires actual Windows CreateProcess/Job containment')
 class WindowsJobTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Hosted Python's tool-cache ancestors allow other users to replace
+        # children. Keep that production rejection: execute exact local runtime
+        # bytes from a unique protected tree instead of trusting the cache ACL.
+        paths=create_private_paths()
+        cls.runtime_root=Path(tempfile.gettempdir()).resolve(strict=True)/('keep-job-runtime-ci-'+str(uuid.uuid4()))
+        paths.create_root(cls.runtime_root)
+        cls.addClassCleanup(shutil.rmtree,cls.runtime_root)
+        dlls=paths.mkdir(cls.runtime_root/'DLLs')
+        source_executable=Path(sys.executable).resolve(strict=True)
+        source_root=Path(sys.base_prefix).resolve(strict=True)
+        manifest={}
+
+        def publish_source(source,target):
+            if source.is_symlink() or not source.is_file():
+                raise AssertionError('Synthetic runtime source is not a regular local file')
+            data=source.read_bytes()
+            if not 0<len(data)<=64*1024**2:
+                raise AssertionError('Synthetic runtime source exceeds its fixture bound')
+            digest=hashlib.sha256(data).hexdigest()
+            paths.publish(target,data)
+            if hashlib.sha256(paths.read(target,limit=len(data))).hexdigest()!=digest or source.read_bytes()!=data:
+                raise AssertionError('Synthetic runtime copy changed bytes')
+            manifest[str(target.relative_to(cls.runtime_root))]=digest
+
+        cls.executable=cls.runtime_root/source_executable.name
+        publish_source(source_executable,cls.executable)
+        for directory,destination in ((source_root,cls.runtime_root),(source_root/'DLLs',dlls)):
+            if not directory.is_dir():
+                raise AssertionError('Synthetic Windows runtime DLL directory is unavailable')
+            for source in sorted(directory.iterdir()):
+                if source.suffix.lower() in ('.dll','.pyd'):
+                    publish_source(source,destination/source.name)
+        if not any(name.lower().startswith('python') and name.lower().endswith('.dll') for name in manifest):
+            raise AssertionError('Synthetic Windows Python runtime DLL is unavailable')
+
+        # An uncompressed ZIP lets Python import encodings before loading any
+        # extension modules. Exclude installed packages, caches and test suites;
+        # no user/site modules or network downloads enter this fixture.
+        library=source_root/'Lib'
+        archive=io.BytesIO()
+        with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_STORED) as output:
+            for source in sorted(library.rglob('*.py')):
+                relative=source.relative_to(library)
+                if relative.parts[0] in ('site-packages','test') or '__pycache__' in relative.parts:
+                    continue
+                if source.is_symlink() or not source.is_file():
+                    raise AssertionError('Synthetic standard library source is not a regular file')
+                data=source.read_bytes()
+                if source.read_bytes()!=data:
+                    raise AssertionError('Synthetic standard library source changed bytes')
+                output.writestr(relative.as_posix(),data)
+        library_data=archive.getvalue()
+        if not 0<len(library_data)<=64*1024**2:
+            raise AssertionError('Synthetic standard library exceeds its fixture bound')
+        library_name='python'+str(sys.version_info.major)+str(sys.version_info.minor)+'.zip'
+        paths.publish(cls.runtime_root/library_name,library_data)
+        if paths.read(cls.runtime_root/library_name,limit=len(library_data))!=library_data:
+            raise AssertionError('Synthetic standard library copy changed bytes')
+        manifest[library_name]=hashlib.sha256(library_data).hexdigest()
+        # _pth isolates module loading from PYTHONHOME, PYTHONPATH, the registry
+        # and the original mutable tool cache. Do not enable import site.
+        path_config=cls.runtime_root/(cls.executable.stem+'._pth')
+        path_data=(library_name+'\nDLLs\n.\n').encode('ascii')
+        paths.publish(path_config,path_data)
+        if paths.read(path_config)!=path_data:
+            raise AssertionError('Synthetic runtime module configuration changed bytes')
+        manifest[path_config.name]=hashlib.sha256(path_data).hexdigest()
+        for module in ('host_engine','private_store','maintenance_protocol','windows_native'):
+            publish_source(Path(w.__file__).resolve().parent/(module+'.py'),cls.runtime_root/(module+'.py'))
+        paths.publish(cls.runtime_root/'runtime-sha256.json',json.dumps(manifest,sort_keys=True).encode('ascii'))
+        paths.check(cls.executable,private=False)
+        probe='import ctypes,json,pathlib,subprocess,sys,host_engine;print(json.dumps({"executable":sys.executable,"paths":sys.path,"isolated":sys.flags.isolated,"ignore_environment":sys.flags.ignore_environment,"helper":host_engine.__file__}))'
+        result=subprocess.run([str(cls.executable),'-c',probe],cwd=cls.runtime_root,capture_output=True,timeout=15)
+        if result.returncode:
+            raise AssertionError('Protected synthetic runtime failed its native import probe: '+result.stderr.decode('utf-8','replace'))
+        observed=json.loads(result.stdout)
+        if (Path(observed['executable']).resolve()!=cls.executable or observed['isolated']!=1
+                or observed['ignore_environment']!=1 or Path(observed['helper']).parent!=cls.runtime_root
+                or any(cls.runtime_root not in (Path(value),*Path(value).parents) for value in observed['paths'])):
+            raise AssertionError('Synthetic runtime escaped its protected module tree')
+
     def setUp(self):
-        self.paths=create_private_paths();self.root=Path(tempfile.gettempdir()).resolve(strict=True)/('keep-job-ci-'+str(uuid.uuid4()))
-        self.paths.create_root(self.root)
-        self.executable=Path(sys.executable).resolve(strict=True)
+        self.paths=create_private_paths();self.root=self.paths.mkdir(self.runtime_root/('case-'+str(uuid.uuid4())))
         @dataclass
         class Profile:
             installation:Path
@@ -169,7 +253,7 @@ class WindowsJobTests(unittest.TestCase):
     def test_parent_crash_closes_last_job_handle_and_kills_tree(self):
         childfile=self.root/'crash-child';rootfile=self.root/'crash-root'
         inner='import pathlib,subprocess,sys,time;pathlib.Path('+repr(str(rootfile))+').write_text(str(__import__("os").getpid()));p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);pathlib.Path('+repr(str(childfile))+').write_text(str(p.pid));time.sleep(60)'
-        module=str(Path(w.__file__).resolve().parent)
+        module=str(self.runtime_root)
         launcher='import sys;sys.path.insert(0,'+repr(module)+');from pathlib import Path;from types import SimpleNamespace;from private_store import create_private_paths;from host_engine import BoundedRunner,Plan;p=SimpleNamespace(installation=Path('+repr(str(self.root))+'),state=Path('+repr(str(self.root))+'),docker_executable=Path(sys.executable).resolve(),docker_config=Path('+repr(str(self.root))+'));BoundedRunner(p,paths=create_private_paths()).run(Plan("synthetic",(str(p.docker_executable),"-c",'+repr(inner)+'),120))'
         parent=subprocess.Popen([str(self.executable),'-c',launcher],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         try:

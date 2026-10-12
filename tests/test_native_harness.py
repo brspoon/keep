@@ -177,6 +177,9 @@ class FreshProcessTests(unittest.TestCase):
         fixture=CliTests();fixture.setUp();self.addCleanup(fixture.doCleanups);fixture.enroll()
         state=trial.HostState(fixture.paths,fixture.state)
         profile,enrollment=state.credentials(state.active()[1])
+        self.assertEqual(profile.docker_executable.parent,fixture.root)
+        if os.name=='posix':
+            self.assertEqual(profile.docker_executable.stat().st_mode&0o777,0o500)
         identifier='12345678-1234-4234-8234-123456789abc'
         body={'protocol':'keep.maintenance.v1','install_id':enrollment.install_id,'owner_id':enrollment.owner_id,
             'epoch':enrollment.epoch,'request_id':identifier,'operation':'restart','credential_version':0,
