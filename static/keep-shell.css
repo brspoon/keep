@@ -39,7 +39,7 @@ body.preferences-ui { display:block; padding:0; }
 .admin-ui .panel { padding:24px; }
 .admin-ui .panel-head { margin-bottom:16px; }
 .admin-toolbar { display:flex; gap:16px; align-items:flex-start; margin:24px 0; }
-.admin-ui .admin-toolbar input[type=search], .admin-ui .admin-toolbar .admin-add-button { margin:0; height:48px; min-height:48px; box-sizing:border-box; }
+.admin-ui .admin-toolbar .admin-add-button { margin:0; height:48px; min-height:48px; box-sizing:border-box; }
 .admin-ui section.panel.admin-card-list { border:0; background:transparent; padding:0; box-shadow:none; }
 .admin-ui .admin-card-list .user-card, .admin-ui .admin-card-list .recipient-row { border:1px solid var(--border); border-radius:18px; background:var(--surface); padding:0; margin:0 0 16px; overflow:hidden; }
 .admin-ui button.admin-card-header { display:flex; align-items:center; justify-content:space-between; gap:20px; width:100%; max-width:none; padding:24px; margin:0; border:0; border-radius:0; background:transparent; color:var(--text); text-align:left; font:inherit; cursor:pointer; transform:none; }
@@ -133,14 +133,6 @@ body.preferences-ui { display:block; padding:0; }
 .unsaved-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:24px; }
 .unsaved-actions button { flex:1; min-height:44px; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font:inherit; cursor:pointer; }
 .unsaved-actions [data-discard] { background:var(--accent); color:#17191e; border-color:var(--accent); }
-.admin-search-field { position:relative; }
-.admin-list-search input[type=search] { box-sizing:border-box; width:100%; min-height:48px; padding-right:54px; }
-.admin-list-search input[type=search]::-webkit-search-cancel-button { -webkit-appearance:none; appearance:none; }
-.admin-search-clear { position:absolute; right:2px; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:44px; min-height:44px; padding:12px; border:0; border-radius:8px; background:transparent; color:var(--muted); cursor:pointer; }
-.admin-search-clear[hidden] { display:none; }
-.admin-search-clear svg { display:block; width:20px; height:20px; }
-.admin-search-clear:hover { color:var(--text); background:var(--surface-hover); }
-.admin-search-clear:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
 .admin-ui .user-card[hidden], .admin-ui .recipient-row[hidden] { display:none!important; }
 button:disabled { cursor:default; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto!important; } }

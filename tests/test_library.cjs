@@ -3,10 +3,11 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 
-function fixture(fetcher=async()=>({ok:true,json:async()=>({status:'deleted',title:'Movie'})})) {
+function fixture(fetcher=async()=>({ok:true,json:async()=>({status:'deleted',title:'Movie'})}), {searchValue='',libraryUnavailable=false}={}) {
   const element=()=>({listeners:{},dataset:{},hidden:false,disabled:false,textContent:'',classList:{toggle(){},add(){},remove(){}},
-    addEventListener(name,fn){this.listeners[name]=fn;},focus(){},setAttribute(){},querySelector(){return null;}});
-  const search=element(),clear=element(),status=element(),empty=element(),browseEmpty=element(),nav=element(),link=element(),confirm=element(),cancel=element(),close=element(),error=element();search.value='';error.hidden=true;
+    addEventListener(name,fn){this.listeners[name]=fn;},focus(options){this.focusOptions=options;this.focused=true;},setAttribute(){},querySelector(){return null;}});
+  const search=element(),clear=element(),status=element(),empty=element(),browseEmpty=element(),view=element(),nav=element(),link=element(),confirm=element(),cancel=element(),close=element(),error=element();search.value=searchValue;error.hidden=true;
+  view.dataset.libraryUnavailable=String(libraryUnavailable);
   link.getAttribute=()=> '#library-1';
   const heading=element(),library=element();
   const grid=element();grid.replaceWith=replacement=>grid.replacement=replacement;
@@ -22,16 +23,16 @@ function fixture(fetcher=async()=>({ok:true,json:async()=>({status:'deleted',tit
     'h2':heading,'[data-delete-library]':library}[s]);
   const document={
     getElementById:id=>({'media-search':search,'search-clear':clear,'search-status':status,'search-empty':empty,'browse-empty':browseEmpty,'delete-media-dialog':dialog}[id]),
-    querySelector:s=>s==='.section-nav'?nav:null,
+    querySelector:s=>s==='.section-nav'?nav:s==='.media-view'?view:null,
     querySelectorAll:s=>s==='.delete-media-button'?[opener]:s==='.media-view section'?[section]:s==='.section-nav a'?[link]:[],
     createElement:()=>element()
   };
   let calls=0,payload=null,toast='';
-  const window={showToast:message=>toast=message};
+  const window={listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},showToast:message=>toast=message};
   vm.runInNewContext(fs.readFileSync('static/keep-library.js','utf8'),{document,window,
     fetch:async(url,options)=>{calls++;payload=JSON.parse(options.body);return fetcher(url,options);},
     setTimeout:()=>1,clearTimeout(){}});
-  return {search,clear,status,empty,browseEmpty,nav,link,section,confirm,cancel,close,error,opener,card,count,grid,dialog,heading,library,
+  return {search,clear,status,empty,browseEmpty,view,window,nav,link,section,confirm,cancel,close,error,opener,card,count,grid,dialog,heading,library,
     calls:()=>calls,payload:()=>payload,toast:()=>toast};
 }
 
@@ -54,6 +55,34 @@ test('search hides collection buttons and restores them when cleared',()=>{
   assert.equal(f.empty.hidden,false);assert.equal(f.browseEmpty.hidden,true);
   f.clear.listeners.click();
   assert.equal(f.section.hidden,false);assert.equal(f.link.hidden,false);assert.equal(f.nav.hidden,false);
+  assert.equal(f.empty.hidden,true);assert.equal(f.browseEmpty.hidden,true);
+  assert.equal(f.search.focused,true);assert.equal(f.search.focusOptions.preventScroll,true);
+});
+
+test('restored library searches filter on startup and page restoration',()=>{
+  const f=fixture(undefined,{searchValue:'no match'});
+  assert.equal(f.section.hidden,true);assert.equal(f.link.hidden,true);assert.equal(f.clear.hidden,false);
+  assert.equal(f.status.textContent,'0 titles found');assert.equal(f.empty.hidden,false);
+  f.search.value='2026';f.window.listeners.pageshow();
+  assert.equal(f.section.hidden,false);assert.equal(f.link.hidden,false);assert.equal(f.nav.hidden,false);
+  assert.equal(f.status.textContent,'1 title found');assert.equal(f.empty.hidden,true);
+  f.search.value='';f.window.listeners.pageshow();
+  assert.equal(f.clear.hidden,true);assert.equal(f.status.textContent,'');
+});
+
+test('whitespace stays clearable without filtering library titles',()=>{
+  const f=fixture();f.search.value='   ';f.search.listeners.input();
+  assert.equal(f.clear.hidden,false);assert.equal(f.section.hidden,false);assert.equal(f.card.hidden,false);
+  assert.equal(f.count.textContent,1);assert.equal(f.status.textContent,'');
+  f.clear.listeners.click();
+  assert.equal(f.search.value,'');assert.equal(f.clear.hidden,true);
+  assert.equal(f.search.focused,true);assert.equal(f.search.focusOptions.preventScroll,true);
+});
+
+test('clearing a search keeps library error empty-state safeguards',()=>{
+  const f=fixture(undefined,{libraryUnavailable:true});f.card.removed=true;
+  f.search.value='no match';f.search.listeners.input();assert.equal(f.empty.hidden,false);
+  f.clear.listeners.click();
   assert.equal(f.empty.hidden,true);assert.equal(f.browseEmpty.hidden,true);
 });
 

@@ -131,9 +131,6 @@ html[data-appearance="light"] .library-ui .header-views .view-tab.active {
 .library-ui .keep-scope-option[aria-pressed="true"] {
   background:var(--accent); color:var(--on-accent);
 }
-html[data-appearance="light"] .faq-search-field input[type="search"] {
-  background:transparent; border:0; border-radius:0;
-}
 html[data-appearance="light"] .app-header .user-links :is(a,button) {
   background:transparent; border-color:transparent;
 }
@@ -221,7 +218,6 @@ html[data-appearance="light"] :is(.preferences-dialog button.save-button, .save-
 html[data-appearance="light"] :is(a, button, input, select, textarea, summary):focus-visible {
  outline-color:var(--focus);
 }
-html[data-appearance="light"] .faq-search-field:focus-within { border-color:var(--focus); }
 html[data-appearance="light"] .appearance-choices .choice:has(:checked) { border-color:var(--option-accent-border); }
 html[data-appearance="light"] .keep-duration-option:not(:disabled):hover { border-color:var(--option-accent-border); }
 html[data-appearance="light"] .keep-duration-option.is-current { color:var(--text); }

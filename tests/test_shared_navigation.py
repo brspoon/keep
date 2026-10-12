@@ -148,7 +148,7 @@ class SharedNavigationTests(unittest.TestCase):
             self.assertEqual(page.count('class="admin-toolbar"'), 1)
             self.assertEqual(page.count('class="admin-add-button"'), 1)
             self.assertIn('type="search" placeholder="Search ', page)
-            self.assertIn('class="admin-search-clear" aria-label="Clear search" hidden', page)
+            self.assertRegex(page, r'class="[^\"]*\badmin-search-clear\b[^\"]*" aria-label="Clear search" hidden')
         users = self.client.get('/settings/users').get_data(as_text=True)
         self.assertNotIn('<details class="user-card">', users)
         self.assertIn('data-user-toggle aria-expanded="false"', users)

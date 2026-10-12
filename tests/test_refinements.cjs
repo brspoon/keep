@@ -62,7 +62,7 @@ test('admin search shows a clear button and restores all rows and focus',()=>{
     querySelector:selector=>selector==='input'?input:selector==='.admin-search-clear'?clear:status};
   const document={body:{},querySelector:selector=>selector==='.admin-list-search'?wrapper:null,
     querySelectorAll:selector=>selector==='.user-card'?rows:[],getElementById:()=>null,addEventListener(){}};
-  const window={addEventListener(){}};
+  const window={addEventListener:(type,fn)=>listeners['window-'+type]=fn};
   vm.runInNewContext(fs.readFileSync('static/keep-refinements.js','utf8'),{
     document,window,MutationObserver:class{observe(){}},Event:class{constructor(type){this.type=type;}}});
   input.value='alex';
@@ -77,6 +77,16 @@ test('admin search shows a clear button and restores all rows and focus',()=>{
   assert.equal(rows[0].hidden,false);
   assert.equal(rows[1].hidden,false);
   assert.equal(input.focused,true);
+  input.value='   ';
+  listeners['input-input']();
+  assert.equal(clear.hidden,false, 'Whitespace remains clearable');
+  assert.equal(rows.every(row=>!row.hidden),true);
+  input.value='bailey';
+  listeners['window-pageshow']();
+  assert.equal(clear.hidden,false);
+  assert.equal(rows[0].hidden,true);
+  assert.equal(rows[1].hidden,false);
+  assert.equal(status.textContent,'1 user');
 });
 
 test('email search matches profile names and aliases regardless of case and retains email matches',()=>{

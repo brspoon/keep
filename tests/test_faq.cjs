@@ -39,7 +39,7 @@ test('FAQ offers a retry message when live rules are unavailable',async()=>{
 
 test('FAQ search filters answers, restores them, and reports no matches',async()=>{
   const listeners={};
-  const search={value:'',addEventListener:(type,fn)=>listeners['search-'+type]=fn,focus(){this.focused=true;}};
+  const search={value:'',addEventListener:(type,fn)=>listeners['search-'+type]=fn,focus(options){this.focused=true;this.focusOptions=options;}};
   const clear={hidden:true,addEventListener:(type,fn)=>listeners['clear-'+type]=fn};
   const status={textContent:''};
   const empty={hidden:true};
@@ -58,7 +58,7 @@ test('FAQ search filters answers, restores them, and reports no matches',async()
   const document={getElementById:id=>ids[id]||null,
     querySelectorAll:selector=>selector==='.faq-section'?sections:topics,
     querySelector:()=>popular};
-  const window={location:{hash:''},addEventListener(){}};
+  const window={location:{hash:''},addEventListener:(type,fn)=>listeners['window-'+type]=fn};
   vm.runInNewContext(fs.readFileSync('static/keep-faq.js','utf8'),{
     document,window,fetch:async()=>({ok:false})});
   await new Promise(resolve=>setImmediate(resolve));
@@ -82,9 +82,18 @@ test('FAQ search filters answers, restores them, and reports no matches',async()
   listeners['clear-click']();
   assert.equal(search.value,'');
   assert.equal(search.focused,true);
+  assert.equal(search.focusOptions.preventScroll,true);
   assert.equal(status.textContent,'');
   assert.equal(sections[0].hidden,false);
   assert.equal(sections[1].hidden,false);
   assert.equal(leavingQuestions[1].open,false);
   assert.equal(popular.hidden,false);
+  search.value='   ';
+  listeners['window-pageshow']();
+  assert.equal(clear.hidden,false,'whitespace remains clearable');
+  assert.equal(sections[0].hidden,false);
+  search.value='restored missing answer';
+  listeners['window-pageshow']();
+  assert.equal(empty.hidden,false);
+  assert.equal(status.textContent,'0 questions found');
 });

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.24.0 — 2026-10-11
+
+- Expand the API reference with authentication guidance, response examples, and copyable requests.
+- Add collection-specific media details and exact Plex, TMDB, TVDB, and IMDb ID filters, with available Keep and Leaving metadata.
+- Add an owner-only API endpoint for recorded worker and job status.
+- Use consistent search fields and clear buttons throughout Keep.
+
 ## 2.23.3 — 2026-10-07
 
 - Update the container's Python and zlib packages with vendor security fixes.

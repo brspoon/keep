@@ -40,7 +40,11 @@
     status.textContent = query ? `${matches} ${matches === 1 ? 'title' : 'titles'} found` : '';
   }
   search?.addEventListener('input', applySearch);
-  clear?.addEventListener('click', () => { search.value = ''; applySearch(); search.focus(); });
+  clear?.addEventListener('click', () => { search.value = ''; applySearch(); search.focus({preventScroll:true}); });
+  if (search) {
+    window.addEventListener('pageshow', applySearch);
+    applySearch();
+  }
 
   function resetConfirmation() {
     clearTimeout(timer); armed = false;
