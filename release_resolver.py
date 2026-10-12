@@ -23,43 +23,113 @@ MEDIA=('application/vnd.oci.image.index.v1+json','application/vnd.docker.distrib
 
 class HTTPSClient:
     HOSTS=frozenset(('api.github.com','github.com','release-assets.githubusercontent.com','auth.docker.io','registry-1.docker.io'))
+    BLOB_CDN='production.cloudfront.docker.com'
+    BLOB_PATH=re.compile(r'/v2/brspoon/keep/blobs/sha256:[a-f0-9]{64}\Z')
+    PRIVATE_HEADERS=frozenset(('authorization','cookie','proxy-authorization'))
+
+    @classmethod
+    def _destination(cls,url,*,blob_cdn=False):
+        try:
+            if not isinstance(url,str) or len(url)>8192 or any(ord(value)<32 or ord(value)==127 for value in url):
+                raise ValueError()
+            parsed=urlsplit(url)
+            permitted=parsed.hostname in cls.HOSTS or blob_cdn and parsed.hostname==cls.BLOB_CDN
+            if (parsed.scheme!='https' or not permitted or parsed.username is not None
+                    or parsed.password is not None or parsed.port not in (None,443) or parsed.fragment):
+                raise ValueError()
+        except (TypeError,ValueError):
+            raise EngineError('Release transport destination is not allowed') from None
+        return parsed
 
     @classmethod
     def allowed(cls,url):
-        parsed=urlsplit(url)
-        if (parsed.scheme!='https' or parsed.hostname not in cls.HOSTS or parsed.username is not None
-                or parsed.password is not None or parsed.port not in (None,443) or parsed.fragment):
-            raise EngineError('Release transport destination is not allowed')
-        return parsed
+        return cls._destination(url)
+
+    @classmethod
+    def _registry_blob(cls,parsed):
+        return parsed.hostname=='registry-1.docker.io' and bool(cls.BLOB_PATH.fullmatch(parsed.path)) and not parsed.query
+
+    @staticmethod
+    def _length(headers):
+        declared=headers.get('Content-Length')
+        if declared is not None and (not declared.isdecimal() or len(declared)>20 or int(declared)>MAX_JSON):
+            raise EngineError('Published release information exceeded its bound')
 
     def get(self,url,*,headers=None):
-        self.allowed(url)
-        allowed=self.allowed
+        origin=self.allowed(url)
+        blob_download=self._registry_blob(origin)
+        deadline=time.monotonic()+60
+        client=self
         class Redirects(urllib.request.HTTPRedirectHandler):
             max_redirections=3
             max_repeats=1
             def redirect_request(self,req,fp,code,msg,response_headers,newurl):
-                target=allowed(newurl)
-                if req.has_header('Authorization') and target.hostname!=urlsplit(req.full_url).hostname:
+                if time.monotonic()>deadline:
+                    raise EngineError('Published release information exceeded its bound')
+                source=urlsplit(req.full_url)
+                target=client._destination(newurl,blob_cdn=blob_download)
+                docker=source.hostname in ('registry-1.docker.io',client.BLOB_CDN)
+                if docker:
+                    if (not blob_download or req.get_method()!='GET' or code not in (302,307)
+                            or target.hostname!=client.BLOB_CDN
+                            or source.hostname=='registry-1.docker.io' and not client._registry_blob(source)):
+                        raise EngineError('Registry redirect is not an allowed blob download')
+                elif source.hostname in ('api.github.com','auth.docker.io') or target.hostname in (
+                        'api.github.com','auth.docker.io','registry-1.docker.io',client.BLOB_CDN):
+                    raise EngineError('Release API redirects are not allowed')
+                cross_host=target.hostname!=source.hostname
+                credential=any(name.lower()=='authorization' for values in (req.headers,req.unredirected_hdrs) for name in values)
+                if credential and cross_host and not docker:
                     raise EngineError('Registry authentication may not cross hosts')
-                return super().redirect_request(req,fp,code,msg,response_headers,newurl)
+                redirected=super().redirect_request(req,fp,code,msg,response_headers,newurl)
+                if redirected is not None and (docker or cross_host):
+                    for values in (redirected.headers,redirected.unredirected_hdrs):
+                        for name in list(values):
+                            if name.lower() in client.PRIVATE_HEADERS:
+                                del values[name]
+                return redirected
+
+            def http_error_302(self,req,fp,code,msg,response_headers):
+                # urllib drains redirect responses before following Location.
+                # Keep that drain bounded too, including its opaque CDN URL.
+                class BoundedRedirectBody:
+                    def read(self):
+                        total=0
+                        while True:
+                            if time.monotonic()>deadline:
+                                raise EngineError('Published release information exceeded its bound')
+                            block=fp.read(65536)
+                            if not block:return b''
+                            total+=len(block)
+                            if total>MAX_JSON:
+                                raise EngineError('Published release information exceeded its bound')
+                    def close(self):fp.close()
+                    def __getattr__(self,name):return getattr(fp,name)
+                try:
+                    client._length(response_headers)
+                    return super().http_error_302(req,BoundedRedirectBody(),code,msg,response_headers)
+                finally:
+                    fp.close()
+            http_error_301=http_error_303=http_error_307=http_error_308=http_error_302
+
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),Redirects())
         request=urllib.request.Request(url,headers={'User-Agent':'Keep-maintenance','Accept':'application/json',**(headers or {})})
-        deadline=time.monotonic()+60
         try:
             with opener.open(request,timeout=15) as response:
                 if response.status!=200:raise EngineError('Published release information is unavailable')
-                declared=response.headers.get('Content-Length')
-                if declared is not None and (not declared.isdecimal() or int(declared)>MAX_JSON):
-                    raise EngineError('Published release information exceeded its bound')
+                self._length(response.headers)
                 content=bytearray()
                 while block:=response.read(65536):
                     content.extend(block)
                     if len(content)>MAX_JSON or time.monotonic()>deadline:
                         raise EngineError('Published release information exceeded its bound')
+                if time.monotonic()>deadline:
+                    raise EngineError('Published release information exceeded its bound')
                 return bytes(content),dict(response.headers)
-        except (OSError,urllib.error.HTTPError,urllib.error.URLError) as error:
-            raise EngineError('Published release transport failed') from error
+        except (OSError,urllib.error.HTTPError,urllib.error.URLError):
+            # Transport errors can contain a signed Location or token query.
+            # Never expose that URL through an exception chain.
+            raise EngineError('Published release transport failed') from None
 
 
 class OfficialReleaseResolver:

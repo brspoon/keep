@@ -5,6 +5,7 @@ volume worker against temporary directories and exercise real bounded pipes.
 """
 from dataclasses import replace
 import copy
+from email.message import Message
 import hashlib
 import io
 import json
@@ -15,14 +16,19 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import traceback
 import unittest
 from unittest.mock import patch
+import urllib.error
+import urllib.request
+import urllib.response
 
 from docker_adapter import INSPECT_CONTAINER, INSPECT_HELPER, PosixDockerAdapter, env_image
 from host_engine import BoundedRunner, EngineError, HostEngine, Plan
 from maintenance_protocol import canonical, parse_json, signed, verify, verify_request
 from private_store import Journal
 from release_resolver import HTTPSClient, OfficialReleaseResolver
+import release_resolver
 from test_drafts import DraftFixture, image, request
 import test_drafts
 import volume_worker
@@ -635,6 +641,188 @@ class ResolverTests(unittest.TestCase):
         configuration['rootfs']['diff_ids']=['sha256:'+'0'*64]
         records[-1]=canonical(configuration)
         with self.assertRaises(EngineError):OfficialReleaseResolver(self.client(records)).resolve(records[0])
+
+
+class HTTPSRedirectTests(unittest.TestCase):
+    """Real urllib opener/error/redirect chain with an offline HTTPS transport."""
+    BLOB='https://registry-1.docker.io/v2/brspoon/keep/blobs/sha256:'+'a'*64
+    CDN='https://production.cloudfront.docker.com/registry/config?opaque=private-signed-query'
+
+    def transport(self,routes,*,inject=None):
+        requests=[];streams=[];supplied=[]
+        class Body(io.BytesIO):
+            def __init__(inner,body):super().__init__(body);inner.read_sizes=[]
+            def read(inner,size=-1):inner.read_sizes.append(size);return super().read(size)
+        class OfflineHTTPS(urllib.request.HTTPSHandler):
+            def https_open(inner,request):
+                if inject:inject(request,len(requests))
+                requests.append({'url':request.full_url,'headers':dict(request.headers),
+                    'unredirected':dict(request.unredirected_hdrs),'timeout':request.timeout,'method':request.get_method()})
+                result=routes(request) if callable(routes) else routes[request.full_url]
+                if isinstance(result,Exception):raise result
+                status,values,body=result
+                metadata=Message()
+                for name,value in values.items():metadata[name]=str(value)
+                stream=Body(body);streams.append(stream)
+                response=urllib.response.addinfourl(stream,metadata,request.full_url,status)
+                response.msg='offline HTTP fixture'
+                return response
+        real=urllib.request.build_opener
+        def build(*handlers):
+            supplied.extend(handlers)
+            return real(*handlers,OfflineHTTPS())
+        change=patch.object(urllib.request,'build_opener',side_effect=build)
+        return change,requests,streams,supplied
+
+    def test_registry_blob_302_and_307_strip_all_credentials_before_cdn_download(self):
+        private={'Authorization':'Bearer registry-private','Cookie':'private-cookie','Proxy-Authorization':'private-proxy'}
+        for status in (302,307):
+            change,requests,streams,handlers=self.transport({self.BLOB:(status,{'Location':self.CDN},b''),
+                self.CDN:(200,{'Content-Length':2},b'{}')})
+            with self.subTest(status=status),change:
+                body,_=HTTPSClient().get(self.BLOB,headers=private)
+            self.assertEqual(body,b'{}');self.assertEqual(len(requests),2)
+            for values in (requests[1]['headers'],requests[1]['unredirected']):
+                self.assertFalse(HTTPSClient.PRIVATE_HEADERS.intersection(name.lower() for name in values))
+            self.assertEqual([value['timeout'] for value in requests],[15,15])
+            self.assertEqual([value['method'] for value in requests],['GET','GET'])
+            self.assertTrue(all(stream.closed for stream in streams))
+            self.assertTrue(any(isinstance(handler,urllib.request.ProxyHandler) and handler.proxies=={} for handler in handlers))
+
+    def test_lowercase_and_unredirected_credentials_do_not_cross_the_real_handler_chain(self):
+        def inject(request,index):
+            if index==0:
+                for name in HTTPSClient.PRIVATE_HEADERS:
+                    request.headers[name]='lowercase-private'
+                    request.unredirected_hdrs[name.upper()]='unredirected-private'
+        change,requests,_,_=self.transport({self.BLOB:(307,{'Location':self.CDN},b''),self.CDN:(200,{},b'{}')},inject=inject)
+        with change:self.assertEqual(HTTPSClient().get(self.BLOB)[0],b'{}')
+        for values in (requests[1]['headers'],requests[1]['unredirected']):
+            self.assertFalse(HTTPSClient.PRIVATE_HEADERS.intersection(name.lower() for name in values))
+
+    def test_cdn_is_not_a_generic_or_initial_destination_even_without_authorization(self):
+        self.assertNotIn(HTTPSClient.BLOB_CDN,HTTPSClient.HOSTS)
+        for headers in (None,{'Authorization':'Bearer private'}):
+            change,requests,_,_=self.transport({})
+            with change,self.assertRaises(EngineError):HTTPSClient().get(self.CDN,headers=headers)
+            self.assertEqual(requests,[])
+        with self.assertRaises(EngineError):HTTPSClient.allowed(self.CDN)
+
+    def test_other_repositories_digests_queries_manifests_and_apis_never_redirect_to_cdn(self):
+        origins=(self.BLOB.replace('brspoon/keep','other/keep'),self.BLOB.replace('sha256:','sha512:'),
+            self.BLOB[:-1],self.BLOB+'?query=opaque',self.BLOB.replace('/blobs/','/manifests/'),
+            'https://api.github.com/repos/brspoon/keep/releases/latest',
+            'https://auth.docker.io/token?service=registry.docker.io&scope=repository:brspoon/keep:pull')
+        for origin in origins:
+            change,requests,_,_=self.transport({origin:(307,{'Location':self.CDN},b'')})
+            with self.subTest(origin=origin),change,self.assertRaises(EngineError):HTTPSClient().get(origin)
+            self.assertEqual(len(requests),1)
+
+    def test_blob_redirect_to_other_allowed_hosts_and_untrusted_cdn_destinations_is_denied(self):
+        targets=('https://github.com/brspoon/keep','https://api.github.com/repos/brspoon/keep',
+            'https://auth.docker.io/token','https://registry-1.docker.io/v2/brspoon/keep/manifests/2.26.0',
+            'https://unknown.example/config','https://production.cloudfront.docker.com.evil.example/config',
+            'http://production.cloudfront.docker.com/config','https://production.cloudfront.docker.com:444/config',
+            'https://user:secret@production.cloudfront.docker.com/config',self.CDN+'#fragment')
+        for target in targets:
+            for headers in (None,{'Authorization':'Bearer private'}):
+                change,requests,_,_=self.transport({self.BLOB:(307,{'Location':target},b'')})
+                with self.subTest(target=target,authenticated=headers is not None),change,self.assertRaises(EngineError):
+                    HTTPSClient().get(self.BLOB,headers=headers)
+                self.assertEqual(len(requests),1)
+
+    def test_only_302_and_307_registry_download_redirect_codes_are_permitted(self):
+        for code in (301,303,308):
+            change,requests,_,_=self.transport({self.BLOB:(code,{'Location':self.CDN},b'')})
+            with self.subTest(code=code),change,self.assertRaises(EngineError):HTTPSClient().get(self.BLOB)
+            self.assertEqual(len(requests),1)
+
+    def test_cdn_chain_remains_on_exact_host_and_has_existing_redirect_budget(self):
+        urls=[self.CDN+'&hop='+str(index) for index in range(4)]
+        routes={self.BLOB:(307,{'Location':urls[0]},b'')}
+        routes.update({url:(307,{'Location':urls[index+1]},b'') for index,url in enumerate(urls[:-1])})
+        routes[urls[-1]]=(200,{},b'{}')
+        change,requests,_,_=self.transport(routes)
+        with change,self.assertRaises(EngineError):HTTPSClient().get(self.BLOB)
+        self.assertEqual(len(requests),4)
+        change,requests,_,_=self.transport({self.BLOB:(307,{'Location':self.CDN},b''),
+            self.CDN:(307,{'Location':'https://github.com/brspoon/keep'},b'')})
+        with change,self.assertRaises(EngineError):HTTPSClient().get(self.BLOB)
+        self.assertEqual(len(requests),2)
+
+    def test_redirect_loop_is_bounded_and_signed_query_is_not_in_error_traceback(self):
+        change,requests,_,_=self.transport({self.BLOB:(307,{'Location':self.CDN},b''),self.CDN:(307,{'Location':self.CDN},b'')})
+        with change:
+            try:HTTPSClient().get(self.BLOB)
+            except EngineError as failure:
+                self.assertNotIn('private-signed-query',''.join(traceback.format_exception(failure)))
+                self.assertIsNone(failure.__cause__)
+            else:self.fail('Redirect loop should hold')
+        self.assertEqual(len(requests),2)
+
+    def test_redirect_and_final_response_byte_bounds_close_streams_without_unbounded_read(self):
+        for redirect in (True,False):
+            for declared in (None,release_resolver.MAX_JSON+1):
+                body=b'x'*(release_resolver.MAX_JSON+1)
+                values={} if declared is None else {'Content-Length':declared}
+                if redirect:values['Location']=self.CDN
+                routes={self.BLOB:(307 if redirect else 200,values,body)}
+                change,requests,streams,_=self.transport(routes)
+                with self.subTest(redirect=redirect,declared=declared),change,self.assertRaises(EngineError):
+                    HTTPSClient().get(self.BLOB)
+                self.assertEqual(len(requests),1);self.assertTrue(all(stream.closed for stream in streams))
+                self.assertTrue(all(size==65536 for stream in streams for size in stream.read_sizes))
+
+    def test_deadline_includes_redirects_and_empty_final_response(self):
+        routes={self.BLOB:(307,{'Location':self.CDN},b''),self.CDN:(307,{'Location':self.CDN+'&hop=2'},b'')}
+        change,requests,_,_=self.transport(routes)
+        with change,patch.object(release_resolver.time,'monotonic',side_effect=(0,30,40,90)),self.assertRaises(EngineError):
+            HTTPSClient().get(self.BLOB)
+        self.assertEqual(len(requests),2)
+        change,requests,_,_=self.transport({self.BLOB:(200,{},b'')})
+        with change,patch.object(release_resolver.time,'monotonic',side_effect=(0,61)),self.assertRaises(EngineError):
+            HTTPSClient().get(self.BLOB)
+
+    def test_transport_failure_does_not_expose_opaque_cdn_query_or_credentials(self):
+        change,requests,_,_=self.transport({self.BLOB:(307,{'Location':self.CDN},b''),
+            self.CDN:urllib.error.URLError(self.CDN+' secret-cookie')})
+        headers={'Authorization':'Bearer secret-token'}
+        with change:
+            try:HTTPSClient().get(self.BLOB,headers=headers)
+            except EngineError as failure:
+                trace=''.join(traceback.format_exception(failure))
+                for private in ('private-signed-query','secret-cookie','secret-token'):self.assertNotIn(private,trace)
+                self.assertIsNone(failure.__cause__)
+            else:self.fail('Transport failure should hold')
+        self.assertEqual(len(requests),2)
+
+    def test_github_public_asset_redirect_remains_supported_without_forwarding_cookies(self):
+        origin='https://github.com/brspoon/keep/releases/download/2.26.0/keep-2.26.0-release-materials.json'
+        target='https://release-assets.githubusercontent.com/github-production-release-asset/fixture?signature=opaque'
+        change,requests,_,_=self.transport({origin:(302,{'Location':target},b''),target:(200,{},b'{}')})
+        with change:self.assertEqual(HTTPSClient().get(origin,headers={'Cookie':'private-cookie'})[0],b'{}')
+        self.assertFalse(any(name.lower()=='cookie' for name in requests[1]['headers']))
+
+    def test_real_redirect_transport_preserves_release_native_and_config_digest_verification(self):
+        records=ResolverTests().records();target,release,materials,index,manifest,configuration=records
+        def routes(request):
+            url=request.full_url
+            if url==self.CDN:return 200,{},configuration
+            if '/blobs/' in url:return 307,{'Location':self.CDN},b''
+            if '/releases/tags/' in url:return 200,{},canonical(release)
+            if '/releases/download/' in url:return 200,{},canonical(materials)
+            if 'auth.docker.io' in url:return 200,{},canonical({'token':'anonymous-private-fixture'})
+            if url.endswith(target.native_digest):return 200,{},manifest
+            return 200,{'Docker-Content-Digest':target.index_digest},index
+        change,requests,_,_=self.transport(routes)
+        with change:self.assertEqual(OfficialReleaseResolver().resolve(target),target)
+        self.assertEqual(len(requests),7)
+        for values in (requests[-1]['headers'],requests[-1]['unredirected']):
+            self.assertFalse(HTTPSClient.PRIVATE_HEADERS.intersection(name.lower() for name in values))
+        substituted=canonical({**parse_json(configuration),'rootfs':{'type':'layers','diff_ids':['sha256:'+'0'*64]}})
+        def changed(request):return (200,{},substituted) if request.full_url==self.CDN else routes(request)
+        change,_,_,_=self.transport(changed)
+        with change,self.assertRaises(EngineError):OfficialReleaseResolver().resolve(target)
 
 
 if __name__=='__main__':unittest.main()
