@@ -73,6 +73,83 @@ class GraphTests(unittest.TestCase):
             with self.assertRaises(trial.TrialError):trial.RegistryGraph(value,'amd64')
 
 
+def registry_records():
+    project='keep-maintenance-native-012345abcdef';identifier='b'*64;network_id='a'*64;endpoint_id='c'*64
+    proof={'project':project,'network_id':network_id,'container_id':identifier,
+        'image_id':'sha256:'+'d'*64,'members':[identifier]}
+    network={'Id':network_id,'Name':project,'Internal':True,'Driver':'bridge','Scope':'local',
+        'Labels':{'io.keep.maintenance.trial':project},'IPAM':{'Config':[{'Subnet':'172.18.0.0/16','Gateway':'172.18.0.1'}]},
+        'Containers':{identifier:{'Name':project+'-registry','EndpointID':endpoint_id,'IPv4Address':'172.18.0.2/16'}}}
+    container={'Id':identifier,'Image':proof['image_id'],'State':{'Running':True},
+        'Config':{'Image':trial.TOOLING[1]['repository']+'@'+trial.TOOLING[1]['index_digest'],
+            'Labels':{'io.keep.maintenance.trial':project}},
+        'NetworkSettings':{'Ports':{},'Networks':{project:{'NetworkID':network_id,'EndpointID':endpoint_id,
+            'IPAddress':'172.18.0.2','IPPrefixLen':16}}}}
+    return proof,network,container
+
+
+class RegistryEndpointTests(unittest.TestCase):
+    def test_owned_internal_registry_uses_verified_ipv4_without_published_port(self):
+        proof,network,container=registry_records()
+        graph=trial.RegistryGraph.owned('amd64',proof,network,container)
+        response=SimpleNamespace(status=200,read=lambda limit:b'{}',getheader=lambda name:None)
+        with patch.object(trial.http.client,'HTTPConnection') as connection:
+            connection.return_value.getresponse.return_value=response
+            self.assertEqual(graph.request('GET','/v2/'),(b'{}',None))
+        connection.assert_called_once_with('172.18.0.2',5000,timeout=15)
+        self.assertEqual(container['NetworkSettings']['Ports'],{})
+
+    def test_foreign_network_container_image_endpoint_and_public_address_reject_before_http(self):
+        mutations=(
+            lambda p,n,c:n.update(Internal=False),
+            lambda p,n,c:n.update(Id='e'*64),
+            lambda p,n,c:n['Labels'].update({'io.keep.maintenance.trial':'other'}),
+            lambda p,n,c:n['Containers'].update({'e'*64:{}}),
+            lambda p,n,c:c.update(Id='e'*64),
+            lambda p,n,c:c.update(Image='sha256:'+'e'*64),
+            lambda p,n,c:c['Config'].update(Image='unrelated/image:latest'),
+            lambda p,n,c:c['State'].update(Running=False),
+            lambda p,n,c:c['NetworkSettings']['Networks'].update({'other':{}}),
+            lambda p,n,c:c['NetworkSettings']['Networks'][p['project']].update(NetworkID='e'*64),
+            lambda p,n,c:c['NetworkSettings']['Networks'][p['project']].update(EndpointID='e'*64),
+            lambda p,n,c:c['NetworkSettings']['Networks'][p['project']].update(IPAddress='8.8.8.8'),
+            lambda p,n,c:n['IPAM']['Config'][0].update(Subnet='8.8.8.0/24'),
+            lambda p,n,c:c['NetworkSettings']['Networks'][p['project']].update(IPAddress='172.19.0.2'),
+            lambda p,n,c:c['NetworkSettings']['Networks'][p['project']].update(IPAddress='172.18.0.1'),
+            lambda p,n,c:c['NetworkSettings']['Networks'][p['project']].update(IPPrefixLen=24),
+            lambda p,n,c:p.update(address='8.8.8.8'),
+        )
+        for mutate in mutations:
+            proof,network,container=registry_records();mutate(proof,network,container)
+            with self.subTest(mutate=mutate),patch.object(trial.http.client,'HTTPConnection') as connect:
+                with self.assertRaises(trial.TrialError):trial.RegistryGraph.owned('amd64',proof,network,container)
+                connect.assert_not_called()
+
+    def test_fresh_child_revalidates_owned_resources_and_rejects_unbounded_id_before_commands(self):
+        with tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve()) as temp:
+            paths=create_private_paths();root=create_root(paths,Path(temp).resolve()/'private');state=paths.mkdir(root/'state')
+            executable=root/'docker';paths.publish(executable,b'fixture');executable.chmod(0o500)
+            proof,network,container=registry_records()
+            graph={'schema':'keep.maintenance-trial-graph.v1','architecture':'amd64','registry':proof,'images':[]}
+            paths.publish(state/'trial-registry-graph.json',canonical(graph))
+            def transport(argv,**kwargs):
+                if tuple(argv[3:])==('network','inspect',proof['network_id']):return canonical([network])
+                if tuple(argv[3:])==('inspect',proof['container_id']):return canonical([container])
+                raise AssertionError('Unexpected registry reconstruction command')
+            with patch.object(trial.shutil,'which',return_value=str(executable)),patch.object(trial,'run',side_effect=transport) as run, \
+                 patch.object(trial,'load_backend',side_effect=RuntimeError('stop after endpoint proof')) as load, \
+                 patch.object(trial.http.client,'HTTPConnection') as connect:
+                with self.assertRaisesRegex(RuntimeError,'stop after endpoint proof'):
+                    trial.child_helper(state,'12345678-1234-4234-8234-123456789abc',crash=True)
+                self.assertEqual(run.call_count,2);load.assert_called_once();connect.assert_not_called()
+            proof['network_id']='--unbounded-command'
+            paths.publish(state/'trial-registry-graph.json',canonical(graph),overwrite=True)
+            with patch.object(trial,'run') as run:
+                with self.assertRaises(trial.TrialError):
+                    trial.child_helper(state,'12345678-1234-4234-8234-123456789abc',crash=True)
+                run.assert_not_called()
+
+
 class PackagingTests(unittest.TestCase):
     def test_fixed_root_and_isolated_module_layouts_resolve_without_user_paths(self):
         with tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve()) as temporary:
@@ -354,6 +431,78 @@ class ToolPreflightTests(unittest.TestCase):
             with self.assertRaises(trial.TrialError):value.tooling_preflight()
         self.assertEqual(value.report['tooling_preflight'][-1]['error_code'],'metadata_invalid')
         self.assertNotIn('private invalid version',json.dumps(value.report))
+
+
+class ToolSetupTests(unittest.TestCase):
+    def setUp(self):
+        directory=tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(directory.cleanup)
+        paths=create_private_paths();root=create_root(paths,Path(directory.name).resolve()/'private')
+        value=trial.NativeTrial.__new__(trial.NativeTrial)
+        value.paths,value.root=paths,root
+        for name in ('tool_state','installation','state','config','socket'):
+            setattr(value,name,paths.mkdir(root/name))
+        proof,self.network,self.registry=registry_records()
+        value.name,value.architecture=proof['project'],'amd64'
+        value.env={'PATH':'/usr/bin:/bin'}
+        value.tools,value.network=[],None
+        value.report={'tooling':[{'local_id':'sha256:'+'e'*64},{'local_id':proof['image_id']}]}
+        value.tooling_preflight=Mock()
+        self.dind='f'*64;self.fail_dind=False
+        def outer(*args,**kwargs):
+            self.assertNotIn('--publish',args)
+            if args[:2]==('network','create'):
+                self.assertIn('--internal',args)
+                return proof['network_id'].encode()
+            if args[0]=='run':
+                self.assertEqual(args[args.index('--network')+1],value.name)
+                if args[args.index('--name')+1]==value.name+'-registry':return proof['container_id'].encode()
+                self.assertEqual(args[args.index('--entrypoint')+1],'dockerd')
+                self.assertIn('--host=unix:///trial-socket/docker.sock',args)
+                if self.fail_dind:raise trial.TrialError('private command error',code='command_failed',returncode=125)
+                paths.publish(value.socket/'docker.sock',b'fixture socket')
+                return self.dind.encode()
+            if args==('network','inspect',proof['network_id']):return canonical([self.network])
+            if args==('inspect',proof['container_id']):return canonical([self.registry])
+            if args[0]=='cp':
+                paths.publish(Path(args[-1]),b'private fixture executable')
+                return b''
+            if args[0]=='exec':return b''
+            raise AssertionError('Unexpected tooling setup command')
+        value.outer=Mock(side_effect=outer)
+        def inner(*args):
+            if args==('info','--format','{{json .ID}}'):return b'"synthetic-daemon"'
+            if args==('info','--format','{{.OSType}}'):return b'linux'
+            if args==('info','--format','{{.Architecture}}'):return b'x86_64'
+            raise AssertionError('Unexpected inner daemon probe')
+        value.inner=Mock(side_effect=inner)
+        self.value=value
+
+    def test_actual_setup_stages_use_owned_internal_endpoint_and_unix_only_daemon(self):
+        with patch.object(trial.RegistryGraph,'request',return_value=(b'{}',None)),patch.object(trial,'run',return_value=b''):
+            self.value.tooling()
+        self.assertEqual(self.value.resolver.host,'172.18.0.2')
+        self.assertEqual(self.value.resolver.port,5000)
+        self.assertEqual(self.value.registry_proof['members'],['b'*64,self.dind])
+        self.assertEqual(self.value.profile.daemon_id,'synthetic-daemon')
+        rows=self.value.report['tooling_preflight']
+        self.assertEqual([row['step'] for row in rows],[
+            'owned-internal-network-create','owned-registry-container-start','owned-registry-endpoint-inspect',
+            'owned-registry-http-ready','owned-dind-container-start','pinned-docker-client-copy',
+            'pinned-compose-client-copy','isolated-unix-socket-ready','isolated-context-create',
+            'isolated-daemon-ready','isolated-native-platform-verify'])
+        self.assertTrue(all(row['status']=='passed' for row in rows))
+        self.assertNotIn('172.18.0.2',json.dumps(self.value.report))
+
+    def test_dind_setup_failure_records_exact_safe_stage_and_preserves_registry_ownership(self):
+        self.fail_dind=True
+        with patch.object(trial.RegistryGraph,'request',return_value=(b'{}',None)):
+            with self.assertRaises(trial.TrialError):self.value.tooling()
+        self.assertEqual(self.value.report['tooling_preflight'][-1],{
+            'step':'owned-dind-container-start','status':'failed','error_code':'command_failed','exit_code':125})
+        self.assertEqual(self.value.tools,['b'*64])
+        self.assertNotIn('private command error',json.dumps(self.value.report))
+        self.assertFalse(any(call.args[0]=='cp' for call in self.value.outer.call_args_list))
 
 
 class CleanupTests(unittest.TestCase):

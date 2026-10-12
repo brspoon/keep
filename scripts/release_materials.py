@@ -71,7 +71,41 @@ def guard():
     version = Path('VERSION').read_text().strip()
     if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
         raise ValueError('Invalid release version')
+    require_maintenance_qualification()
     return version
+
+
+def maintenance_source(path):
+    if (not path.is_file() or path.is_symlink() or path.stat().st_size > MAINTENANCE_LIMIT
+            or any(parent.is_symlink() for parent in path.parents)):
+        raise ValueError('Current maintenance source is unavailable')
+    with path.open('rb') as stream:
+        body = stream.read(MAINTENANCE_LIMIT + 1)
+    if len(body) > MAINTENANCE_LIMIT:
+        raise ValueError('Current maintenance source exceeded its size limit')
+    return body
+
+
+def require_maintenance_qualification():
+    """Hold publication until the checked-out runtime explicitly qualifies."""
+    body = maintenance_source(MAINTENANCE_ROOT / 'maintenance_mailbox.py')
+    try:
+        tree = ast.parse(body)
+    except (SyntaxError, ValueError):
+        raise ValueError('Maintenance runtime must be explicitly qualified before publication') from None
+    bindings = [node for node in ast.walk(tree) if isinstance(node, ast.Name)
+                and node.id == 'RUNTIME_QUALIFIED' and isinstance(node.ctx, (ast.Store, ast.Del))]
+    bindings += [node for node in ast.walk(tree) if
+                 isinstance(node, ast.alias) and (node.asname or node.name.split('.')[0]) == 'RUNTIME_QUALIFIED'
+                 or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler))
+                 and node.name == 'RUNTIME_QUALIFIED']
+    declarations = [node for node in tree.body if isinstance(node, ast.Assign)
+                    and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == 'RUNTIME_QUALIFIED']
+    if (len(bindings) != 1 or len(declarations) != 1
+            or not isinstance(declarations[0].value, ast.Constant)
+            or declarations[0].value.value is not True):
+        raise ValueError('Maintenance runtime must be explicitly qualified before publication')
 
 
 def bundle(arch, *, verify_files=False):
@@ -203,19 +237,9 @@ def maintenance_sources():
     for name in ('keep-maintenance.js', 'keep-maintenance.css', 'keep-about.js'):
         files['static/' + name] = root / 'static' / name
 
-    def read(path):
-        if (not path.is_file() or path.is_symlink() or path.stat().st_size > MAINTENANCE_LIMIT
-                or any(parent.is_symlink() for parent in path.parents)):
-            raise ValueError('Current maintenance source is unavailable')
-        with path.open('rb') as stream:
-            body = stream.read(MAINTENANCE_LIMIT + 1)
-        if len(body) > MAINTENANCE_LIMIT:
-            raise ValueError('Current maintenance source exceeded its size limit')
-        return body
-
     sources = {}
     for name, path in files.items():
-        body = read(path)
+        body = maintenance_source(path)
         fixture = body
         if name == 'maintenance_mailbox.py':
             disabled, enabled = b'RUNTIME_QUALIFIED = False', b'RUNTIME_QUALIFIED = True'
@@ -227,9 +251,9 @@ def maintenance_sources():
                          'fixture_sha256': hashlib.sha256(fixture).hexdigest()}
     helpers = {}
     for name in HELPER_FILES:
-        body = read(root / name)
+        body = maintenance_source(root / name)
         helpers[name] = {'bytes': len(body), 'sha256': hashlib.sha256(body).hexdigest()}
-    runner = read(root / 'scripts/maintenance_container_trial.py')
+    runner = maintenance_source(root / 'scripts/maintenance_container_trial.py')
     values = [node.value for node in ast.parse(runner).body if isinstance(node, ast.Assign)
               and any(isinstance(target, ast.Name) and target.id == 'TOOLING' for target in node.targets)]
     if len(values) != 1:

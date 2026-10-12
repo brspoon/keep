@@ -30,6 +30,12 @@ locking and launcher behavior in the same main validation run. Full Windows Dock
 Desktop, LAN-device and Plex acceptance remain separate checks; see
 [development testing](DEVELOPMENT_TESTING.md#installation-platforms).
 
+Native maintenance trials also verify paired restart, active-work draining,
+schema upgrades, matched rollback, image reacquisition and crash reconciliation.
+Initial trials may run with maintenance disabled in the app. Candidate and stable
+publication require the checked-out runtime to declare maintenance qualified;
+the release cannot publish with that support flag disabled.
+
 Candidate publication runs only from a manual `workflow_dispatch` on `main`, with
 `publish_release` set to `true`, confirmation set to `release-stable`, and
 `validation_run_id` identifying the successful main-push run for that exact commit.

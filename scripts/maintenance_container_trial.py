@@ -13,6 +13,7 @@ import argparse
 from dataclasses import replace
 import hashlib
 import http.client
+import ipaddress
 import json
 import os
 import platform
@@ -69,7 +70,7 @@ TOOLING = [
 
 FAILURE_CODES = frozenset(('validation_failed', 'command_failed', 'command_timeout',
     'command_unavailable', 'metadata_invalid', 'host_not_native', 'daemon_not_native',
-    'tool_not_native', 'tool_identity_unavailable'))
+    'tool_not_native', 'tool_identity_unavailable', 'registry_endpoint_invalid'))
 
 
 class TrialError(RuntimeError):
@@ -171,16 +172,81 @@ def run(argv, *, env=None, timeout=120, stdin=None, stdout=None):
     return result.stdout
 
 
+def registry_resource_proof(proof):
+    def checked(value):
+        require(value, 'Owned registry endpoint proof differs', code='registry_endpoint_invalid')
+    checked(isinstance(proof,dict) and set(proof)=={'project','network_id','container_id','image_id','members'})
+    project=proof['project'];network_id=proof['network_id'];identifier=proof['container_id']
+    checked(isinstance(project,str) and re.fullmatch(r'keep-maintenance-native-[a-f0-9]{12}',project))
+    checked(all(isinstance(value,str) and re.fullmatch('[a-f0-9]{64}',value) for value in (network_id,identifier)))
+    checked(isinstance(proof['image_id'],str) and DIGEST.fullmatch(proof['image_id']))
+    members=proof['members']
+    checked(isinstance(members,list) and 1<=len(members)<=2
+        and all(isinstance(value,str) and re.fullmatch('[a-f0-9]{64}',value) for value in members)
+        and len(set(members))==len(members)
+        and identifier in members)
+
+
+def owned_registry_address(proof, network, container):
+    """Select IPv4 only from the exact owned internal bridge and pinned tool."""
+    registry_resource_proof(proof)
+    def checked(value):
+        require(value, 'Owned registry endpoint proof differs', code='registry_endpoint_invalid')
+    project=proof['project'];network_id=proof['network_id'];identifier=proof['container_id']
+    members=proof['members']
+    checked(isinstance(network,dict) and network.get('Id')==network_id and network.get('Name')==project
+        and network.get('Internal') is True and network.get('Driver')=='bridge' and network.get('Scope')=='local'
+        and (network.get('Labels') or {}).get('io.keep.maintenance.trial')==project)
+    containers=network.get('Containers')
+    checked(isinstance(containers,dict) and identifier in containers and set(containers)<=set(members))
+    checked(isinstance(container,dict) and container.get('Id')==identifier
+        and container.get('Image')==proof['image_id'] and container.get('State',{}).get('Running') is True
+        and (container.get('Config',{}).get('Labels') or {}).get('io.keep.maintenance.trial')==project
+        and container.get('Config',{}).get('Image')==TOOLING[1]['repository']+'@'+TOOLING[1]['index_digest'])
+    attached=container.get('NetworkSettings',{}).get('Networks')
+    checked(isinstance(attached,dict) and set(attached)=={project} and isinstance(attached[project],dict))
+    endpoint=attached[project];member=containers[identifier]
+    checked(isinstance(member,dict) and endpoint.get('NetworkID')==network_id
+        and isinstance(endpoint.get('EndpointID'),str) and re.fullmatch('[a-f0-9]{64}',endpoint['EndpointID'])
+        and member.get('EndpointID')==endpoint['EndpointID'] and member.get('Name')==project+'-registry')
+    configurations=network.get('IPAM',{}).get('Config')
+    checked(isinstance(configurations,list) and 1<=len(configurations)<=2)
+    try:
+        subnets=[ipaddress.ip_network(row['Subnet'],strict=True) for row in configurations if isinstance(row,dict)]
+        selected=[subnet for subnet in subnets if isinstance(subnet,ipaddress.IPv4Network)]
+        address=ipaddress.IPv4Address(endpoint.get('IPAddress'))
+        private=[ipaddress.IPv4Network(value) for value in ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16')]
+        checked(len(subnets)==len(configurations) and len(selected)==1)
+        subnet=selected[0]
+        checked(any(subnet.subnet_of(value) for value in private) and address in subnet
+            and address not in (subnet.network_address,subnet.broadcast_address)
+            and endpoint.get('IPAddress')==str(address) and type(endpoint.get('IPPrefixLen')) is int
+            and endpoint['IPPrefixLen']==subnet.prefixlen and member.get('IPv4Address')==str(address)+'/'+str(subnet.prefixlen))
+        for row in configurations:
+            if row.get('Gateway'):
+                checked(str(address)!=row['Gateway'])
+    except (KeyError,TypeError,ValueError):
+        raise TrialError('Owned registry endpoint proof differs',code='registry_endpoint_invalid') from None
+    return str(address)
+
+
 class RegistryGraph:
-    """Trial-only loopback registry; no credentials, proxies or external fallback."""
+    """Trial-only owned registry; no credentials, proxies or external fallback."""
     def __init__(self, port, architecture):
         require(type(port) is int and 1 <= port <= 65535, 'Invalid fixture registry port')
-        self.port, self.architecture = port, architecture
+        self.host, self.port, self.architecture = '127.0.0.1', port, architecture
         self.identities, self.configurations, self.configuration_bytes = {}, {}, {}
+
+    @classmethod
+    def owned(cls, architecture, proof, network, container):
+        address=owned_registry_address(proof,network,container)
+        result=cls(5000,architecture)
+        result.host=address
+        return result
 
     def request(self, method, path, data=None, content_type=None):
         require(path.startswith('/v2/brspoon/keep/') or path == '/v2/', 'Unscoped fixture registry path')
-        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=15)
+        connection = http.client.HTTPConnection(self.host, self.port, timeout=15)
         try:
             connection.request(method, path, body=data, headers={'Accept': INDEX+','+MANIFEST+','+'application/vnd.docker.distribution.manifest.v2+json',
                 **({'Content-Type': content_type} if content_type else {})})
@@ -276,7 +342,19 @@ def child_helper(state_directory, identifier, *, crash=False):
     if crash:
         graph=parse_json(paths.read(root/'trial-registry-graph.json',limit=1048576),1048576)
         require(graph.get('schema')=='keep.maintenance-trial-graph.v1','Invalid trial graph')
-        resolver=RegistryGraph(graph['port'],graph['architecture'])
+        proof=graph['registry']
+        registry_resource_proof(proof)
+        docker=Path(shutil.which('docker') or '').resolve(strict=True)
+        outer_env={'PATH':os.environ.get('PATH','/usr/bin:/bin'),
+            'DOCKER_CONFIG':str(root.parent/'outer-config'),'HOME':str(root.parent)}
+        def inspect(*args):
+            rows=parse_json(run((docker,'--host','unix:///var/run/docker.sock',*args),env=outer_env),1048576)
+            require(isinstance(rows,list) and len(rows)==1 and isinstance(rows[0],dict),'Invalid retained registry inspection')
+            return rows[0]
+        # The private graph retains identities, not a user-selected HTTP host.
+        # A new helper revalidates both actual resources before any connection.
+        resolver=RegistryGraph.owned(graph['architecture'],proof,
+            inspect('network','inspect',proof['network_id']),inspect('inspect',proof['container_id']))
         resolver.identities={value.reference:value for value in (ImageIdentity.from_dict(item) for item in graph['images'])}
     def factory(paths,profile,enrollment=None):
         class Backend:
@@ -406,19 +484,52 @@ class NativeTrial:
 
     def tooling(self):
         self.tooling_preflight()
-        self.network = self.outer('network','create','--internal','--label','io.keep.maintenance.trial='+self.name,self.name).decode().strip()
+        def create_network():
+            self.network=self.outer('network','create','--internal','--label','io.keep.maintenance.trial='+self.name,self.name).decode().strip()
+            require(re.fullmatch('[a-f0-9]{64}',self.network),'Invalid owned network identity',code='metadata_invalid')
+            return {'network_id':self.network,'internal':True}
+        self.tooling_probe('owned-internal-network-create',create_network)
         registry_data=self.paths.mkdir(self.tool_state/'registry-data')
         daemon_data=self.paths.mkdir(self.tool_state/'daemon-data')
-        registry = self.outer('run','--detach','--name',self.name+'-registry','--label','io.keep.maintenance.trial='+self.name,
-            '--network',self.name,'--publish','127.0.0.1::5000','--mount','type=bind,source='+str(registry_data)+',target=/var/lib/registry',TOOLING[1]['repository']+'@'+TOOLING[1]['index_digest']).decode().strip()
-        self.tools.append(registry)
-        port = self.outer('inspect','--format','{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}',registry).decode().strip()
-        self.resolver = RegistryGraph(int(port), self.architecture)
-        dind = self.outer('run','--detach','--privileged','--name',self.name+'-daemon','--label','io.keep.maintenance.trial='+self.name,
-            '--network',self.name,'--entrypoint','dockerd','--env','DOCKER_TLS_CERTDIR=', '--mount','type=bind,source='+str(daemon_data)+',target=/var/lib/docker','--mount','type=bind,source='+str(self.socket)+',target=/trial-socket',
-            TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],'--host=unix:///trial-socket/docker.sock',
-            '--registry-mirror=http://'+self.name+'-registry:5000','--insecure-registry='+self.name+'-registry:5000').decode().strip()
-        self.tools.append(dind)
+        def start_registry():
+            registry=self.outer('run','--detach','--name',self.name+'-registry','--label','io.keep.maintenance.trial='+self.name,
+                '--network',self.name,'--mount','type=bind,source='+str(registry_data)+',target=/var/lib/registry',
+                TOOLING[1]['repository']+'@'+TOOLING[1]['index_digest']).decode().strip()
+            require(re.fullmatch('[a-f0-9]{64}',registry),'Invalid owned registry identity',code='metadata_invalid')
+            self.tools.append(registry)
+            return {'container_id':registry}
+        registry=self.tooling_probe('owned-registry-container-start',start_registry)['container_id']
+        def registry_endpoint():
+            def inspect(*args):
+                rows=parse_json(self.outer(*args),1048576)
+                require(isinstance(rows,list) and len(rows)==1 and isinstance(rows[0],dict),'Invalid owned registry inspection',code='metadata_invalid')
+                return rows[0]
+            self.registry_proof={'project':self.name,'network_id':self.network,'container_id':registry,
+                'image_id':self.report['tooling'][1]['local_id'],'members':list(self.tools)}
+            self.resolver=RegistryGraph.owned(self.architecture,self.registry_proof,
+                inspect('network','inspect',self.network),inspect('inspect',registry))
+            return {'network_id':self.network,'container_id':registry,'endpoint_kind':'owned-internal-ipv4','port':5000}
+        self.tooling_probe('owned-registry-endpoint-inspect',registry_endpoint)
+        def registry_ready():
+            deadline=time.monotonic()+30
+            while True:
+                try:
+                    self.resolver.request('GET','/v2/')
+                    return {'ready':True}
+                except (OSError,http.client.HTTPException,TrialError):
+                    require(time.monotonic()<deadline,'Owned registry is unavailable',code='registry_endpoint_invalid')
+                    time.sleep(.2)
+        self.tooling_probe('owned-registry-http-ready',registry_ready)
+        def start_dind():
+            dind=self.outer('run','--detach','--privileged','--name',self.name+'-daemon','--label','io.keep.maintenance.trial='+self.name,
+                '--network',self.name,'--entrypoint','dockerd','--env','DOCKER_TLS_CERTDIR=', '--mount','type=bind,source='+str(daemon_data)+',target=/var/lib/docker','--mount','type=bind,source='+str(self.socket)+',target=/trial-socket',
+                TOOLING[0]['repository']+'@'+TOOLING[0]['index_digest'],'--host=unix:///trial-socket/docker.sock',
+                '--registry-mirror=http://'+self.name+'-registry:5000','--insecure-registry='+self.name+'-registry:5000').decode().strip()
+            require(re.fullmatch('[a-f0-9]{64}',dind),'Invalid owned daemon identity',code='metadata_invalid')
+            self.tools.append(dind)
+            self.registry_proof['members']=list(self.tools)
+            return {'container_id':dind,'control_transport':'unix'}
+        dind=self.tooling_probe('owned-dind-container-start',start_dind)['container_id']
         # The daemon's exact pinned native image also supplies the matching
         # Docker29 client and Compose binary; the runner's older CLI must not
         # silently drop modern native descriptor fields in inspect responses.
@@ -426,37 +537,53 @@ class NativeTrial:
         selected=binaries/'docker'
         plugins=self.paths.mkdir(self.config/'cli-plugins')
         plugin=plugins/'docker-compose'
-        self.outer('cp',dind+':/usr/local/bin/docker',selected)
-        self.outer('cp',dind+':/usr/local/libexec/docker/cli-plugins/docker-compose',plugin)
-        for binary in (selected,plugin):
+        def copy_binary(source,binary):
+            self.outer('cp',dind+':'+source,binary)
             require(binary.is_file() and not binary.is_symlink(),'Pinned client binary is unavailable')
             os.chmod(binary,0o500)
             self.paths.check(binary)
+            return {'sha256':hashlib.sha256(binary.read_bytes()).hexdigest()}
+        self.tooling_probe('pinned-docker-client-copy',lambda:copy_binary('/usr/local/bin/docker',selected))
+        self.tooling_probe('pinned-compose-client-copy',lambda:copy_binary('/usr/local/libexec/docker/cli-plugins/docker-compose',plugin))
         self.report['client_binary_sha256']=hashlib.sha256(selected.read_bytes()).hexdigest()
         self.report['compose_binary_sha256']=hashlib.sha256(plugin.read_bytes()).hexdigest()
-        deadline = time.monotonic()+90
-        while not (self.socket/'docker.sock').exists():
-            require(time.monotonic() < deadline, 'Isolated Unix socket did not appear')
-            time.sleep(.2)
-        self.outer('exec',dind,'chown',str(os.geteuid())+':'+str(os.getegid()),'/trial-socket/docker.sock')
-        self.outer('exec',dind,'chmod','600','/trial-socket/docker.sock')
+        def socket_ready():
+            deadline=time.monotonic()+90
+            while not (self.socket/'docker.sock').exists():
+                require(time.monotonic()<deadline,'Isolated Unix socket did not appear')
+                time.sleep(.2)
+            self.outer('exec',dind,'chown',str(os.geteuid())+':'+str(os.getegid()),'/trial-socket/docker.sock')
+            self.outer('exec',dind,'chmod','600','/trial-socket/docker.sock')
+            return {'control_transport':'unix'}
+        self.tooling_probe('isolated-unix-socket-ready',socket_ready)
         endpoint = 'unix://'+str(self.socket/'docker.sock')
         local_env = {'PATH':self.env['PATH'],'HOME':str(self.root),'DOCKER_CONFIG':str(self.config)}
-        run((selected,'context','create',self.name,'--docker','host='+endpoint),env=local_env)
+        def create_context():
+            run((selected,'context','create',self.name,'--docker','host='+endpoint),env=local_env)
+            return {'context':self.name,'control_transport':'unix'}
+        self.tooling_probe('isolated-context-create',create_context)
         self.profile = Profile(self.installation,self.state,selected,self.config,self.name,endpoint,'temporary',self.name,
             self.name+'_keep-data',(self.installation/'compose.yml',),self.installation/'.env')
-        deadline = time.monotonic()+90
-        while True:
-            try:
-                daemon = json.loads(self.inner('info','--format','{{json .ID}}'))
-                break
-            except TrialError:
-                require(time.monotonic() < deadline, 'Isolated daemon is unavailable')
-                time.sleep(.2)
+        def daemon_ready():
+            deadline=time.monotonic()+90
+            while True:
+                try:
+                    daemon=parse_json(self.inner('info','--format','{{json .ID}}'),256)
+                    require(isinstance(daemon,str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9:-]{0,127}',daemon),
+                        'Invalid isolated daemon identity',code='metadata_invalid')
+                    return {'daemon_id':daemon}
+                except TrialError:
+                    require(time.monotonic()<deadline,'Isolated daemon is unavailable')
+                    time.sleep(.2)
+        daemon=self.tooling_probe('isolated-daemon-ready',daemon_ready)['daemon_id']
         self.profile = replace(self.profile, daemon_id=daemon)
-        require(self.inner('info','--format','{{.OSType}}').strip() == b'linux', 'Isolated daemon must use Linux containers')
-        native = self.inner('info','--format','{{.Architecture}}').decode().strip()
-        require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(native) == self.architecture, 'Isolated daemon is not native')
+        def daemon_native():
+            require(self.inner('info','--format','{{.OSType}}').strip()==b'linux','Isolated daemon must use Linux containers',code='daemon_not_native')
+            native=self.inner('info','--format','{{.Architecture}}').decode().strip()
+            require({'x86_64':'amd64','amd64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(native)==self.architecture,
+                'Isolated daemon is not native',code='daemon_not_native')
+            return {'architecture':self.architecture,'os':'linux'}
+        self.tooling_probe('isolated-native-platform-verify',daemon_native)
 
     def images(self):
         base = json.loads(self.outer('image','inspect',self.candidate))[0]
@@ -500,7 +627,7 @@ class NativeTrial:
             self.images_by_schema[schema]=identity
             self.report['images'][version]=identity.as_dict()
         self.paths.publish(self.state/'trial-registry-graph.json',canonical({'schema':'keep.maintenance-trial-graph.v1',
-            'architecture':self.architecture,'port':self.resolver.port,
+            'architecture':self.architecture,'registry':self.registry_proof,
             'images':[image.as_dict() for image in self.images_by_schema.values()]}))
 
     def stage_source(self, base):

@@ -65,6 +65,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         write_maintenance_sources(self.root)
+        # Publication tests declare qualification only in their copied source;
+        # this synthetic fixture does not qualify the real application.
+        shim = self.root / 'maintenance_mailbox.py'
+        shim.write_bytes(shim.read_bytes().replace(b'RUNTIME_QUALIFIED = False', b'RUNTIME_QUALIFIED = True'))
         maintenance_root = patch.object(materials, 'MAINTENANCE_ROOT', self.root)
         maintenance_root.start()
         self.addCleanup(maintenance_root.stop)
@@ -390,6 +394,70 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 materials.archive('amd64')
         draft.assert_not_called()
         upload.assert_not_called()
+
+    def test_manual_publication_rejects_disabled_missing_or_ambiguous_qualification(self):
+        cases = (
+            b'RUNTIME_QUALIFIED = False\n',
+            b'# RUNTIME_QUALIFIED = True\n',
+            b'RUNTIME_QUALIFIED = bool(1)\n',
+            b'RUNTIME_QUALIFIED = 1\n',
+            b'RUNTIME_QUALIFIED = "True"\n',
+            b'RUNTIME_QUALIFIED = True\nRUNTIME_QUALIFIED = False\n',
+            b'RUNTIME_QUALIFIED = True\nRUNTIME_QUALIFIED = True\n',
+            b'RUNTIME_QUALIFIED = other = True\n',
+            b'RUNTIME_QUALIFIED = True\nfrom module import value as RUNTIME_QUALIFIED\n',
+            b'RUNTIME_QUALIFIED = True\ndef RUNTIME_QUALIFIED():\n    return False\n',
+            b'if True:\n    RUNTIME_QUALIFIED = True\n',
+            b'RUNTIME_QUALIFIED = True\nif condition:\n    RUNTIME_QUALIFIED = False\n',
+            b'RUNTIME_QUALIFIED = True\ndel RUNTIME_QUALIFIED\n',
+            b'RUNTIME_QUALIFIED = (\n',
+        )
+        for body in cases:
+            (self.root / 'maintenance_mailbox.py').write_bytes(body)
+            with self.subTest(body=body), chdir(self.root), \
+                 patch.object(materials, 'require_manual_dispatch'), \
+                 patch.object(materials, 'require_current_source'):
+                with self.assertRaisesRegex(ValueError, 'explicitly qualified before publication'):
+                    materials.guard()
+        (self.root / 'maintenance_mailbox.py').unlink()
+        with chdir(self.root), patch.object(materials, 'require_manual_dispatch'), \
+             patch.object(materials, 'require_current_source'):
+            with self.assertRaisesRegex(ValueError, 'maintenance source is unavailable'):
+                materials.guard()
+
+    def test_candidate_prepare_and_stable_verify_hold_before_external_writes_when_disabled(self):
+        (self.root / 'maintenance_mailbox.py').write_bytes(b'RUNTIME_QUALIFIED = False\n')
+        for candidate_only, action in ((True, lambda: materials.main()), (False, materials.verify)):
+            with self.subTest(candidate_only=candidate_only), chdir(self.root), \
+                 patch.dict(os.environ, {'KEEP_CANDIDATE_ONLY': str(candidate_only).lower()}), \
+                 patch.object(sys, 'argv', ['release_materials.py', 'prepare']), \
+                 patch.object(materials, 'require_manual_dispatch'), \
+                 patch.object(materials, 'require_current_source'), \
+                 patch.object(materials, 'draft') as draft, patch.object(materials, 'upload') as upload, \
+                 patch.object(materials, 'api') as api, patch.object(materials, 'hub') as hub:
+                with self.assertRaisesRegex(ValueError, 'explicitly qualified before publication'):
+                    action()
+            draft.assert_not_called(); upload.assert_not_called(); api.assert_not_called(); hub.assert_not_called()
+
+    def test_disabled_source_remains_available_for_initial_native_validation(self):
+        path = self.root / 'maintenance_mailbox.py'
+        path.write_bytes(b'RUNTIME_QUALIFIED = False\n')
+        _, sources, _, _ = materials.maintenance_sources()
+        self.assertEqual(sources['maintenance_mailbox.py'], {
+            'source_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+            'fixture_sha256': hashlib.sha256(b'RUNTIME_QUALIFIED = True\n').hexdigest()})
+
+    def test_checked_out_source_flag_controls_manual_publication(self):
+        actual = Path(materials.__file__).resolve().parents[1]
+        body = (actual / 'maintenance_mailbox.py').read_bytes()
+        enabled = b'RUNTIME_QUALIFIED = True' in body
+        with chdir(self.root), patch.object(materials, 'MAINTENANCE_ROOT', actual), \
+             patch.object(materials, 'require_manual_dispatch'), patch.object(materials, 'require_current_source'):
+            if enabled:
+                self.assertEqual(materials.guard(), self.VERSION)
+            else:
+                with self.assertRaisesRegex(ValueError, 'explicitly qualified before publication'):
+                    materials.guard()
 
     def test_draft_reuses_only_one_matching_source_and_prepare_creates_once(self):
         matching = {'id': 44, 'tag_name': self.VERSION, 'target_commitish': self.REVISION,

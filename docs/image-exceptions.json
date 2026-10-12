@@ -21,7 +21,7 @@
     "scripts/package_source_notices.py": "4056b9f2df4fa5a040f7c889de75d851d0d812172619b427e997220a713cbfe4",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
     "scripts/publish_release.py": "02edb524c802f0a3adc5bf3a842d6c291a5b7b772a0d0f837be2909fdfdc64bd",
-    "scripts/release_materials.py": "2895c7d5baaf38c09c1d339406dd33055e3a042ba5794e9b23d4403ee4fcf468",
+    "scripts/release_materials.py": "d38e1ef380be58019330a64f02efcfc76c4774602df6d2ed1843f0f0ad5049f8",
     "scripts/registry_transfer.py": "ddd75f23e65bd7739f0f1f970052efd614cb6ceeb13369ed83c587609f058d47",
     "scripts/candidate_publication.py": "4caa8c48aad6bbf64d89a0cc9278369fd7717a6bd4435357c01f4091db297564",
     "scripts/hub_analysis_review.py": "f6bb592f6408498d39f7983b515c0ffc25132a4f9c506cdeab8b04dfab8a54ad",
@@ -30,7 +30,7 @@
     "scripts/package_maintenance_helper.py": "69bf370bc478112e11f5bb25c89e2ba5e4f4d301b31f1fcf5aec765d941a51c9",
     ".github/workflows/native-image.yml": "d9269ee215a803e4a603a08d50e8527274c7effa1ab459c72ff4956be1df29da",
     "scripts/validated_build.py": "8825708adaba054dd0a898a08e528484ff2af9f12abd2631842bab260f0c4dd6",
-    "scripts/maintenance_container_trial.py": "ea8ecacc823957117cdfdb2da9786939ae0847ceaade8b70f832c78fca7d2229",
+    "scripts/maintenance_container_trial.py": "10701deffb6b284250baa1cc487814e8c5ef557cd34bbad19bf562b0528741d4",
     "tests/maintenance_trial_fixture.py": "31f9eee827dc28c8fd01b9c4b1859e93bfd924832841ce604890c68ef40845c4"
   },
   "exceptions": {
