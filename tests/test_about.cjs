@@ -91,6 +91,14 @@ test('release links ignore supplied URLs and reject invalid tags without HTML ex
   const f=fixture({snapshot:baseline({releases:[{version:'2.25.0',tag:'2.25.0',published_at:'2026-10-11T12:00:00Z',url:'javascript:alert(1)',name:'<img onerror=alert(1)>'},{version:'2.26.0',tag:'javascript:alert(1)',published_at:'invalid'}]})});
   const rows=f.ids['about-releases'].children;assert.equal(rows.length,1);assert.equal(rows[0].children[1].href,'https://github.com/brspoon/keep/releases/tag/2.25.0');assert.equal(rows[0].children[1].rel,'noopener noreferrer');assert.doesNotMatch(rows[0].textContent,/<img|javascript/);
 });
+test('release paths accept exact version tags and reject quotes, separators and final line breaks',()=>{
+  for(const tag of ['2.26.0" onmouseover="alert(1)', '2.26.0/../../login', '2.26.0%2Flogin', '2.26.0?url=https://outside.example', '2.26.0\n', 'v2.26.0\r\n']){
+    const f=fixture({snapshot:baseline({releases:[{version:tag.replace(/^v/,''),tag,published_at:'2026-10-11T12:00:00Z'}]})});
+    assert.equal(f.ids['about-releases'].children.length,0);assert.equal(f.ids['about-releases-empty'].hidden,false);
+  }
+  const f=fixture({snapshot:baseline({releases:[{version:'2.26.0',tag:'v2.26.0',published_at:'2026-10-11T12:00:00Z',url:'https://outside.example'}]})});
+  assert.equal(f.ids['about-releases'].children[0].children[1].href,'https://github.com/brspoon/keep/releases/tag/v2.26.0');
+});
 test('CSRF or owner authorization failures preserve the server message and stop requests',async()=>{
   const f=fixture(),action=f.ids['about-check-form'].fire('submit');await settle();f.respond(0,403,{error:'Your session changed. Refresh the page and try again.'});await action;await settle();assert.match(f.ids['about-feedback'].textContent,/Your session changed/);assert.equal(f.ids['about-check'].disabled,true);await f.advance(200000);await f.ids['about-check-form'].fire('submit');assert.equal(f.calls.length,1);
 });

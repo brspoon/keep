@@ -31,13 +31,14 @@
   const comparisons = new Set(['unknown', 'update_available', 'up_to_date', 'ahead']);
   const states = new Set(['idle', 'queued', 'running']);
   const versionPattern = /^(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})$/;
-  const releaseUrl = tag => typeof tag === 'string' && versionPattern.test(tag.replace(/^v/, ''))
-    ? `https://github.com/brspoon/keep/releases/tag/${tag}` : null;
+  const validVersion = value => typeof value === 'string' && versionPattern.exec(value)?.[0] === value;
+  const releaseUrl = tag => typeof tag === 'string' && validVersion(tag.replace(/^v/, ''))
+    ? `https://github.com/brspoon/keep/releases/tag/${encodeURIComponent(tag)}` : null;
   const normalize = value => {
     if (!value || !statuses.has(value.status) || !comparisons.has(value.comparison) || !states.has(value.check_state)
       || typeof value.can_check !== 'boolean' || typeof value.worker_available !== 'boolean') throw new Error('Invalid release status');
-    const latest = versionPattern.test(value.latest_version || '') ? value.latest_version : null;
-    return {...value, installed_version:versionPattern.test(value.installed_version || '') ? value.installed_version : 'Unknown',
+    const latest = validVersion(value.latest_version) ? value.latest_version : null;
+    return {...value, installed_version:validVersion(value.installed_version) ? value.installed_version : 'Unknown',
       latest_version:latest, comparison:value.status === 'success' && value.stale === false && latest ? value.comparison : 'unknown',
       stale:value.stale !== false, reason:typeof value.reason === 'string' ? value.reason : '',
       message:typeof value.message === 'string' ? value.message : 'Release information checked.',
