@@ -27,6 +27,12 @@ CONCLUSIONS = {'success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_o
 LOADER_STEP = 'Verify default Expat and OpenSSL library loading'
 CURRENT_ACCEPTANCE_STEP = 'Accept only reviewed fixed findings and block all others'
 LEGACY_ACCEPTANCE_STEP = 'Accept only the nine verified-fixed findings and block all others'
+MAINTENANCE_STEPS = frozenset((
+    'Set up the optional host helper runtime',
+    'Preload pinned isolated native maintenance tooling',
+    'Exercise the real optional maintenance lifecycle on the native architecture',
+    'Preserve native maintenance delivery evidence',
+))
 
 
 def api(path, *, method='GET'):
@@ -126,11 +132,15 @@ def release_identity(release):
     return match[1], builds.positive(match[2], 'candidate producer run ID')
 
 
-def expected_paths(version, arch, *, legacy=False):
+def expected_paths(version, arch, *, legacy=False, maintenance=None):
     source = f'distribution/keep-{version}-source-materials-{arch}.tar.gz'
     paths = {f'keep-tested-{arch}.tar', source, source + '.sha256',
              *builds.materials.evidence_names(arch), f'portable-recovery-{arch}.json',
              f'installer-trial-{arch}.json', f'distribution/source-bundle-{arch}.json'}
+    if maintenance is None:
+        maintenance = not legacy
+    if maintenance:
+        paths.add(f'maintenance-native-{arch}.json')
     if legacy:
         paths.remove(f'candidate-dependencies-{arch}.json')
     return paths
@@ -210,7 +220,7 @@ def latest_producer_job(jobs, run, name):
 
 
 def native_profile(job):
-    """Recognize the exact pre-dependency contract without approving it."""
+    """Recognize complete current and historical native validation contracts."""
     steps = job.get('steps')
     if (not isinstance(steps, list) or any(not isinstance(step, dict) or
             not isinstance(step.get('name'), str) or not step['name'].strip() for step in steps)):
@@ -218,13 +228,16 @@ def native_profile(job):
     by_name = {step['name']: step for step in steps}
     if len(by_name) != len(steps):
         raise ValueError('Duplicate native validation step metadata')
-    if LOADER_STEP not in by_name and CURRENT_ACCEPTANCE_STEP not in by_name and LEGACY_ACCEPTANCE_STEP in by_name:
+    maintenance = MAINTENANCE_STEPS.intersection(by_name)
+    if maintenance and maintenance != MAINTENANCE_STEPS:
+        raise ValueError('Unknown or incomplete native maintenance validation profile')
+    if LOADER_STEP not in by_name and CURRENT_ACCEPTANCE_STEP not in by_name and LEGACY_ACCEPTANCE_STEP in by_name and not maintenance:
         profile = 'legacy'
         required = tuple(name for name in builds.NATIVE_STEPS
-                         if name not in (LOADER_STEP, CURRENT_ACCEPTANCE_STEP)) + (LEGACY_ACCEPTANCE_STEP,)
+                         if name not in MAINTENANCE_STEPS | {LOADER_STEP, CURRENT_ACCEPTANCE_STEP}) + (LEGACY_ACCEPTANCE_STEP,)
     elif LOADER_STEP in by_name and CURRENT_ACCEPTANCE_STEP in by_name and LEGACY_ACCEPTANCE_STEP not in by_name:
-        profile = 'current'
-        required = builds.NATIVE_STEPS
+        profile = 'current' if maintenance else 'pre-maintenance'
+        required = tuple(name for name in builds.NATIVE_STEPS if maintenance or name not in MAINTENANCE_STEPS)
     else:
         raise ValueError('Unknown or incomplete native validation profile')
     for name in (*required, builds.RETAIN_STEP, builds.INDEX_STEP):
@@ -248,6 +261,7 @@ def usable(run, release, artifacts, assets):
     if len(profiles) != 1:
         raise ValueError('Native architectures disagree on the validation profile')
     legacy = profiles == {'legacy'}
+    maintenance = profiles == {'current'}
     available = True
     versions = set()
     for arch in builds.ARCHES:
@@ -272,7 +286,7 @@ def usable(run, release, artifacts, assets):
             raise ValueError('Usable validation index source or producer binding differs')
         builds.checked_digest(index.get('config_digest'))
         records = index.get('assets')
-        expected = expected_paths(version, arch, legacy=legacy)
+        expected = expected_paths(version, arch, legacy=legacy, maintenance=maintenance)
         if (not isinstance(records, list) or len(records) != len(expected) or
                 any(not isinstance(row, dict) or not isinstance(row.get('path'), str) for row in records) or
                 {row.get('path') for row in records} != expected):
@@ -298,9 +312,9 @@ def usable(run, release, artifacts, assets):
         versions.add(version)
     if available and len(versions) != 1:
         raise ValueError('Native indexes disagree on the version')
-    # Authenticated legacy storage can be retained or superseded, but cannot
-    # satisfy the current dependency qualification or promotion contract.
-    return available and not legacy
+    # Authenticate historical storage without allowing it to satisfy the
+    # current maintenance qualification or promotion contract.
+    return available and maintenance
 
 
 def snapshot(release, run, artifacts, assets):
