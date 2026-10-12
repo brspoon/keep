@@ -21,17 +21,38 @@
     panel.className = 'keep-select-panel';
     panel.hidden = true;
     panel.id = `keep-select-${++nextId}`;
+    const searchControl = document.createElement('div');
+    searchControl.className = 'keep-search-control';
+    const svgNode = (tag, attributes) => {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, value));
+      return node;
+    };
+    const icon = svgNode('svg', {class: 'keep-search-icon', viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true'});
+    icon.append(svgNode('circle', {cx: '11', cy: '11', r: '6.5', stroke: 'currentColor', 'stroke-width': '2'}),
+      svgNode('path', {d: 'm16 16 4 4', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round'}));
     const search = document.createElement('input');
     search.type = 'search';
-    search.className = 'keep-select-search';
+    search.className = 'keep-select-search keep-search-input';
     search.placeholder = 'Find an option…';
     search.setAttribute('aria-label', 'Find an option');
     search.autocomplete = 'off';
+    search.spellcheck = false;
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'keep-select-search-clear keep-search-clear';
+    clear.setAttribute('aria-label', 'Clear option search');
+    clear.hidden = true;
+    const clearIcon = svgNode('svg', {viewBox: '0 0 20 20', 'aria-hidden': 'true'});
+    clearIcon.append(svgNode('circle', {cx: '10', cy: '10', r: '8', fill: 'currentColor'}),
+      svgNode('path', {d: 'm7 7 6 6m0-6-6 6', fill: 'none', stroke: 'var(--surface)', 'stroke-width': '1.7', 'stroke-linecap': 'round'}));
+    clear.append(clearIcon);
+    searchControl.append(icon, search, clear);
     const list = document.createElement('div');
     list.className = 'keep-select-list';
     list.id = `${panel.id}-list`;
     list.setAttribute('role', 'listbox');
-    panel.append(search, list);
+    panel.append(searchControl, list);
     // A select inside a native dialog must keep its popup in the same top layer.
     const dialog = select.closest('dialog');
     (dialog || document.body).append(panel);
@@ -120,10 +141,12 @@
         items.push({option, node});
       });
       search.hidden = items.length < 12;
+      searchControl.hidden = search.hidden;
       search.setAttribute('role', 'combobox');
       search.setAttribute('aria-controls', list.id);
       search.setAttribute('aria-expanded', 'true');
       sync();
+      filter();
     }
     function commit(index) {
       if (trigger.disabled || !items[index] || !eligible(items[index])) return;
@@ -137,8 +160,8 @@
       sync();
       if (trigger.disabled) return;
       if (opened && opened !== control) opened.close();
-      render();
       search.value = '';
+      render();
       panel.hidden = false;
       opened = control;
       trigger.setAttribute('aria-expanded', 'true');
@@ -154,8 +177,19 @@
     }
     function keydown(event) {
       const inSearch = event.target === search;
+      const inClear = event.target === clear;
       if (event.key === 'Escape' && !panel.hidden) { event.preventDefault(); close(true); return; }
-      if (event.key === 'Tab') { close(inSearch); return; }
+      if (event.key === 'Tab') {
+        if (inSearch && !event.shiftKey && !clear.hidden) {
+          event.preventDefault(); clear.focus({preventScroll: true}); return;
+        }
+        if (inClear && event.shiftKey) {
+          event.preventDefault(); search.focus({preventScroll: true}); return;
+        }
+        close(inSearch || inClear); return;
+      }
+      // Enter and Space activate the clear button normally, without committing an option.
+      if (inClear) return;
       if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && !(inSearch && ['Home', 'End'].includes(event.key))) {
         event.preventDefault();
         if (panel.hidden) open();
@@ -180,11 +214,24 @@
     trigger.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); panel.hidden ? open() : close(); });
     trigger.addEventListener('keydown', keydown);
     search.addEventListener('keydown', keydown);
-    search.addEventListener('input', () => {
+    clear.addEventListener('keydown', keydown);
+    function filter() {
       const query = search.value.trim().toLocaleLowerCase();
-      items.forEach(item => { item.node.hidden = item.option.hidden || !item.option.textContent.toLocaleLowerCase().includes(query); });
+      clear.hidden = search.value.length === 0;
+      items.forEach(item => {
+        item.node.hidden = item.option.hidden || Boolean(item.option.parentElement?.hidden)
+          || !item.option.textContent.toLocaleLowerCase().includes(query);
+      });
       list.querySelectorAll('.keep-select-group').forEach(node => { node.hidden = Boolean(query); });
       mark(items.findIndex(eligible));
+    }
+    search.addEventListener('input', filter);
+    clear.addEventListener('click', () => {
+      search.value = '';
+      filter();
+      mark(items[select.selectedIndex] && eligible(items[select.selectedIndex])
+        ? select.selectedIndex : items.findIndex(eligible));
+      search.focus({preventScroll: true});
     });
     select.addEventListener('change', sync);
     select.addEventListener('focus', () => trigger.focus());

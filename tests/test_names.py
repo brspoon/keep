@@ -700,7 +700,7 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn('background: linear-gradient(145deg, #ffbe52, #e78712);', page)
         self.assertIn('.user-avatar.fallback', page)
         self.assertIn('class="user-avatar fallback"', page)
-        self.assertIn('id="media-search" type="search"', page)
+        self.assertRegex(page, r'<input(?=[^>]*\bid="media-search")(?=[^>]*\btype="search")[^>]*>')
         self.assertIn('placeholder="Search leaving movies and shows"', page)
         self.assertIn('function applyMediaSearch()', page)
         self.assertIn('`${title} ${year}`.toLocaleLowerCase().includes(query)', page)

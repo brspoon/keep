@@ -25,10 +25,10 @@
 
   {% from 'shared_category_nav.html' import category_nav %}
   {{ category_nav(sections, 'library') }}
-  <div class="media-search" role="search"><div class="search-field">
-    <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    <input id="media-search" type="search" placeholder="Search your media libraries" aria-label="Search your media libraries" autocomplete="off" spellcheck="false">
-    <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="m7 7 6 6m0-6-6 6" fill="none" stroke="var(--surface)" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+  <div class="media-search" role="search"><div class="search-field keep-search-control">
+    {% include 'shared_search_icon.html' %}
+    <input id="media-search" class="keep-search-input" type="search" placeholder="Search your media libraries" aria-label="Search your media libraries" autocomplete="off" spellcheck="false">
+    <button id="search-clear" class="search-clear keep-search-clear" type="button" aria-label="Clear search" hidden>{% include 'shared_search_clear_icon.html' %}</button>
   </div><div id="search-status" class="search-status" aria-live="polite"></div></div>
   <div id="search-empty" class="empty search-empty" hidden>No titles match your search. Try a different title or clear your search.</div>
   {% if library_errors %}<div class="library-error" role="alert">Could not load {{ library_errors|join(', ') }}. Deletion is unavailable for these libraries until the connection recovers. <a href="/library">Try again</a></div>{% endif %}

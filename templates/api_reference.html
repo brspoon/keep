@@ -16,18 +16,33 @@
 <a class="skip-link" href="#main-content">Skip to content</a>
 <main class="page" id="main-content" tabindex="-1">
   {% include 'shared_header.html' %}
-    <div class="page-heading"><h2>API reference</h2><p class="subtitle">Read selected Leaving and Kept collections, then manage Keep protection with an account-bound key.</p></div>
+    <div class="page-heading"><h2>API reference</h2><p class="subtitle">Endpoints and examples for Keep integrations.</p></div>
     {% include 'shared_admin_tabs.html' %}
+    <section class="api-quick-start" aria-labelledby="api-quick-start-title">
+      <div class="api-section-heading"><div><h2 id="api-quick-start-title">Get started</h2><p>Create a key in API keys and choose the scopes your integration needs.</p></div></div>
+      <div id="api-contract-overview" hidden></div>
+      <noscript><p>Enable JavaScript to browse endpoint details, or download the OpenAPI specification.</p></noscript>
+    </section>
     <section class="api-endpoints" aria-labelledby="api-endpoints-title">
-      <div class="api-section-heading"><div><h2 id="api-endpoints-title">Endpoints</h2><p>Browse the contract below. Examples are read-only; this page does not send API requests.</p></div><span class="api-base-path">Base path <code>/api/v1</code></span></div>
+      <div class="api-section-heading"><div><h2 id="api-endpoints-title">Endpoints</h2><p>Expand an endpoint for parameters, request examples, and response fields.</p></div><span class="api-base-path">Base path <code>/api/v1</code></span></div>
       <div class="api-search">
         <label for="api-search">Search endpoints</label>
-        <div class="api-search-field"><input id="api-search" type="search" placeholder="Search path, method, scope, or description" autocomplete="off" spellcheck="false" aria-controls="api-operation-list"><button id="api-search-clear" type="button" aria-label="Clear endpoint search" hidden>×</button></div>
+        <div class="api-search-field keep-search-control">
+          {% include 'shared_search_icon.html' %}
+          <input id="api-search" class="keep-search-input" type="search" placeholder="Search path, method, scope, or description" autocomplete="off" spellcheck="false" aria-controls="api-operation-list">
+          <button id="api-search-clear" class="keep-search-clear" type="button" aria-label="Clear endpoint search" hidden>{% include 'shared_search_clear_icon.html' %}</button>
+        </div>
         <p id="api-search-status" role="status" aria-live="polite"></p>
       </div>
       <p id="api-load-status" class="api-load-status" role="status" aria-live="polite">Loading endpoint definitions…</p>
+      <button id="api-load-retry" class="api-retry" type="button" hidden>Try again</button>
       <p id="api-empty" class="api-empty" hidden>No endpoints match. Try a different search.</p>
       <div id="api-operation-list" class="api-operation-list" role="list" aria-label="API endpoints" data-spec-url="/static/openapi.json"></div>
+    </section>
+    <section class="api-resources" aria-labelledby="api-resources-title">
+      <h2 id="api-resources-title">Resources</h2>
+      <p>OpenAPI file for integration tools.</p>
+      <a class="api-download" href="/static/openapi.json" download="keep-openapi.json">Download API definition</a>
     </section>
 </main>
 </body>

@@ -22,10 +22,10 @@
       <p>Answers about Leaving, Keeps, your library, and your account.</p>
       <div class="faq-search">
         <label for="faq-search">Search questions</label>
-        <div class="faq-search-field">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <input id="faq-search" type="search" placeholder="What would you like to know?" autocomplete="off" spellcheck="false" aria-controls="faq-content">
-          <button id="faq-search-clear" type="button" aria-label="Clear FAQ search" hidden>×</button>
+        <div class="faq-search-field keep-search-control">
+          {% include 'shared_search_icon.html' %}
+          <input id="faq-search" class="keep-search-input" type="search" placeholder="What would you like to know?" autocomplete="off" spellcheck="false" aria-controls="faq-content">
+          <button id="faq-search-clear" class="keep-search-clear" type="button" aria-label="Clear FAQ search" hidden>{% include 'shared_search_clear_icon.html' %}</button>
         </div>
         <p id="faq-search-status" role="status" aria-live="polite"></p>
       </div>

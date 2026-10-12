@@ -7,6 +7,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 import math
 import os
+from pathlib import Path
 import re
 import sqlite3
 import threading
@@ -77,7 +78,7 @@ class RetryUnstarted(RuntimeError):
 
 
 class Store:
-    def __init__(self, path, logger=None):
+    def __init__(self, path, logger=None, *, initialize=True):
         self.path = path
         self.logger = logger
         self._initialized = False
@@ -88,7 +89,19 @@ class Store:
         self._last_request_tokens = {}
         self._active_runs = {}
         self._startup_recovery = False
-        self._observe(self._initialize)
+        if initialize:
+            self._observe(self._initialize)
+
+    def _connect(self, *, read_only=False):
+        if read_only:
+            # URI mode prevents an observation from creating a missing database.
+            return sqlite3.connect(Path(self.path).absolute().as_uri() + '?mode=ro',
+                                   uri=True, timeout=0.25)
+        return sqlite3.connect(self.path, timeout=0.25)
+
+    @staticmethod
+    def _has_table(db, name):
+        return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
     def _initialize(self):
         with closing(sqlite3.connect(self.path, timeout=0.25)) as db, db:
@@ -134,14 +147,19 @@ class Store:
                 attempted=0,scope=excluded.scope''', (job_id, token, scope))
         return True
 
-    def pending(self, *, scopes=None):
-        self._retry_controls()
+    def pending(self, *, scopes=None, read_only=False):
+        if not read_only:
+            self._retry_controls()
         def read():
-            with closing(sqlite3.connect(self.path, timeout=0.25)) as db:
+            with closing(self._connect(read_only=read_only)) as db:
+                if read_only and not self._has_table(db, 'background_job_requests'):
+                    return {}
+                columns = {row[1] for row in db.execute('PRAGMA table_info(background_job_requests)')}
+                scope_column = 'scope' if 'scope' in columns else 'NULL'
                 return {job_id: token for job_id, token, scope in db.execute(
-                    'SELECT job_id,request_token,scope FROM background_job_requests') if job_id in JOB_IDS
+                    f'SELECT job_id,request_token,{scope_column} FROM background_job_requests') if job_id in JOB_IDS
                     and (scope is None or scopes is None or scope == scopes.get(job_id))}
-        return self._observe(read) or {}
+        return read() if read_only else self._observe(read) or {}
 
     def requested(self, job_id, *, first_attempt=False, scope=None):
         def read():
@@ -288,13 +306,15 @@ class Store:
                     return
                 self._retry_operations.pop(job_id, None)
 
-    def interval(self, job_id, default):
+    def interval(self, job_id, default, *, read_only=False):
         def read():
-            with closing(sqlite3.connect(self.path, timeout=0.25)) as db:
+            with closing(self._connect(read_only=read_only)) as db:
+                if read_only and not self._has_table(db, 'background_job_settings'):
+                    return default
                 row = db.execute('SELECT interval_seconds FROM background_job_settings WHERE job_id=?',
                                  (job_id,)).fetchone()
                 return row[0] if row and row[0] in INTERVAL_SECONDS else default
-        value = self._observe(read)
+        value = read() if read_only else self._observe(read)
         return default if value is None else value
 
     def set_interval(self, job_id, seconds):
@@ -435,9 +455,12 @@ class Store:
                 if not self._active_runs[job_id]:
                     del self._active_runs[job_id]
 
-    def records(self):
-        self._retry_controls()
-        with closing(sqlite3.connect(self.path, timeout=0.25)) as db:
+    def records(self, *, read_only=False):
+        if not read_only:
+            self._retry_controls()
+        with closing(self._connect(read_only=read_only)) as db:
+            if read_only and not self._has_table(db, 'background_jobs'):
+                return {}
             db.row_factory = sqlite3.Row
             return {row['job_id']: dict(row) for row in db.execute('SELECT * FROM background_jobs')
                     if row['job_id'] in JOB_IDS}
@@ -449,7 +472,7 @@ class Store:
             self._retry_controls()
 
     def snapshot(self, getter, connection_settings, *, heartbeat_path, now=None,
-                 plex_interval=900, reminder_interval=900):
+                 plex_interval=900, reminder_interval=900, read_only=False):
         now = time.time() if now is None else now
         try:
             heartbeat = os.stat(heartbeat_path).st_mtime
@@ -459,7 +482,7 @@ class Store:
         worker = {'available': available, 'kind': 'success' if available else 'failed',
                   'label': 'Running' if available else 'Unavailable',
                   'checked_at': timestamp(heartbeat)}
-        records = self.records()
+        records = self.records(read_only=read_only)
         scope = seerr.namespace(getter)
         email = str(getter('EMAIL_ENABLED')).lower() == 'true'
         configured = {service: connection_settings.configured(service, getter)
@@ -468,7 +491,7 @@ class Store:
         intervals = {job_id: 30 for job_id in JOB_IDS}
         intervals.update({'plex-access-sync': plex_interval, 'reminder-scan': reminder_interval,
                           'seerr-history': seerr.REFRESH_INTERVAL})
-        intervals = {job_id: self.interval(job_id, seconds) for job_id, seconds in intervals.items()}
+        intervals = {job_id: self.interval(job_id, seconds, read_only=read_only) for job_id, seconds in intervals.items()}
         job_rows = []
         for job_id, title, description in JOBS:
             record = records.get(job_id)
@@ -492,12 +515,13 @@ class Store:
                 self._inactive(row, 'Setup needed', 'Configure a connection first')
             job_rows.append(row)
 
-        with closing(sqlite3.connect(self.path, timeout=0.25)) as db:
+        with closing(self._connect(read_only=read_only)) as db:
             db.row_factory = sqlite3.Row
-            checks = {row['service']: dict(row) for row in db.execute('SELECT * FROM automatic_connection_checks')}
             # Manual refreshes use the same durable Seerr schedule. Ignore records
             # for previous settings rather than attributing them to the new service.
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            checks = ({row['service']: dict(row) for row in db.execute('SELECT * FROM automatic_connection_checks')}
+                      if not read_only or 'automatic_connection_checks' in tables else {})
             history = (db.execute('SELECT next_attempt,failures FROM seerr_refresh WHERE scope=?', (scope,)).fetchone()
                        if 'seerr_refresh' in tables else None)
             availability = (db.execute('SELECT due,failures FROM seerr_availability_queue WHERE scope=?', (scope,)).fetchone()
@@ -542,7 +566,7 @@ class Store:
                 record = None
             row = self._row(job_id, label + ' connection',
                             'Check the saved connection without changing the service.', record, available)
-            intervals[job_id] = self.interval(job_id, AUTO_INTERVALS[service])
+            intervals[job_id] = self.interval(job_id, AUTO_INTERVALS[service], read_only=read_only)
             row['schedule'] = interval_label(intervals[job_id])
             if service == 'email' and not email:
                 self._inactive(row, 'Disabled', 'Email is disabled')
@@ -567,7 +591,7 @@ class Store:
         scopes = {'seerr-history': scope, 'seerr-availability': scope}
         scopes.update({'probe-' + service: connection_settings.connection_fingerprint(service, getter)
                        for service, _ in PROBES})
-        pending = self.pending(scopes=scopes)
+        pending = self.pending(scopes=scopes, read_only=read_only)
         for row in job_rows:
             disabled = row['status'] == 'disabled'
             queued = row['id'] in pending

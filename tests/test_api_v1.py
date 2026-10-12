@@ -542,9 +542,192 @@ class ApiV1Tests(unittest.TestCase):
             response = self.auth(token, path='/api/v1/media?collection_id=1&state=all')
         self.assertEqual(response.status_code, 200)
         item = response.json['data'][0]
-        self.assertEqual(set(item), {'media_id', 'collection_id', 'title', 'year', 'type', 'state'})
-        self.assertEqual(item, {'media_id': '42', 'collection_id': 1, 'title': 'Sample',
-                                'year': 2020, 'type': 'movie', 'state': 'leaving'})
+        self.assertEqual(set(item), {'id', 'media_id', 'collection_id', 'title', 'year', 'type', 'state',
+                                    'provider_ids', 'entered_leaving_at', 'keep'})
+        self.assertEqual(item, {'id': '1:42', 'media_id': '42', 'collection_id': 1, 'title': 'Sample',
+                                'year': 2020, 'type': 'movie', 'state': 'leaving',
+                                'provider_ids': {'tmdb': ['1'], 'tvdb': [], 'imdb': []},
+                                'entered_leaving_at': None, 'keep': None})
+
+    def test_exact_media_identity_is_collection_bound_and_kept_takes_precedence(self):
+        token = self.make_key(scopes=('media:read',))
+        leaving = {'mediaServerId': '42', 'addDate': '2026-09-01T03:00:00+03:00',
+                   'mediaData': {'title': 'Leaving copy', 'type': 'movie', 'tmdbId': 100}}
+        kept = {'mediaServerId': '42', 'addDate': '2026-09-01T00:00:00Z',
+                'mediaData': {'title': 'Kept copy', 'type': 'movie', 'tmdbId': 100}}
+        with patch.object(api, 'feed', side_effect=lambda cid, kind, deadline:
+                          [kept] if kind == 'exclusions' else [leaving]) as feed:
+            response = self.auth(token, path='/api/v1/media/1:42')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json['data']['id'], '1:42')
+            self.assertEqual(response.json['data']['state'], 'kept')
+            self.assertEqual(response.json['data']['title'], 'Kept copy')
+            self.assertIsNone(response.json['data']['entered_leaving_at'])
+            self.assertEqual({call.args[0] for call in feed.call_args_list}, {1})
+            for item_id in ('2:42', '0:42', '1:042', '1:0', '1:42:3', '1000000000:42'):
+                with self.subTest(item_id=item_id):
+                    self.assertEqual(self.auth(token, path='/api/v1/media/' + item_id).status_code, 404)
+            self.assertEqual(self.auth(token, path='/api/v1/media/1:42?state=all').status_code, 400)
+        with patch.object(api, 'feed', return_value=[]):
+            self.assertEqual(self.auth(token, path='/api/v1/media/1:42').status_code, 404)
+        self.assertEqual(self.auth(self.make_key(scopes=('collections:read',)),
+                                   path='/api/v1/media/1:42').json['error']['code'], 'insufficient_scope')
+
+    def test_provider_lookup_preserves_all_matches_and_disambiguates_media_type(self):
+        token = self.make_key(scopes=('media:read',))
+        entries = {
+            1: [{'mediaServerId': '42', 'mediaData': {'title': 'Movie', 'type': 'movie', 'tmdbId': 100}},
+                {'mediaServerId': '43', 'mediaData': {'title': 'Episode', 'type': 'episode', 'tmdbId': 100}}],
+            3: [{'mediaServerId': '44', 'mediaData': {'title': 'Show', 'type': 'series',
+                                                     'providerIds': {'tmdb': ['100'], 'tvdb': ['200']}}}],
+            5: [{'mediaServerId': '45', 'mediaData': {'title': 'Another collection', 'type': 'movie',
+                                                     'providerIds': {'tmdb': ['100']}}}],
+        }
+        with patch.object(api, 'feed', side_effect=lambda cid, kind, deadline:
+                          [] if kind == 'exclusions' else entries.get(cid, [])):
+            movies = self.auth(token, path='/api/v1/media?provider=tmdb&provider_id=100&media_type=movie&state=all')
+            self.assertEqual([row['id'] for row in movies.json['data']], ['1:42', '5:45'])
+            shows = self.auth(token, path='/api/v1/media?provider=tmdb&provider_id=100&media_type=show')
+            self.assertEqual([row['id'] for row in shows.json['data']], ['3:44'])
+            exact = self.auth(token, path='/api/v1/media?media_id=42')
+            self.assertEqual([row['id'] for row in exact.json['data']], ['1:42'])
+            narrowed = self.auth(token, path='/api/v1/media?provider=tmdb&provider_id=100&media_type=movie&collection_id=5')
+            self.assertEqual([row['id'] for row in narrowed.json['data']], ['5:45'])
+            hidden = self.auth(token, path='/api/v1/media?provider=tmdb&provider_id=100&media_type=movie&collection_id=2')
+            self.assertEqual(hidden.status_code, 404)
+            for query in ('provider=tmdb', 'provider_id=100', 'provider=tmdb&provider_id=100',
+                          'provider=url&provider_id=100&media_type=movie',
+                          'provider=tmdb&provider_id=0100&media_type=movie',
+                          'provider=tvdb&provider_id=0&media_type=show',
+                          'provider=tmdb&provider_id=1.5&media_type=movie',
+                          'provider=imdb&provider_id=tt0000000&media_type=movie',
+                          'provider=imdb&provider_id=https://example.test&media_type=movie',
+                          'media_id=042', 'media_type=episode', 'media_id=42&media_id=42'):
+                with self.subTest(query=query):
+                    self.assertEqual(self.auth(token, path='/api/v1/media?' + query).status_code, 400)
+
+    def test_provider_and_lifecycle_metadata_are_allowlisted_and_bounded(self):
+        token = self.make_key(scopes=('media:read',))
+        item = {'mediaServerId': '42', 'addDate': '2026-09-01T03:00:00+03:00',
+                'imdbId': 'tt9999999', 'accessToken': 'private-token',
+                'mediaData': {'title': 'Sample', 'type': 'movie', 'tmdbId': True,
+                              'tvdbId': 200, 'imdbId': 'tt1234567',
+                              'providerIds': {'tmdb': ['0', '01', 1.2, False, {}, 'https://secret.test',
+                                                      *map(str, range(1, 30))],
+                                              'tvdb': ['200', '201'], 'imdb': ['tt1234567', 'tt2345678'],
+                                              'private': ['secret-token']}}}
+        with patch.object(api, 'feed', side_effect=lambda cid, kind, deadline:
+                          [] if kind == 'exclusions' else [item]):
+            response = self.auth(token, path='/api/v1/media/1:42')
+            data = response.json['data']
+            self.assertEqual(data['provider_ids']['tmdb'], list(map(str, range(1, 11))))
+            self.assertEqual(data['provider_ids']['tvdb'], ['200', '201'])
+            self.assertEqual(data['provider_ids']['imdb'], ['tt1234567', 'tt2345678'])
+            self.assertEqual(data['entered_leaving_at'], '2026-09-01T00:00:00Z')
+            self.assertNotIn('private-token', response.get_data(as_text=True))
+            self.assertNotIn('secret.test', response.get_data(as_text=True))
+            self.assertNotIn('tt9999999', response.get_data(as_text=True))
+            for date in (None, '2026-09-01T00:00:00', '2026-09-31T00:00:00Z', 'secret/path', True):
+                item['addDate'] = date
+                self.assertIsNone(self.auth(token, path='/api/v1/media/1:42').json['data']['entered_leaving_at'])
+
+    def test_embedded_keep_obeys_scope_and_current_ownership(self):
+        self.seed_keep(user_id='7', media_id='42')
+        self.seed_keep(user_id='8', media_id='43')
+        entries = [{'mediaServerId': mid, 'mediaData': {'title': 'Kept', 'type': 'movie'}}
+                   for mid in ('42', '43')]
+        owner_without_scope = self.make_key(scopes=('media:read',))
+        owner_with_scope = self.make_key(scopes=('media:read', 'keeps:read'))
+        member = self.make_key(user_id='8', scopes=('media:read', 'keeps:read'))
+        with patch.object(api, 'feed', side_effect=lambda cid, kind, deadline:
+                          entries if kind == 'exclusions' else []):
+            self.assertIsNone(self.auth(owner_without_scope, path='/api/v1/media/1:42').json['data']['keep'])
+            own = self.auth(owner_with_scope, path='/api/v1/media/1:42').json['data']['keep']
+            self.assertTrue(own['owned_by_current_user'])
+            self.assertEqual(own['expires_at'], '2026-11-01T00:00:00Z')
+            self.assertIsNone(self.auth(member, path='/api/v1/media/1:42').json['data']['keep'])
+            self.assertTrue(self.auth(member, path='/api/v1/media/1:43').json['data']['keep']['owned_by_current_user'])
+
+    def test_embedded_keep_rechecks_permissions_and_attribution_after_upstream_read(self):
+        self.seed_keep(user_id='7', media_id='42')
+        token = self.make_key(user_id='8', scopes=('media:read', 'keeps:read'))
+        item = {'mediaServerId': '42', 'mediaData': {'title': 'Kept', 'type': 'movie'}}
+        for path in ('/api/v1/media?collection_id=1&state=kept', '/api/v1/media/1:42'):
+            for change in ('manager permission', 'attribution'):
+                with self.subTest(path=path, change=change):
+                    with closing(keep.attribution_db()) as db, db:
+                        db.execute("UPDATE user_profiles SET can_remove_any=? WHERE plex_id='8'",
+                                   (int(change == 'manager permission'),))
+                        db.execute('UPDATE keep_attribution SET user_id=? WHERE collection_id=? AND media_id=?',
+                                   ('7' if change == 'manager permission' else '8', '1', '42'))
+                    def changed_feed(cid, kind, deadline):
+                        with closing(keep.attribution_db()) as db, db:
+                            db.execute("UPDATE user_profiles SET can_remove_any=0 WHERE plex_id='8'")
+                            db.execute("UPDATE keep_attribution SET user_id='7' WHERE collection_id='1' AND media_id='42'")
+                        return [item] if kind == 'exclusions' else []
+                    with patch.object(api, 'feed', side_effect=changed_feed):
+                        response = self.auth(token, path=path)
+                    self.assertEqual(response.status_code, 200)
+                    data = response.json['data']
+                    self.assertIsNone((data[0] if isinstance(data, list) else data)['keep'])
+
+    def test_operational_status_requires_explicit_scope_and_current_owner(self):
+        existing = self.make_key()
+        self.assertEqual(self.auth(existing, path='/api/v1/status').json['error']['code'], 'insufficient_scope')
+        member = self.make_key(user_id='8', scopes=('status:read',))
+        self.assertEqual(self.auth(member, path='/api/v1/status').json['error']['code'], 'permission_denied')
+        token = self.make_key(scopes=('status:read',))
+        self.assertEqual(self.client.get('/api/v1/status').status_code, 401)
+        self.assertEqual(self.auth(token, path='/api/v1/status?limit=1').status_code, 400)
+        with (patch.object(keep.background_jobs.Store, '_initialize',
+                          side_effect=AssertionError('Status must not initialize jobs')),
+             patch.object(keep.background_jobs.Store, '_retry_controls',
+                          side_effect=AssertionError('Status must not retry controls')),
+             patch.object(keep.requests, 'get', side_effect=AssertionError('No probe')),
+             patch.object(keep.requests, 'post', side_effect=AssertionError('No write'))):
+            response = self.auth(token, path='/api/v1/status')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['data']['version'], keep.APP_VERSION)
+        self.assertTrue(response.json['data']['jobs'])
+
+    def test_status_allowlist_and_sqlite_failures_do_not_leak_diagnostics(self):
+        token = self.make_key(scopes=('status:read',))
+        snapshot = {'worker': {'available': True, 'checked_at': '2026-10-11T22:00:00+00:00',
+                               'label': 'private worker secret'},
+                    'jobs': [{'id': 'keep-expiry', 'status': 'success', 'last_run': '2026-10-11T21:55:00Z',
+                              'last_success': '2026-10-11T21:55:00Z', 'next_run': None,
+                              'last_attempt_status': 'success', 'queued': False, 'interval': 30,
+                              'result': 'private result secret', 'scope': 'private fingerprint'}]}
+        with patch.object(keep, 'jobs_snapshot', return_value=snapshot) as jobs:
+            response = self.auth(token, path='/api/v1/status')
+        jobs.assert_called_once_with(read_only=True)
+        self.assertEqual(set(response.json['data']), {'version', 'observed_at', 'worker', 'jobs'})
+        self.assertEqual(set(response.json['data']['worker']), {'available', 'heartbeat_at'})
+        self.assertEqual(set(response.json['data']['jobs'][0]), {'id', 'status', 'last_run_at',
+                         'last_success_at', 'next_run_at', 'last_attempt_status', 'queued', 'interval_seconds'})
+        self.assertNotIn('private', response.get_data(as_text=True))
+        with patch.object(keep, 'jobs_snapshot', side_effect=api_v1.sqlite3.OperationalError('private database path')):
+            failed = self.auth(token, path='/api/v1/status')
+        self.assertEqual(failed.status_code, 503)
+        self.assertEqual(failed.json['error']['code'], 'service_unavailable')
+        self.assertNotIn('private', failed.get_data(as_text=True))
+
+    def test_new_reads_discard_results_after_settings_change_or_revocation(self):
+        token = self.make_key(scopes=('media:read', 'status:read'))
+        item = {'mediaServerId': '42', 'mediaData': {'title': 'Before revoke'}}
+        def revoke(cid, kind, deadline):
+            with closing(keep.attribution_db()) as db, db:
+                db.execute('UPDATE api_keys SET revoked_at=? WHERE secret_hash=?',
+                           (time.time(), hashlib.sha256(token.encode()).hexdigest()))
+            return [] if kind == 'exclusions' else [item]
+        with patch.object(api, 'feed', side_effect=revoke):
+            self.assertEqual(self.auth(token, path='/api/v1/media/1:42').status_code, 401)
+        token = self.make_key(scopes=('status:read',))
+        def changed_status(**kwargs):
+            keep.connection_settings.save({'MAINTAINERR_URL': 'http://changed.example.test'})
+            return {'worker': {'available': False, 'checked_at': None}, 'jobs': []}
+        with patch.object(keep, 'jobs_snapshot', side_effect=changed_status):
+            self.assertEqual(self.auth(token, path='/api/v1/status').status_code, 409)
 
     def test_pagination_over_100_media_uses_complete_feed(self):
         token = self.make_key(scopes=('media:read',))
@@ -902,7 +1085,7 @@ class ApiV1Tests(unittest.TestCase):
         spec = json.loads(Path('static/openapi.json').read_text())
         documented = {}
         for path, item in spec['paths'].items():
-            route = '/api/v1' + path.replace('{keep_id}', '<keep_id>')
+            route = '/api/v1' + re.sub(r'\{([^}]+)\}', r'<\1>', path)
             documented[route] = {method.upper() for method in item
                                  if method.lower() in ('get', 'post', 'patch', 'delete')}
         actual = {}
@@ -983,6 +1166,65 @@ class ApiV1Tests(unittest.TestCase):
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(set(updated.json), set(response_schema['properties']))
         self.assertEqual(set(updated.json['data']), set(keep_item_schema['properties']))
+
+    def test_openapi_exact_media_and_status_schemas_match_live_payloads(self):
+        from pathlib import Path
+        spec = json.loads(Path('static/openapi.json').read_text())
+        schemas = spec['components']['schemas']
+
+        def assert_fields(payload, schema_name):
+            schema = schemas[schema_name]
+            self.assertEqual(set(payload), set(schema['properties']))
+            self.assertLessEqual(set(schema['required']), set(payload))
+
+        token = self.make_key(scopes=('media:read', 'keeps:read', 'status:read'))
+        self.seed_keep(media_id='42')
+        kept = {'mediaServerId': '42', 'ruleGroupId': 1,
+                'mediaData': {'title': 'Kept contract title', 'type': 'movie', 'tmdbId': 100}}
+        leaving = {'mediaServerId': '43', 'addDate': '2026-10-11T20:00:00+02:00',
+                   'mediaData': {'title': 'Leaving contract title', 'type': 'show', 'tvdbId': 200}}
+        with patch.object(api, 'feed', side_effect=lambda cid, kind, deadline:
+                          [kept] if kind == 'exclusions' else [leaving]):
+            for media_id in ('42', '43'):
+                with self.subTest(media_id=media_id):
+                    response = self.auth(token, path='/api/v1/media/1:' + media_id)
+                    self.assertEqual(response.status_code, 200)
+                    assert_fields(response.json, 'MediaResponse')
+                    media = response.json['data']
+                    assert_fields(media, 'Media')
+                    assert_fields(media['provider_ids'], 'ProviderIds')
+                    for provider, identifiers in media['provider_ids'].items():
+                        definition = schemas['ProviderIds']['properties'][provider]
+                        self.assertIsInstance(identifiers, list)
+                        self.assertLessEqual(len(identifiers), definition['maxItems'])
+                        self.assertEqual(len(identifiers), len(set(identifiers)))
+                        for identifier in identifiers:
+                            self.assertRegex(identifier, definition['items']['pattern'])
+                    self.assertIn(media['state'], schemas['Media']['properties']['state']['enum'])
+                    if media['keep'] is not None:
+                        assert_fields(media['keep'], 'Keep')
+            self.assertIsNotNone(self.auth(token, path='/api/v1/media/1:42').json['data']['keep'])
+            self.assertIsNone(self.auth(token, path='/api/v1/media/1:43').json['data']['keep'])
+
+        status = self.auth(token, path='/api/v1/status')
+        self.assertEqual(status.status_code, 200)
+        assert_fields(status.json, 'StatusResponse')
+        assert_fields(status.json['data'], 'Status')
+        assert_fields(status.json['data']['worker'], 'WorkerStatus')
+        jobs = status.json['data']['jobs']
+        self.assertTrue(jobs)
+        self.assertLessEqual(len(jobs), schemas['Status']['properties']['jobs']['maxItems'])
+        for job in jobs:
+            with self.subTest(job_id=job['id']):
+                assert_fields(job, 'JobStatus')
+                for field in ('id', 'status', 'last_attempt_status'):
+                    self.assertIn(job[field], schemas['JobStatus']['properties'][field]['enum'])
+                interval = job['interval_seconds']
+                if interval is not None:
+                    self.assertIs(type(interval), int)
+                    definition = schemas['JobStatus']['properties']['interval_seconds']
+                    self.assertGreaterEqual(interval, definition['minimum'])
+                    self.assertLessEqual(interval, definition['maximum'])
 
 
 if __name__ == '__main__':

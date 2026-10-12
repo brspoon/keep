@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Keep API",
-    "version": "1.0.0",
-    "summary": "Read Leaving and Kept collection media and manage Keep protection.",
-    "description": "Keys are named, account-bound bearer credentials created by the Keep owner in Admin > API keys. API settings and the reference page are owner-only. Keep stores only a hash and reveals each secret once. Choose an expiry of 30, 90 or 365 days (default 90), or Never expires. Revoke or replace keys at any time; replacement preserves the original expiry. Revoked keys can be removed from the list while their activity history remains. Every request rechecks current account status, session version, and Keep permissions, including requests with never-expiring keys. Scopes constrain access but grant no permissions. No CORS is enabled by default. Use HTTPS in normal deployments. See docs/API.md for examples, retry behavior, rate limits, compatibility, and credential handling."
+    "version": "1.1.0",
+    "summary": "Read selected collection media, manage Keep protection, and inspect recorded operational status.",
+    "description": "Keep's API covers selected Leaving and Kept collections, Keep protection, and recorded worker and job status. Send an API key in the Authorization header with the scopes required by each endpoint."
   },
   "servers": [
     {
@@ -24,6 +24,10 @@
     {
       "name": "Keeps",
       "description": "Keep protection records. Deleting a Keep removes protection only."
+    },
+    {
+      "name": "Status",
+      "description": "Read-only local worker and job observations for the current owner."
     }
   ],
   "security": [
@@ -39,13 +43,16 @@
           "Collections"
         ],
         "summary": "List configured collections",
-        "description": "Requires the collections:read scope. Collection availability follows current Keep account access.",
+        "description": "Lists the collections selected in Keep.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Limit"
           },
           {
             "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/CollectionIdFilter"
           }
         ],
         "responses": {
@@ -55,15 +62,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CollectionPage"
+                },
+                "examples": {
+                  "page": {
+                    "summary": "One configured collection",
+                    "value": {
+                      "data": [
+                        {
+                          "collection_id": 1,
+                          "name": "Leaving Movies"
+                        }
+                      ],
+                      "pagination": {
+                        "limit": 25,
+                        "offset": 0,
+                        "total": 1,
+                        "next_offset": null
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "No configured collections match",
+                    "value": {
+                      "data": [],
+                      "pagination": {
+                        "limit": 25,
+                        "offset": 0,
+                        "total": 0,
+                        "next_offset": null
+                      }
+                    }
+                  }
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ResultLimitExceeded"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -76,12 +132,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "422": {
-            "$ref": "#/components/responses/ResultLimitExceeded"
           }
         },
         "x-required-scope": "collections:read"
@@ -94,24 +144,13 @@
           "Media"
         ],
         "summary": "List media in selected collections",
-        "description": "Requires media:read. Returns only the documented allowlist from configured Leaving and Kept collections; this is not Radarr/Sonarr library inventory. `state` defaults to `leaving`. Search matches titles case-insensitively. An incomplete or over-limit upstream read fails instead of returning a partial page as complete.",
+        "description": "Lists media in selected Leaving and Kept collections. Filters combine; state defaults to leaving. Use state=all to search both states. Provider lookup requires provider, provider_id, and media_type. Embedded Keep data requires keeps:read and current access to that Keep. A null keep does not establish whether the title is protected.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Limit"
           },
           {
             "$ref": "#/components/parameters/Offset"
-          },
-          {
-            "name": "collection_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 999999999
-            },
-            "description": "Limit results to one configured collection."
           },
           {
             "name": "search",
@@ -121,7 +160,8 @@
               "type": "string",
               "maxLength": 100
             },
-            "description": "Case-insensitive title search."
+            "description": "Case-insensitive title search.",
+            "example": "Example"
           },
           {
             "name": "state",
@@ -136,7 +176,76 @@
               ],
               "default": "leaving"
             },
-            "description": "Collection state to include."
+            "description": "Collection state to include.",
+            "example": "all"
+          },
+          {
+            "$ref": "#/components/parameters/CollectionIdFilter"
+          },
+          {
+            "name": "media_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+              "maxLength": 20
+            },
+            "description": "Match an exact positive Plex media ID string. Results can include the same Plex title in multiple selected collections.",
+            "example": "42"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tmdb",
+                "tvdb",
+                "imdb"
+              ]
+            },
+            "description": "Provider namespace. Requires provider_id and an explicit media_type in the same request.",
+            "example": "tmdb"
+          },
+          {
+            "name": "provider_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 22,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+                  "maxLength": 20
+                },
+                {
+                  "type": "string",
+                  "pattern": "^tt(?=[0-9]{7,20}(?![\\s\\S]))0*[1-9][0-9]*(?![\\s\\S])",
+                  "minLength": 9,
+                  "maxLength": 22
+                }
+              ]
+            },
+            "description": "Exact provider ID: a positive decimal string of at most 20 digits for tmdb/tvdb, or tt followed by 7\u201320 digits with a nonzero numeric part for imdb. Requires provider and media_type. Numeric IDs require canonical spelling: no leading zeros, signs, or whitespace. IMDb requires lowercase tt.",
+            "example": "550"
+          },
+          {
+            "name": "media_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "movie",
+                "show"
+              ]
+            },
+            "description": "Match movie or show metadata. Required for provider lookup, and may be used alone. Shows include upstream show, series, or tv types; episodes and seasons are excluded.",
+            "example": "movie"
           }
         ],
         "responses": {
@@ -146,6 +255,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MediaPage"
+                },
+                "examples": {
+                  "leaving": {
+                    "summary": "Leaving title with provider IDs",
+                    "value": {
+                      "data": [
+                        {
+                          "id": "1:42",
+                          "media_id": "42",
+                          "collection_id": 1,
+                          "title": "Example Movie",
+                          "year": 2024,
+                          "type": "movie",
+                          "state": "leaving",
+                          "provider_ids": {
+                            "tmdb": [
+                              "550"
+                            ],
+                            "tvdb": [],
+                            "imdb": [
+                              "tt0137523"
+                            ]
+                          },
+                          "entered_leaving_at": "2026-10-10T18:00:00Z",
+                          "keep": null
+                        }
+                      ],
+                      "pagination": {
+                        "limit": 25,
+                        "offset": 0,
+                        "total": 1,
+                        "next_offset": null
+                      }
+                    }
+                  },
+                  "kept": {
+                    "summary": "Kept title with an accessible local Keep record",
+                    "value": {
+                      "data": [
+                        {
+                          "id": "1:42",
+                          "media_id": "42",
+                          "collection_id": 1,
+                          "title": "Example Movie",
+                          "year": 2024,
+                          "type": "movie",
+                          "state": "kept",
+                          "provider_ids": {
+                            "tmdb": [
+                              "550"
+                            ],
+                            "tvdb": [],
+                            "imdb": [
+                              "tt0137523"
+                            ]
+                          },
+                          "entered_leaving_at": null,
+                          "keep": {
+                            "id": "1:42",
+                            "collection_id": 1,
+                            "media_id": "42",
+                            "duration": "temporary",
+                            "expires_at": "2026-11-10T18:00:00Z",
+                            "extension_available_at": null,
+                            "owned_by_current_user": true
+                          }
+                        }
+                      ],
+                      "pagination": {
+                        "limit": 25,
+                        "offset": 0,
+                        "total": 1,
+                        "next_offset": null
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -159,6 +344,21 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ResultLimitExceeded"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -170,12 +370,127 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-required-scope": "media:read"
+      }
+    },
+    "/media/{item_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ItemId"
+        }
+      ],
+      "get": {
+        "operationId": "getMedia",
+        "tags": [
+          "Media"
+        ],
+        "summary": "Read exact media from a selected collection",
+        "description": "Reads a title in a selected collection using its composite ID. Checks both Leaving and Kept; Kept takes precedence if the title occurs in both. Returns 404 when the collection or title is unavailable. Embedded Keep data requires keeps:read and current access to that Keep.",
+        "responses": {
+          "200": {
+            "description": "Current media detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaResponse"
+                },
+                "examples": {
+                  "leaving": {
+                    "summary": "Leaving title",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "media_id": "42",
+                        "collection_id": 1,
+                        "title": "Example Movie",
+                        "year": 2024,
+                        "type": "movie",
+                        "state": "leaving",
+                        "provider_ids": {
+                          "tmdb": [
+                            "550"
+                          ],
+                          "tvdb": [],
+                          "imdb": [
+                            "tt0137523"
+                          ]
+                        },
+                        "entered_leaving_at": "2026-10-10T18:00:00Z",
+                        "keep": null
+                      }
+                    }
+                  },
+                  "kept": {
+                    "summary": "Kept title with keeps:read and current object access",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "media_id": "42",
+                        "collection_id": 1,
+                        "title": "Example Movie",
+                        "year": 2024,
+                        "type": "movie",
+                        "state": "kept",
+                        "provider_ids": {
+                          "tmdb": [
+                            "550"
+                          ],
+                          "tvdb": [],
+                          "imdb": [
+                            "tt0137523"
+                          ]
+                        },
+                        "entered_leaving_at": null,
+                        "keep": {
+                          "id": "1:42",
+                          "collection_id": 1,
+                          "media_id": "42",
+                          "duration": "temporary",
+                          "expires_at": "2026-11-10T18:00:00Z",
+                          "extension_available_at": null,
+                          "owned_by_current_user": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
-          "422": {
-            "$ref": "#/components/responses/ResultLimitExceeded"
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/UpstreamError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "x-required-scope": "media:read"
@@ -188,7 +503,7 @@
           "Keeps"
         ],
         "summary": "List visible Keeps",
-        "description": "Requires keeps:read. The account sees its own Keeps. A current Keep manager or owner may also see other Keeps. Authorization is evaluated on each request.",
+        "description": "Lists your Keeps. The owner and Keep managers can also see other users' Keeps.",
         "parameters": [
           {
             "$ref": "#/components/parameters/Limit"
@@ -197,14 +512,7 @@
             "$ref": "#/components/parameters/Offset"
           },
           {
-            "name": "collection_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 999999999
-            }
+            "$ref": "#/components/parameters/CollectionIdFilter"
           }
         ],
         "responses": {
@@ -214,6 +522,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KeepPage"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "1:42",
+                      "collection_id": 1,
+                      "media_id": "42",
+                      "duration": "temporary",
+                      "expires_at": "2026-11-10T18:00:00Z",
+                      "extension_available_at": null,
+                      "owned_by_current_user": true
+                    }
+                  ],
+                  "pagination": {
+                    "limit": 25,
+                    "offset": 0,
+                    "total": 1,
+                    "next_offset": null
+                  }
                 }
               }
             }
@@ -227,6 +554,21 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ResultLimitExceeded"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -238,12 +580,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "422": {
-            "$ref": "#/components/responses/ResultLimitExceeded"
           }
         },
         "x-required-scope": "keeps:read"
@@ -254,7 +590,7 @@
           "Keeps"
         ],
         "summary": "Protect an eligible Leaving title",
-        "description": "Requires keeps:write and a valid Idempotency-Key. Only configured Leaving titles can be protected. Indefinite duration additionally requires current indefinite-Keep permission. This operation removes the selected title from Leaving and adds protection; it never deletes media.",
+        "description": "Protects a title in a selected Leaving collection. Indefinite protection requires permission to keep indefinitely. Removing a title from Leaving does not delete its media.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -294,12 +630,52 @@
                   "type": "string"
                 },
                 "description": "Relative path to the created Keep."
+              },
+              "Idempotency-Replayed": {
+                "description": "Present with the string true when the successful response is replayed for the same API key and Idempotency-Key.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "example": "true"
               }
             },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KeepResponse"
+                },
+                "examples": {
+                  "temporary": {
+                    "summary": "Temporary protection",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "collection_id": 1,
+                        "media_id": "42",
+                        "duration": "temporary",
+                        "expires_at": "2026-11-10T18:00:00Z",
+                        "extension_available_at": null,
+                        "owned_by_current_user": true
+                      }
+                    }
+                  },
+                  "indefinite": {
+                    "summary": "Indefinite protection",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "collection_id": 1,
+                        "media_id": "42",
+                        "duration": "indefinite",
+                        "expires_at": null,
+                        "extension_available_at": null,
+                        "owned_by_current_user": true
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -312,6 +688,12 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -333,9 +715,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
           }
         },
         "x-required-scope": "keeps:write"
@@ -353,7 +732,7 @@
           "Keeps"
         ],
         "summary": "Read a visible Keep",
-        "description": "Requires keeps:read. The caller must own the Keep or currently have Keep manager or owner permission.",
+        "description": "Reads a Keep you own. The owner and Keep managers can also read other users' Keeps.",
         "responses": {
           "200": {
             "description": "Keep record.",
@@ -361,6 +740,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KeepResponse"
+                },
+                "examples": {
+                  "temporary": {
+                    "summary": "Temporary protection",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "collection_id": 1,
+                        "media_id": "42",
+                        "duration": "temporary",
+                        "expires_at": "2026-11-10T18:00:00Z",
+                        "extension_available_at": null,
+                        "owned_by_current_user": true
+                      }
+                    }
+                  },
+                  "indefinite": {
+                    "summary": "Indefinite protection",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "collection_id": 1,
+                        "media_id": "42",
+                        "duration": "indefinite",
+                        "expires_at": null,
+                        "extension_available_at": null,
+                        "owned_by_current_user": true
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -377,6 +786,15 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -388,9 +806,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
           }
         },
         "x-required-scope": "keeps:read"
@@ -401,7 +816,7 @@
           "Keeps"
         ],
         "summary": "Change a Keep duration",
-        "description": "Requires keeps:write and a valid Idempotency-Key. The caller must own the Keep or currently have Keep manager or owner permission. Indefinite duration requires current indefinite-Keep permission. Extending a temporary Keep follows Keep's existing extension-availability rules.",
+        "description": "Changes protection for a Keep you own or can manage. Indefinite protection requires permission to keep indefinitely. Temporary extensions follow the Keep's extension availability time.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -436,7 +851,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KeepResponse"
+                },
+                "examples": {
+                  "temporary": {
+                    "summary": "Temporary protection",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "collection_id": 1,
+                        "media_id": "42",
+                        "duration": "temporary",
+                        "expires_at": "2026-11-10T18:00:00Z",
+                        "extension_available_at": null,
+                        "owned_by_current_user": true
+                      }
+                    }
+                  },
+                  "indefinite": {
+                    "summary": "Indefinite protection",
+                    "value": {
+                      "data": {
+                        "id": "1:42",
+                        "collection_id": 1,
+                        "media_id": "42",
+                        "duration": "indefinite",
+                        "expires_at": null,
+                        "extension_available_at": null,
+                        "owned_by_current_user": true
+                      }
+                    }
+                  }
                 }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Present with the string true when the successful response is replayed for the same API key and Idempotency-Key.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "example": "true"
               }
             }
           },
@@ -451,6 +908,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -472,9 +932,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
           }
         },
         "x-required-scope": "keeps:write"
@@ -485,7 +942,7 @@
           "Keeps"
         ],
         "summary": "Remove Keep protection",
-        "description": "Requires keeps:write and a valid Idempotency-Key. The caller must own the Keep or currently have Keep manager or owner permission. Removes Keep protection only; it never deletes the title from Plex or its media files.",
+        "description": "Removes protection from a Keep you own or can manage. The media remains in Plex.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -493,7 +950,19 @@
         ],
         "responses": {
           "204": {
-            "description": "Protection removed. No response body."
+            "description": "Protection removed. No response body.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Present with the string true when the successful response is replayed for the same API key and Idempotency-Key.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "example": "true"
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidRequest"
@@ -507,8 +976,14 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -521,12 +996,81 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
           }
         },
         "x-required-scope": "keeps:write"
+      }
+    },
+    "/status": {
+      "get": {
+        "operationId": "getStatus",
+        "tags": [
+          "Status"
+        ],
+        "summary": "Read recorded worker and job status",
+        "description": "Requires the current owner role and an explicitly selected status:read scope. Returns recorded worker and job observations. Worker availability reflects heartbeat freshness; job records may be stale or absent when the worker is unavailable.",
+        "responses": {
+          "200": {
+            "description": "Local operational observations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                },
+                "example": {
+                  "data": {
+                    "version": "2.24.0",
+                    "observed_at": "2026-10-11T18:00:00Z",
+                    "worker": {
+                      "available": true,
+                      "heartbeat_at": "2026-10-11T17:59:50Z"
+                    },
+                    "jobs": [
+                      {
+                        "id": "keep-expiry",
+                        "status": "success",
+                        "last_run_at": "2026-10-11T17:59:00Z",
+                        "last_success_at": "2026-10-11T17:59:01Z",
+                        "next_run_at": "2026-10-11T18:04:00Z",
+                        "last_attempt_status": "success",
+                        "queued": false,
+                        "interval_seconds": null
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ReadConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-required-scope": "status:read"
       }
     }
   },
@@ -536,7 +1080,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "Keep API key",
-        "description": "Account-bound key created by the owner in Admin > API keys. Required scopes are documented per operation: collections:read, media:read, keeps:read, keeps:write. Never put the key in a URL."
+        "description": "Send your API key as Authorization: Bearer keep_<secret>. Create keys and choose scopes in Admin > API keys. Scopes do not override account permissions. Use HTTPS."
       }
     },
     "parameters": {
@@ -550,7 +1094,8 @@
           "maximum": 100,
           "default": 25
         },
-        "description": "Page size."
+        "description": "Page size.",
+        "example": 25
       },
       "Offset": {
         "name": "offset",
@@ -562,7 +1107,8 @@
           "maximum": 10000,
           "default": 0
         },
-        "description": "Zero-based offset. List feeds are capped at 10,000 records."
+        "description": "Zero-based offset. List feeds are capped at 10,000 records.",
+        "example": 0
       },
       "KeepId": {
         "name": "keep_id",
@@ -570,10 +1116,11 @@
         "required": true,
         "schema": {
           "type": "string",
-          "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}$",
+          "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}(?![\\s\\S])",
           "maxLength": 30
         },
-        "description": "Composite collection_id:media_id identifier, for example 1:42."
+        "description": "Composite collection_id:media_id identifier, for example 1:42.",
+        "example": "1:42"
       },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
@@ -583,9 +1130,34 @@
           "type": "string",
           "minLength": 16,
           "maxLength": 128,
-          "pattern": "^[A-Za-z0-9_-]{16,128}$"
+          "pattern": "^[A-Za-z0-9_-]{16,128}(?![\\s\\S])"
         },
-        "description": "Required on writes. A matching method, path, and body replays the successful response for 24 hours. Reuse with a different request returns 409."
+        "description": "Required on writes. A matching method, path, and body replays the successful response for 24 hours. Reuse with a different request returns 409.",
+        "example": "client-keep-create-0001"
+      },
+      "CollectionIdFilter": {
+        "name": "collection_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999999
+        },
+        "description": "Limit results to one configured collection. An unavailable collection returns 404.",
+        "example": 1
+      },
+      "ItemId": {
+        "name": "item_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}(?![\\s\\S])",
+          "maxLength": 30
+        },
+        "description": "Composite collection_id:media_id. The collection must be selected in Keep.",
+        "example": "1:42"
       }
     },
     "schemas": {
@@ -602,17 +1174,20 @@
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 100
+            "maximum": 100,
+            "description": "The requested page size."
           },
           "offset": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "The requested zero-based offset."
           },
           "total": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "The complete matching result count, bounded to 10,000."
           },
           "next_offset": {
             "type": [
@@ -620,7 +1195,8 @@
               "null"
             ],
             "minimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "The next page offset, or null when the result is complete."
           }
         }
       },
@@ -635,10 +1211,12 @@
           "collection_id": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 999999999
+            "maximum": 999999999,
+            "description": "The configured Maintainerr collection ID."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The collection label configured in Keep."
           }
         }
       },
@@ -646,41 +1224,81 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "id",
           "media_id",
           "collection_id",
           "title",
           "year",
           "type",
-          "state"
+          "state",
+          "provider_ids",
+          "entered_leaving_at",
+          "keep"
         ],
         "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}(?![\\s\\S])",
+            "maxLength": 30,
+            "description": "Composite collection_id:media_id. Use this value for exact media detail."
+          },
           "media_id": {
             "type": "string",
-            "pattern": "^[1-9][0-9]{0,19}$"
+            "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+            "description": "The positive Plex media ID, represented as a decimal string."
           },
           "collection_id": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 999999999
+            "maximum": 999999999,
+            "description": "The configured Maintainerr collection ID."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500,
+            "description": "The title supplied by Maintainerr, or Untitled when absent."
           },
           "year": {
             "type": [
               "integer",
               "null"
-            ]
+            ],
+            "description": "Release year supplied by Maintainerr, or null when unavailable."
           },
           "type": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 30,
+            "description": "Media type supplied by Maintainerr, or unknown when absent."
           },
           "state": {
             "type": "string",
             "enum": [
               "leaving",
               "kept"
-            ]
+            ],
+            "description": "The current collection state. Kept protection takes precedence when a title appears in both source feeds."
+          },
+          "provider_ids": {
+            "$ref": "#/components/schemas/ProviderIds"
+          },
+          "entered_leaving_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "UTC time from a valid timezone-aware Maintainerr addDate for Leaving media. Null for Kept media or missing, invalid, or timezone-naive source dates. This is not a deletion deadline."
+          },
+          "keep": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Keep"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Accessible local Keep record, requiring keeps:read as well as media:read and current object permission. Null when there is no accessible local record; it does not prove the title is unprotected or protected indefinitely."
           }
         }
       },
@@ -699,40 +1317,47 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}$"
+            "pattern": "^[1-9][0-9]{0,8}:[1-9][0-9]{0,19}(?![\\s\\S])",
+            "description": "The composite collection_id:media_id identifier."
           },
           "collection_id": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 999999999
+            "maximum": 999999999,
+            "description": "The configured Maintainerr collection ID."
           },
           "media_id": {
             "type": "string",
-            "pattern": "^[1-9][0-9]{0,19}$"
+            "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+            "description": "The positive Plex media ID, represented as a decimal string."
           },
           "duration": {
             "type": "string",
             "enum": [
               "temporary",
               "indefinite"
-            ]
+            ],
+            "description": "Temporary protection expires; indefinite protection has no scheduled expiry."
           },
           "expires_at": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Scheduled protection expiry in UTC, or null for indefinite protection."
           },
           "extension_available_at": {
             "type": [
               "string",
               "null"
             ],
-            "format": "date-time"
+            "format": "date-time",
+            "description": "UTC time when another temporary extension becomes available. Null means no waiting period is recorded."
           },
           "owned_by_current_user": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the account behind this key owns the Keep. User IDs and names are not included."
           }
         }
       },
@@ -804,11 +1429,13 @@
           "collection_id": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 999999999
+            "maximum": 999999999,
+            "description": "The configured Maintainerr collection ID."
           },
           "media_id": {
             "type": "string",
-            "pattern": "^[1-9][0-9]{0,19}$"
+            "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+            "description": "The positive Plex media ID, represented as a decimal string."
           },
           "duration": {
             "type": "string",
@@ -891,6 +1518,235 @@
             "$ref": "#/components/schemas/Keep"
           }
         }
+      },
+      "ProviderIds": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tmdb",
+          "tvdb",
+          "imdb"
+        ],
+        "description": "Validated provider IDs from Maintainerr mediaData only. Empty arrays mean the source supplied no supported valid ID. Numeric IDs are canonical positive decimal strings. At most 10 distinct IDs are included for each provider.",
+        "properties": {
+          "tmdb": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+              "maxLength": 20
+            },
+            "description": "TMDB identifiers. Movie and television IDs use separate namespaces; include media_type when looking up an ID."
+          },
+          "tvdb": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,19}(?![\\s\\S])",
+              "maxLength": 20
+            },
+            "description": "TVDB identifiers."
+          },
+          "imdb": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^tt(?=[0-9]{7,20}(?![\\s\\S]))0*[1-9][0-9]*(?![\\s\\S])",
+              "minLength": 9,
+              "maxLength": 22
+            },
+            "description": "IMDb identifiers with a tt prefix and a nonzero 7\u201320 digit numeric part."
+          }
+        }
+      },
+      "MediaResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Media"
+          }
+        }
+      },
+      "WorkerStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "available",
+          "heartbeat_at"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "Whether the worker heartbeat is within the existing freshness tolerance (at most 300 seconds old or 30 seconds ahead). This is not full container health."
+          },
+          "heartbeat_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Recorded worker heartbeat in UTC, or null when unavailable or invalid."
+          }
+        }
+      },
+      "JobStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "last_run_at",
+          "last_success_at",
+          "next_run_at",
+          "last_attempt_status",
+          "queued",
+          "interval_seconds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "onboarding-cleanup",
+              "plex-access-sync",
+              "keep-expiry",
+              "reminder-scan",
+              "reminder-reconcile",
+              "queue-cleanup",
+              "email-digest",
+              "seerr-availability",
+              "seerr-history",
+              "connection-monitor",
+              "probe-plex",
+              "probe-maintainerr",
+              "probe-radarr",
+              "probe-sonarr",
+              "probe-tautulli",
+              "probe-email"
+            ],
+            "description": "Stable identifier from Keep's fixed job catalog."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "success",
+              "failed",
+              "waiting",
+              "review",
+              "disabled",
+              "interrupted",
+              "stale",
+              "queued"
+            ],
+            "description": "Current recorded job state, including freshness and pending-request state. No job is run by this read."
+          },
+          "last_run_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Recorded completion time of the latest finished job attempt or connection check, or null when unavailable."
+          },
+          "last_success_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Recorded completion time of the latest successful attempt, or null."
+          },
+          "next_run_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Recorded next scheduled time, or null when unavailable."
+          },
+          "last_attempt_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "success",
+              "failed",
+              "waiting",
+              "review",
+              "disabled",
+              null
+            ],
+            "description": "Recorded result of the latest finished attempt, or null when unavailable. Freshness and queue state are represented separately."
+          },
+          "queued": {
+            "type": "boolean",
+            "description": "Whether a local manual-run request is pending."
+          },
+          "interval_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 604800,
+            "description": "The configured job interval in seconds when known, otherwise null."
+          }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "observed_at",
+          "worker",
+          "jobs"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Running Keep application version."
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC time when this local observation was read."
+          },
+          "worker": {
+            "$ref": "#/components/schemas/WorkerStatus"
+          },
+          "jobs": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/JobStatus"
+            },
+            "description": "Allowlisted recorded job observations. No prose results, credentials, paths, or internal fingerprints are returned."
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Status"
+          }
+        }
       }
     },
     "responses": {
@@ -900,6 +1756,12 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_request",
+                "message": "Unsupported or repeated query parameter."
+              }
             }
           }
         }
@@ -910,7 +1772,22 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_token",
+                "message": "An active API key and account are required."
+              }
             }
+          }
+        },
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Bearer authentication challenge.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Bearer realm=\"Keep API\""
           }
         }
       },
@@ -920,6 +1797,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "scope": {
+                "summary": "The key lacks the required scope",
+                "value": {
+                  "error": {
+                    "code": "insufficient_scope",
+                    "message": "This API key does not allow the requested operation."
+                  }
+                }
+              },
+              "permission": {
+                "summary": "The account lacks the current permission",
+                "value": {
+                  "error": {
+                    "code": "permission_denied",
+                    "message": "Indefinite Keeps require current account permission."
+                  }
+                }
+              }
             }
           }
         }
@@ -930,26 +1827,77 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "not_found",
+                "message": "Resource not available."
+              }
             }
           }
         }
       },
       "Conflict": {
-        "description": "Mutation is busy, conflicts with an earlier idempotency key, or has an uncertain outcome.",
+        "description": "Another mutation is running, the operation conflicts with current Keep state or an earlier Idempotency-Key, or an earlier outcome is uncertain.",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "busy": {
+                "summary": "Retry later with the same Idempotency-Key",
+                "value": {
+                  "error": {
+                    "code": "busy",
+                    "message": "Another Keep or deletion operation is running. Retry later with the same Idempotency-Key."
+                  }
+                }
+              },
+              "conflict": {
+                "summary": "The key was reused for a different request",
+                "value": {
+                  "error": {
+                    "code": "conflict",
+                    "message": "This Idempotency-Key was used for a different request."
+                  }
+                }
+              },
+              "uncertain": {
+                "summary": "Inspect current protection before another write",
+                "value": {
+                  "error": {
+                    "code": "operation_uncertain",
+                    "message": "A previous attempt may have changed protection. Inspect the current state before making a new request."
+                  }
+                }
+              }
             }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "When present, seconds to wait before retrying. For uncertain writes, inspect current state before making a new operation.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "example": 2
           }
         }
       },
       "PayloadTooLarge": {
-        "description": "Request exceeds the write-body limit.",
+        "description": "Request exceeds the 8 KiB write-body limit or the 1 MiB application request limit.",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "payload_too_large",
+                "message": "The API request exceeds the body limit."
+              }
             }
           }
         }
@@ -960,6 +1908,12 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unsupported_media_type",
+                "message": "Use Content-Type: application/json."
+              }
             }
           }
         }
@@ -971,13 +1925,21 @@
             "schema": {
               "type": "integer",
               "minimum": 1
-            }
+            },
+            "description": "Seconds to wait before another request. A retained-write-attempt limit can require a longer wait.",
+            "example": 30
           }
         },
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "rate_limited",
+                "message": "Too many API requests. Try again later."
+              }
             }
           }
         }
@@ -988,6 +1950,12 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "internal_error",
+                "message": "Keep could not complete the request. Check the current state before retrying."
+              }
             }
           }
         }
@@ -998,16 +1966,42 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "upstream_unavailable",
+                "message": "Maintainerr could not provide a complete collection. Try again later."
+              }
             }
           }
         }
       },
       "MutationUncertain": {
-        "description": "An upstream write may have completed; inspect current state before retrying with a new key.",
+        "description": "A prerequisite upstream read failed, or an upstream write may have completed. Inspect error.code: mutation_uncertain requires checking current protection before making another operation.",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "read_failed": {
+                "summary": "A prerequisite read failed before an upstream change",
+                "value": {
+                  "error": {
+                    "code": "upstream_unavailable",
+                    "message": "Maintainerr could not provide a complete collection. Try again later."
+                  }
+                }
+              },
+              "write_uncertain": {
+                "summary": "Inspect current protection before another operation",
+                "value": {
+                  "error": {
+                    "code": "mutation_uncertain",
+                    "message": "Maintainerr could not confirm the write. Inspect current protection before trying another request."
+                  }
+                }
+              }
             }
           }
         }
@@ -1018,7 +2012,23 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "service_unavailable",
+                "message": "Keep is busy. Check the current state before retrying."
+              }
             }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "When present, seconds to wait before retrying. For uncertain writes, inspect current state before making a new operation.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "example": 5
           }
         }
       },
@@ -1028,7 +2038,22 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "method_not_allowed",
+                "message": "Method Not Allowed."
+              }
             }
+          }
+        },
+        "headers": {
+          "Allow": {
+            "description": "Methods supported by the requested resource.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "GET, HEAD, OPTIONS"
           }
         }
       },
@@ -1038,10 +2063,39 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "result_limit_exceeded",
+                "message": "Too many records. Filter by collection or narrow the media search before retrying."
+              }
+            }
+          }
+        }
+      },
+      "ReadConflict": {
+        "description": "Service or collection settings changed during the read. Reload the request against the current configuration.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "conflict",
+                "message": "Service or collection settings changed. Reload before retrying."
+              }
             }
           }
         }
       }
     }
+  },
+  "x-scope-descriptions": {
+    "collections:read": "Read selected collections.",
+    "media:read": "Read Leaving and Kept media.",
+    "keeps:read": "Read Keeps you can access.",
+    "keeps:write": "Create, change, or remove protection.",
+    "status:read": "Read worker and job status. Owner only."
   }
 }

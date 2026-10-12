@@ -50,7 +50,7 @@
         originalOpen.delete(detail);
       }
     }
-    clear.hidden = !query;
+    clear.hidden = !search.value;
     empty.hidden = !query || matches > 0;
     status.textContent = query ? `${matches} ${matches === 1 ? 'question' : 'questions'} found` : '';
   };
@@ -58,8 +58,9 @@
   clear?.addEventListener('click', () => {
     search.value = '';
     updateSearch();
-    search.focus();
+    search.focus({preventScroll: true});
   });
+  window.addEventListener('pageshow', updateSearch);
   popular?.querySelectorAll('a[href^="#faq-"]').forEach(link => {
     link.addEventListener('click', () => {
       const question = document.getElementById(link.hash.slice(1));

@@ -2193,39 +2193,7 @@ def home():
         }
 
         .search-field {
-            position: relative;
             width: min(520px, 100%);
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            width: 17px;
-            height: 17px;
-            transform: translateY(-50%);
-            color: var(--muted);
-            pointer-events: none;
-        }
-
-        .search-field input {
-            width: 100%;
-            min-height: 46px;
-            padding: 0 42px;
-            border: 1px solid var(--border);
-            border-radius: 13px;
-            outline: none;
-            background: rgba(255,255,255,0.045);
-            color: var(--text);
-            font: 600 14px/1 inherit;
-            transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
-        }
-
-        .search-field input::placeholder { color: var(--muted); }
-        .search-field input:focus {
-            border-color: rgba(245,166,35,.62);
-            background: rgba(255,255,255,0.065);
-            box-shadow: 0 0 0 3px rgba(245,166,35,.12);
         }
 
         .search-status { color: var(--muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
@@ -2647,16 +2615,13 @@ def home():
                 <button type="button" class="keep-scope-option" data-keep-scope="mine" aria-pressed="false">My Keeps</button>
             </div>
             {% endif %}
-            <div class="search-field">
-                <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"></circle>
-                    <path d="m16 16 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-                </svg>
-                <input id="media-search" type="search"
+            <div class="search-field keep-search-control">
+                {% include 'shared_search_icon.html' %}
+                <input id="media-search" class="keep-search-input" type="search"
                     placeholder="Search {{ 'kept' if is_kept_view else 'leaving' }} movies and shows"
                     aria-label="Search {{ 'kept' if is_kept_view else 'leaving' }} movies and shows"
                     autocomplete="off" spellcheck="false">
-                <button id="search-clear" class="search-clear" type="button" aria-label="Clear search" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="currentColor"/><path d="m7 7 6 6m0-6-6 6" fill="none" stroke="var(--surface)" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+                <button id="search-clear" class="search-clear keep-search-clear" type="button" aria-label="Clear search" hidden>{% include 'shared_search_clear_icon.html' %}</button>
             </div>
             <div id="search-status" class="search-status" aria-live="polite"></div>
         </div>
@@ -4511,10 +4476,12 @@ def settings_jobs():
     return response
 
 
-def jobs_snapshot():
-    return job_store().snapshot(connection_value, connection_settings,
+def jobs_snapshot(*, read_only=False):
+    store = background_jobs.Store(KEEP_DB_PATH, logger=app.logger, initialize=False) if read_only else job_store()
+    return store.snapshot(connection_value, connection_settings,
         heartbeat_path=DIGEST_WORKER_HEARTBEAT_PATH,
-        plex_interval=max(30, PLEX_ACCESS_SYNC_SECONDS), reminder_interval=REMINDER_SCAN_SECONDS)
+        plex_interval=max(30, PLEX_ACCESS_SYNC_SECONDS), reminder_interval=REMINDER_SCAN_SECONDS,
+        read_only=read_only)
 
 
 def jobs_action_response(message, status=200, **details):

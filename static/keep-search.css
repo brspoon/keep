@@ -1,0 +1,82 @@
+/* Shared search controls. Loaded after page, shell, and appearance styles. */
+:root .keep-search-control {
+  position:relative;
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  max-width:620px;
+  min-width:0;
+  margin:0;
+  padding:0;
+  border:0;
+  background:transparent;
+}
+:root .keep-search-control .keep-search-input[type=search] {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  height:48px;
+  min-height:48px;
+  margin:0;
+  padding:0 48px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  outline:0;
+  background:var(--surface-2,var(--surface));
+  color:var(--text);
+  font:inherit;
+  font-size:16px;
+  font-weight:400;
+  line-height:1.4;
+  box-shadow:none;
+  transition:none;
+  -webkit-appearance:none;
+  appearance:none;
+}
+:root .keep-search-control .keep-search-input[type=search]::placeholder { color:var(--muted); opacity:1; }
+:root .keep-search-control .keep-search-input[type=search]::-webkit-search-cancel-button,
+:root .keep-search-control .keep-search-input[type=search]::-webkit-search-decoration { -webkit-appearance:none; appearance:none; display:none; }
+:root .keep-search-control .keep-search-icon {
+  position:absolute;
+  z-index:1;
+  left:14px;
+  top:50%;
+  width:20px;
+  height:20px;
+  transform:translateY(-50%);
+  color:var(--muted);
+  pointer-events:none;
+}
+:root .keep-search-control .keep-search-clear {
+  position:absolute;
+  right:2px;
+  top:2px;
+  display:grid;
+  place-items:center;
+  box-sizing:border-box;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px;
+  margin:0;
+  padding:12px;
+  border:0;
+  border-radius:8px;
+  outline:0;
+  background:transparent;
+  color:var(--muted);
+  font:inherit;
+  line-height:1;
+  box-shadow:none;
+  transform:none;
+  cursor:pointer;
+}
+:root .keep-search-control .keep-search-clear[hidden],
+:root .keep-search-control[hidden] { display:none!important; }
+:root .keep-search-control .keep-search-clear svg { display:block; width:20px; height:20px; }
+:root .keep-search-control .keep-search-clear:hover { background:var(--surface-hover); color:var(--text); transform:none; }
+:root .keep-search-control:focus-within .keep-search-input[type=search] { border-color:var(--focus,var(--accent)); }
+:root .keep-search-control .keep-search-input[type=search]:focus-visible { outline:2px solid var(--focus,var(--accent)); outline-offset:2px; }
+:root .keep-search-control .keep-search-clear:focus-visible { outline:2px solid var(--focus,var(--accent)); outline-offset:-3px; }
+:root .keep-select-panel .keep-search-control { max-width:none; }

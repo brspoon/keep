@@ -123,6 +123,7 @@
         : `0 ${label}`;
     };
     input.addEventListener('input', filter); filter();
+    window.addEventListener('pageshow', filter);
     clear.addEventListener('click', () => {
       input.value = '';
       filter();

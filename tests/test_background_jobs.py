@@ -159,6 +159,107 @@ class BackgroundJobTests(unittest.TestCase):
         self.assertEqual(self.row('email-digest')['label'], 'Disabled')
         self.assertEqual(self.row('probe-sonarr')['label'], 'Setup needed')
 
+    def test_read_only_first_snapshot_does_not_create_job_schema(self):
+        path = Path(self.directory.name) / 'new jobs?readonly.sqlite3'
+        sqlite3.connect(path).close()
+        before = path.read_bytes()
+        with patch.object(background_jobs.Store, '_initialize') as initialize:
+            observer = background_jobs.Store(path, initialize=False)
+            snapshot = observer.snapshot(self.settings.get, self.connections,
+                                         heartbeat_path=self.heartbeat, now=100, read_only=True)
+        initialize.assert_not_called()
+        self.assertFalse(observer._initialized)
+        self.assertEqual(path.read_bytes(), before)
+        with sqlite3.connect(path) as db:
+            self.assertEqual(db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(), [])
+        self.assertFalse(snapshot['worker']['available'])
+        jobs = {row['id']: row for row in snapshot['jobs']}
+        self.assertEqual(jobs['keep-expiry']['status'], 'stale')
+        self.assertIsNone(jobs['keep-expiry']['last_success'])
+        self.assertEqual(jobs['plex-access-sync']['interval'], 900)
+        self.assertFalse(any(row['queued'] for row in jobs.values()))
+
+    def test_read_only_snapshot_never_flushes_retries_or_startup_recovery(self):
+        self.alive()
+        self.store._start('keep-expiry', 'unfinished', 80)
+        self.store.request_run('keep-expiry')
+        claimed = self.store.claim('keep-expiry')
+        self.store._retry_operations = {'queue-cleanup': {'start': ('queue-cleanup', 'deferred', 90, None)}}
+        self.store._startup_recovery = True
+        with sqlite3.connect(self.path) as db:
+            before = '\n'.join(db.iterdump())
+        with patch.object(self.store, '_retry_controls') as retry:
+            snapshot = self.store.snapshot(self.settings.get, self.connections,
+                                           heartbeat_path=self.heartbeat, now=100, read_only=True)
+        retry.assert_not_called()
+        self.assertTrue(self.store._startup_recovery)
+        self.assertIn('queue-cleanup', self.store._retry_operations)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual('\n'.join(db.iterdump()), before)
+            self.assertEqual(db.execute('SELECT claimed_token FROM background_job_requests WHERE job_id=?',
+                                        ('keep-expiry',)).fetchone()[0], claimed)
+        jobs = {row['id']: row for row in snapshot['jobs']}
+        self.assertEqual(jobs['keep-expiry']['status'], 'running')
+        self.assertTrue(jobs['keep-expiry']['queued'])
+        self.assertIsNone(jobs['queue-cleanup']['last_run'])
+
+    def test_read_only_snapshot_ignores_previous_connection_observations_and_requests(self):
+        self.alive()
+        old_seerr = seerr.namespace(self.settings.get)
+        old_radarr = self.connections.connection_fingerprint('radarr', self.settings.get)
+        with patch.object(background_jobs.time, 'time', return_value=90):
+            self.store.run('seerr-history', lambda: None, scope=old_seerr)
+            self.store.run('probe-radarr', lambda: None, scope=old_radarr)
+        self.store.request_run('seerr-history', scope=old_seerr)
+        self.store.request_run('probe-radarr', scope=old_radarr)
+        self.connections.record_automatic_check('radarr', old_radarr, True, now=90)
+        self.settings.update(SEERR_API_KEY='replacement-seerr', RADARR_API_KEY='replacement-radarr')
+        observer = background_jobs.Store(self.path, initialize=False)
+        snapshot = observer.snapshot(self.settings.get, self.connections,
+                                     heartbeat_path=self.heartbeat, now=100, read_only=True)
+        jobs = {row['id']: row for row in snapshot['jobs']}
+        for job_id in ('seerr-history', 'probe-radarr'):
+            self.assertEqual(jobs[job_id]['status'], 'waiting')
+            self.assertIsNone(jobs[job_id]['last_run'])
+            self.assertIsNone(jobs[job_id]['last_success'])
+            self.assertFalse(jobs[job_id]['queued'])
+
+    def test_read_only_snapshot_does_not_migrate_legacy_observations(self):
+        path = Path(self.directory.name) / 'legacy-readonly.sqlite3'
+        with sqlite3.connect(path) as db:
+            db.execute('''CREATE TABLE background_jobs (
+                job_id TEXT PRIMARY KEY,run_token TEXT NOT NULL,started REAL NOT NULL,
+                finished REAL,last_success REAL,duration REAL,status TEXT NOT NULL,
+                result TEXT NOT NULL,next_run REAL)''')
+            db.execute('INSERT INTO background_jobs VALUES (?,?,?,?,?,?,?,?,?)',
+                       ('queue-cleanup', 'old-run', 70, 80, 80, 10, 'success', 'Completed', 110))
+            db.execute('''CREATE TABLE background_job_requests (
+                job_id TEXT PRIMARY KEY, request_token TEXT NOT NULL)''')
+            db.execute('INSERT INTO background_job_requests VALUES (?,?)', ('queue-cleanup', 'old-request'))
+            before = '\n'.join(db.iterdump())
+        self.alive()
+        observer = background_jobs.Store(path, initialize=False)
+        snapshot = observer.snapshot(self.settings.get, self.connections,
+                                     heartbeat_path=self.heartbeat, now=100, read_only=True)
+        with sqlite3.connect(path) as db:
+            self.assertEqual('\n'.join(db.iterdump()), before)
+        queue = next(row for row in snapshot['jobs'] if row['id'] == 'queue-cleanup')
+        self.assertEqual(queue['last_success'], background_jobs.timestamp(80))
+        self.assertTrue(queue['queued'])
+
+    def test_read_only_database_failure_is_raised_and_missing_file_is_not_created(self):
+        path = Path(self.directory.name) / 'missing.sqlite3'
+        observer = background_jobs.Store(path, initialize=False)
+        with self.assertRaises(sqlite3.OperationalError):
+            observer.snapshot(self.settings.get, self.connections,
+                              heartbeat_path=self.heartbeat, now=100, read_only=True)
+        self.assertFalse(path.exists())
+        with patch.object(background_jobs.sqlite3, 'connect', side_effect=sqlite3.OperationalError('locked')):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.store.interval('keep-expiry', 30, read_only=True)
+            with self.assertRaises(sqlite3.OperationalError):
+                self.store.pending(read_only=True)
+
     def test_stopped_worker_marks_unfinished_run_interrupted(self):
         self.store._start('keep-expiry', 'interrupted', 1)
         self.alive(now=1)

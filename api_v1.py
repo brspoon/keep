@@ -19,9 +19,12 @@ from flask import Blueprint, g, jsonify, redirect, render_template, request, ses
 import requests
 from werkzeug.exceptions import HTTPException
 
-SCOPES = {'collections:read', 'media:read', 'keeps:read', 'keeps:write'}
+SCOPES = {'collections:read', 'media:read', 'keeps:read', 'keeps:write', 'status:read'}
 TOKEN = re.compile(r'keep_[A-Za-z0-9_-]{43}\Z')
 MEDIA_ID = re.compile(r'[1-9][0-9]{0,19}\Z')
+IMDB_ID = re.compile(r'tt[0-9]{7,20}\Z')
+FEED_TIMESTAMP = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
+                            r'(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})\Z')
 IDEMPOTENCY = re.compile(r'[A-Za-z0-9_-]{16,128}\Z')
 PAGE_SIZE = 100
 MAX_PAGES = 100
@@ -65,6 +68,45 @@ def key_expired(expires_at):
     return expires_at != 0 and expires_at <= time.time()
 
 
+def provider_identifier(provider, value):
+    """Allowlisted display identifiers, never upstream URLs or permissions."""
+    if provider in ('tmdb', 'tvdb'):
+        if type(value) is int:
+            return str(value) if 0 < value < 10 ** 20 else None
+        return value if isinstance(value, str) and MEDIA_ID.fullmatch(value) else None
+    if provider == 'imdb' and isinstance(value, str) and IMDB_ID.fullmatch(value):
+        return value if int(value[2:]) else None
+    return None
+
+
+def provider_ids(data):
+    result = {'tmdb': [], 'tvdb': [], 'imdb': []}
+    raw = data.get('providerIds')
+    raw = raw if isinstance(raw, dict) else {}
+    for provider, ids in result.items():
+        direct = provider_identifier(provider, data.get(provider + 'Id'))
+        if direct:
+            ids.append(direct)
+        values = raw.get(provider)
+        for value in values if isinstance(values, list) else []:
+            identifier = provider_identifier(provider, value)
+            if identifier and identifier not in ids:
+                ids.append(identifier)
+            if len(ids) >= 10:
+                break
+    return result
+
+
+def observed_timestamp(value):
+    if not isinstance(value, str) or not FEED_TIMESTAMP.fullmatch(value):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00')).astimezone(
+            timezone.utc).isoformat().replace('+00:00', 'Z')
+    except (ValueError, OverflowError):
+        return None
+
+
 def key_activity_description(action, name, scopes=None, expires_at=None):
     verb = {'create': 'Created', 'revoke': 'Revoked', 'rotate': 'Replaced',
             'remove': 'Removed'}[action]
@@ -103,6 +145,8 @@ class ApiV1:
         self.blueprint.register_error_handler(Exception, self.unexpected)
         for path, methods, function in (
                 ('/collections', ['GET'], self.collections), ('/media', ['GET'], self.media),
+                ('/media/<item_id>', ['GET'], self.get_media),
+                ('/status', ['GET'], self.status),
                 ('/keeps', ['GET'], self.keeps), ('/keeps', ['POST'], self.mutate),
                 ('/keeps/<keep_id>', ['GET'], self.get_keep),
                 ('/keeps/<keep_id>', ['PATCH', 'DELETE'], self.mutate)):
@@ -301,13 +345,24 @@ class ApiV1:
         except (requests.RequestException, ValueError, TypeError):
             raise ApiProblem(502, 'upstream_unavailable', 'Maintainerr could not provide a complete collection. Try again later.') from None
 
-    def media(self):
+    def media_keeps(self, db, key, profile, selected):
+        if 'keeps:read' not in json.loads(key['scopes']):
+            return {}
+        return {(int(row['collection_id']), row['media_id']): self.keep_row(row, profile['plex_id'])
+                for row in self.saved_keeps(db, selected, profile)}
+
+    def enrich_media_keeps(self, rows, selected):
+        # Upstream reads can be slow. Read current object permissions and local
+        # ownership afterward so a changed grant cannot expose another user's Keep.
         with closing(self.keep.attribution_db()) as db:
-            self.current(db, 'media:read')
-        values, selected = self.parameters(('limit', 'offset', 'collection_id', 'search', 'state'))
-        state, search = request.args.get('state', 'leaving'), request.args.get('search', '')
-        if state not in ('leaving', 'kept', 'all') or len(search) > 100:
-            raise ApiProblem(400, 'invalid_request', 'Invalid media filter.')
+            key, profile = self.current(db, 'media:read')
+            visible_keeps = self.media_keeps(db, key, profile, selected)
+        for row in rows:
+            row['keep'] = visible_keeps.get((row['collection_id'], row['media_id']))
+        return rows
+
+    def media_rows(self, selected, state, search='', *, exact_id=None, provider=None,
+                   provider_id=None, media_type=None):
         rows, deadline = [], time.monotonic() + 20
         for cid in sorted(selected):
             kept = self.feed(cid, 'exclusions', deadline)
@@ -317,18 +372,101 @@ class ApiV1:
                 if state not in (label, 'all'):
                     continue
                 for item in source:
-                    if label == 'leaving' and str(item['mediaServerId']) in kept_ids:
+                    media_id = str(item['mediaServerId'])
+                    if label == 'leaving' and media_id in kept_ids:
+                        continue
+                    if exact_id is not None and media_id != exact_id:
                         continue
                     data = item['mediaData']
                     title = str(data.get('title') or 'Untitled')[:500]
                     if search.casefold() not in title.casefold():
                         continue
-                    rows.append({'media_id': str(item['mediaServerId']), 'collection_id': cid,
+                    kind = ('movie' if data.get('type') == 'movie' else
+                            'show' if data.get('type') in ('show', 'series', 'tv') else None)
+                    if media_type and kind != media_type:
+                        continue
+                    identifiers = provider_ids(data)
+                    if provider and provider_id not in identifiers[provider]:
+                        continue
+                    rows.append({'id': f'{cid}:{media_id}', 'media_id': media_id, 'collection_id': cid,
                                  'title': title, 'year': data.get('year') if type(data.get('year')) is int else None,
-                                 'type': str(data.get('type') or 'unknown')[:30], 'state': label})
+                                 'type': str(data.get('type') or 'unknown')[:30], 'state': label,
+                                 'provider_ids': identifiers,
+                                 'entered_leaving_at': observed_timestamp(item.get('addDate')) if label == 'leaving' else None,
+                                 'keep': None})
         if selected != {cid: name for cid, name in self.selected_collections().items() if cid in selected}:
             raise ApiProblem(409, 'conflict', 'Collection settings changed. Reload before retrying.')
+        return rows
+
+    def media(self):
+        with closing(self.keep.attribution_db()) as db:
+            self.current(db, 'media:read')
+            values, selected = self.parameters(('limit', 'offset', 'collection_id', 'search', 'state',
+                                                'media_id', 'provider', 'provider_id', 'media_type'))
+        state, search = request.args.get('state', 'leaving'), request.args.get('search', '')
+        if state not in ('leaving', 'kept', 'all') or len(search) > 100:
+            raise ApiProblem(400, 'invalid_request', 'Invalid media filter.')
+        exact_id = valid_media_id(request.args['media_id']) if 'media_id' in request.args else None
+        provider, provider_id = request.args.get('provider'), request.args.get('provider_id')
+        media_type = request.args.get('media_type')
+        if media_type is not None and media_type not in ('movie', 'show'):
+            raise ApiProblem(400, 'invalid_request', 'media_type must be movie or show.')
+        if provider is not None or provider_id is not None:
+            if (provider not in ('tmdb', 'tvdb', 'imdb') or media_type is None or
+                    provider_identifier(provider, provider_id) is None):
+                raise ApiProblem(400, 'invalid_request',
+                                 'Provider lookup requires provider, a canonical provider_id, and media_type.')
+        rows = self.media_rows(selected, state, search, exact_id=exact_id, provider=provider,
+                               provider_id=provider_id, media_type=media_type)
+        self.enrich_media_keeps(rows, selected)
         return self.page(rows, values)
+
+    def get_media(self, item_id):
+        if request.args:
+            raise ApiProblem(400, 'invalid_request', 'Unsupported query parameter.')
+        with closing(self.keep.attribution_db()) as db:
+            self.current(db, 'media:read')
+            match = re.fullmatch(r'([1-9][0-9]{0,8}):([1-9][0-9]{0,19})', item_id)
+            selected = self.selected_collections()
+            if not match or int(match[1]) not in selected:
+                raise ApiProblem(404, 'not_found', 'Media not available.')
+            cid, media_id = int(match[1]), match[2]
+            selected = {cid: selected[cid]}
+        rows = self.media_rows(selected, 'all', exact_id=media_id)
+        if not rows:
+            raise ApiProblem(404, 'not_found', 'Media not available.')
+        if len(rows) != 1:
+            raise ApiProblem(502, 'upstream_unavailable', 'Maintainerr could not resolve the media identity.')
+        self.enrich_media_keeps(rows, selected)
+        return jsonify(data=rows[0])
+
+    def status(self):
+        if request.args:
+            raise ApiProblem(400, 'invalid_request', 'Unsupported query parameter.')
+        with closing(self.keep.attribution_db()) as db:
+            _, profile = self.current(db, 'status:read')
+            if profile['plex_id'] != self.keep.owner_id():
+                raise ApiProblem(403, 'permission_denied', 'Operational status is available only to the owner.')
+        snapshot = self.keep.jobs_snapshot(read_only=True)
+        statuses = {'running', 'success', 'failed', 'waiting', 'review', 'disabled', 'interrupted', 'stale', 'queued'}
+        attempts = {'success', 'failed', 'waiting', 'review', 'disabled'}
+        rows = []
+        for row in snapshot['jobs']:
+            if row['id'] not in self.keep.background_jobs.JOB_IDS:
+                continue
+            interval = row.get('interval')
+            attempt = row.get('last_attempt_status')
+            rows.append({'id': row['id'], 'status': row['status'] if row['status'] in statuses else 'stale',
+                         'last_run_at': observed_timestamp(row.get('last_run')),
+                         'last_success_at': observed_timestamp(row.get('last_success')),
+                         'next_run_at': observed_timestamp(row.get('next_run')),
+                         'last_attempt_status': attempt if attempt in attempts else None,
+                         'queued': row.get('queued') is True,
+                         'interval_seconds': interval if type(interval) is int and 1 <= interval <= 604800 else None})
+        return jsonify(data={'version': self.keep.APP_VERSION, 'observed_at': timestamp(time.time()),
+                             'worker': {'available': snapshot['worker']['available'] is True,
+                                        'heartbeat_at': observed_timestamp(snapshot['worker'].get('checked_at'))},
+                             'jobs': rows})
 
     @staticmethod
     def manager(profile, owner):
