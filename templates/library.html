@@ -39,8 +39,8 @@
   {% include 'shared_browse_empty.html' %}
 
   <div class="media-view active" data-library-unavailable="{{ 'true' if library_errors or access_unavailable else 'false' }}">
-  {% for section in sections %}<section id="library-{{ loop.index }}" data-library-key="{{ section.library_key }}">
-    <div class="section-header"><h2>{{ section.name }}</h2><span class="count">{{ section['items']|length }}</span></div>
+  {% for section in sections %}<section id="library-{{ loop.index }}" data-library-key="{{ section.library_key }}" data-alphabet-section>
+    <div class="section-header"><h2>{{ section.name }}</h2><span class="count">{{ section['items']|length }}</span>{% set alphabet_name = section.name %}{% include 'shared_alphabet_nav.html' %}</div>
     {% if section['items'] %}<div class="grid">
       {% for item in section['items'] %}<article class="card" data-title="{{ item.title }}" data-year="{{ item.year }}">
         <div class="poster-wrap"><button class="title-details-trigger" type="button" data-details-url="/api/title-details/{{ item.service }}/{{ item.id }}" aria-label="Details for {{ item.title }}" aria-haspopup="dialog"></button><span class="poster-placeholder" aria-hidden="true"><span>Artwork unavailable</span></span>

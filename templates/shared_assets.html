@@ -13,4 +13,8 @@
 {% if request.path not in ('/', '/kept') %}<script defer src="/static/keep-whats-new.js?v={{ app_version }}"></script>{% endif %}
 {% if request.path == '/settings/connections' %}<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>{% endif %}
 <link rel="stylesheet" href="/static/keep-search.css?v={{ app_version }}">
+{% if request.path in ('/', '/kept', '/library') %}
+<link rel="stylesheet" href="/static/keep-alphabet.css?v={{ app_version }}">
+<script defer src="/static/keep-alphabet.js?v={{ app_version }}"></script>
+{% endif %}
 {% endif %}

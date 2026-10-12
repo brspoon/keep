@@ -2635,7 +2635,7 @@ def home():
 
         <div class="media-view active">
             {% for collection in collections %}
-            <section id="collection-{{ collection.id }}">
+            <section id="collection-{{ collection.id }}" data-alphabet-section>
                 <div class="section-header">
                     <h2>
                         {% if is_kept_view %}
@@ -2646,12 +2646,14 @@ def home():
                         {% endif %}
                     </h2>
                     <span class="count">{{ collection["items"]|length }}</span>
+                    {% set alphabet_name = collection.name|replace(" Leaving Plex Soon", " Kept") if is_kept_view else collection.name %}
+                    {% include 'shared_alphabet_nav.html' %}
                 </div>
 
                 {% if collection["items"] %}
                 <div class="grid">
                     {% for item in collection["items"] %}
-                    <article class="card"{% if is_kept_view %} data-kept-by-viewer="{{ 'true' if item.kept_by_viewer else 'false' }}"{% endif %}>
+                    <article class="card" data-title="{{ item.mediaData.title or 'Untitled' }}"{% if is_kept_view %} data-kept-by-viewer="{{ 'true' if item.kept_by_viewer else 'false' }}"{% endif %}>
                         <div class="poster-wrap{% if not item.image_path %} poster-unavailable{% endif %}">
                             <button class="title-details-trigger" type="button" data-details-url="{{ url_for('get_title_details', source='kept' if is_kept_view else 'leaving', item_id=item.mediaServerId, collection=collection.id) }}" aria-label="Details for {{ item.mediaData.title }}" aria-haspopup="dialog"></button>
                             <span class="poster-placeholder" aria-hidden="true"><span>Artwork unavailable</span></span>
@@ -2863,6 +2865,7 @@ def home():
             searchStatus.textContent = filtering
                 ? `${totalMatches} ${totalMatches === 1 ? "title" : "titles"}${myKeeps ? " in My Keeps" : " found"}`
                 : "";
+            window.KeepAlphabet?.refresh();
         }
 
         mediaSearch.addEventListener("input", applyMediaSearch);
