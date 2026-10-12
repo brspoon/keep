@@ -23,6 +23,8 @@ import notifications_app
 import pushover
 import email_templates
 import api_v1
+import maintenance_app
+import maintenance_mailbox
 MASKED_CONNECTION_FIELDS = tuple(name for name in SECRETS if name != 'PUSHOVER_APP_TOKEN') + ("PLEX_MACHINE_IDENTIFIER",)
 from contextvars import ContextVar
 from service_discovery import discover_collections, test_plex
@@ -181,13 +183,43 @@ DUMMY_PASSWORD_HASH = password_hasher.hash(secrets.token_urlsafe(32))
 
 
 KEEP_DB_PATH = os.environ.get("KEEP_DB_PATH", "/app/data/keep.sqlite3")
-os.makedirs(os.path.dirname(os.path.abspath(KEEP_DB_PATH)), exist_ok=True)
 
+connection_settings = None
+onboarding = None
+maintenance_store = maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
 
-connection_settings = ConnectionSettings(KEEP_DB_PATH)
-onboarding = Onboarding(KEEP_DB_PATH, PLEX_OWNER_ID)
-if "PLEX_CLIENT_IDENTIFIER" not in os.environ:
-    PLEX_CLIENT_IDENTIFIER = onboarding.client_id()
+def maintenance_authority():
+    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+        row=db.execute("""SELECT p.plex_id,p.session_version,p.status,p.auth_type,p.plex_access
+            FROM installation i JOIN user_profiles p ON p.plex_id=i.owner
+            WHERE i.id=1 AND i.complete=1""").fetchone()
+    return (maintenance_app.Authority(str(row[0]),row[1],row[2:]==('active','plex','active'))
+        if row else maintenance_app.Authority('',0,False))
+
+def maintenance_configuration():
+    from connection_settings import FIELDS,PLEX_FIELDS,validate
+    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+        values=dict(db.execute('SELECT name,value FROM connection_settings'))
+        overrides={row[0] for row in db.execute('SELECT name FROM plex_connection_overrides')}
+    for name in FIELDS:
+        if name in os.environ and not(name in PLEX_FIELDS and name in overrides):
+            values[name]=os.environ[name]
+    return maintenance_app.configuration_fingerprint(values)
+
+maintenance_controller = maintenance_app.Controller(maintenance_store,
+    maintenance_app.Hooks(maintenance_authority,maintenance_configuration,
+        lambda:APP_VERSION,maintenance_mailbox.runtime_qualified))
+maintenance_app.register_flask(app,maintenance_controller,
+    read_only_about=lambda snapshot:maintenance_about(snapshot))
+
+def maintenance_work(*,authority=False):
+    def decorate(callback):
+        @wraps(callback)
+        def admitted(*args,**kwargs):
+            with maintenance_store.work(authority=authority):
+                return callback(*args,**kwargs)
+        return admitted
+    return decorate
 
 def owner_id():
     return onboarding.owner()
@@ -267,153 +299,8 @@ def attribution_db():
     return db
 
 
-with closing(attribution_db()) as db, db:
-    db.execute("BEGIN IMMEDIATE")
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS keep_attribution (
-            collection_id TEXT NOT NULL,
-            media_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            kept_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (collection_id, media_id)
-        )
-    """)
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS keep_schedules (
-            collection_id TEXT NOT NULL,
-            media_id TEXT NOT NULL,
-            expires_at TEXT,
-            extension_available_at TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (collection_id, media_id)
-        )
-    """)
-    schedule_columns = {row["name"] for row in db.execute("PRAGMA table_info(keep_schedules)")}
-    if "extension_available_at" not in schedule_columns:
-        db.execute("ALTER TABLE keep_schedules ADD COLUMN extension_available_at TEXT")
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS keep_migrations (
-            name TEXT PRIMARY KEY,
-            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            completed_at TEXT
-        )
-    """)
-    db.execute("INSERT OR IGNORE INTO keep_migrations(name) VALUES (?)",
-               (TEMPORARY_KEEP_MIGRATION,))
 
 
-with closing(attribution_db()) as db, db:
-    db.execute("BEGIN IMMEDIATE")
-    db.execute("""CREATE TABLE IF NOT EXISTS user_profiles (
-        plex_id TEXT PRIMARY KEY,
-        plex_username TEXT NOT NULL DEFAULT '',
-        email TEXT NOT NULL DEFAULT '',
-        full_name TEXT NOT NULL DEFAULT '',
-        display_name TEXT NOT NULL DEFAULT '',
-        can_remove_any INTEGER NOT NULL DEFAULT 0 CHECK (can_remove_any IN (0, 1)),
-        can_keep_indefinitely INTEGER NOT NULL DEFAULT 0 CHECK (can_keep_indefinitely IN (0, 1)),
-        can_delete_media INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_media IN (0, 1)),
-        can_delete_any INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_any IN (0, 1)),
-        auth_type TEXT NOT NULL DEFAULT 'plex',
-        status TEXT NOT NULL DEFAULT 'active',
-        password_hash TEXT NOT NULL DEFAULT '',
-        invite_token_hash TEXT,
-        invite_expires_at REAL,
-        session_version INTEGER NOT NULL DEFAULT 0,
-        last_seen_at TEXT,
-        plex_access TEXT NOT NULL DEFAULT 'active',
-        plex_checked_at TEXT,
-        plex_sync_visible INTEGER NOT NULL DEFAULT 0,
-        theme_mode TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))
-    )""")
-    profile_columns = {
-        row["name"] for row in db.execute("PRAGMA table_info(user_profiles)")
-    }
-    if "can_remove_any" not in profile_columns:
-        db.execute("ALTER TABLE user_profiles ADD COLUMN can_remove_any INTEGER NOT NULL DEFAULT 0")
-    profile_migrations = {
-        "can_keep_indefinitely": "INTEGER NOT NULL DEFAULT 0",
-        "can_delete_media": "INTEGER NOT NULL DEFAULT 0",
-        "can_delete_any": "INTEGER NOT NULL DEFAULT 0",
-        "auth_type": "TEXT NOT NULL DEFAULT 'plex'",
-        "status": "TEXT NOT NULL DEFAULT 'active'",
-        "password_hash": "TEXT NOT NULL DEFAULT ''",
-        "invite_token_hash": "TEXT",
-        "invite_expires_at": "REAL",
-        "session_version": "INTEGER NOT NULL DEFAULT 0",
-        "welcome_version": "TEXT NOT NULL DEFAULT ''",
-        "plex_access": "TEXT NOT NULL DEFAULT 'active'",
-        "plex_checked_at": "TEXT",
-        "plex_sync_visible": "INTEGER NOT NULL DEFAULT 0",
-        "theme_mode": "TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))",
-    }
-    for column, definition in profile_migrations.items():
-        if column not in profile_columns:
-            db.execute(f"ALTER TABLE user_profiles ADD COLUMN {column} {definition}")
-    db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS local_user_email_unique
-                  ON user_profiles(lower(email)) WHERE auth_type = 'local'""")
-    db.execute("""CREATE TABLE IF NOT EXISTS email_recipients (
-        email TEXT PRIMARY KEY COLLATE NOCASE,
-        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS recipient_subscriptions (
-        email TEXT NOT NULL COLLATE NOCASE,
-        collection_id INTEGER NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-        PRIMARY KEY (email, collection_id)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (
-        action TEXT NOT NULL,
-        client_key TEXT NOT NULL,
-        window_started INTEGER NOT NULL,
-        attempts INTEGER NOT NULL,
-        PRIMARY KEY (action, client_key)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS activity_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        actor_id TEXT NOT NULL DEFAULT '',
-        actor_name TEXT NOT NULL DEFAULT '',
-        action TEXT NOT NULL,
-        description TEXT NOT NULL
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS media_libraries (
-        library_key TEXT PRIMARY KEY,
-        service TEXT NOT NULL CHECK (service IN ('radarr', 'sonarr')),
-        external_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        path TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(service, external_id)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS user_library_permissions (
-        user_id TEXT NOT NULL,
-        library_key TEXT NOT NULL,
-        PRIMARY KEY(user_id, library_key),
-        FOREIGN KEY(user_id) REFERENCES user_profiles(plex_id) ON DELETE CASCADE,
-        FOREIGN KEY(library_key) REFERENCES media_libraries(library_key) ON DELETE CASCADE
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS user_feature_acknowledgements (
-        user_id TEXT NOT NULL,
-        feature_key TEXT NOT NULL,
-        version TEXT NOT NULL,
-        acknowledged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY(user_id, feature_key)
-    )""")
-    for recipient in db.execute("SELECT email FROM email_recipients").fetchall():
-        db.executemany("""INSERT OR IGNORE INTO recipient_subscriptions
-            (email, collection_id, enabled) VALUES (?, ?, 1)""",
-            ((recipient["email"], collection_id)
-             for collection_id in recipient_collection_ids()))
-    # Migrate names cached by the former Seerr integration, if present.
-    old_names = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'keeper_names'"
-    ).fetchone()
-    if old_names:
-        db.execute("""INSERT OR IGNORE INTO user_profiles(plex_id, display_name)
-                      SELECT plex_id, display_name FROM keeper_names""")
 
 
 def short_keeper_name(full_name):
@@ -531,6 +418,7 @@ def get_authorized_plex_user_ids():
     return authorized
 
 
+@maintenance_work(authority=True)
 def sync_plex_user_access():
     authorized = get_authorized_plex_user_ids()
     if authorized is None:
@@ -578,6 +466,7 @@ def token_digest(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+@maintenance_work()
 def persistent_rate_limit(action, limit, window_seconds):
     """Return a 429 response after a per-client fixed-window limit is exhausted."""
     now = int(time.time())
@@ -618,6 +507,7 @@ def activity_actor(user=None):
     )
 
 
+@maintenance_work()
 def log_activity(action, description, actor=None):
     actor_id, actor_name = activity_actor(actor)
     try:
@@ -819,6 +709,7 @@ def keep_migration_started_at():
     return datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
 
+@maintenance_work()
 def migrate_existing_keep_schedules(exclusions_by_collection=None):
     """Give every exclusion present at upgrade a fresh, one-time 30-day keep."""
     with closing(attribution_db()) as db:
@@ -1463,6 +1354,7 @@ def get_recipient_delivery_preferences():
     return preferences
 
 
+@maintenance_work()
 def send_email(to_addresses, subject, html_body, text_body):
     if not email_enabled():
         raise RuntimeError('Email is disabled')
@@ -1499,6 +1391,7 @@ def send_email(to_addresses, subject, html_body, text_body):
             raise RuntimeError("SMTP rejected one or more digest recipients")
 
 
+@maintenance_work()
 def send_notification_email(to_addresses, subject, html_body, text_body):
     """Recheck effective SMTP settings immediately before delivery."""
     token = _settings_snapshot.set(connection_settings.snapshot())
@@ -1508,6 +1401,7 @@ def send_notification_email(to_addresses, subject, html_body, text_body):
         _settings_snapshot.reset(token)
 
 
+@maintenance_work()
 def send_notification_email_test(address):
     subject, body, plain = email_templates.notification_email(
         'Keep test notification', 'Your Keep email notifications are working.',
@@ -1516,12 +1410,14 @@ def send_notification_email_test(address):
     return notifications.Outcome('accepted')
 
 
+@maintenance_work()
 def send_notification_push_test(credentials):
     return pushover.send(credentials.app_token, credentials.user_key,
         'Your Keep Pushover notifications are working.', title='Keep test notification',
         device=credentials.device)
 
 
+@maintenance_work()
 def send_local_setup_email(profile, token, reset=False):
     setup_url = f"{connection_value('KEEP_URL').rstrip('/')}/auth/local/setup/{token}"
     name = profile["display_name"] or profile["full_name"] or "there"
@@ -1537,6 +1433,7 @@ def private_setup_link(token):
     return response
 
 
+@maintenance_work(authority=True)
 def issue_local_setup(plex_id, reset=False):
     token = secrets.token_urlsafe(32)
     with closing(attribution_db()) as db, db:
@@ -1751,6 +1648,7 @@ def get_collection_exclusions(collection_id):
     return cache[cache_key]
 
 
+@maintenance_work()
 def change_maintainerr_exclusion(media_id, collection_id, action):
     response = requests.post(
         f"{connection_value('MAINTAINERR_URL')}/api/rules/exclusion",
@@ -4087,6 +3985,7 @@ def settings_page():
     return redirect(url_for("settings_users"))
 
 
+@maintenance_work()
 def test_smtp_connection(getter=None):
     """Verify encrypted transport and optional authentication without sending mail."""
     import ssl
@@ -4623,6 +4522,30 @@ def about_diagnostics(snapshot):
     return json.dumps(details, indent=2)
 
 
+def maintenance_about(maintenance_snapshot):
+    """Render recorded owner About without normal middleware/context processors."""
+    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+        db.row_factory=sqlite3.Row
+        profile=db.execute('SELECT * FROM user_profiles WHERE plex_id=?',
+            (str((session.get('plex_user') or {}).get('id','')),)).fetchone()
+        libraries=[dict(row) for row in db.execute('SELECT * FROM media_libraries')]
+    token=_settings_snapshot.set(connection_settings.snapshot())
+    try:
+        snapshot=about_snapshot()
+        snapshot.update(can_check=False,reason='Maintenance is in progress.')
+        document=app.jinja_env.get_template('about.html').render(
+            app_version=APP_VERSION,theme_mode=profile['theme_mode'],owner=True,
+            plex_user=session.get('plex_user'),csrf_token=get_csrf_token(),
+            capabilities={'delete_media':True},granted_libraries=libraries,
+            about_snapshot=snapshot,diagnostics=about_diagnostics(snapshot),
+            maintenance_snapshot=maintenance_snapshot,notice=None,error=None,
+            show_announcement=False,announcement_version=ANNOUNCEMENT_VERSION)
+    finally:
+        _settings_snapshot.reset(token)
+    response=app.response_class(document,mimetype='text/html')
+    response.headers['Cache-Control']='no-store'
+    return response
+
 @app.get('/settings/about')
 def settings_about():
     denied = require_owner()
@@ -4630,7 +4553,7 @@ def settings_about():
         return denied
     snapshot = about_snapshot()
     response = app.make_response(render_template('about.html', about_snapshot=snapshot,
-        diagnostics=about_diagnostics(snapshot), notice=session.pop('about_notice', None),
+        diagnostics=about_diagnostics(snapshot), maintenance_snapshot=maintenance_controller.snapshot(user=session.get('plex_user')), notice=session.pop('about_notice', None),
         error=session.pop('about_error', None)))
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -5839,7 +5762,7 @@ def release_store():
     return store
 
 
-def background_maintenance_once(state):
+def _background_maintenance_once(state):
     """One existing worker pass, with durable, credential-free job results."""
     jobs = job_store()
     try:
@@ -5898,6 +5821,11 @@ def background_maintenance_once(state):
         app.logger.warning('Some notification deliveries need review')
 
 
+def background_maintenance_once(state):
+    return maintenance_app.worker_step(maintenance_store,
+        lambda:_background_maintenance_once(state),authority=True)[1]
+
+
 def run_maintenance_job(jobs, job_id, callback, *, fallback=None, **options):
     """A failed job retries next pass while unrelated maintenance continues."""
     try:
@@ -5935,40 +5863,9 @@ def seerr_job_due(kind, getter, now=None):
         row = db.execute('SELECT updated FROM seerr_cache WHERE scope=?', (scope,)).fetchone()
         return not row or now >= row['updated'] + job_store().interval('seerr-history', seerr.REFRESH_INTERVAL)
 
-with closing(attribution_db()) as db, db:
-    db.execute("BEGIN IMMEDIATE")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_queue (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        collection_id INTEGER NOT NULL,
-        media_id TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        received_at REAL NOT NULL,
-        batch_id TEXT
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_batches (
-        id TEXT PRIMARY KEY,
-        status TEXT NOT NULL,
-        created_at REAL NOT NULL,
-        detail TEXT
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_deliveries (
-        batch_id TEXT NOT NULL,
-        email TEXT NOT NULL COLLATE NOCASE,
-        sent_at REAL NOT NULL,
-        PRIMARY KEY (batch_id, email)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_reminders (
-        collection_id INTEGER NOT NULL,
-        media_id TEXT NOT NULL,
-        episode TEXT NOT NULL,
-        queue_id INTEGER NOT NULL,
-        queued_at REAL NOT NULL,
-        PRIMARY KEY (collection_id, media_id, episode)
-    )""")
-    db.execute("""CREATE INDEX IF NOT EXISTS notification_pending
-                  ON notification_queue(batch_id, received_at)""")
 
 
+@maintenance_work()
 def cancel_queued_notifications(collection_id, media_id):
     """Remove every unsent notification for one title."""
     with closing(attribution_db()) as db, db:
@@ -5978,6 +5875,7 @@ def cancel_queued_notifications(collection_id, media_id):
         ).rowcount
 
 
+@maintenance_work()
 def queue_notifications(collection_id, media_ids, kind, now=None):
     now = time.time() if now is None else now
     with closing(attribution_db()) as db, db:
@@ -5997,6 +5895,7 @@ def queue_notifications(collection_id, media_ids, kind, now=None):
                            (collection_id, str(media_id), kind, now))
 
 
+@maintenance_work()
 def prune_notification_queue():
     """Drop pending titles that are no longer active in their collection."""
     with closing(attribution_db()) as db:
@@ -6099,6 +5998,7 @@ def reminder_episode(item):
         return None
 
 
+@maintenance_work()
 def reconcile_reminder_queue():
     """Resolve aggregate webhooks and deduplicate warnings before any batch sends.
 
@@ -6153,6 +6053,7 @@ def reconcile_reminder_queue():
                 db.execute("DELETE FROM notification_queue WHERE id = ?", (row["id"],))
 
 
+@maintenance_work()
 def queue_due_reminders(now=None):
     """Catch up active, unprotected titles with at most seven days remaining.
 
@@ -6240,8 +6141,30 @@ def fresh_notification_call(callback, *args):
         _settings_snapshot.reset(token)
 
 
+class MaintenanceNotificationRuntime(notifications_app.Runtime):
+    @maintenance_work(authority=True)
+    def recover_after_lock(self, *args, **kwargs):
+        return super().recover_after_lock(*args, **kwargs)
+
+    @maintenance_work()
+    def process_digest(self, *args, **kwargs):
+        return super().process_digest(*args, **kwargs)
+
+    @maintenance_work()
+    def process_operational(self, *args, **kwargs):
+        return super().process_operational(*args, **kwargs)
+
+    @maintenance_work()
+    def observe_recorded(self, *args, **kwargs):
+        return super().observe_recorded(*args, **kwargs)
+
+    @maintenance_work()
+    def send(self, *args, **kwargs):
+        return super().send(*args, **kwargs)
+
+
 def notification_runtime():
-    return notifications_app.Runtime(notifications_app.Helpers(
+    return MaintenanceNotificationRuntime(notifications_app.Helpers(
         store=lambda: notification_store(), settings=lambda: notification_settings_store(),
         collections=lambda: fresh_notification_call(get_collections),
         email_preferences=lambda: get_recipient_delivery_preferences(),
@@ -6253,6 +6176,7 @@ def notification_runtime():
         send_email=lambda addresses, subject, body, plain: send_notification_email(addresses, subject, body, plain)))
 
 
+@maintenance_work()
 def observe_notification_status():
     settings = connection_settings.snapshot()
     getter = lambda name: settings.get(name, globals().get(name, ''))
@@ -6274,6 +6198,7 @@ def observe_notification_status():
         current_connection_scopes=scopes, current_job_scopes=job_scopes)
 
 
+@maintenance_work()
 def process_digest(now=None):
     result = notification_runtime().process_digest(now=now, quiet_seconds=DIGEST_QUIET_SECONDS)
     if result == 'sent':
@@ -6291,6 +6216,7 @@ def update_digest_worker_heartbeat(now=None):
     os.utime(DIGEST_WORKER_HEARTBEAT_PATH, (timestamp, timestamp))
 
 
+@maintenance_work()
 def expire_due_keeps(now=None):
     """Release due exclusions, retaining local state whenever Maintainerr fails."""
     migrate_existing_keep_schedules()
@@ -6363,6 +6289,7 @@ def expire_due_keeps(now=None):
     return {"released": released, "missing": missing, "failed": failed}
 
 
+@maintenance_work()
 def queue_seerr_availability():
     try:
         seerr_store().queue_availability(connection_value)
@@ -6371,77 +6298,99 @@ def queue_seerr_availability():
         app.logger.warning('Could not queue Seerr availability sync; scheduled Seerr sync remains available')
 
 
+@maintenance_work()
+def seerr_worker_once():
+    try:
+        settings = connection_settings.snapshot()
+        getter = lambda key: settings.get(key, '')
+        store = seerr_store()
+        jobs = job_store()
+        force_availability = jobs.requested('seerr-availability', first_attempt=True,
+                                          scope=seerr.namespace(getter))
+        availability = (jobs.run('seerr-availability', lambda: store.process_availability(
+                getter, **({'force': True} if force_availability else {})),
+            scope=seerr.namespace(getter),
+            result_fn=lambda result: ('success', 'Completed') if result
+                else ('failed', 'Connection unavailable') if jobs.requested('seerr-availability')
+                else ('waiting', 'Waiting for queued work')) if force_availability or seerr_job_due('availability', getter)
+            else store.process_availability(getter))
+        if availability is None and force_availability:
+            jobs.retry_unstarted('seerr-availability')
+        if availability:
+            app.logger.info('Seerr availability sync requested after media deletion')
+    except Exception:
+        app.logger.warning('Seerr availability sync deferred; background retry pending')
+    try:
+        settings = connection_settings.snapshot()
+        getter = lambda key: settings.get(key, '')
+        if connection_settings.configured('seerr', getter):
+            fingerprint = connection_settings.connection_fingerprint('seerr', getter)
+            try:
+                store = seerr_store()
+                jobs = job_store()
+                force_history = jobs.requested('seerr-history', first_attempt=True,
+                                              scope=seerr.namespace(getter))
+                refreshed = (jobs.run('seerr-history', lambda: store.refresh(getter, automatic=not force_history),
+                    interval=jobs.interval('seerr-history', seerr.REFRESH_INTERVAL),
+                    scope=seerr.namespace(getter),
+                    result_fn=lambda result: ('success', 'Completed') if result is not None
+                        else ('failed', 'Connection unavailable') if jobs.requested('seerr-history')
+                        else ('waiting', 'Waiting for the next scheduled check'))
+                    if force_history or seerr_job_due('history', getter) else store.refresh(getter, automatic=True))
+            except (seerr.RefreshBusy, background_jobs.RetryUnstarted):
+                raise
+            except Exception:
+                before, after = connection_settings.record_automatic_check('seerr', fingerprint, False)
+                if after == 2:
+                    app.logger.warning('Seerr automatic connection check failed twice')
+                raise
+            if refreshed is not None:
+                before, _ = connection_settings.record_automatic_check('seerr', fingerprint, True)
+                if before:
+                    app.logger.info('Seerr automatic connection check recovered')
+    except Exception:
+        # No URLs, credentials, upstream response bodies, or account data.
+        app.logger.warning('Seerr background refresh deferred; retaining previous history')
+
+
 def seerr_refresh_worker():
-    """Isolate bounded Seerr I/O from mail delivery and keep maintenance."""
     while True:
         try:
-            settings = connection_settings.snapshot()
-            getter = lambda key: settings.get(key, '')
-            store = seerr_store()
-            jobs = job_store()
-            force_availability = jobs.requested('seerr-availability', first_attempt=True,
-                                              scope=seerr.namespace(getter))
-            availability = (jobs.run('seerr-availability', lambda: store.process_availability(
-                    getter, **({'force': True} if force_availability else {})),
-                scope=seerr.namespace(getter),
-                result_fn=lambda result: ('success', 'Completed') if result
-                    else ('failed', 'Connection unavailable') if jobs.requested('seerr-availability')
-                    else ('waiting', 'Waiting for queued work')) if force_availability or seerr_job_due('availability', getter)
-                else store.process_availability(getter))
-            if availability is None and force_availability:
-                jobs.retry_unstarted('seerr-availability')
-            if availability:
-                app.logger.info('Seerr availability sync requested after media deletion')
+            maintenance_app.worker_step(maintenance_store,seerr_worker_once)
         except Exception:
-            app.logger.warning('Seerr availability sync deferred; background retry pending')
-        try:
-            settings = connection_settings.snapshot()
-            getter = lambda key: settings.get(key, '')
-            if connection_settings.configured('seerr', getter):
-                fingerprint = connection_settings.connection_fingerprint('seerr', getter)
-                try:
-                    store = seerr_store()
-                    jobs = job_store()
-                    force_history = jobs.requested('seerr-history', first_attempt=True,
-                                                  scope=seerr.namespace(getter))
-                    refreshed = (jobs.run('seerr-history', lambda: store.refresh(getter, automatic=not force_history),
-                        interval=jobs.interval('seerr-history', seerr.REFRESH_INTERVAL),
-                        scope=seerr.namespace(getter),
-                        result_fn=lambda result: ('success', 'Completed') if result is not None
-                            else ('failed', 'Connection unavailable') if jobs.requested('seerr-history')
-                            else ('waiting', 'Waiting for the next scheduled check'))
-                        if force_history or seerr_job_due('history', getter) else store.refresh(getter, automatic=True))
-                except (seerr.RefreshBusy, background_jobs.RetryUnstarted):
-                    raise
-                except Exception:
-                    before, after = connection_settings.record_automatic_check('seerr', fingerprint, False)
-                    if after == 2:
-                        app.logger.warning('Seerr automatic connection check failed twice')
-                    raise
-                if refreshed is not None:
-                    before, _ = connection_settings.record_automatic_check('seerr', fingerprint, True)
-                    if before:
-                        app.logger.info('Seerr automatic connection check recovered')
-        except Exception:
-            # No URLs, credentials, upstream response bodies, or account data.
-            app.logger.warning('Seerr background refresh deferred; retaining previous history')
+            app.logger.warning("Background admission is unavailable; retrying")
         time.sleep(30)
 
 
+def worker_startup_recovery():
+    return maintenance_app.worker_step(maintenance_store,_worker_startup_recovery,authority=True)
+
+def _worker_startup_recovery():
+    notification_runtime().recover_after_lock()
+    job_store().interrupt_running()
+
 def digest_worker():
-    import fcntl
-    lock_path = os.path.join(os.path.dirname(KEEP_DB_PATH), "digest-worker.lock")
-    with open(lock_path, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        notification_runtime().recover_after_lock()
-        job_store().interrupt_running()
-        app.logger.warning("Digest worker started; quiet window %s seconds", DIGEST_QUIET_SECONDS)
-        import threading
-        threading.Thread(target=seerr_refresh_worker, name='seerr-refresh', daemon=True).start()
-        threading.Thread(target=connection_monitor_worker, name='connection-monitor', daemon=True).start()
-        state = {'plex_sync': 0, 'reminder_scan': None}
+    import threading
+    lock_path=os.path.join(os.path.dirname(KEEP_DB_PATH),"digest-worker.lock")
+    with open(lock_path,"w") as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        recovered=False
+        state={'plex_sync':0,'reminder_scan':None}
         while True:
             update_digest_worker_heartbeat()
+            if not recovered:
+                try:
+                    admitted,_=worker_startup_recovery()
+                except (maintenance_app.MaintenanceError,maintenance_app.StorageError,sqlite3.Error,OSError):
+                    app.logger.warning("Background admission is unavailable; retrying")
+                    admitted=False
+                if not admitted:
+                    time.sleep(30)
+                    continue
+                recovered=True
+                app.logger.warning("Digest worker started; quiet window %s seconds",DIGEST_QUIET_SECONDS)
+                threading.Thread(target=seerr_refresh_worker,name='seerr-refresh',daemon=True).start()
+                threading.Thread(target=connection_monitor_worker,name='connection-monitor',daemon=True).start()
             try:
                 background_maintenance_once(state)
             except Exception:
@@ -6450,25 +6399,230 @@ def digest_worker():
             time.sleep(30)
 
 
+@maintenance_work()
+def connection_monitor_once():
+    try:
+        settings = connection_settings.snapshot()
+        getter = lambda key: settings.get(key, globals().get(key, ''))
+        jobs = job_store()
+        force = jobs.requested('connection-monitor', first_attempt=True)
+        jobs.run('connection-monitor', lambda:
+            connection_monitor.run_due(connection_settings, getter, test_smtp_connection, app.logger,
+                                       jobs=jobs, force=force),
+                 result_fn=lambda passed: ('success', 'Completed') if passed
+                     else ('failed', 'Connection unavailable'))
+    except Exception:
+        app.logger.warning('Automatic connection checks deferred; retrying')
+
+
 def connection_monitor_worker():
-    """Keep connection I/O out of digest processing and use persisted due times."""
     while True:
         try:
-            settings = connection_settings.snapshot()
-            getter = lambda key: settings.get(key, globals().get(key, ''))
-            jobs = job_store()
-            force = jobs.requested('connection-monitor', first_attempt=True)
-            jobs.run('connection-monitor', lambda:
-                connection_monitor.run_due(connection_settings, getter, test_smtp_connection, app.logger,
-                                           jobs=jobs, force=force),
-                     result_fn=lambda passed: ('success', 'Completed') if passed
-                         else ('failed', 'Connection unavailable'))
+            maintenance_app.worker_step(maintenance_store,connection_monitor_once)
         except Exception:
-            app.logger.warning('Automatic connection checks deferred; retrying')
+            app.logger.warning("Background admission is unavailable; retrying")
         time.sleep(30)
 
 
-notification_settings_store(initialize=True)
+def _initialize_application_schema():
+    global connection_settings,onboarding,PLEX_CLIENT_IDENTIFIER
+    os.makedirs(os.path.dirname(os.path.abspath(KEEP_DB_PATH)),exist_ok=True)
+    connection_settings=ConnectionSettings(KEEP_DB_PATH)
+    onboarding=Onboarding(KEEP_DB_PATH,PLEX_OWNER_ID,initialize=False,maintenance_store=maintenance_store)
+    onboarding._initialize_schema(PLEX_OWNER_ID)
+    if "PLEX_CLIENT_IDENTIFIER" not in os.environ:
+        PLEX_CLIENT_IDENTIFIER=onboarding.client_id()
+    with closing(attribution_db()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS keep_attribution (
+                collection_id TEXT NOT NULL,
+                media_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                kept_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (collection_id, media_id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS keep_schedules (
+                collection_id TEXT NOT NULL,
+                media_id TEXT NOT NULL,
+                expires_at TEXT,
+                extension_available_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (collection_id, media_id)
+            )
+        """)
+        schedule_columns = {row["name"] for row in db.execute("PRAGMA table_info(keep_schedules)")}
+        if "extension_available_at" not in schedule_columns:
+            db.execute("ALTER TABLE keep_schedules ADD COLUMN extension_available_at TEXT")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS keep_migrations (
+                name TEXT PRIMARY KEY,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT
+            )
+        """)
+        db.execute("INSERT OR IGNORE INTO keep_migrations(name) VALUES (?)",
+                   (TEMPORARY_KEEP_MIGRATION,))
+
+    with closing(attribution_db()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""CREATE TABLE IF NOT EXISTS user_profiles (
+            plex_id TEXT PRIMARY KEY,
+            plex_username TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            full_name TEXT NOT NULL DEFAULT '',
+            display_name TEXT NOT NULL DEFAULT '',
+            can_remove_any INTEGER NOT NULL DEFAULT 0 CHECK (can_remove_any IN (0, 1)),
+            can_keep_indefinitely INTEGER NOT NULL DEFAULT 0 CHECK (can_keep_indefinitely IN (0, 1)),
+            can_delete_media INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_media IN (0, 1)),
+            can_delete_any INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_any IN (0, 1)),
+            auth_type TEXT NOT NULL DEFAULT 'plex',
+            status TEXT NOT NULL DEFAULT 'active',
+            password_hash TEXT NOT NULL DEFAULT '',
+            invite_token_hash TEXT,
+            invite_expires_at REAL,
+            session_version INTEGER NOT NULL DEFAULT 0,
+            last_seen_at TEXT,
+            plex_access TEXT NOT NULL DEFAULT 'active',
+            plex_checked_at TEXT,
+            plex_sync_visible INTEGER NOT NULL DEFAULT 0,
+            theme_mode TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))
+        )""")
+        profile_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(user_profiles)")
+        }
+        if "can_remove_any" not in profile_columns:
+            db.execute("ALTER TABLE user_profiles ADD COLUMN can_remove_any INTEGER NOT NULL DEFAULT 0")
+        profile_migrations = {
+            "can_keep_indefinitely": "INTEGER NOT NULL DEFAULT 0",
+            "can_delete_media": "INTEGER NOT NULL DEFAULT 0",
+            "can_delete_any": "INTEGER NOT NULL DEFAULT 0",
+            "auth_type": "TEXT NOT NULL DEFAULT 'plex'",
+            "status": "TEXT NOT NULL DEFAULT 'active'",
+            "password_hash": "TEXT NOT NULL DEFAULT ''",
+            "invite_token_hash": "TEXT",
+            "invite_expires_at": "REAL",
+            "session_version": "INTEGER NOT NULL DEFAULT 0",
+            "welcome_version": "TEXT NOT NULL DEFAULT ''",
+            "plex_access": "TEXT NOT NULL DEFAULT 'active'",
+            "plex_checked_at": "TEXT",
+            "plex_sync_visible": "INTEGER NOT NULL DEFAULT 0",
+            "theme_mode": "TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))",
+        }
+        for column, definition in profile_migrations.items():
+            if column not in profile_columns:
+                db.execute(f"ALTER TABLE user_profiles ADD COLUMN {column} {definition}")
+        db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS local_user_email_unique
+                      ON user_profiles(lower(email)) WHERE auth_type = 'local'""")
+        db.execute("""CREATE TABLE IF NOT EXISTS email_recipients (
+            email TEXT PRIMARY KEY COLLATE NOCASE,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS recipient_subscriptions (
+            email TEXT NOT NULL COLLATE NOCASE,
+            collection_id INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            PRIMARY KEY (email, collection_id)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (
+            action TEXT NOT NULL,
+            client_key TEXT NOT NULL,
+            window_started INTEGER NOT NULL,
+            attempts INTEGER NOT NULL,
+            PRIMARY KEY (action, client_key)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            actor_id TEXT NOT NULL DEFAULT '',
+            actor_name TEXT NOT NULL DEFAULT '',
+            action TEXT NOT NULL,
+            description TEXT NOT NULL
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS media_libraries (
+            library_key TEXT PRIMARY KEY,
+            service TEXT NOT NULL CHECK (service IN ('radarr', 'sonarr')),
+            external_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            path TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(service, external_id)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS user_library_permissions (
+            user_id TEXT NOT NULL,
+            library_key TEXT NOT NULL,
+            PRIMARY KEY(user_id, library_key),
+            FOREIGN KEY(user_id) REFERENCES user_profiles(plex_id) ON DELETE CASCADE,
+            FOREIGN KEY(library_key) REFERENCES media_libraries(library_key) ON DELETE CASCADE
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS user_feature_acknowledgements (
+            user_id TEXT NOT NULL,
+            feature_key TEXT NOT NULL,
+            version TEXT NOT NULL,
+            acknowledged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(user_id, feature_key)
+        )""")
+        for recipient in db.execute("SELECT email FROM email_recipients").fetchall():
+            db.executemany("""INSERT OR IGNORE INTO recipient_subscriptions
+                (email, collection_id, enabled) VALUES (?, ?, 1)""",
+                ((recipient["email"], collection_id)
+                 for collection_id in recipient_collection_ids()))
+        # Migrate names cached by the former Seerr integration, if present.
+        old_names = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'keeper_names'"
+        ).fetchone()
+        if old_names:
+            db.execute("""INSERT OR IGNORE INTO user_profiles(plex_id, display_name)
+                          SELECT plex_id, display_name FROM keeper_names""")
+
+    with closing(attribution_db()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_id INTEGER NOT NULL,
+            media_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            received_at REAL NOT NULL,
+            batch_id TEXT
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_batches (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            detail TEXT
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_deliveries (
+            batch_id TEXT NOT NULL,
+            email TEXT NOT NULL COLLATE NOCASE,
+            sent_at REAL NOT NULL,
+            PRIMARY KEY (batch_id, email)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_reminders (
+            collection_id INTEGER NOT NULL,
+            media_id TEXT NOT NULL,
+            episode TEXT NOT NULL,
+            queue_id INTEGER NOT NULL,
+            queued_at REAL NOT NULL,
+            PRIMARY KEY (collection_id, media_id, episode)
+        )""")
+        db.execute("""CREATE INDEX IF NOT EXISTS notification_pending
+                      ON notification_queue(batch_id, received_at)""")
+    notification_settings_store(initialize=True)
+    job_store()
+    api_v1.ApiV1(sys.modules[__name__])
+
+def initialize_application_schema():
+    if maintenance_mailbox.runtime_qualified():
+        maintenance_store.initialize()
+    with maintenance_store.startup_schema(APP_VERSION):
+        _initialize_application_schema()
+
+initialize_application_schema()
+
 notification_routes = notifications_routes.register_routes(app, SimpleNamespace(
     require_owner=lambda: require_owner(), require_csrf=lambda: require_form_csrf(),
     current_account_session=lambda: current_account_session(), actor=lambda: notification_actor(),
@@ -6479,8 +6633,6 @@ notification_routes = notifications_routes.register_routes(app, SimpleNamespace(
     connections=connection_settings, quiet_seconds=DIGEST_QUIET_SECONDS,
     send_email_test=lambda address: send_notification_email_test(address),
     send_push_test=lambda credentials: send_notification_push_test(credentials)))
-job_store()
-api_v1.ApiV1(sys.modules[__name__])
 # Keep browser recovery branded after the API installs its HTTP error handlers.
 app.register_error_handler(404, missing_page)
 

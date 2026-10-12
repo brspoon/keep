@@ -10,7 +10,9 @@ import re
 import secrets
 import sqlite3
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager,nullcontext
+from pathlib import Path
+import maintenance_app
 
 TTL = 600
 
@@ -20,11 +22,17 @@ def digest(value):
 
 
 class Onboarding:
-    def __init__(self, path, legacy_owner=''):
-        self.path = path
+    def __init__(self,path,legacy_owner='',*,initialize=True,maintenance_store=None):
+        self.path=path
+        self.maintenance=maintenance_store or maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
+        if initialize:
+            with self.maintenance.startup_schema(Path(__file__).with_name('VERSION').read_text().strip()):
+                self._initialize_schema(legacy_owner)
+
+    def _initialize_schema(self,legacy_owner):
         if legacy_owner and not re.fullmatch(r'[1-9][0-9]*', legacy_owner):
             raise ValueError('PLEX_OWNER_ID must be a positive numeric Plex account ID')
-        with self.db() as db:
+        with self.db(_schema=True) as db:
             db.execute('CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, complete INTEGER NOT NULL DEFAULT 0)')
             db.execute('CREATE TABLE IF NOT EXISTS installation_metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
             db.execute("INSERT OR IGNORE INTO installation_metadata VALUES ('plex_client_id', ?)", (secrets.token_urlsafe(24),))
@@ -38,16 +46,19 @@ class Onboarding:
                 db.execute('DELETE FROM bootstrap')
 
     @contextmanager
-    def db(self, write=True):
-        db = sqlite3.connect(self.path, timeout=10)
-        try:
-            db.execute("PRAGMA secure_delete=ON")
-            with db:
-                if write:
-                    db.execute('BEGIN IMMEDIATE')
-                yield db
-        finally:
-            db.close()
+    def db(self,write=True,*,authority=False,_schema=False):
+        lease=self.maintenance.work(authority=authority) if write and not _schema else nullcontext()
+        with lease:
+            uri=Path(self.path).absolute().as_uri()+'?mode=ro'
+            db=sqlite3.connect(self.path,timeout=10) if write else sqlite3.connect(uri,uri=True,timeout=10)
+            try:
+                with db:
+                    if write:
+                        db.execute('PRAGMA secure_delete=ON')
+                        db.execute('BEGIN IMMEDIATE')
+                    yield db
+            finally:
+                db.close()
 
     def owner(self):
         with self.db(write=False) as db:
@@ -65,7 +76,7 @@ class Onboarding:
 
     def issue(self):
         code = secrets.token_urlsafe(32)
-        with self.db() as db:
+        with self.db(authority=True) as db:
             if db.execute('SELECT 1 FROM installation').fetchone():
                 raise ValueError('Ownership is already established; bootstrap is disabled')
             # Old data without an explicit owner must be recovered deliberately.
@@ -82,7 +93,7 @@ class Onboarding:
     def claim(self, code_digest, verified_owner):
         if not re.fullmatch(r'[1-9][0-9]*', verified_owner):
             raise ValueError('Invalid verified Plex identity')
-        with self.db() as db:
+        with self.db(authority=True) as db:
             if db.execute('SELECT 1 FROM installation').fetchone():
                 raise ValueError('Ownership is already established')
             if db.execute("SELECT 1 FROM sqlite_master WHERE name='user_profiles'").fetchone():
@@ -116,7 +127,7 @@ class Onboarding:
             db.execute('DELETE FROM bootstrap WHERE expires<=?', (time.time(),))
 
     def finish(self):
-        with self.db() as db:
+        with self.db(authority=True) as db:
             db.execute('UPDATE installation SET complete=1 WHERE id=1')
 
 
@@ -127,8 +138,12 @@ if __name__ == '__main__':
     parser.parse_args()
     os.umask(0o077)
     path = os.environ.get('KEEP_DB_PATH', '/app/data/keep.sqlite3')
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     try:
-        print(Onboarding(path, os.environ.get('PLEX_OWNER_ID', '')).issue())
+        store=maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
+        with store.work(authority=True):
+            os.makedirs(os.path.dirname(os.path.abspath(path)),exist_ok=True)
+            print(Onboarding(path,os.environ.get('PLEX_OWNER_ID',''),maintenance_store=store).issue())
+    except maintenance_app.MaintenanceError:
+        parser.exit(1,'Keep maintenance is in progress. Try again after it finishes.\n')
     except ValueError as error:
         parser.exit(1, str(error) + '\n')

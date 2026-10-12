@@ -5,6 +5,7 @@ Main validation retains its original bundles privately through validated_build.
 Version-release writes here require confirmed manual publication of current main.
 """
 import argparse
+import ast
 import base64
 import hashlib
 import http.client
@@ -25,9 +26,19 @@ from publish_release import github_repository, repository_visibility, require_cu
 from registry_transfer import checked_digest
 import review_image
 from candidate_publication import publication_identity
+from package_maintenance_helper import package as helper_package, write_asset as write_helper_asset
+from helper_bundle import FILES as HELPER_FILES
 
 ARCHES = ('amd64', 'arm64')
 HASH = re.compile(r'[0-9a-f]{64}\Z')
+MAINTENANCE_ROOT = Path(__file__).resolve().parents[1]
+MAINTENANCE_LIMIT = 1024 * 1024
+MAINTENANCE_PHASES = (
+    'isolated-native-daemon', 'source-packaged-real-registry-graphs',
+    'signed-enrollment-and-paired-compose', 'restart-active-work-drain-and-duplicate',
+    'real-schema-upgrade', 'unhealthy-schema-upgrade-matched-rollback',
+    'empty-store-original-index-reacquisition', 'post-commit-crash-preserves-new-write',
+)
 
 
 def evidence_names(arch):
@@ -60,7 +71,41 @@ def guard():
     version = Path('VERSION').read_text().strip()
     if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
         raise ValueError('Invalid release version')
+    require_maintenance_qualification()
     return version
+
+
+def maintenance_source(path):
+    if (not path.is_file() or path.is_symlink() or path.stat().st_size > MAINTENANCE_LIMIT
+            or any(parent.is_symlink() for parent in path.parents)):
+        raise ValueError('Current maintenance source is unavailable')
+    with path.open('rb') as stream:
+        body = stream.read(MAINTENANCE_LIMIT + 1)
+    if len(body) > MAINTENANCE_LIMIT:
+        raise ValueError('Current maintenance source exceeded its size limit')
+    return body
+
+
+def require_maintenance_qualification():
+    """Hold publication until the checked-out runtime explicitly qualifies."""
+    body = maintenance_source(MAINTENANCE_ROOT / 'maintenance_mailbox.py')
+    try:
+        tree = ast.parse(body)
+    except (SyntaxError, ValueError):
+        raise ValueError('Maintenance runtime must be explicitly qualified before publication') from None
+    bindings = [node for node in ast.walk(tree) if isinstance(node, ast.Name)
+                and node.id == 'RUNTIME_QUALIFIED' and isinstance(node.ctx, (ast.Store, ast.Del))]
+    bindings += [node for node in ast.walk(tree) if
+                 isinstance(node, ast.alias) and (node.asname or node.name.split('.')[0]) == 'RUNTIME_QUALIFIED'
+                 or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler))
+                 and node.name == 'RUNTIME_QUALIFIED']
+    declarations = [node for node in tree.body if isinstance(node, ast.Assign)
+                    and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                    and node.targets[0].id == 'RUNTIME_QUALIFIED']
+    if (len(bindings) != 1 or len(declarations) != 1
+            or not isinstance(declarations[0].value, ast.Constant)
+            or declarations[0].value.value is not True):
+        raise ValueError('Maintenance runtime must be explicitly qualified before publication')
 
 
 def bundle(arch, *, verify_files=False):
@@ -177,6 +222,213 @@ def installer_evidence(path, arch, identity):
             actual = phase.get(key)
             if (actual is not expected if isinstance(expected, bool) else actual != expected):
                 raise ValueError('Installer trial lifecycle proof is incomplete')
+
+
+def maintenance_sources():
+    """Hash the exact checked-out application, fixture and helper sources."""
+    root = MAINTENANCE_ROOT
+    files = {name: root / name for name in
+             ('app.py', 'onboarding.py', 'maintenance_app.py', 'maintenance_mailbox.py',
+              'maintenance_protocol.py', 'private_store.py')}
+    files['maintenance_trial_fixture.py'] = root / 'tests/maintenance_trial_fixture.py'
+    files['maintenance_portable_fixture.py'] = root / 'tests/portable_trial.py'
+    for path in sorted((root / 'templates').glob('about*.html')):
+        files['templates/' + path.name] = path
+    for name in ('keep-maintenance.js', 'keep-maintenance.css', 'keep-about.js'):
+        files['static/' + name] = root / 'static' / name
+
+    sources = {}
+    for name, path in files.items():
+        body = maintenance_source(path)
+        fixture = body
+        if name == 'maintenance_mailbox.py':
+            disabled, enabled = b'RUNTIME_QUALIFIED = False', b'RUNTIME_QUALIFIED = True'
+            if body.count(disabled) == 1 and enabled not in body:
+                fixture = body.replace(disabled, enabled)
+            elif body.count(enabled) != 1 or disabled in body:
+                raise ValueError('Maintenance qualification source is ambiguous')
+        sources[name] = {'source_sha256': hashlib.sha256(body).hexdigest(),
+                         'fixture_sha256': hashlib.sha256(fixture).hexdigest()}
+    helpers = {}
+    for name in HELPER_FILES:
+        body = maintenance_source(root / name)
+        helpers[name] = {'bytes': len(body), 'sha256': hashlib.sha256(body).hexdigest()}
+    runner = maintenance_source(root / 'scripts/maintenance_container_trial.py')
+    values = [node.value for node in ast.parse(runner).body if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == 'TOOLING' for target in node.targets)]
+    if len(values) != 1:
+        raise ValueError('Maintenance native tooling source is ambiguous')
+    tooling = ast.literal_eval(values[0])
+    if (not isinstance(tooling, list) or len(tooling) != 2
+            or {entry.get('repository') for entry in tooling} != {'library/docker', 'library/registry'}):
+        raise ValueError('Maintenance native tooling source is invalid')
+    return hashlib.sha256(runner).hexdigest(), sources, helpers, tooling
+
+
+def maintenance_evidence(path, arch, identity):
+    path = Path(path)
+    if (not path.is_file() or path.is_symlink() or not 0 < path.stat().st_size <= MAINTENANCE_LIMIT):
+        raise ValueError('Native maintenance evidence is required within its size limit')
+    with path.open('rb') as stream:
+        return maintenance_evidence_bytes(stream.read(MAINTENANCE_LIMIT + 1), arch, identity)
+
+
+def maintenance_evidence_bytes(data, arch, identity):
+    """Validate original native proof without rewriting its retained bytes."""
+    def unique(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError('Duplicate native maintenance evidence field')
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError('Invalid native maintenance evidence value')
+
+    if not isinstance(data, bytes) or not 0 < len(data) <= MAINTENANCE_LIMIT:
+        raise ValueError('Native maintenance evidence is required within its size limit')
+    proof = json.loads(data, object_pairs_hook=unique, parse_constant=invalid_constant)
+    if not isinstance(proof, dict):
+        raise ValueError('Native maintenance evidence is invalid')
+    candidate = proof.get('candidate')
+    if (arch not in ARCHES or proof.get('schema') != 'keep.maintenance-native-trial.v1'
+            or proof.get('architecture') != arch or proof.get('outcome') != 'passed'
+            or not isinstance(candidate, dict) or candidate != {
+                'version': identity['version'], 'revision': identity['revision'],
+                'architecture': arch, 'os': 'linux', 'image_id': identity['config_digest']}):
+        raise ValueError('Maintenance trial proof differs from the tested native image')
+    base = proof.get('base_image')
+    if (not isinstance(base, dict) or base.get('config_digest') != identity['config_digest']
+            or base.get('version') != identity['version'] or base.get('revision') != identity['revision']):
+        raise ValueError('Maintenance trial source image differs from the tested native image')
+    checked_digest(base.get('id'))
+    runner, sources, helpers, tooling = maintenance_sources()
+    if (proof.get('runner_sha256') != runner or proof.get('source_files') != sources
+            or proof.get('helper_sources') != helpers):
+        raise ValueError('Maintenance trial source differs from the current release')
+    bundle_bytes, _ = helper_package(MAINTENANCE_ROOT, '0.0.1', identity['revision'])
+    if proof.get('helper_bundle_sha256') != hashlib.sha256(bundle_bytes).hexdigest():
+        raise ValueError('Maintenance trial helper bundle differs from the current release')
+    project = proof.get('project')
+    if not isinstance(project, str) or not re.fullmatch(r'keep-maintenance-native-[a-f0-9]{12}', project):
+        raise ValueError('Maintenance trial resource identity is invalid')
+    activation = proof.get('activation')
+    if (not isinstance(activation, dict) or set(activation) != {'install_id', 'context', 'daemon_id'}
+            or activation.get('context') != project or not isinstance(activation.get('install_id'), str)
+            or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', activation['install_id'])
+            or not isinstance(activation.get('daemon_id'), str)
+            or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9:-]{0,127}', activation['daemon_id'])):
+        raise ValueError('Maintenance trial signed enrollment proof is incomplete')
+    actual_tools = proof.get('tooling')
+    if (not isinstance(actual_tools, list) or len(actual_tools) != len(tooling)
+            or any(not isinstance(actual, dict) or actual.get('reference') != expected['repository'] + '@' + expected['index_digest']
+                   or actual.get('native_digest') != expected['native'][arch]
+                   for actual, expected in zip(actual_tools, tooling))):
+        raise ValueError('Maintenance trial native tooling differs')
+    for tool in actual_tools:
+        checked_digest(tool.get('local_id'))
+    for key in ('client_binary_sha256', 'compose_binary_sha256'):
+        if not isinstance(proof.get(key), str) or not HASH.fullmatch(proof[key]):
+            raise ValueError('Maintenance trial client proof is missing')
+    images = proof.get('images')
+    expected_keys = {'index_digest', 'native_digest', 'image_id', 'version', 'revision', 'architecture'}
+    if not isinstance(images, dict) or set(images) != {'0.0.' + str(number) for number in range(1, 5)}:
+        raise ValueError('Maintenance trial immutable image graph is incomplete')
+    for version, image in images.items():
+        if (not isinstance(image, dict) or set(image) != expected_keys or image.get('version') != version
+                or image.get('revision') != identity['revision'] or image.get('architecture') != arch):
+            raise ValueError('Maintenance trial immutable image graph differs')
+        for key in ('index_digest', 'native_digest', 'image_id'):
+            checked_digest(image.get(key))
+    if any(len({image[key] for image in images.values()}) != 4
+           for key in ('index_digest', 'native_digest', 'image_id')):
+        raise ValueError('Maintenance trial immutable image graph is ambiguous')
+    phases = proof.get('phases')
+    if (not isinstance(phases, list) or len(phases) != len(MAINTENANCE_PHASES)
+            or any(not isinstance(phase, dict) or phase.get('status') != 'passed' or phase.get('error_type')
+                   for phase in phases)
+            or [phase.get('name') for phase in phases] != list(MAINTENANCE_PHASES)):
+        raise ValueError('Maintenance trial lifecycle proof is incomplete')
+    by_name = {phase['name']: phase for phase in phases}
+    required = {
+        'restart-active-work-drain-and-duplicate': {
+            'gate_closed_with_writer_held': True, 'ordinary_http_status': 503,
+            'protected_write_before_stop': True, 'protected_write_in_snapshot': True,
+            'duplicate_operation_unchanged': True},
+        'real-schema-upgrade': {'schema': 2},
+        'unhealthy-schema-upgrade-matched-rollback': {
+            'schema_restored': 2, 'failed_schema_preserved': 3, 'matched_recovery_retained': True},
+        'empty-store-original-index-reacquisition': {
+            'empty_before_load': True, 'original_index_loaded': True, 'original_native_selected': True,
+            'original_config_verified': True, 'registry_assistance': False,
+            'prior_cache_assistance': False, 'runtime_uid': 10001},
+        'post-commit-crash-preserves-new-write': {
+            'new_admitted_write_preserved': True, 'fresh_private_state_reconstruction': True,
+            'registry_assistance': False, 'post_commit_rollback': False, 'schema': 4},
+    }
+    for name, fields in required.items():
+        phase = by_name[name]
+        for key, expected in fields.items():
+            if type(phase.get(key)) is not type(expected) or phase[key] != expected:
+                raise ValueError('Maintenance trial lifecycle proof is incomplete')
+        request_id = phase.get('request_id')
+        if not isinstance(request_id, str) or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', request_id):
+            raise ValueError('Maintenance trial operation identity is invalid')
+    operation_ids = [by_name[name]['request_id'] for name in required
+                     if name != 'empty-store-original-index-reacquisition']
+    if len(set(operation_ids)) != len(operation_ids):
+        raise ValueError('Maintenance trial operations were not independent')
+    reacquire = by_name['empty-store-original-index-reacquisition']
+    if (reacquire.get('image') != images['0.0.2']
+            or reacquire['request_id'] != by_name['unhealthy-schema-upgrade-matched-rollback']['request_id']
+            or not isinstance(reacquire.get('archive_sha256'), str) or not HASH.fullmatch(reacquire['archive_sha256'])):
+        raise ValueError('Maintenance trial original-image reacquisition differs')
+    resumed = by_name['post-commit-crash-preserves-new-write']
+    old_pid, new_pid = resumed.get('terminated_helper_pid'), resumed.get('fresh_helper_pid')
+    if type(old_pid) is not int or type(new_pid) is not int or old_pid < 1 or new_pid < 1 or old_pid == new_pid:
+        raise ValueError('Maintenance trial fresh-process reconstruction is missing')
+    cleanup = proof.get('cleanup')
+    if (not isinstance(cleanup, dict) or cleanup.get('resources_absent') is not True
+            or cleanup.get('trial_volumes_removed') != [project + '_keep-data']
+            or type(cleanup.get('trial_containers_removed')) is not int or cleanup['trial_containers_removed'] < 2
+            or cleanup.get('fixture_images_removed') != 5 or type(cleanup.get('fixture_images_removed')) is not int
+            or not isinstance(cleanup.get('tooling_containers_removed'), list)
+            or len(cleanup['tooling_containers_removed']) != 3
+            or any(not isinstance(value, str) or not re.fullmatch('[a-f0-9]{64}', value)
+                   for value in cleanup['tooling_containers_removed'])
+            or len(set(cleanup['tooling_containers_removed'])) != 3 or cleanup.get('held')
+            or cleanup.get('project') != project or cleanup.get('source_candidate_preserved') is not True):
+        raise ValueError('Maintenance trial resources were not verified clean')
+    identifiers = cleanup.get('owned_service_helper_ids')
+    if (not isinstance(identifiers, list) or len(identifiers) != cleanup['trial_containers_removed']
+            or not 2 <= len(identifiers) <= 128
+            or any(not isinstance(value, str) or not re.fullmatch('[a-f0-9]{64}', value) for value in identifiers)
+            or len(set(identifiers)) != len(identifiers)):
+        raise ValueError('Maintenance trial exact container cleanup proof is incomplete')
+    aliases = cleanup.get('owned_image_aliases')
+    expected_aliases = {project + '-base:source', *[project + '-image:0.0.' + str(number) for number in range(1, 5)]}
+    if (not isinstance(aliases, list) or len(aliases) != 5
+            or any(not isinstance(row, dict) or set(row) != {'alias', 'image_id'}
+                   or not isinstance(row.get('alias'), str) for row in aliases)
+            or {row['alias'] for row in aliases} != expected_aliases):
+        raise ValueError('Maintenance trial exact image cleanup proof is incomplete')
+    for row in aliases:
+        checked_digest(row['image_id'])
+    if (len({row['image_id'] for row in aliases}) != 5
+            or next(row['image_id'] for row in aliases if row['alias'] == project + '-base:source') != base['id']
+            or not isinstance(cleanup.get('owned_network_id'), str)
+            or not re.fullmatch('[a-f0-9]{64}', cleanup['owned_network_id'])):
+        raise ValueError('Maintenance trial exact resource identity differs')
+    empty = cleanup.get('empty_store')
+    if (not isinstance(empty, dict) or set(empty) != {'daemon_container_id', 'proof_container_id', 'proof_container_absent'}
+            or empty.get('proof_container_absent') is not True
+            or empty.get('daemon_container_id') not in cleanup['tooling_containers_removed']
+            or not isinstance(empty.get('proof_container_id'), str)
+            or not re.fullmatch('[a-f0-9]{64}', empty['proof_container_id'])
+            or empty['proof_container_id'] in identifiers):
+        raise ValueError('Maintenance trial empty-store cleanup proof is incomplete')
+    return proof
 
 
 def fetch(arch):
@@ -384,11 +636,14 @@ def archive(arch, native_digest=None):
     if not installer.is_file() or installer.is_symlink():
         raise ValueError('Native one-command installer evidence is required')
     installer_evidence(installer, arch, identity)
+    maintenance = Path(f'maintenance-native-{arch}.json')
+    maintenance_evidence(maintenance, arch, identity)
     outputs = [source, source.with_name(source.name + '.sha256')]
     with tempfile.TemporaryDirectory(prefix='keep-native-evidence-') as directory:
         stage = Path(directory)
         records = []
-        retained = [*reports, portable, installer, Path('distribution') / f'source-bundle-{arch}.json']
+        retained = [*reports, portable, installer, maintenance,
+                    Path('distribution') / f'source-bundle-{arch}.json']
         if validation is not None:
             retained.append(validation_path)
             identity['main_validation'] = validation_summary(validation)
@@ -498,7 +753,7 @@ def verify_identities(version, release, digests=None, *, security_reviews=None):
                 checked_digest(identity['native_digest'])
                 checked_digest(identity['config_digest'])
                 required = set(evidence_names(arch)) | {f'portable-recovery-{arch}.json', f'installer-trial-{arch}.json',
-                                                      f'source-bundle-{arch}.json'}
+                                                      f'maintenance-native-{arch}.json', f'source-bundle-{arch}.json'}
                 require_validation = bool(os.environ.get('KEEP_VALIDATION_RUN_ID')) or os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
                 if require_validation or identity.get('main_validation') is not None:
                     required.add(f'validation-provenance-{arch}.json')
@@ -524,6 +779,8 @@ def verify_identities(version, release, digests=None, *, security_reviews=None):
                         raise ValueError('Durable native evidence member differs')
                     if record['path'] in review_members:
                         original_reviews[arch][review_members[record['path']]] = json.loads(data)
+                    if record['path'] == f'maintenance-native-{arch}.json':
+                        maintenance_evidence_bytes(data, arch, identity)
                 if f'validation-provenance-{arch}.json' in required:
                     proof = json.load(package.extractfile(prefix + f'validation-provenance-{arch}.json'))
                     verify_durable_validation(identity, proof, arch)
@@ -565,15 +822,49 @@ def aggregate():
     print('Both original native digests verified against source and security assets.')
 
 
+def archive_helper():
+    """Retain exact optional helper source in the same confirmed version draft."""
+    version = guard()
+    release = draft(version)
+    with tempfile.TemporaryDirectory(prefix='keep-release-helper-') as directory:
+        path, _ = write_helper_asset(Path.cwd(), directory, version, os.environ['GITHUB_SHA'])
+        for asset in (path, path.with_name(path.name + '.sha256')):
+            guard()
+            upload(release, asset)
+
+
+def verify_helper(version, release):
+    """Compare complete published helper bytes with this exact release source."""
+    with tempfile.TemporaryDirectory(prefix='keep-verify-helper-') as directory:
+        path, manifest = write_helper_asset(Path.cwd(), directory, version, os.environ['GITHUB_SHA'])
+        inventory = release.get('assets')
+        if not isinstance(inventory, list) or len(inventory) > 64:
+            raise ValueError('Helper release asset inventory is invalid')
+        for local in (path, path.with_name(path.name + '.sha256')):
+            matches = [asset for asset in inventory if isinstance(asset, dict) and asset.get('name') == local.name]
+            if len(matches) != 1:
+                raise ValueError('Require one original helper asset and checksum')
+            asset = matches[0]
+            if (asset.get('digest') != 'sha256:' + file_sha(local)
+                    or asset.get('size') != local.stat().st_size
+                    or asset_body(asset) != local.read_bytes()):
+                raise ValueError('Helper release source bytes differ from the tested revision')
+        return {'name': path.name, 'sha256': file_sha(path), 'bytes': path.stat().st_size,
+                'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True,
+                    separators=(',', ':')).encode('ascii')).hexdigest()}
+
+
 def verify():
     version = guard()
     digests = tested_digests()
     release = draft(version)
     identities = verify_identities(version, release, digests)
+    helper = verify_helper(version, release)
     with tempfile.TemporaryDirectory(prefix='keep-release-identity-') as directory:
         identity_path = Path(directory) / f'keep-{version}-release-materials.json'
         identity_path.write_text(json.dumps({'version': version, 'revision': os.environ['GITHUB_SHA'],
-                                            'run_id': identities[ARCHES[0]]['run_id'], 'images': identities},
+                                            'run_id': identities[ARCHES[0]]['run_id'], 'images': identities,
+                                            'maintenance_helper': helper},
                                            indent=2, sort_keys=True) + '\n')
         guard()
         upload(release, identity_path)
@@ -582,13 +873,15 @@ def verify():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=('report', 'fetch', 'archive', 'archive-native', 'aggregate', 'verify', 'prepare'))
+    parser.add_argument('mode', choices=('report', 'fetch', 'archive', 'archive-native', 'archive-helper', 'aggregate', 'verify', 'prepare'))
     parser.add_argument('architecture', nargs='?', choices=ARCHES)
     args = parser.parse_args()
     if args.mode == 'verify':
         verify()
     elif args.mode == 'prepare':
         draft(guard(), create=True)
+    elif args.mode == 'archive-helper':
+        archive_helper()
     elif args.mode == 'aggregate':
         aggregate()
     elif args.architecture:

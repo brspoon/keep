@@ -2,7 +2,7 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync('static/keep-about.js', 'utf8');
+const source = fs.readFileSync(require('node:path').join(__dirname,'../static/keep-about.js'), 'utf8');
 const baseline = changes => ({status:'success', comparison:'up_to_date', installed_version:'2.25.0', latest_version:'2.25.0', latest_tag:'2.25.0',
   last_attempt_at:'2026-10-11T12:00:00Z', last_success_at:'2026-10-11T12:00:00Z', stale:false, check_state:'idle', can_check:true,
   worker_available:true, reason:'', retry_after_seconds:0, message:'Release information checked.', releases:[{version:'2.25.0', tag:'2.25.0', published_at:'2026-10-11T12:00:00Z', url:'https://github.com/brspoon/keep/releases/tag/2.25.0'}], ...changes});
@@ -27,7 +27,7 @@ function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, init
     select(){this.selectionStart=0;this.selectionEnd=this.value.length;this.selected=true;}
   }
   document=new Element();document.hidden=hidden;document.activeElement=null;document.createElement=tag=>new Element(tag);
-  const window=new Element();
+  const window=new Element();window.events=[];window.dispatchEvent=event=>{window.events.push(event.type);return true;};
   const ids={};
   for(const id of ['about-feedback','about-copy','about-diagnostics','about-diagnostics-details','about-copy-feedback','about-check-form','about-check','about-refresh','about-snapshot','about-installed','about-latest','about-comparison','about-last-check','about-check-state','about-check-reason','about-releases-empty','about-releases'])ids[id]=new Element();
   ids['about-diagnostics'].value='{"keep_version":"2.25.0"}';
@@ -38,7 +38,7 @@ function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, init
     options.signal.addEventListener('abort',()=>reject(new Error('Aborted')),{once:true});calls.push({url,options,resolve,reject});return promise;};
   class FormData {constructor(){return new Map([['csrf_token','synthetic-csrf']]);}}
   const navigator={clipboard:clipboard?{writeText:async value=>{copies.push(value);if(clipboard==='fail')throw new Error('Denied');}}:undefined};
-  vm.runInNewContext(source,{document,window,navigator,fetch:fetchAvailable?fetch:undefined,AbortController,FormData,URLSearchParams,Intl,Date:ClockDate,
+  vm.runInNewContext(source,{document,window,navigator,CustomEvent:class{constructor(type){this.type=type;}},fetch:fetchAvailable?fetch:undefined,AbortController,FormData,URLSearchParams,Intl,Date:ClockDate,
     setTimeout:(fn,delay)=>{const id=++timeoutId;timers.set(id,{fn,due:now+delay,delay});return id;},clearTimeout:id=>timers.delete(id)});
   return {ids,document,window,calls,copies,timers,now:()=>now,
     respond(index,status,body,extra={}){calls[index].resolve({ok:status>=200&&status<300,status,redirected:false,json:async()=>body,...extra});},
@@ -167,3 +167,5 @@ test('clipboard failure exposes a focused selectable diagnostic fallback without
 test('missing fetch or malformed initial JSON preserves ordinary form fallback and diagnostic copying',async()=>{
   for(const options of [{fetchAvailable:false},{initialJson:'<not-json>'}]){const f=fixture(options);assert.equal((f.ids['about-check-form'].listeners.submit||[]).length,0);await f.ids['about-copy'].fire('click');assert.equal(f.copies.length,1);assert.equal(f.calls.length,0);}
 });
+
+test('adopting a recorded release snapshot emits one read-only maintenance refresh signal',async()=>{const f=fixture();await f.queue(baseline({check_state:'queued',can_check:false}));assert.deepEqual(f.window.events,['keep-release-updated']);});

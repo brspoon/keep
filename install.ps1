@@ -23,6 +23,11 @@ if ($null -eq $python) { throw ('Keep requires Python 3.9 or newer.' + [Environm
 & $python.Source @pythonPrefix -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'
 if ($LASTEXITCODE -ne 0) { throw ('Keep requires Python 3.9 or newer.' + [Environment]::NewLine + (Get-KeepPythonHelp)) }
 
+if ($installerArguments -contains '--maintenance-helper') {
+    & $python.Source @pythonPrefix -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)'
+    if ($LASTEXITCODE -ne 0) { throw 'The optional Keep maintenance helper requires Python 3.12 or newer. The normal installer still supports Python 3.9+.' }
+}
+
 $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ('keep-install-' + [guid]::NewGuid().ToString('N'))
 $installerPath = Join-Path $temporary 'install_keep.py'
 $previousProtocol = [System.Net.ServicePointManager]::SecurityProtocol
