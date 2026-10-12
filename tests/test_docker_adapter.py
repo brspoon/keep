@@ -19,6 +19,7 @@ import tempfile
 import traceback
 import unittest
 from unittest.mock import patch
+from urllib.parse import urlsplit
 import urllib.error
 import urllib.request
 import urllib.response
@@ -604,7 +605,7 @@ class ResolverTests(unittest.TestCase):
                 self.urls.append(url)
                 if '/releases/tags/' in url or url.endswith('/releases/latest'):return canonical(release),{}
                 if '/releases/download/' in url:return canonical(materials),{}
-                if 'auth.docker.io' in url:return canonical({'token':'anonymous-synthetic-token'}),{}
+                if urlsplit(url).hostname=='auth.docker.io':return canonical({'token':'anonymous-synthetic-token'}),{}
                 if '/blobs/' in url:return configuration,{}
                 if url.endswith(target.native_digest):return manifest,{}
                 return index,{'Docker-Content-Digest':target.index_digest}
@@ -811,7 +812,7 @@ class HTTPSRedirectTests(unittest.TestCase):
             if '/blobs/' in url:return 307,{'Location':self.CDN},b''
             if '/releases/tags/' in url:return 200,{},canonical(release)
             if '/releases/download/' in url:return 200,{},canonical(materials)
-            if 'auth.docker.io' in url:return 200,{},canonical({'token':'anonymous-private-fixture'})
+            if urlsplit(url).hostname=='auth.docker.io':return 200,{},canonical({'token':'anonymous-private-fixture'})
             if url.endswith(target.native_digest):return 200,{},manifest
             return 200,{'Docker-Content-Digest':target.index_digest},index
         change,requests,_,_=self.transport(routes)
