@@ -25,6 +25,11 @@ class Observation:
 
 class CliTests(unittest.TestCase):
     def setUp(self):
+        # Transport/state fixtures exercise the qualified Linux contract.
+        # Native host rejection is tested separately without this substitution.
+        qualification = patch.object(cli, 'require_qualified_host')
+        qualification.start()
+        self.addCleanup(qualification.stop)
         self.directory = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
         self.addCleanup(self.directory.cleanup)
         self.paths = create_private_paths()
@@ -220,6 +225,31 @@ class CliTests(unittest.TestCase):
             state.retain_request(mailbox, request)
         self.assertEqual(self.paths.read(self.state / 'accepted-requests' / (request.request_id + '.json')), original)
 
+
+
+class HostQualificationTests(unittest.TestCase):
+    def test_unqualified_hosts_cannot_enroll_or_poll_services(self):
+        for platform in ('darwin', 'win32'):
+            with self.subTest(platform=platform), patch.object(cli.sys, 'platform', platform), \
+                 patch.object(cli, 'HostState') as state, patch.object(cli, 'capture_profile') as capture, \
+                 patch.object(cli, 'create_private_paths') as paths, patch.object(cli, 'load_backend') as load:
+                with self.assertRaisesRegex(StorageError, 'qualified Linux Docker host'):
+                    cli.enroll(Mock(), Mock(), source_proof={}, backend_factory=Mock())
+                for args in (
+                    ['worker', '--state', '/synthetic/private', '--once'],
+                    ['enroll', '--state', '/synthetic/private', '--installation', '/synthetic/keep',
+                     '--docker-executable', '/synthetic/docker', '--docker-config', '/synthetic/config'],
+                ):
+                    with patch('sys.stderr', new=io.StringIO()):
+                        self.assertEqual(cli.main(args), 2)
+                state.assert_not_called(); capture.assert_not_called()
+                paths.assert_not_called(); load.assert_not_called()
+
+    def test_linux_qualification_does_not_touch_docker_or_state(self):
+        with patch.object(cli.sys, 'platform', 'linux'), patch.object(cli.os, 'name', 'posix'), \
+             patch.object(cli, 'BoundedRunner') as runner, patch.object(cli, 'HostState') as state:
+            self.assertIsNone(cli.require_qualified_host())
+            runner.assert_not_called(); state.assert_not_called()
 
 
 if __name__ == '__main__':

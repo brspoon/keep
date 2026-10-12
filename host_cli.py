@@ -32,6 +32,11 @@ def require_python(version=None):
         raise BundleError('The optional maintenance helper requires Python 3.12 or newer')
 
 
+def require_qualified_host():
+    if sys.platform != 'linux' or os.name != 'posix':
+        raise StorageError('In-app maintenance requires a qualified Linux Docker host')
+
+
 def profile_document(profile):
     return {name: ([str(value) for value in getattr(profile, name)] if name == 'compose_files'
                    else str(getattr(profile, name)) if isinstance(getattr(profile, name), Path)
@@ -215,6 +220,7 @@ class Backend:
 
 
 def enroll(paths, profile, *, source_proof, backend_factory=Backend):
+    require_qualified_host()
     state = HostState(paths, profile.state)
     with operation_lock(paths, profile.state / 'agent.lock'):
         active = state.active()
@@ -328,8 +334,10 @@ def main(argv=None, *, paths=None, backend_factory=Backend, sleep=time.sleep, no
         if name == 'worker':
             command.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
-    paths = paths or create_private_paths()
     try:
+        if args.action in ('enroll', 'worker'):
+            require_qualified_host()
+        paths = paths or create_private_paths()
         if args.action == 'install':
             body, version, revision, digest = published_bundle(args.version)
             staged = stage_bundle(paths, args.state, body, version=version, revision=revision, expected_sha256=digest)
