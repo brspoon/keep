@@ -24,7 +24,7 @@
       event.preventDefault();const button=form.querySelector('button[type=submit]');if(button.disabled)return;
       const label=button.textContent;button.disabled=true;button.textContent='Adding…';error.hidden=true;
       try {
-        const response=await fetch(form.action,{method:'POST',body:new FormData(form),credentials:'same-origin'});
+        const response=await fetch(form.getAttribute('action'),{method:'POST',body:new FormData(form),credentials:'same-origin'});
         const page=new DOMParser().parseFromString(await response.text(),'text/html');
         const problem=page.querySelector('.settings-error');
         if(!response.ok || problem || new URL(response.url).pathname!==location.pathname)throw Error(problem?.textContent.trim() || 'Could not confirm the request. Please try again.');

@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 
 function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,moveLosesFocus=false,
-  viewportHeight=800,viewportOffset=0,scrollY=250}={}) {
+  viewportHeight=800,viewportOffset=0,scrollY=250,headerTop=40,headerHeight=128,safeBottom=0}={}) {
   let document,window,nextFrame=0,offset='120px';
   const frames=new Map(),observers=[],resizeObservers=[],scrolls=[];
   class Element {
@@ -77,7 +77,8 @@ function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,moveL
   document.createElement=tag=>new Element(tag);document.createElementNS=(_,tag)=>new Element(tag);
   document.querySelectorAll=selector=>[...(body.matches(selector)?[body]:[]),...body.querySelectorAll(selector)];
   document.querySelector=selector=>document.querySelectorAll(selector)[0]||null;document.getElementById=id=>document.querySelector('#'+id);
-  body.append(view);
+  const pageHeader=new Element('header','app-header');pageHeader.docTop=headerTop;pageHeader.rect.height=headerHeight;
+  body.append(pageHeader,view);
   const sections=groups.map((group,index)=>{
     const section=new Element('section'),header=new Element('div','section-header'),title=new Element('h2','',group.name),grid=new Element('div','grid');
     section.setAttribute('data-alphabet-section','');section.id=`collection-${index+1}`;section.docTop=group.top??(200+index*2000);section.rect.height=group.height??1750;
@@ -86,7 +87,8 @@ function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,moveL
       card.hidden=Boolean(value.hidden);card.docTop=section.docTop+100+cardIndex*250;card.rect.height=220;card.append(new Element('div','title',card.dataset.title));return card;});
     grid.append(...section.cards);section.append(header,grid);section.hidden=Boolean(group.hidden);return section;});
   view.append(...sections);
-  const search=new Element('input'),clear=new Element('button'),scope=new Element('button');search.id='media-search';clear.id='search-clear';scope.setAttribute('data-keep-scope','mine');body.append(search,clear,scope);
+  const search=new Element('input'),clear=new Element('button'),scope=new Element('button'),backToTop=new Element('button','back-to-top');
+  search.id='media-search';clear.id='search-clear';backToTop.id='back-to-top';scope.setAttribute('data-keep-scope','mine');body.append(search,clear,scope,backToTop);
   window=new Element('window');window.scrollY=scrollY;window.innerHeight=viewportHeight;window.innerWidth=mobile?390:1200;
   window.visualViewport=new Element('viewport');window.visualViewport.height=viewportHeight;window.visualViewport.offsetTop=viewportOffset;
   const media=new Map();window.matchMedia=query=>{if(!media.has(query)){const match=new Element('media');match.matches=query.includes('max-width')?mobile:reduced;media.set(query,match);}return media.get(query);};
@@ -96,10 +98,10 @@ function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,moveL
   if(observerAvailable)window.MutationObserver=MutationObserver;
   window.ResizeObserver=ResizeObserver;
   vm.runInNewContext(fs.readFileSync('static/keep-alphabet.js','utf8'),{document,window,MutationObserver,ResizeObserver,requestAnimationFrame:callback=>{frames.set(++nextFrame,callback);return nextFrame;},cancelAnimationFrame:id=>frames.delete(id),
-    getComputedStyle:element=>({getPropertyValue:name=>name==='--browse-offset'?offset:'',height:`${element.getBoundingClientRect().height}px`}),parseFloat,performance:{now:()=>0}});
+    getComputedStyle:element=>({getPropertyValue:name=>name==='--browse-offset'?offset:'',height:`${element.getBoundingClientRect().height}px`,paddingBottom:element.classList.contains('alphabet-side-navigation')?`${safeBottom}px`:'0px'}),parseFloat,performance:{now:()=>0}});
   const flush=()=>{let count=0;while(frames.size){if(++count>100)throw new Error('Animation frame loop');const batch=[...frames];frames.clear();batch.forEach(([,fn])=>fn());}};
   const side=()=>document.querySelector('.alphabet-side-navigation'),buttons=()=>side()?.querySelectorAll('.alphabet-side-letter')||[];
-  return {document,window,sections,search,clear,scope,view,frames,observers,resizeObservers,scrolls,flush,side,visible:()=>buttons().filter(button=>!button.hidden).sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(button=>button.dataset.letter),
+  return {document,window,sections,search,clear,scope,view,pageHeader,backToTop,frames,observers,resizeObservers,scrolls,flush,side,visible:()=>buttons().filter(button=>!button.hidden).sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(button=>button.dataset.letter),
     button:letter=>buttons().find(button=>button.dataset.letter===letter),
     setOffset:value=>{offset=value;},scroll:top=>{window.scrollY=top;window.fire('scroll');flush();},
     setMobile:matches=>{mobile=matches;window.innerWidth=matches?390:1200;const match=window.matchMedia('(max-width: 700px)');match.matches=matches;match.fire('change',{matches});window.fire('resize');flush();},
@@ -177,6 +179,52 @@ test('desktop rail sits beside the current grid even on a wide viewport',()=>{
   assert.equal(f.side().style.left,'1348px');
   f.sections[0].rect.width=2400;f.window.fire('resize');f.flush();assert.equal(f.side().style.left,'2448px');
   f.setMobile(true);assert.equal(f.side().hidden,true);
+});
+test('a full desktop alphabet clears the visible app header and stays inside a short viewport',()=>{
+  const titles=['2001',...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+  const f=fixture([{name:'Movies',titles,height:7500}],{scrollY:0,viewportHeight:600,headerHeight:180});f.flush();
+  const index=f.side().querySelector('.alphabet-side-letters');
+  const top=()=>parseFloat(f.side().style.top),height=()=>parseFloat(index.style.maxHeight);
+  assert.equal(f.side().hidden,false);assert.equal(f.visible().length,27);
+  assert.ok(top()>=f.pageHeader.getBoundingClientRect().bottom+8);
+  assert.ok(top()+height()<=f.window.visualViewport.height-8);
+  assert.ok(height()<27*24+8,'long indexes must scroll within their available height');
+  f.button('#').focus();f.button('#').fire('keydown',{key:'End'});
+  assert.equal(f.document.activeElement,f.button('Z'));assert.equal(f.button('Z').scrollOptions.block,'nearest');assert.equal(f.scrolls.length,0);
+  f.pageHeader.rect.height=240;f.resizeObservers[0].callback();f.flush();
+  assert.ok(f.resizeObservers[0].targets.includes(f.pageHeader));
+  assert.ok(top()>=f.pageHeader.getBoundingClientRect().bottom+8);assert.ok(top()+height()<=592);
+  f.search.focus();f.scroll(300);
+  assert.equal(top(),128);assert.ok(top()+height()<=592);
+});
+test('desktop rail bounds refresh across library sections and visual viewport changes',()=>{
+  const titles=['2001',...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+  const f=fixture([{name:'Movies',titles,height:7500},{name:'Shows',titles,height:7500,top:7800}],
+    {scrollY:0,viewportHeight:600,viewportOffset:40,headerHeight:180,safeBottom:24});f.flush();
+  const index=f.side().querySelector('.alphabet-side-letters');
+  assert.ok(parseFloat(f.side().style.top)>=f.pageHeader.getBoundingClientRect().bottom+8);
+  assert.ok(parseFloat(f.side().style.top)+parseFloat(index.style.maxHeight)<=608);
+  f.scroll(8000);assert.match(index.getAttribute('aria-label'),/Shows/);assert.equal(f.visible().length,27);
+  assert.equal(f.side().style.top,'168px');
+  f.window.visualViewport.height=400;f.window.visualViewport.fire('resize');f.flush();
+  assert.equal(f.side().style.top,'168px');assert.ok(parseFloat(f.side().style.top)+parseFloat(index.style.maxHeight)<=408);
+  f.setMobile(true);assert.equal(f.side().hidden,true);
+});
+test('an index with no room below the header hides and restores focus until space returns',()=>{
+  const f=fixture([{name:'Movies',titles:['Alpha','Beta'],height:7500}],{scrollY:0,viewportHeight:600,headerHeight:180});f.flush();
+  f.button('B').focus();f.window.visualViewport.height=240;f.window.visualViewport.fire('resize');f.flush();
+  assert.equal(f.side().hidden,true);assert.equal(f.document.activeElement,f.sections[0].querySelector('.section-header'));
+  f.scroll(200);assert.equal(f.side().hidden,false);assert.ok(parseFloat(f.side().style.top)>=128);
+});
+test('a long index clears a visible back-to-top button when their horizontal bounds overlap',()=>{
+  const f=fixture([{name:'Movies',titles:['2001',...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'],height:7500}],{viewportHeight:600});f.flush();
+  const index=f.side().querySelector('.alphabet-side-letters');
+  f.backToTop.rect={top:530,left:780,width:46,height:46};f.backToTop.classList.add('visible');f.window.fire('scroll');f.flush();
+  assert.ok(parseFloat(f.side().style.top)+parseFloat(index.style.maxHeight)<=522);
+  f.backToTop.rect.left=700;f.window.fire('scroll');f.flush();
+  assert.equal(parseFloat(f.side().style.top)+parseFloat(index.style.maxHeight),592);
+  f.backToTop.rect.left=780;f.backToTop.classList.remove('visible');f.window.fire('scroll');f.flush();
+  assert.equal(parseFloat(f.side().style.top)+parseFloat(index.style.maxHeight),592);
 });
 test('desktop letters remain neutral while scrolling and retain one predictable tab stop',()=>{
   const f=fixture([{name:'Movies',titles:['Alpha','Beta','Beta again','Zulu']}]);

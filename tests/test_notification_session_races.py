@@ -25,22 +25,21 @@ class NotificationSessionRaceTests(TestCase):
         with closing(keep.attribution_db()) as db, db:
             db.execute('UPDATE user_profiles SET session_version=session_version+1 WHERE plex_id=?', (user_id,))
 
-    def test_viewer_session_revoked_between_provider_sync_and_personal_save_preserves_key_and_preferences(self):
+    def test_owner_session_revoked_between_provider_sync_and_push_save_preserves_key_and_preferences(self):
         self.install()
-        self.push('8')
-        self.login('8')
-        before = self.query("SELECT * FROM pushover_preferences WHERE user_id='8'")
+        self.push()
+        before = self.query("SELECT * FROM pushover_preferences WHERE user_id='7'")
         synchronize = notification_settings.Settings.synchronize
         def revoked(store, **kwargs):
             result = synchronize(store, **kwargs)
-            self.revoke('8')
+            self.revoke()
             return result
         with patch.object(notification_settings.Settings, 'synchronize', revoked):
-            response = self.post('/preferences?fragment=1', action='pushover', receive_pushover='1',
+            response = self.post('/settings/notifications/pushover/preferences', receive_pushover='1',
                 pushover_collection_id=str(self.cid), pushover_event=notifications.REMINDER,
                 key_mode='replace', user_key='C' * 30, device='phone')
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.query("SELECT * FROM pushover_preferences WHERE user_id='8'"), before)
+        self.assertEqual(self.query("SELECT * FROM pushover_preferences WHERE user_id='7'"), before)
         self.email_send.assert_not_called()
         self.push_send.assert_not_called()
 

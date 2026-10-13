@@ -53,6 +53,19 @@ test('idle About renders installed/current/latest facts without fetching or exec
   const f=fixture();assert.equal(f.calls.length,0);assert.equal(f.ids['about-installed'].textContent,'2.25.0');assert.equal(f.ids['about-comparison'].textContent,'Up to date');assert.equal(f.ids['about-check'].disabled,false);
   assert.match(f.ids['about-releases'].textContent,/CurrentLatest/);assert.doesNotMatch(f.ids['about-last-check'].textContent,/T12:/);
 });
+test('a new installed version watches the worker refresh through status GETs without queueing a manual check',async()=>{
+  const f=fixture({snapshot:baseline({installed_version:'2.26.0',latest_version:'2.25.0',stale:true,comparison:'unknown',version_refresh_pending:true})});
+  assert.equal(f.ids['about-comparison'].textContent,'Last known');assert.equal(f.calls.length,0);
+  await f.advance(2000);assert.equal(f.calls[0].url,'/settings/about/status');assert.equal(f.calls[0].options.method,undefined);
+  f.respond(0,200,{snapshot:baseline({installed_version:'2.26.0',latest_version:'2.26.0',version_refresh_pending:false})});await settle();
+  assert.equal(f.ids['about-comparison'].textContent,'Up to date');assert.equal(f.timers.size,0);assert.equal(f.calls.length,1);
+});
+test('a confirmed maintenance completion refreshes recorded release information without starting another check',async()=>{
+  const f=fixture();await f.window.fire('keep-maintenance-completed');await settle();
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].url,'/settings/about/status');assert.equal(f.calls[0].options.method,undefined);
+  f.respond(0,200,{snapshot:baseline({installed_version:'2.26.0',latest_version:'2.26.0'})});await settle();
+  assert.equal(f.ids['about-installed'].textContent,'2.26.0');assert.equal(f.ids['about-comparison'].textContent,'Up to date');
+});
 test('one CSRF form POST queues work, polling follows recorded status, and completion updates controls',async()=>{
   const f=fixture(),action=f.ids['about-check-form'].fire('submit');await settle();assert.equal(f.calls.length,1);assert.equal(f.calls[0].url,'/settings/about/check');assert.equal(f.calls[0].options.method,'POST');assert.equal(f.calls[0].options.body.get('csrf_token'),'synthetic-csrf');assert.equal(f.calls[0].options.credentials,'same-origin');
   await f.ids['about-check-form'].fire('submit');assert.equal(f.calls.length,1);f.respond(0,202,{snapshot:baseline({check_state:'queued',can_check:false}),message:'Update check queued.'});await action;await settle();assert.equal(f.ids['about-check'].textContent,'Queued');assert.equal(f.ids['about-check'].disabled,true);

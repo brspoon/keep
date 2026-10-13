@@ -8,6 +8,7 @@ function fixture(localUser, response) {
     setAttribute() {}, focus() {}, append() {}, hidden: false});
   const submit = Object.assign(element(), {disabled: false, textContent: 'Add and invite'});
   const form = Object.assign(element(), {action: localUser ? '/settings/users/local' : '/settings/recipients',
+    getAttribute: name => name === 'action' ? localUser ? '/settings/users/local' : '/settings/recipients' : null,
     classList: {contains: name => localUser && name === 'add-user-form'},
     elements: [{value: 'test-csrf'}, {value: 'person@example.com'}],
     querySelector: () => submit});
@@ -64,6 +65,14 @@ test('recipient creation retains its error and retry behavior', async () => {
   assert.equal(f.submit.disabled, false);
   assert.equal(f.submit.textContent, 'Add and invite');
   assert.equal(f.navigations.length, 0);
+});
+
+test('the hidden action control does not replace the recipient submission URL', async () => {
+  const f = fixture(false, {ok: true, url: 'https://keep.example.com/settings/users', text: async () => '<html></html>'});
+  f.form.action = {name: 'action', value: 'add', toString: () => '[object HTMLInputElement]'};
+  await f.form.listeners.submit({preventDefault() {}});
+  assert.equal(f.calls[0][0], '/settings/recipients');
+  assert.equal(f.calls[0][1].body.form, f.form);
 });
 
 function activityNavigation(value) {

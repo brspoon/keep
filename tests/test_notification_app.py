@@ -72,7 +72,7 @@ class NotificationAppTests(unittest.TestCase):
 
     def install_push(self, actor=None, *, events=notifications.MEDIA_EVENTS, collections=None):
         self.settings.save_installation(self.owner, enabled=True, token_mode='replace', token='A' * 30, now=100)
-        self.settings.save_preferences(actor or self.user, enabled=True, key_mode='replace', user_key='B' * 30,
+        self.settings.save_preferences(actor or self.owner, enabled=True, key_mode='replace', user_key='B' * 30,
             device='phone', collections={1} if collections is None else collections, events=events,
             available_collections=self.selected, now=100)
 
@@ -152,12 +152,12 @@ class NotificationAppTests(unittest.TestCase):
         target = next(t for t in self.runtime.destinations() if t.provider == 'pushover')
         message = self.runtime.render(target, [{'title': 'One'}])
         with sqlite3.connect(self.path) as db:
-            db.execute("UPDATE user_profiles SET plex_access='revoked' WHERE plex_id='user'")
+            db.execute("UPDATE user_profiles SET plex_access='revoked' WHERE plex_id='owner'")
         self.assertEqual(self.runtime.send(target, message).state, 'cancelled')
         self.send_push.assert_not_called()
         with sqlite3.connect(self.path) as db:
-            db.execute("UPDATE user_profiles SET plex_access='active' WHERE plex_id='user'")
-        self.settings.save_preferences(self.user, enabled=True, key_mode='replace', user_key='C' * 30,
+            db.execute("UPDATE user_profiles SET plex_access='active' WHERE plex_id='owner'")
+        self.settings.save_preferences(self.owner, enabled=True, key_mode='replace', user_key='C' * 30,
             collections={1}, events=notifications.MEDIA_EVENTS, available_collections=self.selected, now=200)
         self.assertEqual(self.runtime.send(target, message).state, 'cancelled')
         self.send_push.assert_not_called()
@@ -170,6 +170,60 @@ class NotificationAppTests(unittest.TestCase):
             db.execute("UPDATE user_profiles SET plex_access='revoked' WHERE plex_id='owner'")
         self.assertEqual(self.runtime.send(target, message).state, 'cancelled')
         self.send_email.assert_not_called()
+
+    def test_owner_role_change_cancels_prepared_operational_email_and_push_before_transport(self):
+        self.enable_owner_alerts()
+        targets = self.runtime.destinations()
+        messages = [(target, self.runtime.render_event(target, {'kind': 'JOB_FAILED', 'entity': 'keep-expiry'}))
+                    for target in targets]
+        self.settings.owner_id = lambda: 'user'
+        for target, message in messages:
+            self.assertEqual(self.runtime.send(target, message).state, 'cancelled')
+        self.send_email.assert_not_called()
+        self.send_push.assert_not_called()
+        email = next(target for target in self.runtime.destinations() if target.provider == 'email')
+        self.assertEqual(email.events, notifications.MEDIA_EVENTS)
+        self.assertFalse(email.owner_verified)
+
+    def test_stored_nonowner_operational_email_choices_are_filtered_for_delivery(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute("INSERT INTO notification_email_events VALUES ('user@example.test',?,100)",
+                       ('["MEDIA_ADDED_TO_COLLECTION","MEDIA_ABOUT_TO_BE_HANDLED","JOB_FAILED","UPDATE_AVAILABLE"]',))
+        self.emails['User@Example.test'] = {1}
+        self.store.observe_update('2.27.0', now=200)
+        self.runtime.process_operational(now=200)
+        self.send_email.assert_not_called()
+        viewer = next(target for target in self.runtime.destinations() if target.id == 'user@example.test')
+        self.assertEqual(viewer.events, notifications.MEDIA_EVENTS)
+        self.assertFalse(viewer.owner_verified)
+
+    def test_legacy_nonowner_single_event_still_delivers_both_media_events_for_selected_lists(self):
+        self.emails = {'User@Example.test': {1}}
+        with sqlite3.connect(self.path) as db:
+            db.execute("INSERT INTO notification_email_events VALUES ('user@example.test',?,NULL)",
+                       ('["MEDIA_ADDED_TO_COLLECTION"]',))
+        self.queue('leaving', kind=notifications.ADDED)
+        self.queue('reminder', kind=notifications.REMINDER)
+        self.queue('other-list', collection=2)
+        self.store.observe_update('2.27.0', now=100)
+        self.runtime.process_digest(now=100, quiet_seconds=0)
+        self.send_email.assert_called_once()
+        self.assertEqual(self.send_email.call_args.args[0], ['User@Example.test'])
+        self.assertEqual(set(self.send_email.call_args.args[3].split(', ')), {'leaving', 'reminder'})
+        self.assertEqual(self.query('SELECT events_json FROM notification_email_events'), [('["MEDIA_ADDED_TO_COLLECTION"]',)])
+
+    def test_former_owner_single_event_becomes_both_media_events_after_owner_change(self):
+        self.settings.save_email_events(self.owner, 'Owner@Example.test', {notifications.REMINDER, 'UPDATE_AVAILABLE'}, now=50)
+        self.settings.owner_id = lambda: 'user'
+        self.queue('leaving', kind=notifications.ADDED)
+        self.queue('reminder', kind=notifications.REMINDER)
+        self.store.observe_update('2.27.0', now=100)
+        self.runtime.process_digest(now=100, quiet_seconds=0)
+        self.send_email.assert_called_once()
+        self.assertEqual(set(self.send_email.call_args.args[3].split(', ')), {'leaving', 'reminder'})
+        target = self.runtime.destinations()[0]
+        self.assertFalse(target.owner_verified)
+        self.assertEqual(target.events, notifications.MEDIA_EVENTS)
 
     def test_media_render_rechecks_subscription_changes_before_sender(self):
         self.install_push()

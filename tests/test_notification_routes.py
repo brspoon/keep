@@ -1,5 +1,6 @@
 """Isolated Flask routes with real notification storage and synthetic senders."""
 from contextlib import closing
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -108,6 +109,15 @@ class NotificationRoutesTests(unittest.TestCase):
             enabled=True, token_mode='replace', token='A' * 30, now=100)
 
     def push_preferences(self, user_id='owner'):
+        if user_id != 'owner':
+            # Older versions allowed personal push destinations. Preserve a
+            # legacy row to verify the owner-only boundary without bypassing it.
+            generation = self.settings.synchronize(now=200)
+            with closing(sqlite3.connect(self.path)) as db, db:
+                db.execute('INSERT INTO pushover_preferences VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    (user_id, 1, 'B' * 30, '', json.dumps(sorted({1})),
+                     json.dumps(sorted(notifications.MEDIA_EVENTS)), user_id + '-legacy', generation, 0, 200))
+            return
         self.settings.save_preferences(notification_settings.Actor(user_id, True, user_id == 'owner'),
             enabled=True, collections={1}, events=notifications.MEDIA_EVENTS, available_collections=self.collections,
             key_mode='replace', user_key='B' * 30, now=200)
@@ -133,7 +143,7 @@ class NotificationRoutesTests(unittest.TestCase):
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         with self.app.test_request_context('/preferences'):
             session['user_id'] = 'owner'
-            context = self.routes.preferences_context('owner@example.test')
+            context = self.routes.pushover_context()
         self.assertTrue(context['push_preferences']['can_test'])
         self.assertEqual(self.path.read_bytes(), before)
         self.email_send.assert_not_called()
@@ -323,7 +333,7 @@ class NotificationRoutesTests(unittest.TestCase):
         self.clock = 1046
         with self.app.test_request_context('/preferences'):
             session['user_id'] = 'owner'
-            context = self.routes.preferences_context('owner@example.test')
+            context = self.routes.pushover_context()
         self.assertEqual(context['test_reviews'][0]['batch_id'], 'test:' + reservation.id)
         self.assertTrue(context['test_reviews'][0]['review_needed'])
         response = self.post('/settings/notifications/review', batch_id='test:' + reservation.id,
@@ -372,7 +382,7 @@ class NotificationRoutesTests(unittest.TestCase):
         self.push_preferences()
         self.push_preferences('viewer')
         owner, viewer = notification_settings.Actor('owner', True, True), notification_settings.Actor('viewer', True)
-        self.settings.reserve_test(viewer, 'validation', now=1000)
+        self.settings.reserve_test(viewer, 'email', now=1000)
         before = self.path.read_bytes()
         view = self.settings.test_availability(owner, 'notification', now=1001)
         self.assertEqual(view['state'], 'busy')
@@ -410,7 +420,7 @@ class NotificationRoutesTests(unittest.TestCase):
         self.assertTrue(self.settings.test_availability(owner, 'validation', now=1100)['can_test'])
         with self.app.test_request_context('/preferences'):
             session['user_id'] = 'owner'
-            context = self.routes.preferences_context('owner@example.test')
+            context = self.routes.pushover_context()
         self.assertFalse(context['push_preferences']['can_test'])
 
     def test_readonly_availability_does_not_create_missing_attempt_table_and_rechecks_access(self):
@@ -438,59 +448,57 @@ class NotificationRoutesTests(unittest.TestCase):
         self.assertNotIn('private-token', response.text)
         self.assertNotIn('B' * 30, response.text)
 
-    def test_personal_push_save_is_independent_and_retains_disabled_selections(self):
+    def test_owner_push_save_is_independent_and_retains_disabled_selections(self):
         self.install()
-        self.push_preferences('viewer')
-        self.login('viewer')
+        self.push_preferences()
         before_email = self.query('SELECT * FROM email_recipients')
-        result = self.post('/test-preferences', action='pushover', key_mode='keep', device='phone')
-        self.assertTrue(result.json['saved'])
-        view = self.settings.preferences_view(notification_settings.Actor('viewer', True), available_collections=self.collections)
+        result = self.post('/settings/notifications/pushover/preferences', key_mode='keep', device='phone')
+        self.assertEqual(result.status_code, 303)
+        view = self.settings.preferences_view(notification_settings.Actor('owner', True, True), available_collections=self.collections)
         self.assertFalse(view['enabled'])
         self.assertEqual(view['collections'], {1})
         self.assertEqual(view['events'], notifications.MEDIA_EVENTS)
         self.assertEqual(self.query('SELECT * FROM email_recipients'), before_email)
 
-    def test_personal_push_rejects_invalid_choices_owner_events_and_missing_csrf(self):
+    def test_owner_push_rejects_invalid_choices_and_missing_csrf(self):
         self.install()
-        self.push_preferences('viewer')
-        self.login('viewer')
+        self.push_preferences()
         before = self.query('SELECT * FROM pushover_preferences')
-        self.assertEqual(self.client.post('/test-preferences', data={'action':'pushover','csrf_token':'wrong'}).status_code, 403)
-        for values in ({'pushover_collection_id':'bad'}, {'pushover_collection_id':'99'}, {'pushover_event':'JOB_FAILED'}):
-            response = self.post('/test-preferences', action='pushover', receive_pushover='1', key_mode='keep', **values)
-            self.assertFalse(response.json['saved'])
-            self.assertIsNotNone(response.json['error'])
+        self.assertEqual(self.client.post('/settings/notifications/pushover/preferences', data={'key_mode':'clear','csrf_token':'wrong'}).status_code, 403)
+        for values in ({'pushover_collection_id':'bad'}, {'pushover_collection_id':'99'}, {'pushover_event':'unknown'}):
+            response = self.post('/settings/notifications/pushover/preferences', receive_pushover='1', key_mode='keep', **values)
+            self.assertEqual(response.status_code, 400)
         self.assertEqual(self.query('SELECT * FROM pushover_preferences'), before)
 
-    def test_personal_test_uses_only_saved_own_credentials_and_feedback_does_not_mark_saved(self):
+    def test_owner_personal_test_uses_only_saved_credentials_and_does_not_mark_saved(self):
         self.install()
-        self.push_preferences('viewer')
-        self.login('viewer')
-        response = self.post('/test-preferences', action='test-pushover', user_key='C' * 30, email='owner@example.test')
+        self.push_preferences()
+        response = self.post('/test-preferences', action='test-pushover', user_key='C' * 30, email='viewer@example.test')
         self.assertFalse(response.json['saved'])
         self.assertEqual(response.json['test_feedback'], 'Test notification sent.')
         self.assertEqual(self.push_send.call_args.args[0].user_key, 'B' * 30)
         self.assertNotIn('B' * 30, response.text)
 
-    def test_personal_discard_reviews_only_own_test_and_preserves_preferences(self):
+    def test_viewer_cannot_save_test_or_discard_pushover_through_current_or_legacy_routes(self):
         self.install()
         self.push_preferences('viewer')
-        actor = notification_settings.Actor('viewer', True)
+        self.push_preferences()
+        actor = notification_settings.Actor('owner', True, True)
         reserved = self.settings.reserve_test(actor, 'notification', now=900)
         self.settings.complete_test(reserved.id, notifications.Outcome('review'), now=901)
-        before = self.query('SELECT * FROM pushover_preferences')
-        response = self.post('/test-preferences', action='discard-pushover-test', test_id=reserved.id)
-        self.assertIsNotNone(response.json['error'])
-        self.assertEqual(self.query('SELECT state FROM notification_test_attempts'), [('review',)])
+        before = self.path.read_bytes()
         self.login('viewer')
-        response = self.post('/test-preferences', action='discard-pushover-test', test_id=reserved.id)
-        self.assertIsNone(response.json['error'])
-        self.assertFalse(response.json['saved'])
-        self.assertEqual(response.json['test_feedback'], 'Test delivery discarded.')
-        self.assertEqual(self.query('SELECT * FROM pushover_preferences'), before)
-        self.assertEqual(self.query('SELECT state FROM notification_test_attempts'), [('cancelled',)])
+        for action in ('pushover', 'test-pushover', 'discard-pushover-test'):
+            response = self.post('/test-preferences', action=action, test_id=reserved.id, key_mode='clear')
+            self.assertEqual(response.status_code, 403)
+        for path in ('/settings/notifications/pushover', '/settings/notifications/pushover/preferences', '/settings/notifications/test/pushover'):
+            self.assertEqual(self.post(path, key_mode='clear').status_code, 403)
+        self.assertEqual(self.path.read_bytes(), before)
         self.push_send.assert_not_called()
+        self.login('owner')
+        response = self.post('/test-preferences', action='discard-pushover-test', test_id=reserved.id)
+        self.assertEqual(response.json['test_feedback'], 'Test delivery discarded.')
+        self.assertEqual(self.query('SELECT state FROM notification_test_attempts'), [('cancelled',)])
 
     def test_account_lookup_storage_failure_returns_fixed_no_store_response(self):
         with patch.object(self.adapter, 'current_account_session', side_effect=sqlite3.OperationalError('private-path-secret')):
@@ -509,7 +517,8 @@ class NotificationRoutesTests(unittest.TestCase):
         with self.app.test_request_context('/preferences'):
             session['user_id'] = 'viewer'
             context = self.routes.preferences_context('owner@example.test')
-        self.assertEqual(context['test_reviews'], [])
+        self.assertNotIn('push_preferences', context)
+        self.assertNotIn('test_reviews', context)
         self.assertEqual(context['email_events'], set(notifications.MEDIA_EVENTS))
 
     def test_legacy_email_action_is_unhandled_for_root_atomic_appearance_email_save(self):

@@ -74,8 +74,11 @@ class HelpFaqTests(unittest.TestCase):
             self.assertIn('href="/kept">Go to Kept', html)
             self.assertIn('href="/library">Go to Manage Library', html)
             self.assertIn('href="/preferences">Go to Preferences', html)
-            for page in ('users', 'email', 'connections', 'activity'):
+            for page in ('users', 'notifications', 'connections', 'activity'):
                 self.assertIn(f'href="/settings/{page}">Go to {page.title()}', html)
+            self.assertIn('How do I set up Pushover notifications?', html)
+            self.assertIn('Pushover is available only to the Keep owner.', html)
+            self.assertIn('Connection alerts, job alerts, and update notices are available only to the Keep owner.', html)
             self.assertNotIn('Back to Leaving', html)
             self.assertIn('data-auto-open="false"', html)
             self.assertNotIn('id="welcome-dialog"', html)
@@ -116,8 +119,12 @@ class HelpFaqTests(unittest.TestCase):
         self.assertNotIn('href="/settings/connections">Go to Connections', basic)
         for service in ('Maintainerr', 'Radarr', 'Sonarr', 'Seerr', 'Tautulli'):
             self.assertNotIn(service, basic)
-        for page in ('users', 'email', 'connections', 'activity'):
+        for page in ('users', 'notifications', 'connections', 'activity'):
             self.assertNotIn(f'href="/settings/{page}">Go to', basic)
+        self.assertNotIn('Pushover', basic)
+        self.assertNotIn('The Keep owner can also receive connection alerts', basic)
+        self.assertIn('turn emails on or off and choose which Leaving lists to follow', basic)
+        self.assertIn('Leaving summaries and seven-day reminders are both included when you opt in.', basic)
         self.assertNotIn('href="/library">Go to Manage Library', basic)
         self.assertIn('href="/preferences">Go to Preferences', basic)
         self.assertIn('<h2 id="keeps-heading">Keeps</h2>', basic)

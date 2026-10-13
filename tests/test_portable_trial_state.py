@@ -260,7 +260,7 @@ class PortableTrialStateTests(unittest.TestCase):
                     assert local['collections'] == {901} and local['events'] == {'MEDIA_ADDED_TO_COLLECTION'}
                     assert owner['configured'] and not owner['enabled'] and owner['user_key'] == ''
                     assert owner['collections'] == {902} and owner['events'] == {'MEDIA_ABOUT_TO_BE_HANDLED','UPDATE_AVAILABLE'}
-                    assert settings.email_event_preferences(fixture.LOCAL_EMAIL)['events'] == {'MEDIA_ADDED_TO_COLLECTION'}
+                    assert settings.email_event_preferences(fixture.LOCAL_EMAIL)['events'] == {'MEDIA_ADDED_TO_COLLECTION','MEDIA_ABOUT_TO_BE_HANDLED'}
                     assert settings.email_event_preferences(fixture.OWNER_EMAIL)['events'] == {'MEDIA_ABOUT_TO_BE_HANDLED','UPDATE_AVAILABLE'}
                     assert settings.installation_view()['ready'] is False
                     # Every persisted field is protected, both at the stopped

@@ -3851,6 +3851,10 @@ def email_preferences_page():
             previous_events = settings.email_event_preferences(email_address)['events'] if email_address else notifications.MEDIA_EVENTS
             chosen_events = (set(request.form.getlist('email_event'))
                              if 'email_event_present' in request.form or 'email_event' in request.form else set(previous_events))
+            if not actor.owner:
+                # Personal email subscriptions always cover both media notices.
+                # Event controls belong to the owner; ignore old or forged fields.
+                chosen_events = set(notifications.MEDIA_EVENTS)
             receive_email = request.form.get('receive_email') == '1'
             requested_theme = request.form.get('theme_mode', theme)
             if requested_theme in ('system', 'light', 'dark'):
@@ -4478,7 +4482,7 @@ def settings_jobs():
 
 def about_snapshot():
     """Read recorded release and worker state without starting network work."""
-    snapshot = release_updates.Store(KEEP_DB_PATH, initialize=False).snapshot(APP_VERSION)
+    snapshot = release_updates.Store(KEEP_DB_PATH, initialize=False, installed_version=APP_VERSION).snapshot(APP_VERSION)
     jobs = jobs_snapshot(read_only=True)
     row = next((row for row in jobs['jobs'] if row['id'] == 'release-check'), None)
     queued = bool(row and row['queued'])
@@ -4486,6 +4490,7 @@ def about_snapshot():
     available = jobs['worker']['available']
     reason = ('A check is running.' if running else 'A check is already queued.' if queued else
               'The background worker is unavailable.' if not available else
+              'Release information will refresh for this version.' if snapshot['version_refresh_pending'] else
               'GitHub release checks are temporarily rate limited.' if not snapshot['can_check'] and snapshot['status'] == 'rate_limited' else
               'Wait briefly before checking again.' if not snapshot['can_check'] else '')
     snapshot.update(check_state='running' if running else 'queued' if queued else 'idle',
@@ -5756,8 +5761,8 @@ def job_store():
 
 def release_store():
     store = app.extensions.get('keep_release_updates')
-    if store is None or store.path != Path(KEEP_DB_PATH):
-        store = release_updates.Store(KEEP_DB_PATH)
+    if store is None or store.path != Path(KEEP_DB_PATH) or store.installed_version != APP_VERSION:
+        store = release_updates.Store(KEEP_DB_PATH, installed_version=APP_VERSION)
         app.extensions['keep_release_updates'] = store
     return store
 
@@ -6194,7 +6199,7 @@ def observe_notification_status():
     return notification_runtime().observe_recorded(
         connections=notifications_app.recorded_connections(KEEP_DB_PATH),
         jobs=background_jobs.Store(KEEP_DB_PATH, initialize=False).records(read_only=True),
-        releases=release_updates.Store(KEEP_DB_PATH, initialize=False).snapshot(APP_VERSION),
+        releases=release_updates.Store(KEEP_DB_PATH, initialize=False, installed_version=APP_VERSION).snapshot(APP_VERSION),
         current_connection_scopes=scopes, current_job_scopes=job_scopes)
 
 

@@ -95,7 +95,9 @@
     const form = event.target;
     const button = form.querySelector('.save-button');
     if (!button || button.disabled) return;
-    const path = new URL(form.action, window.location.href);
+    // A named form control (including our hidden "action" field) shadows
+    // HTMLFormElement properties. Read the attribute to keep this URL stable.
+    const path = new URL(form.getAttribute('action') || '', window.location.href);
     if (path.origin !== window.location.origin || path.pathname !== '/preferences') {
       failure('Could not confirm the save. Please try again.');
       return;

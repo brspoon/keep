@@ -20,6 +20,14 @@
 .notifications-ui .notification-held { margin:24px 0; padding:14px 16px; border:1px solid var(--accent); border-radius:10px; background:var(--accent-soft); color:var(--accent-ink); font-size:13px; }
 .notifications-ui .notification-test { margin-top:16px!important; padding-top:16px; border-top:1px solid var(--border); }
 .notifications-ui .notification-test .help { margin-bottom:0; }
+.notifications-ui .notification-owner-preferences { display:grid; gap:12px; margin-top:20px!important; padding-top:20px; border-top:1px solid var(--border); }
+.notifications-ui .notification-owner-preferences h3 { margin:0; font-size:16px; }
+.notifications-ui .notification-owner-preferences .help { margin:0; }
+.notifications-ui .notification-owner-preferences .notification-secret { margin:0; }
+.notifications-ui .notification-owner-preferences .notification-button { justify-self:start; }
+.notifications-ui .notification-topics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; min-width:0; margin:0; padding:0; border:0; }
+.notifications-ui .notification-topics legend { margin-bottom:8px; color:var(--muted); font-size:13px; font-weight:650; }
+.notifications-ui .notification-topics:disabled { opacity:.6; }
 .notification-secret, .notification-field { display:grid; gap:8px; min-width:0; }
 .notification-secret { margin:12px 0 16px; }
 .notification-secret > label, .notification-field > label, [data-secret-replacement] > label { color:var(--muted); font-size:13px; }
@@ -83,6 +91,7 @@
   .notifications-ui .recipient-actions button { width:100%; }
 }
 @media(max-width:440px) {
+  .notifications-ui .notification-topics { grid-template-columns:1fr; }
   :is(.preferences-ui,.preferences-dialog) .notification-preferences .topics { grid-template-columns:1fr; }
 }
 @media(prefers-reduced-motion:reduce) {

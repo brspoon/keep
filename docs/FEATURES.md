@@ -43,15 +43,15 @@ See [Seerr setup and deletion policy](seerr-attribution.md) for request matching
 | Seerr | Optional | Request history and verified requester-based deletion access. Linking an account alone does not grant deletion permission. |
 | Tautulli | Optional | Qualifying watch history and watched thresholds for Leaving information and supported forecasts. |
 | SMTP/email | Optional | Invitations, password resets, and Leaving email summaries. With email disabled, the owner can share private account setup/reset links. |
-| Pushover | Optional | Leaving summaries and reminders, with separate personal keys, events, and collection choices. The owner can also choose operational alerts. |
+| Pushover | Optional | Owner-only Leaving summaries, reminders, and operational alerts, configured in Admin Notifications. |
 
 Plex and Maintainerr must already be running and reachable from Keep. Optional connections enable their associated features; forecasts require supported rules and verifiable media/watch data. See [installation and configuration](INSTALLATION.md) for setup.
 
 ## Notifications and personal preferences
 
-Viewers can choose email, Pushover, or both in Preferences, with separate event and collection choices for each channel. Keep sends new-entry summaries and reminders when titles have seven days or less remaining; missed updates can make a reminder arrive later. Kept titles are excluded. Preferences also provide system, light, and dark appearance choices.
+Viewers can turn emails on or off and choose collections in Preferences. Opting in includes Leaving summaries and seven-day reminders. Keep sends new-entry summaries and reminders when titles have seven days or less remaining; missed updates can make a reminder arrive later. Kept titles are excluded. Preferences also provide system, light, and dark appearance choices.
 
-Under **Admin → Notifications**, the owner enables providers, tests their own saved destination, and reviews recent deliveries. SMTP settings remain in Connections. Email recipient cards show the corresponding account's full name, with a display name or Plex username as a fallback. Search matches email addresses, full names, display names, and Plex usernames. Addresses without an associated account remain independent email recipients.
+Under **Admin → Notifications**, the owner enables providers, configures their own Pushover user key, device, events, and collections, tests their saved destination, and reviews recent deliveries. Pushover is available only to the owner. SMTP settings remain in Connections. Email recipient cards show the corresponding account's full name, with a display name or Plex username as a fallback. Search matches email addresses, full names, display names, and Plex usernames. Addresses without an associated account remain independent email recipients.
 
 The owner can opt into connection failures and recovery, failed jobs and recovery, and available Keep updates. These events are unavailable to other accounts. A failed connection alert follows two failed automatic checks. Notifications use recorded results; they do not start extra service checks.
 

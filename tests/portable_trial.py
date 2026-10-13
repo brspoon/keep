@@ -14,6 +14,7 @@ import sqlite3
 import stat
 import sys
 import time
+import uuid
 from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
@@ -313,11 +314,27 @@ def seed_notification_preferences(app):
         ('7', {902}, {'MEDIA_ABOUT_TO_BE_HANDLED', 'UPDATE_AVAILABLE'}, 'trial-tablet'),
     ):
         actor = notification_settings.Actor(user_id, True, owner=user_id == '7')
-        settings.save_preferences(actor, enabled=False, collections=selected, events=events,
-            available_collections={901, 902}, key_mode='replace', user_key=TRIAL_PUSH_KEYS[user_id],
-            device=device, now=now)
-        settings.save_email_events(actor, LOCAL_EMAIL if user_id == LOCAL_ID else OWNER_EMAIL,
-                                  events, now=now)
+        if actor.owner:
+            settings.save_preferences(actor, enabled=False, collections=selected, events=events,
+                available_collections={901, 902}, key_mode='replace', user_key=TRIAL_PUSH_KEYS[user_id],
+                device=device, now=now)
+        else:
+            # Preserve a pre-owner-only destination as recovery coverage. New
+            # non-owner Pushover settings are deliberately rejected by the app.
+            with closing(sqlite3.connect(app.KEEP_DB_PATH)) as db, db:
+                provider = db.execute("SELECT generation FROM notification_provider_generations WHERE provider='pushover'").fetchone()[0]
+                queue_id, event_id = settings._watermarks(db)
+                generation = uuid.uuid4().hex
+                settings._epoch(db, user_id, generation, queue_id, event_id, now)
+                db.execute('INSERT INTO pushover_preferences VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    (user_id, 0, TRIAL_PUSH_KEYS[user_id], device, json.dumps(sorted(selected)),
+                     json.dumps(sorted(events)), generation, provider, queue_id, now))
+        if actor.owner:
+            settings.save_email_events(actor, OWNER_EMAIL, events, now=now)
+        else:
+            with closing(sqlite3.connect(app.KEEP_DB_PATH)) as db, db:
+                db.execute('INSERT INTO notification_email_events VALUES (?,?,NULL)',
+                           (LOCAL_EMAIL, json.dumps(sorted(events))))
     with closing(sqlite3.connect(app.KEEP_DB_PATH)) as db, db:
         db.execute('CREATE TABLE portable_trial_notifications_marker (fixture_id TEXT PRIMARY KEY)')
         db.execute('INSERT INTO portable_trial_notifications_marker VALUES (?)', (FIXTURE_ID,))
