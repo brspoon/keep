@@ -486,11 +486,12 @@ class SettingsTests(unittest.TestCase):
                        (keep.time.time() - 1, profile['plex_id']))
         self.assertEqual(self.client.get('/auth/local/setup/' + token).status_code, 400)
 
-    def test_recipient_add_disable_enable_remove_and_last_enabled_guard(self):
+    def test_recipient_add_disable_enable_remove_including_last_enabled(self):
         self.assertEqual(self.form('/settings/recipients', action='add', email='TWO@Example.com').status_code, 302)
         self.assertEqual(self.form('/settings/recipients', action='disable', email='two@example.com').status_code, 302)
         self.assertEqual(keep.get_email_recipients(), ['one@example.com'])
-        self.assertEqual(self.form('/settings/recipients', action='disable', email='one@example.com').status_code, 400)
+        self.assertEqual(self.form('/settings/recipients', action='disable', email='one@example.com').status_code, 302)
+        self.assertEqual(keep.get_email_recipients(), [])
         self.assertEqual(self.form('/settings/recipients', action='enable', email='two@example.com').status_code, 302)
         self.assertEqual(self.form('/settings/recipients', action='remove', email='one@example.com').status_code, 302)
         self.assertEqual(keep.get_email_recipients(), ['two@example.com'])
@@ -503,50 +504,41 @@ class SettingsTests(unittest.TestCase):
                          {'one@example.com': {1, 6}})
         response = self.form('/settings/recipients/preferences', email='one@example.com')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], '/settings/email')
-        page = self.client.get('/settings/email').get_data(as_text=True)
+        self.assertEqual(response.headers['Location'], '/settings/notifications')
+        page = self.client.get('/settings/notifications').get_data(as_text=True)
         self.assertIn('Choose at least one email topic for this recipient.', page)
         self.assertIn('class="subscriptions invalid"', page)
-        self.assertIn('form.classList.toggle("invalid", !valid)', page)
-        self.assertIn('event.preventDefault()', page)
+        self.assertIn('/static/keep-notifications.js?v=' + keep.APP_VERSION, page)
         self.assertEqual(keep.get_recipient_delivery_preferences(),
                          {'one@example.com': {1, 6}})
 
-    def test_last_enabled_recipient_errors_stay_in_the_email_page_without_mutation(self):
+    def test_last_enabled_recipient_can_be_disabled_or_removed_in_each_appearance(self):
         with closing(keep.attribution_db()) as db, db:
             db.execute("INSERT INTO email_recipients(email,enabled) VALUES ('two@example.com',0)")
             keep.ensure_recipient_subscriptions(db, 'two@example.com')
-        def snapshot():
-            with closing(keep.attribution_db()) as db:
-                return {table: [tuple(row) for row in db.execute('SELECT * FROM ' + table + ' ORDER BY 1,2')]
-                        for table in ('email_recipients', 'recipient_subscriptions', 'activity_log')}
-        before = snapshot()
-        with self.client.session_transaction() as state:
-            state['settings_error'] = 'Choose at least one email topic for this recipient.'
-            state['settings_error_email'] = 'one@example.com'
         for theme in ('light', 'dark', 'system'):
             with closing(keep.attribution_db()) as db, db:
                 db.execute("UPDATE user_profiles SET theme_mode=? WHERE plex_id='7'", (theme,))
             for action in ('disable', 'remove'):
                 with self.subTest(theme=theme, action=action), patch.object(keep, 'send_email') as mail:
+                    with closing(keep.attribution_db()) as db, db:
+                        db.execute("INSERT INTO email_recipients(email,enabled) VALUES ('one@example.com',1) ON CONFLICT(email) DO UPDATE SET enabled=1")
+                        keep.ensure_recipient_subscriptions(db, 'one@example.com')
                     response = self.form('/settings/recipients', action=action, email='ONE@Example.com')
-                    body = response.get_data(as_text=True)
-                    self.assertEqual(response.status_code, 400)
-                    self.assertEqual(response.mimetype, 'text/html')
-                    self.assertEqual(response.headers['Cache-Control'], 'no-store')
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(response.headers['Location'], '/settings/notifications')
+                    body = self.client.get(response.headers['Location']).get_data(as_text=True)
                     self.assertIn(f'data-theme="{theme}"', body)
-                    self.assertIn('class="admin-ui"', body)
-                    self.assertIn('href="/settings/email" class="active" aria-current="page"', body)
+                    self.assertIn('class="admin-ui notifications-ui"', body)
+                    self.assertIn('href="/settings/notifications" class="active" aria-current="page"', body)
                     self.assertIn('/static/keep-ui.css', body)
                     self.assertIn('/static/keep-theme.css', body)
                     self.assertIn('/static/keep-icon.svg?v=' + keep.APP_VERSION, body)
-                    self.assertIn('class="settings-error" role="alert">At least one email recipient must remain enabled', body)
-                    self.assertIn('aria-expanded="true" aria-controls="recipient-editor-1"', body)
-                    self.assertRegex(body, r'id="recipient-editor-1"\s*>')
-                    self.assertRegex(body, r'id="recipient-editor-2"\s+hidden>')
-                    self.assertNotIn('class="subscriptions invalid"', body)
-                    self.assertIn('currentUrl.pathname = "/settings/email"', body)
-                    self.assertEqual(snapshot(), before)
+                    self.assertNotIn('At least one email recipient must remain enabled', body)
+                    self.assertEqual(keep.get_email_recipients(), [])
+                    with closing(keep.attribution_db()) as db:
+                        row = db.execute("SELECT enabled FROM email_recipients WHERE email='one@example.com'").fetchone()
+                    self.assertEqual(row['enabled'] if row else None, 0 if action == 'disable' else None)
                     mail.assert_not_called()
 
     def test_recipient_validation_errors_preserve_context_and_escape_add_input(self):
@@ -562,7 +554,7 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(action=action):
                 response = self.form('/settings/recipients', action=action, email='missing@example.com')
                 self.assertEqual(response.status_code, expected_status)
-                self.assertIn('class="admin-ui"', response.get_data(as_text=True))
+                self.assertIn('class="admin-ui notifications-ui"', response.get_data(as_text=True))
                 self.assertEqual(keep.get_email_recipients(), ['one@example.com'])
 
     def test_disabled_recipient_topics_reflect_preferences_and_are_greyed_out(self):
@@ -570,7 +562,7 @@ class SettingsTests(unittest.TestCase):
                   collection_id=['1', '6'])
         with closing(keep.attribution_db()) as db, db:
             db.execute("UPDATE email_recipients SET enabled=0 WHERE email='one@example.com'")
-        page = self.client.get('/settings/email').get_data(as_text=True)
+        page = self.client.get('/settings/notifications').get_data(as_text=True)
         self.assertIn('class="subscriptions disabled"', page)
         self.assertIn('aria-disabled="true"', page)
         self.assertRegex(page, r'value="1"\s+checked disabled')
@@ -578,7 +570,7 @@ class SettingsTests(unittest.TestCase):
         self.assertRegex(page, r'value="5"\s+disabled')
         self.assertRegex(page, r'value="6"\s+checked disabled')
         self.assertIn('type="submit" disabled>Save</button>', page)
-        self.assertIn('.subscriptions.disabled { opacity:.48; }', page)
+        self.assertIn('/static/keep-notifications.css?v=' + keep.APP_VERSION, page)
 
     def test_user_can_manage_only_their_own_email_preferences(self):
         with closing(keep.attribution_db()) as db, db:
@@ -651,7 +643,7 @@ class SettingsTests(unittest.TestCase):
         self.assertIn('Your preferences were saved.', saved)
         self.assertEqual(keep.get_recipient_delivery_preferences()['owner@example.com'], {1, 3})
         invalid = self.form('/preferences?fragment=1', receive_email='1', collection_id='999')
-        self.assertIn('Select at least one collection', invalid.get_data(as_text=True))
+        self.assertIn('Invalid collection preference.', invalid.get_data(as_text=True))
 
     def test_appearance_is_saved_per_account_and_validated(self):
         fragment = self.client.get('/preferences?fragment=1').get_data(as_text=True)
@@ -728,13 +720,13 @@ class SettingsTests(unittest.TestCase):
 
     def test_preferences_use_plain_email_notification_label(self):
         page = self.client.get('/preferences').get_data(as_text=True)
-        self.assertIn('Receive Keep email notifications', page)
+        self.assertIn('Receive email notifications', page)
         self.assertNotIn('Receive consolidated Keep emails', page)
-        self.assertIn('id="email-topics" disabled', page)
+        self.assertRegex(page, r'id="email-topics"[^>]* disabled')
 
         self.form('/preferences', receive_email='1', collection_id='1')
         page = self.client.get('/preferences').get_data(as_text=True)
-        self.assertNotIn('id="email-topics" disabled', page)
+        self.assertNotRegex(page, r'id="email-topics"[^>]* disabled')
 
     def test_owner_can_delete_local_user_without_removing_recipient(self):
         profile, _ = self.create_local(email='delete@example.com', add_recipient=True)
@@ -759,7 +751,7 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM user_feature_acknowledgements WHERE user_id=?",
                                         (profile['plex_id'],)).fetchone()[0], 0)
 
-    def test_admin_sections_separate_users_email_and_activity(self):
+    def test_admin_sections_separate_users_notifications_and_activity(self):
         profile, _ = self.create_local()
         users_page = self.client.get('/settings/users').get_data(as_text=True)
         self.assertIn('class="source source-local">local</span>', users_page)
@@ -769,14 +761,14 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn('Active recipients', users_page)
         self.assertNotIn('Recent activity', users_page)
 
-        email_page = self.client.get('/settings/email').get_data(as_text=True)
-        self.assertIn('href="/settings/email" class="active"', email_page)
+        email_page = self.client.get('/settings/notifications').get_data(as_text=True)
+        self.assertIn('href="/settings/notifications" class="active"', email_page)
         self.assertIn('Active recipients', email_page)
         self.assertIn('Queued titles', email_page)
         self.assertIn('Next digest', email_page)
         self.assertIn('Email recipients', email_page)
         self.assertIn('Add email recipient', email_page)
-        self.assertIn('New recipients receive all configured collection topics by default.', email_page)
+        self.assertIn('New recipients follow all collections.', email_page)
         self.assertNotIn('Add local user', email_page)
         self.assertNotIn('Recent activity', email_page)
 

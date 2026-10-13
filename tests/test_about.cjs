@@ -2,14 +2,14 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync('static/keep-about.js', 'utf8');
+const source = fs.readFileSync(require('node:path').join(__dirname,'../static/keep-about.js'), 'utf8');
 const baseline = changes => ({status:'success', comparison:'up_to_date', installed_version:'2.25.0', latest_version:'2.25.0', latest_tag:'2.25.0',
   last_attempt_at:'2026-10-11T12:00:00Z', last_success_at:'2026-10-11T12:00:00Z', stale:false, check_state:'idle', can_check:true,
   worker_available:true, reason:'', retry_after_seconds:0, message:'Release information checked.', releases:[{version:'2.25.0', tag:'2.25.0', published_at:'2026-10-11T12:00:00Z', url:'https://github.com/brspoon/keep/releases/tag/2.25.0'}], ...changes});
 async function settle() { for (let i=0;i<12;i++) await Promise.resolve(); }
-function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, initialJson, hidden=false}={}) {
+function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, initialJson, hidden=false, toast=false}={}) {
   let now=Date.parse('2026-10-11T12:00:00Z'),document,timeoutId=0;
-  const timers=new Map(),calls=[],copies=[];
+  const timers=new Map(),calls=[],copies=[],toasts=[];
   class ClockDate extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
   class Element {
     constructor(tag='div',text=''){this.tagName=tag.toUpperCase();this.children=[];this._text=text;this.textWrites=[];this.attrs={};this.listeners={};this.hidden=false;this.disabled=false;this.value='';this.selectionStart=0;this.selectionEnd=0;this.open=false;this.className='';
@@ -27,7 +27,7 @@ function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, init
     select(){this.selectionStart=0;this.selectionEnd=this.value.length;this.selected=true;}
   }
   document=new Element();document.hidden=hidden;document.activeElement=null;document.createElement=tag=>new Element(tag);
-  const window=new Element();
+  const window=new Element();if(toast)window.showToast=(message,tone)=>toasts.push({message,tone});window.events=[];window.dispatchEvent=event=>{window.events.push(event.type);return true;};
   const ids={};
   for(const id of ['about-feedback','about-copy','about-diagnostics','about-diagnostics-details','about-copy-feedback','about-check-form','about-check','about-refresh','about-snapshot','about-installed','about-latest','about-comparison','about-last-check','about-check-state','about-check-reason','about-releases-empty','about-releases'])ids[id]=new Element();
   ids['about-diagnostics'].value='{"keep_version":"2.25.0"}';
@@ -38,9 +38,9 @@ function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, init
     options.signal.addEventListener('abort',()=>reject(new Error('Aborted')),{once:true});calls.push({url,options,resolve,reject});return promise;};
   class FormData {constructor(){return new Map([['csrf_token','synthetic-csrf']]);}}
   const navigator={clipboard:clipboard?{writeText:async value=>{copies.push(value);if(clipboard==='fail')throw new Error('Denied');}}:undefined};
-  vm.runInNewContext(source,{document,window,navigator,fetch:fetchAvailable?fetch:undefined,AbortController,FormData,URLSearchParams,Intl,Date:ClockDate,
+  vm.runInNewContext(source,{document,window,navigator,CustomEvent:class{constructor(type){this.type=type;}},fetch:fetchAvailable?fetch:undefined,AbortController,FormData,URLSearchParams,Intl,Date:ClockDate,
     setTimeout:(fn,delay)=>{const id=++timeoutId;timers.set(id,{fn,due:now+delay,delay});return id;},clearTimeout:id=>timers.delete(id)});
-  return {ids,document,window,calls,copies,timers,now:()=>now,
+  return {ids,document,window,calls,copies,timers,toasts,now:()=>now,
     respond(index,status,body,extra={}){calls[index].resolve({ok:status>=200&&status<300,status,redirected:false,json:async()=>body,...extra});},
     fail(index){calls[index].reject(new Error('Network lost'));},
     async advance(ms){now+=ms;const due=[...timers].filter(([,timer])=>timer.due<=now);due.forEach(([id,timer])=>{timers.delete(id);timer.fn();});await settle();},
@@ -166,4 +166,36 @@ test('clipboard failure exposes a focused selectable diagnostic fallback without
 });
 test('missing fetch or malformed initial JSON preserves ordinary form fallback and diagnostic copying',async()=>{
   for(const options of [{fetchAvailable:false},{initialJson:'<not-json>'}]){const f=fixture(options);assert.equal((f.ids['about-check-form'].listeners.submit||[]).length,0);await f.ids['about-copy'].fire('click');assert.equal(f.copies.length,1);assert.equal(f.calls.length,0);}
+});
+
+test('adopting a recorded release snapshot emits one read-only maintenance refresh signal',async()=>{const f=fixture();await f.queue(baseline({check_state:'queued',can_check:false}));assert.deepEqual(f.window.events,['keep-release-updated']);});
+
+test('fresh positive badges are green while stale and ongoing checks remain neutral',()=>{
+  const ready=fixture();assert.equal(ready.ids['about-comparison'].attrs['data-status'],'ok');assert.equal(ready.ids['about-check-state'].attrs['data-status'],'ok');
+  const stale=fixture({snapshot:baseline({stale:true})});assert.equal(stale.ids['about-comparison'].attrs['data-status'],'neutral');assert.equal(stale.ids['about-check-state'].attrs['data-status'],'neutral');
+  const busy=fixture({snapshot:baseline({check_state:'queued',can_check:false})});assert.equal(busy.ids['about-check-state'].attrs['data-status'],'neutral');
+});
+test('update-check acknowledgements and completion use shared toast while actionable failures persist',async()=>{
+  const f=fixture({toast:true});await f.queue();
+  assert.equal(f.toasts[0].tone,'neutral');assert.equal(f.toasts.at(-1).tone,'neutral');assert.equal(f.ids['about-feedback'].hidden,true);
+  await f.poll(baseline());assert.equal(f.toasts.at(-1).tone,'ok');assert.equal(f.ids['about-feedback'].hidden,true);
+  await f.queue(null,503,{error:'Check unavailable.'});assert.equal(f.ids['about-feedback'].hidden,false);assert.equal(f.ids['about-feedback'].textContent,'Check unavailable.');
+});
+test('manual status reads reserve success feedback for fresh completed release checks',async()=>{
+  for (const [changes,tone] of [
+    [{status:'never',comparison:'unknown',latest_version:null,stale:true,message:'Release information has not been checked yet.'},'neutral'],
+    [{stale:true},'neutral'],
+    [{check_state:'queued'},'neutral'],
+    [{},'ok']
+  ]) {
+    const snapshot=baseline({...changes,worker_available:false,can_check:false});
+    const f=fixture({snapshot,toast:true});
+    await f.ids['about-refresh'].fire('click');f.respond(0,200,{snapshot});await settle();
+    assert.equal(f.toasts.at(-1).tone,tone);assert.equal(f.toasts.at(-1).message,snapshot.message);
+    assert.equal(f.ids['about-feedback'].hidden,true);
+  }
+});
+test('queue acknowledgements remain neutral if the worker has already returned to idle',async()=>{
+  const f=fixture({toast:true});await f.queue(baseline());
+  assert.equal(f.toasts.at(-1).message,'Update check queued.');assert.equal(f.toasts.at(-1).tone,'neutral');
 });

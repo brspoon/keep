@@ -50,6 +50,10 @@ NATIVE_STEPS = (
     'Smoke-test packaged web and worker with durable data',
     'Exercise portable installation, restore and failed-upgrade recovery',
     'Exercise one-command installation and owner-preserving reruns',
+    'Set up the optional host helper runtime',
+    'Preload pinned isolated native maintenance tooling',
+    'Exercise the real optional maintenance lifecycle on the native architecture',
+    'Preserve native maintenance delivery evidence',
     'Capture verified vendor evidence and Scout assessment',
     'Inventory installed notices and inspect every image layer',
     'Scan candidate without suppressions',
@@ -256,7 +260,8 @@ def input_paths(arch):
     source = f'distribution/keep-{version}-source-materials-{arch}.tar.gz'
     return [f'keep-tested-{arch}.tar', source, source + '.sha256',
             *materials.evidence_names(arch), f'portable-recovery-{arch}.json',
-            f'installer-trial-{arch}.json', f'distribution/source-bundle-{arch}.json']
+            f'installer-trial-{arch}.json', f'maintenance-native-{arch}.json',
+            f'distribution/source-bundle-{arch}.json']
 
 
 def regular(path, limit=ASSET_LIMIT):
@@ -352,6 +357,7 @@ def retain(arch):
         raise ValueError('Original source summary differs from the verified bundle')
     materials.portable_evidence(regular(f'portable-recovery-{arch}.json', JSON_LIMIT), arch, identity)
     materials.installer_evidence(regular(f'installer-trial-{arch}.json', JSON_LIMIT), arch, identity)
+    materials.maintenance_evidence(regular(f'maintenance-native-{arch}.json', JSON_LIMIT), arch, identity)
     release = candidate(run['id'])
     prefix = f"build-{run['id']}-{attempt}-{arch}--"
     with tempfile.TemporaryDirectory(prefix='keep-retain-image-') as directory:
@@ -580,6 +586,7 @@ def restore(arch):
         materials.bundle(arch, verify_files=True)
         materials.portable_evidence(Path(f'portable-recovery-{arch}.json'), arch, index)
         materials.installer_evidence(Path(f'installer-trial-{arch}.json'), arch, index)
+        materials.maintenance_evidence(Path(f'maintenance-native-{arch}.json'), arch, index)
         subprocess.run(['docker', 'image', 'load', '--input', str(stage / f'keep-tested-{arch}.tar')], check=True)
         inspect_image(arch, index['config_digest'])
         verify_files(index, arch)

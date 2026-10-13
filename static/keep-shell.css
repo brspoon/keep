@@ -18,6 +18,7 @@ body.library-ui, body.admin-ui, body.preferences-ui { margin:0; background:var(-
 .page-heading .subtitle { margin:6px 0 0; }
 .library-ui .search-field input { border:1px solid #3b3f48; }
 .library-ui .page, .admin-ui .page { box-sizing:border-box; width:min(1440px,100%); margin:0 auto; padding:40px 40px 60px; }
+.library-ui .page { width:100%; }
 body.preferences-ui { display:block; padding:0; }
 .preferences-ui main { width:min(1440px,100%); padding:40px; margin:0 auto; border:0; border-radius:0; background:none; box-shadow:none; }
 .preferences-ui main > form, .preferences-ui main > .page-heading, .preferences-ui main > .back, .preferences-ui main > .email, .preferences-ui main > .notice, .preferences-ui main > .error { max-width:600px; margin-left:auto; margin-right:auto; }

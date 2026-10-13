@@ -2,6 +2,10 @@
 
 ## Upgrade an installation
 
+An enrolled Linux installation can use **Admin → About → Install update**.
+See [in-app maintenance](MAINTENANCE.md) to configure the optional host helper.
+The following steps remain available for installations without that helper.
+
 Work from the installation directory (`~/keep` on Linux/macOS, `$HOME\keep` in
 Windows PowerShell for the one-command installer).
 Read the target release notes and [create a verified backup](PORTABLE_BACKUP.md)
@@ -9,10 +13,10 @@ of the database, `.env`, Compose files, and exact current image before upgrading
 Test the new release on an isolated copy when it changes data or recovery behavior.
 
 Edit `KEEP_IMAGE` in `.env` to select the new version. For example, to select
-Keep 2.25.0:
+Keep 2.26.1:
 
 ```dotenv
-KEEP_IMAGE=brspoon/keep:2.25.0
+KEEP_IMAGE=brspoon/keep:2.26.1
 ```
 
 Then pull and recreate both services together:

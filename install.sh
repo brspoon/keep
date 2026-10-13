@@ -42,6 +42,14 @@ main() (
     python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' || {
         prerequisite_help python3
     }
+    for keep_argument do
+        if [ "$keep_argument" = "--maintenance-helper" ]; then
+            python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' || {
+                printf '%s\n' 'The optional Keep maintenance helper requires Python 3.12 or newer. The normal installer still supports Python 3.9+.' >&2
+                exit 1
+            }
+        fi
+    done
     installer_tmp=$(mktemp -d "${TMPDIR:-/tmp}/keep-install.XXXXXXXX")
     trap 'rm -f "$installer_tmp/install_keep.py"; rmdir "$installer_tmp"' EXIT
     trap 'exit 130' INT
@@ -50,7 +58,7 @@ main() (
     installer_status=$(curl --fail --silent --show-error --proto '=https' \
         --connect-timeout 15 --max-time 120 --write-out '%{http_code}' \
         --output "$installer_tmp/install_keep.py" \
-        'https://raw.githubusercontent.com/brspoon/keep/2.25.0/scripts/install_keep.py')
+        'https://raw.githubusercontent.com/brspoon/keep/2.26.1/scripts/install_keep.py')
     [ "$installer_status" = '200' ] || { printf '%s\n' 'Keep installer download returned an unexpected status.' >&2; exit 1; }
     python3 "$installer_tmp/install_keep.py" --start "$@"
 )

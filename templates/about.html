@@ -8,7 +8,10 @@
 {% include 'shared_brand_head.html' %}
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <link rel="stylesheet" href="/static/keep-about.css?v={{ app_version }}">
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-about.js?v={{ app_version }}"></script>
+<link rel="stylesheet" href="/static/keep-maintenance.css?v={{ app_version }}">
+<script defer src="/static/keep-maintenance.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 {% include 'shared_assets.html' %}
 </head>
@@ -20,7 +23,11 @@
 {% include 'shared_admin_tabs.html' %}
 {% set busy = about_snapshot.check_state in ('queued', 'running') %}
 {% set feedback = error or notice or (about_snapshot.message if about_snapshot.status in ('failed', 'rate_limited') else '') %}
-<p id="about-feedback" class="about-feedback{% if error or about_snapshot.status in ('failed', 'rate_limited') %} is-error{% endif %}" role="status" aria-live="polite" aria-atomic="true" {% if not feedback %}hidden{% endif %}>{{ feedback }}</p>
+{% set feedback_error = error or (not notice and about_snapshot.status in ('failed', 'rate_limited')) %}
+{% set feedback_status = 'error' if feedback_error else 'neutral' if notice or busy or about_snapshot.status != 'success' or about_snapshot.stale else 'ok' %}
+{% set comparison = about_snapshot.comparison if about_snapshot.status == 'success' and not about_snapshot.stale and about_snapshot.latest_version else 'unknown' %}
+{% set comparison_label = 'Last known' if about_snapshot.stale and about_snapshot.latest_version else {'update_available':'Update available', 'up_to_date':'Up to date', 'ahead':'Ahead of latest stable'}.get(comparison, '') %}
+<p id="about-feedback" data-feedback-status="{{ feedback_status }}" class="about-feedback{% if feedback_error %} is-error{% endif %}" role="status" aria-live="polite" aria-atomic="true" {% if not feedback %}hidden{% endif %}>{{ feedback }}</p>
 <section class="about-panel" aria-labelledby="about-version-title">
   <div class="about-section-heading"><h2 id="about-version-title">Version</h2>
     {% if owner %}<form id="about-check-form" method="post" action="/settings/about/check" aria-busy="{{ 'true' if busy else 'false' }}">
@@ -30,18 +37,19 @@
   </div>
   <dl class="about-version-details">
     <div><dt>Installed</dt><dd id="about-installed">{{ about_snapshot.installed_version }}</dd></div>
-    <div><dt>Latest stable</dt><dd><strong id="about-latest">{{ about_snapshot.latest_version or 'Not checked' }}</strong><span id="about-comparison" class="about-badge" {% if about_snapshot.comparison == 'unknown' and not about_snapshot.latest_version %}hidden{% endif %}>{{ 'Last known' if about_snapshot.stale and about_snapshot.latest_version else 'Update available' if about_snapshot.comparison == 'update_available' else 'Up to date' if about_snapshot.comparison == 'up_to_date' else 'Ahead of latest stable' if about_snapshot.comparison == 'ahead' else '' }}</span></dd></div>
-    <div><dt>Last check</dt><dd><span id="about-last-check">{% if about_snapshot.last_attempt_at %}<time datetime="{{ about_snapshot.last_attempt_at }}">{{ about_snapshot.last_attempt_at }}</time>{% else %}Not checked{% endif %}</span><span id="about-check-state" class="about-badge">{{ 'Queued' if about_snapshot.check_state == 'queued' else 'Checking' if about_snapshot.check_state == 'running' else 'Failed' if about_snapshot.status == 'failed' else 'Rate limited' if about_snapshot.status == 'rate_limited' else 'Checked' if about_snapshot.status == 'success' else 'Not checked' }}</span></dd></div>
+    <div><dt>Latest stable</dt><dd><strong id="about-latest">{{ about_snapshot.latest_version or 'Not checked' }}</strong><span id="about-comparison" class="about-badge status-badge" data-comparison="{{ comparison }}" data-status="{{ 'ok' if comparison == 'up_to_date' else 'warn' if comparison == 'update_available' else 'neutral' }}" {% if not comparison_label %}hidden{% endif %}>{{ comparison_label }}</span></dd></div>
+    <div><dt>Last check</dt><dd><span id="about-last-check">{% if about_snapshot.last_attempt_at %}<time datetime="{{ about_snapshot.last_attempt_at }}">{{ about_snapshot.last_attempt_at }}</time>{% else %}Not checked{% endif %}</span><span id="about-check-state" class="about-badge status-badge" data-status="{{ 'neutral' if busy else 'error' if about_snapshot.status == 'failed' else 'warn' if about_snapshot.status == 'rate_limited' else 'ok' if about_snapshot.status == 'success' and not about_snapshot.stale else 'neutral' }}">{{ 'Queued' if about_snapshot.check_state == 'queued' else 'Checking' if about_snapshot.check_state == 'running' else 'Failed' if about_snapshot.status == 'failed' else 'Rate limited' if about_snapshot.status == 'rate_limited' else 'Checked' if about_snapshot.status == 'success' else 'Not checked' }}</span></dd></div>
   </dl>
   <p id="about-check-reason" class="about-check-reason" {% if not about_snapshot.reason or (busy and about_snapshot.worker_available) %}hidden{% endif %}>{{ about_snapshot.reason or '' }}</p>
   <button id="about-refresh" class="about-button secondary" type="button" hidden>Refresh status</button>
 </section>
+{% include 'about_maintenance.html' %}
 <section class="about-panel" aria-labelledby="about-releases-title">
   <div class="about-section-heading"><h2 id="about-releases-title">Recent releases</h2></div>
   <p id="about-releases-empty" class="about-empty" {% if about_snapshot.releases %}hidden{% endif %}>No releases checked yet.</p>
   <div id="about-releases" class="about-release-list">
     {% for release in about_snapshot.releases %}<article class="about-release">
-      <div class="about-release-main"><div class="about-release-title"><h3>{{ release.version }}</h3>{% if release.version == about_snapshot.installed_version %}<span class="about-badge">Current</span>{% endif %}{% if release.tag == about_snapshot.latest_tag %}<span class="about-badge">{{ 'Last known' if about_snapshot.stale else 'Latest' }}</span>{% endif %}</div><time datetime="{{ release.published_at }}">{{ release.published_at }}</time></div>
+      <div class="about-release-main"><div class="about-release-title"><h3>{{ release.version }}</h3>{% if release.version == about_snapshot.installed_version %}<span class="about-badge status-badge" data-status="ok">Current</span>{% endif %}{% if release.tag == about_snapshot.latest_tag %}<span class="about-badge status-badge" data-status="{{ 'neutral' if about_snapshot.stale else 'ok' }}">{{ 'Last known' if about_snapshot.stale else 'Latest' }}</span>{% endif %}</div><time datetime="{{ release.published_at }}">{{ release.published_at }}</time></div>
       <a class="about-link secondary" href="{{ release.url }}" target="_blank" rel="noopener noreferrer">View changelog<span class="visually-hidden"> for {{ release.version }} (opens a new tab)</span></a>
     </article>{% endfor %}
   </div>

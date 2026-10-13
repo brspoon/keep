@@ -26,8 +26,8 @@ JOBS = (
     ('keep-expiry', 'Temporary Keeps', 'Release expired Keep protection.'),
     ('reminder-scan', 'Leaving reminders', 'Find titles eligible for a seven-day reminder.'),
     ('reminder-reconcile', 'Reminder reconciliation', 'Resolve and deduplicate queued reminders.'),
-    ('queue-cleanup', 'Email queue cleanup', 'Remove queued titles that are no longer eligible.'),
-    ('email-digest', 'Email delivery', 'Send queued digests after the quiet period.'),
+    ('queue-cleanup', 'Notification queue cleanup', 'Remove queued titles that are no longer eligible.'),
+    ('email-digest', 'Notification delivery', 'Send queued notifications after the quiet period.'),
     ('seerr-availability', 'Seerr availability', 'Request an availability sync after library deletion.'),
     ('seerr-history', 'Seerr request history', 'Refresh request attribution and account links.'),
     ('connection-monitor', 'Connection checks', 'Check which service probes are due.'),
@@ -35,7 +35,7 @@ JOBS = (
 RESULT_STATUSES = frozenset(('success', 'failed', 'waiting', 'review', 'disabled'))
 RESULT_MESSAGES = frozenset((
     'Completed', 'No changes', 'Waiting for queued work', 'Delivery needs review',
-    'Connection unavailable', 'Some Keeps will be retried', 'Email is disabled',
+    'Connection unavailable', 'Some Keeps will be retried', 'Email is disabled', 'Notifications are disabled',
     'Waiting for the next scheduled check', 'Result unavailable',
     'Release information checked', 'Release check unavailable', 'Release check rate limited',
     'Waiting for the next release check',

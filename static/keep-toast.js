@@ -17,10 +17,13 @@
     document.body.append(toast);
   }
   let timer;
-  window.showToast = (message, isError = false) => {
+  window.showToast = (message, status = false) => {
+    const tone = status === true || status === 'error' ? 'error' : status === 'neutral' ? 'neutral' : 'ok';
+    const isError = tone === 'error';
     document.getElementById('toast-message').textContent = message;
+    toast.setAttribute('data-status', tone);
     toast.classList.toggle('error', isError);
-    toast.querySelector('.toast-check').textContent = isError ? '!' : '✓';
+    toast.querySelector('.toast-check').textContent = isError ? '!' : tone === 'neutral' ? 'i' : '✓';
     toast.classList.add('visible');
     clearTimeout(timer);
     timer = setTimeout(() => toast.classList.remove('visible'), isError ? 6000 : 4000);
@@ -34,10 +37,10 @@
     pending = JSON.parse(sessionStorage.getItem(key) || 'null');
     sessionStorage.removeItem(key);
   } catch (_) {}
-  const error = document.querySelector('#settings-error-notice, .settings-error, .preferences-ui .error');
-  const notice = document.querySelector('#settings-saved-notice, .preferences-ui .notice, .connections-ui .notice');
+  const error = document.querySelector('#settings-error-notice, .settings-error, .preferences-ui .error, #about-feedback[data-feedback-status="error"]:not([hidden])');
+  const notice = document.querySelector('#settings-saved-notice, .preferences-ui .notice, .connections-ui .notice, #about-feedback:is([data-feedback-status="ok"],[data-feedback-status="neutral"]):not([hidden])');
   if (!error && notice) {
-    window.showToast(notice.textContent.trim());
+    window.showToast(notice.textContent.trim(), notice.getAttribute?.('data-feedback-status') || 'ok');
     notice.hidden = true;
   } else if (!error && pending && pending.path === location.pathname && Date.now() - pending.at < 30000 && typeof pending.message === 'string') {
     window.showToast(pending.message);

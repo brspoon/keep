@@ -1,0 +1,23 @@
+.about-ui .maintenance-actions,.about-ui .maintenance-resources { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.about-ui .maintenance-resources { margin-top:14px; }
+.about-ui .maintenance-operation { margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+.about-ui .maintenance-operation h3 { margin:0 0 8px; font-size:15px; font-weight:650; }
+.about-ui #maintenance-phase { margin:0; }
+.about-ui .about-maintenance .about-feedback { margin:16px 0 0; }
+.about-ui .maintenance-confirm { box-sizing:border-box; width:min(480px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; padding:26px; border:1px solid var(--border); border-radius:16px; background:var(--surface); color:var(--text); }
+.about-ui .maintenance-confirm::backdrop { background:#0009; backdrop-filter:blur(3px); }
+.about-ui .maintenance-confirm h2 { margin:0; font-size:22px; }
+.about-ui .maintenance-confirm p { margin:12px 0 0; font-size:14px; line-height:1.6; }
+.about-ui #maintenance-confirm-description { font-weight:650; }
+.about-ui :is(#maintenance-confirm-impact,#maintenance-confirm-backup) { color:var(--muted); }
+.about-ui .maintenance-confirm-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:22px; }
+@media(max-width:600px) {
+  .about-ui .about-maintenance .about-section-heading { align-items:flex-start; }
+  .about-ui .maintenance-actions { width:100%; }
+  .about-ui .maintenance-actions .about-button { flex:1; }
+  .about-ui .maintenance-confirm { padding:20px; }
+  .about-ui .maintenance-confirm-actions .about-button { flex:1; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .about-ui .maintenance-confirm::backdrop { backdrop-filter:none; }
+}

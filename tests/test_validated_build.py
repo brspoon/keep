@@ -16,13 +16,18 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import validated_build as builds
+from tests.test_maintenance_evidence import write_maintenance_sources, synthetic_maintenance_proof
 
 
 class ValidatedBuildTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
+        write_maintenance_sources(self.root)
+        maintenance_root = patch.object(builds.materials, 'MAINTENANCE_ROOT', self.root)
+        maintenance_root.start()
+        self.addCleanup(maintenance_root.stop)
         (self.root / 'VERSION').write_text('2.21.4\n')
         self.directory = chdir(self.root)
         self.directory.__enter__()
@@ -55,6 +60,10 @@ class ValidatedBuildTests(unittest.TestCase):
             records = []
             for offset, name in enumerate(builds.input_paths(arch)):
                 body = ('original bytes of ' + name).encode()
+                if name == f'maintenance-native-{arch}.json':
+                    identity = {'version': '2.21.4', 'revision': 'a' * 40, 'architecture': arch,
+                                'config_digest': 'sha256:' + ('b' if arch == 'amd64' else 'c') * 64}
+                    body = ('  ' + json.dumps(synthetic_maintenance_proof(self.root, identity), indent=3) + '\r\n').encode()
                 asset_id = 1000 + number * 100 + offset
                 asset_name = f'build-100-{attempt}-{arch}--' + Path(name).name
                 record = {'path': name, 'id': asset_id, 'name': asset_name, 'bytes': len(body),
@@ -183,6 +192,19 @@ class ValidatedBuildTests(unittest.TestCase):
                     step['conclusion'] = 'success'
                 next(step for step in job['steps'] if step['name'] == name)['conclusion'] = result
                 with self.subTest(name=name, result=result), self.assertRaises(ValueError):
+                    builds.job_success(job, native=True)
+
+    def test_native_maintenance_execution_and_cleanup_artifact_steps_are_required(self):
+        names = ('Set up the optional host helper runtime', 'Preload pinned isolated native maintenance tooling',
+                 'Exercise the real optional maintenance lifecycle on the native architecture',
+                 'Preserve native maintenance delivery evidence')
+        self.assertTrue(set(names).issubset(builds.NATIVE_STEPS))
+        for name in names:
+            for outcome in ('missing', 'failure', 'skipped'):
+                job = copy.deepcopy(self.native['amd64'])
+                if outcome == 'missing': job['steps'] = [step for step in job['steps'] if step['name'] != name]
+                else: next(step for step in job['steps'] if step['name'] == name)['conclusion'] = outcome
+                with self.subTest(name=name, outcome=outcome), self.assertRaises(ValueError):
                     builds.job_success(job, native=True)
 
     def test_artifact_rejects_expiry_wrong_origin_digest_size_and_duplicates(self):
@@ -325,6 +347,31 @@ class ValidatedBuildTests(unittest.TestCase):
                 builds.restore('amd64')
         docker.assert_not_called()
         self.assertFalse(Path('validation-provenance-amd64.json').exists())
+
+    def test_restore_rejects_semantically_failed_original_maintenance_proof_before_image_load(self):
+        row = next(record for record in self.indexes['amd64']['assets']
+                   if record['path'] == 'maintenance-native-amd64.json')
+        original = self.blobs[f"/releases/assets/{row['id']}"]
+        failed = json.loads(original)
+        failed['phases'][6]['registry_assistance'] = True
+        body = json.dumps(failed).encode()
+        # A matching asset hash alone must not turn an unsuccessful lifecycle
+        # into qualification. Bind the substituted bytes consistently everywhere.
+        row.update(bytes=len(body), sha256=hashlib.sha256(body).hexdigest())
+        asset = next(asset for asset in self.assets if asset['id'] == row['id'])
+        asset.update(size=len(body), digest='sha256:' + row['sha256'])
+        self.blobs[f"/releases/assets/{row['id']}"] = body
+        archive = self.zip_bytes({'index.json': json.dumps(self.indexes['amd64']).encode()})
+        self.artifacts[0].update(size_in_bytes=len(archive), digest='sha256:' + hashlib.sha256(archive).hexdigest())
+        self.blobs['/actions/artifacts/500/zip'] = archive
+        with patch.object(builds, 'api', side_effect=self.api), patch.object(builds, 'download', side_effect=self.download), \
+             patch.object(builds.materials, 'bundle'), patch.object(builds.materials, 'portable_evidence'), \
+             patch.object(builds.materials, 'installer_evidence'), patch.object(builds.subprocess, 'run') as docker:
+            with self.assertRaisesRegex(ValueError, 'Maintenance trial lifecycle'):
+                builds.restore('amd64')
+        docker.assert_not_called()
+        self.assertFalse(Path('validation-provenance-amd64.json').exists())
+        self.assertEqual(Path('maintenance-native-amd64.json').read_bytes(), body)
 
     def test_durable_provenance_rechecks_origin_artifact_and_index(self):
         proof = builds.provenance('amd64', self.indexes['amd64'], self.artifacts[0])

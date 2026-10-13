@@ -78,6 +78,25 @@ jobs:
       - name: Verify installation tools are absent and runtime libraries work
         run: |
           docker run --rm --network none keep-ci python -c "import importlib.util, zlib, sqlite3, ssl; assert all(importlib.util.find_spec(name) is None for name in ('pip', 'ensurepip', 'setuptools', 'msgpack')); assert zlib.decompress(zlib.compress(b'keep')) == b'keep'; assert sqlite3.connect(':memory:').execute('select 1').fetchone() == (1,); assert ssl.create_default_context().get_ca_certs()"
+      - name: Set up the optional host helper runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Preload pinned isolated native maintenance tooling
+        run: |
+          docker pull docker.io/library/docker@sha256:5efed980cba3fc126cf54e21a5a6ff8849d05b6e0623d6e7612f48e9cd6cd17e
+          docker pull docker.io/library/registry@sha256:325b4b29b041e82803abeb703e201655e4e23ab83264ec1a7c9ddb0a5b14a6e0
+      - name: Exercise the real optional maintenance lifecycle on the native architecture
+        run: |
+          python3 -B scripts/maintenance_container_trial.py --source-directory "$PWD" --integration-source "$PWD" --candidate-image keep-ci:latest --architecture ${{ matrix.arch }} --evidence maintenance-native-${{ matrix.arch }}.json
+      - name: Preserve native maintenance delivery evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: maintenance-native-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: maintenance-native-${{ matrix.arch }}.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Validate portable Compose
         run: |
           cp .env.example .env
@@ -172,6 +191,7 @@ jobs:
             candidate-*${{ matrix.arch }}.json
             portable-recovery-${{ matrix.arch }}.json
             installer-trial-${{ matrix.arch }}.json
+            maintenance-native-${{ matrix.arch }}.json
             source-materials/original-base-packages/package-sources.json
             source-materials/packages/package-sources.json
           if-no-files-found: warn

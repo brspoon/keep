@@ -1,0 +1,31 @@
+{% set maintenance = maintenance_snapshot|default({'supported': false, 'enrolled': false, 'helper_available': false, 'can_install': false, 'can_restart': false, 'reason': 'not_enrolled', 'installed_version': about_snapshot.installed_version, 'latest_version': none, 'confirmation': none, 'operation': none}) %}
+<section class="about-panel about-maintenance" aria-labelledby="maintenance-title">
+  <div class="about-section-heading"><h2 id="maintenance-title" tabindex="-1">Maintenance</h2>
+    <div id="maintenance-actions" class="maintenance-actions" hidden>
+      <button id="maintenance-install" class="about-button" type="button" aria-haspopup="dialog" aria-controls="maintenance-confirm" disabled>Install update</button>
+      <button id="maintenance-restart" class="about-button secondary" type="button" aria-haspopup="dialog" aria-controls="maintenance-confirm" disabled>Restart</button>
+    </div>
+  </div>
+  <p id="maintenance-reason" class="about-check-reason">{{ 'In-app maintenance is not available for this installation.' if not maintenance.supported else 'In-app maintenance is not configured.' if not maintenance.enrolled else 'Checking maintenance status…' }}</p>
+  <div id="maintenance-operation" class="maintenance-operation" hidden>
+    <h3 id="maintenance-operation-title" tabindex="-1"></h3>
+    <p id="maintenance-phase" class="about-badge status-badge" data-status="neutral" role="status" aria-live="polite" aria-atomic="true"></p>
+  </div>
+  <p id="maintenance-feedback" class="about-feedback" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden></p>
+  <div class="maintenance-resources">
+    <button id="maintenance-refresh" class="about-button secondary" type="button" hidden>Refresh status</button>
+    <button id="maintenance-reload" class="about-button secondary" type="button" hidden>Reload Keep</button>
+    <a id="maintenance-guide" class="about-link secondary" href="https://github.com/brspoon/keep/blob/main/docs/MIGRATION.md#upgrade-an-installation" target="_blank" rel="noopener noreferrer">Update guide<span class="visually-hidden"> (opens a new tab)</span></a>
+  </div>
+  <input id="maintenance-csrf" type="hidden" value="{{ csrf_token }}">
+  <script type="application/json" id="maintenance-snapshot">{{ maintenance|tojson }}</script>
+</section>
+<dialog id="maintenance-confirm" class="welcome-dialog maintenance-confirm" aria-labelledby="maintenance-confirm-title" aria-describedby="maintenance-confirm-description maintenance-confirm-impact maintenance-confirm-backup">
+  <form id="maintenance-confirm-form" method="dialog">
+    <h2 id="maintenance-confirm-title">Confirm maintenance</h2>
+    <p id="maintenance-confirm-description"></p>
+    <p id="maintenance-confirm-impact">Keep will be briefly unavailable.</p>
+    <p id="maintenance-confirm-backup">Its database and settings are backed up first.</p>
+    <div class="maintenance-confirm-actions"><button id="maintenance-confirm-cancel" class="about-button secondary" type="button">Cancel</button><button id="maintenance-confirm-submit" class="about-button" type="submit">Continue</button></div>
+  </form>
+</dialog>

@@ -30,7 +30,7 @@ is missing or unusable. It does not install prerequisites or change Docker's
 permissions automatically. See [missing prerequisite help](#missing-prerequisites).
 
 Keep starts on your trusted local network. Git, a domain, and a reverse proxy
-are not required. The installation uses the prebuilt `brspoon/keep:2.25.0` image
+are not required. The installation uses the prebuilt `brspoon/keep:2.26.1` image
 for both the web app and worker, with a shared `keep-data` volume. Docker selects
 the amd64 or arm64 image for your server.
 
@@ -43,13 +43,13 @@ are optional alternatives; they are not additional steps for a default install.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1 | iex
 ```
 
 The installer checks prerequisites, downloads the release files into your home
@@ -68,9 +68,9 @@ both to become healthy. It then prints a setup address such as
 4. Select **Return to Setup** to review the setup checklist. It explains any missing configuration, and **Verify services and finish setup** stays disabled until the required settings are saved. Once available, select it to verify Plex's identity and server access, retrieve Maintainerr's collections, and check that every selected collection still exists. If email is enabled, Keep also checks the SMTP connection and configured authentication without sending an email.
 5. When **Setup verified** appears, select **Open Keep**.
 
-Radarr, Sonarr, Seerr, Tautulli, and email are optional. The
-[Maintainerr webhook](#maintainerr-webhook-for-email-summaries) is only needed
-for email summaries. The checklist requires a saved Plex address, server
+Radarr, Sonarr, Seerr, Tautulli, email, and Pushover are optional. The
+[Maintainerr webhook](#maintainerr-webhook-for-notifications) supplies new Leaving
+events for either notification channel. The checklist requires a saved Plex address, server
 identity, and credential; a Maintainerr address; and at least one selected
 collection. If email is enabled, save the SMTP host and sender address. Having
 those settings enables the button; the final verification still tests the live
@@ -125,13 +125,13 @@ server. You can also choose another available port or installation directory:
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
 ```
 
 Replace the example address with your server's address. If automatic detection
@@ -150,7 +150,7 @@ The commands above execute a versioned installation script. To review the Linux/
 macOS launcher first, download the same file, read it, then run it:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh -o install.sh
 less install.sh
 sh install.sh
 ```
@@ -159,7 +159,7 @@ On Windows, fetch the PowerShell launcher into a variable, inspect it, then
 execute that exact text:
 
 ```powershell
-$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.ps1'
+$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1'
 $installer
 & ([scriptblock]::Create($installer))
 ```
@@ -200,13 +200,13 @@ HTTP. Replace the example hostname with the hostname configured in your proxy.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.sh | sh -s -- --url https://keep.example.com
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh -s -- --url https://keep.example.com
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.ps1'))) --url https://keep.example.com
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1'))) --url https://keep.example.com
 ```
 
 HTTPS mode binds the app to `127.0.0.1:5000` by default and uses secure session
@@ -226,7 +226,7 @@ KEEP_BIND_ADDRESS=127.0.0.1
 
 From the installation directory, run `docker compose up -d` to recreate both
 services with the new configuration. Sign in again at the new address. Update Maintainerr's webhook
-URL if you use email summaries, and reissue any outstanding account setup or
+URL if you use media notifications, and reissue any outstanding account setup or
 reset links. `KEEP_URL` controls browser callbacks and generated links, so it
 must match the address users will open.
 
@@ -236,6 +236,10 @@ does not trust client-supplied forwarding headers. Use proxy-side rate limits
 and configure HSTS at the proxy.
 
 ## Upgrades and source builds
+
+Owners can install updates or restart Keep from **Admin → About** after enrolling
+the [optional Linux maintenance helper](MAINTENANCE.md). It requires Python 3.12
+or newer on the host; the regular installer continues to support Python 3.9.
 
 Before upgrading, restoring, or moving an existing installation, read the
 [backup and restore guide](PORTABLE_BACKUP.md) and the
@@ -363,12 +367,13 @@ check Enable email delivery. TLS certificate verification remains enabled.
 Test SMTP checks the saved connection, TLS and optional authentication without
 sending an email. It does not verify sender acceptance or inbox delivery.
 
-With email disabled, digests pause without consuming the queue. Self-service
+With email disabled, email digests pause without consuming their queued work.
+Pushover notifications continue if separately configured and enabled. Self-service
 password reset directs users to the owner. Creating a local account or requesting
 its setup/reset link as owner displays a private one-use link, valid for 24 hours,
 for delivery out of band. The page is not cached and sends no referrer. Reissuing
 a link invalidates the prior link. Disabling an account invalidates its links and
-sessions. Turning email back on may resume queued notifications; inspect them first.
+sessions. Turning email back on may resume queued email notifications; inspect them first.
 
 Changing selected collections does not delete historical keeps or saved recipient
 preferences. Unselected collections leave the active views; selecting them again
@@ -380,6 +385,37 @@ to manage its Keeps; removing a collection selection does not remove protection.
 Subscription choices for newly selected collections
 must be reviewed by the owner and recipients.
 
+## Pushover and notification preferences
+
+Open **Admin → Notifications** to enable email or Pushover and review deliveries.
+SMTP settings remain in **Admin → Connections**. Existing email recipients and
+collection subscriptions carry forward on upgrade.
+
+For Pushover, register an application in your [Pushover account](https://pushover.net/apps/build)
+and save its application token under **Admin → Notifications**. Each person saves
+their own Pushover user key in **Preferences**, optionally selects a device, and
+chooses events and collections. Keep uses normal-priority notifications. See the
+[Pushover API guide](https://pushover.net/api) for tokens, keys, and device names.
+Saved Pushover tokens and user keys cannot be revealed in Keep; replace or clear
+them through their respective settings.
+
+Email and Pushover choices are independent. Pushover starts with new events after
+activation; enabling it does not replay an earlier email backlog. Re-enabling
+Pushover or changing its key, device, or application token starts a new delivery
+generation. Account disablement and lost Plex access stop that account's push
+notifications.
+
+**Test notification** sends a fixed message to the signed-in person's saved
+destination. The email test requires enabled, configured email; the Pushover test
+requires a saved application token and personal user key. Tests are limited to
+prevent repeated sends. Provider acceptance does not prove inbox or device delivery.
+
+The owner can choose connection, job, and available-update alerts in Preferences.
+Other accounts receive only the media events they select. An uncertain delivery
+is held for review rather than automatically resent. Check the destination before
+choosing **Resend**, which can create a duplicate. Discarding a delivery changes
+only its notification record.
+
 ## Deliberate service overrides
 
 New installations configure services in the owner UI; no service variables are
@@ -388,7 +424,8 @@ needed in `.env`. Advanced deployments may explicitly override `PLEX_SERVER_URL`
 `RADARR_URL`, `RADARR_API_KEY`, `SONARR_URL`, `SONARR_API_KEY`,
 `SEERR_URL`, `SEERR_API_KEY`, `TAUTULLI_URL`, `TAUTULLI_API_KEY`,
 `EMAIL_ENABLED`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`,
-`SMTP_PASSWORD`, `SMTP_FROM`, or `SMTP_SENDER_NAME`. Overridden fields identify
+`SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_SENDER_NAME`, `PUSHOVER_ENABLED`, or
+`PUSHOVER_APP_TOKEN`. Overridden fields identify
 their source and cannot be changed through the UI, except for the three Plex
 connection fields described above. TLS uses `ssl` internally
 (usually port 465); STARTTLS uses `starttls` (usually port 587).
@@ -426,7 +463,9 @@ unsaved edits before navigation or another action. Connection diagnostics identi
 common DNS, refusal, timeout, TLS, authentication, HTTP and service-response issues
 without echoing service URLs, credentials or raw response text.
 
-## Maintainerr webhook for email summaries
+<a id="maintainerr-webhook-for-email-summaries"></a>
+
+## Maintainerr webhook for notifications
 
 Configure this in Maintainerr, separately from Keep's service connection:
 
@@ -456,7 +495,7 @@ Configure this in Maintainerr, separately from Keep's service connection:
    collection you selected in Keep, and save each rule group. Collection names
    for new-entry events must match Keep's saved labels; refresh/resave the selected
    collections after renaming them in Maintainerr.
-6. Configure SMTP and recipients in Keep, then verify a controlled event with a
+6. Configure email or Pushover in Keep, then verify a controlled event with a
    disposable title and an explicitly chosen test recipient. Maintainerr's generic
    Test notification is ignored by Keep and does not prove media-event queuing or
    inbox delivery. A Keep response of `queued` proves queue acceptance only.

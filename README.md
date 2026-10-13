@@ -13,7 +13,7 @@ When it's time to make room, **Manage Library** lets people with the owner's per
 - **See what's leaving.** Browse selected Maintainerr collections and the time remaining before possible removal.
 - **Keep your watch plans.** Protect titles for 30 days, manage your Keeps, and see who kept each title.
 - **Make space together.** Give trusted users controlled access to library cleanup through Radarr and Sonarr.
-- **Stay informed.** Optional email summaries and watch history help people decide what to keep.
+- **Stay informed.** Optional email and Pushover notifications, plus watch history, help people decide what to keep.
 
 ## Sign-in and access
 
@@ -52,13 +52,13 @@ After installing the prerequisites, run one command for your system on the compu
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.25.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.
@@ -67,7 +67,7 @@ The installer downloads the release files into a `keep` folder in your home dire
 2. On **Set up Keep**, select **Configure services and collections** to open **Admin → Connections**. Save and test Maintainerr, then choose and save at least one collection Keep should track.
 3. Select **Return to Setup** and review the checklist. **Verify services and finish setup** becomes available once the required configuration is saved; the checklist explains anything still missing. Select it to verify Plex and the selected Maintainerr collections, plus SMTP if you enabled email. Select **Open Keep** after verification succeeds.
 
-Radarr, Sonarr, Seerr, Tautulli, and email are optional. See the [installation guide](docs/INSTALLATION.md) to choose a port or address, use an HTTPS proxy, or troubleshoot setup. Keep the installation's `.env` file and data volume private, and back them up before upgrading.
+Radarr, Sonarr, Seerr, Tautulli, email, and Pushover are optional. See the [installation guide](docs/INSTALLATION.md) to choose a port or address, use an HTTPS proxy, or troubleshoot setup. Keep the installation's `.env` file and data volume private, and back them up before upgrading.
 
 ## Guides
 

@@ -1,4 +1,4 @@
-/* A shared title index follows the current section without changing media order. */
+/* A desktop title index follows the current section without changing media order. */
 (() => {
   const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
   const initial = title => {
@@ -8,7 +8,7 @@
   const controls = [...document.querySelectorAll('.media-view section[data-alphabet-section]')].map(section => {
     const header = section.querySelector('.section-header');
     if (!header) return null;
-    return {section, header, name:section.querySelector('h2')?.textContent.trim() || 'this collection', targets:new Map(), available:[], cards:[]};
+    return {section, header, name:section.querySelector('h2')?.textContent.trim() || 'this collection', targets:new Map(), available:[]};
   }).filter(Boolean);
   if (!controls.length) return;
 
@@ -16,37 +16,31 @@
   const side = document.createElement('aside');
   side.className = 'alphabet-side-navigation'; side.hidden = true;
   const index = document.createElement('nav'); index.className = 'alphabet-side-letters';
-  const track = document.createElement('div'); track.className = 'alphabet-scrub-track';
-  const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'alphabet-scrub-handle';
-  handle.setAttribute('role', 'slider'); handle.setAttribute('aria-orientation', 'vertical');
-  handle.setAttribute('aria-valuemin', '0');
-  const bubble = document.createElement('div'); bubble.className = 'alphabet-scrub-bubble';
-  bubble.hidden = true; bubble.setAttribute('aria-hidden', 'true');
-  track.append(handle, bubble); side.append(index, track); document.body.append(side);
+  side.append(index); document.body.append(side);
   document.body.classList.add('alphabet-scroller-ready');
   document.documentElement.classList.add('alphabet-scroller-ready');
 
-  let active = null, drag = null, focusContext = null, keyboardSelection = null, scheduled = false, refreshScheduled = false;
-  let currentIndex = 0, railTop = 0, railHeight = 0;
-  let layoutMetrics = '';
+  let active = null, focusContext = null, indexHadFocus = false, scheduled = false, refreshScheduled = false;
   let renderedControl = null, renderedLetters = '';
   const offset = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--browse-offset')) || 80;
   const viewport = () => ({top:window.visualViewport?.offsetTop || 0, height:window.visualViewport?.height || window.innerHeight});
   const shown = control => !control.section.hidden && control.section.isConnected !== false && control.available.length;
+  const needsIndex = control => {
+    const usableHeight = Math.max(1, viewport().height - offset() - control.header.getBoundingClientRect().height - 24);
+    return shown(control) && control.available.length > 1 && control.section.getBoundingClientRect().height > usableHeight * 2;
+  };
   const rebuild = control => {
-    control.targets.clear(); control.cards = [];
+    control.targets.clear();
     if (!control.section.hidden) control.section.querySelectorAll('.card').forEach(card => {
       if (card.hidden || card.isConnected === false) return;
       const title = card.dataset.title || card.querySelector('.title')?.textContent.trim() || 'Untitled';
       const letter = initial(title);
-      control.cards.push({card, letter});
       if (!control.targets.has(letter)) control.targets.set(letter, card);
     });
     // Follow first appearances in the existing DOM, including the # bucket.
     control.available = [...control.targets.keys()];
   };
   const chooseContext = () => {
-    if (drag && shown(drag.control)) return drag.control;
     if (focusContext && shown(focusContext)) return focusContext;
     const view = viewport(), probe = view.top + offset() + 8;
     const visible = controls.filter(control => {
@@ -55,30 +49,28 @@
     });
     return [...visible].reverse().find(control => control.section.getBoundingClientRect().top <= probe) || visible[0] || null;
   };
-  const atView = control => {
-    const probe = viewport().top + offset() + control.header.getBoundingClientRect().height + 8;
-    // Existing grids flow in DOM row order. Avoid measuring every card on each scroll.
-    let low = 0, high = control.cards.length - 1, position = 0;
-    while (low <= high) {
-      const middle = Math.floor((low + high) / 2);
-      if (control.cards[middle].card.getBoundingClientRect().top <= probe + 1) { position = middle; low = middle + 1; }
-      else high = middle - 1;
+  const hideIndex = previous => {
+    // A responsive rule can already have dropped focus to body before its change
+    // event runs. Remember index focus until another control receives it.
+    if (side.contains(document.activeElement) || indexHadFocus && document.activeElement === document.body) {
+      const destination = [previous, active, ...controls].find(control => control
+        && !control.section.hidden && control.section.isConnected !== false);
+      const target = destination?.header || document.getElementById('media-search');
+      if (target) {
+        if (destination) { target.tabIndex = -1; target.setAttribute('data-alphabet-target', ''); }
+        target.focus({preventScroll:true});
+      }
     }
-    const rowTop = control.cards[position]?.card.getBoundingClientRect().top;
-    // The first card on the nearest row supplies its initial, even in a wide grid.
-    while (position > 0 && Math.abs(control.cards[position - 1].card.getBoundingClientRect().top - rowTop) <= 1) position--;
-    return Math.max(0, control.available.indexOf(control.cards[position]?.letter));
+    focusContext = null; indexHadFocus = false; side.hidden = true;
   };
-  const jump = (control, letter, focus, immediate) => {
+  const jump = (control, letter) => {
     const card = control.targets.get(letter);
     if (!card || card.hidden || control.section.hidden || card.isConnected === false) return;
-    if (focus) {
-      card.tabIndex = -1; card.setAttribute('data-alphabet-target', '');
-      card.focus({preventScroll:true});
-    }
+    card.tabIndex = -1; card.setAttribute('data-alphabet-target', '');
+    card.focus({preventScroll:true});
     const top = Math.max(0, window.scrollY + card.getBoundingClientRect().top - offset() - control.header.getBoundingClientRect().height - 8);
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    window.scrollTo({top, behavior:immediate || reduced ? 'instant' : 'smooth'});
+    window.scrollTo({top, behavior:reduced ? 'instant' : 'smooth'});
   };
   const buttons = letters.map(letter => {
     const button = document.createElement('button'); button.type = 'button';
@@ -86,11 +78,11 @@
     button.hidden = true; button.tabIndex = -1;
     button.addEventListener('click', () => {
       refresh();
-      if (active) jump(active, letter, true, false);
+      if (active && !side.hidden) jump(active, letter);
     });
     button.addEventListener('keydown', event => {
       if (event.metaKey || event.ctrlKey || event.altKey || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-      if (!active) return;
+      if (!active || side.hidden) return;
       const available = active.available.map(value => buttons.find(item => item.dataset.letter === value));
       const position = available.indexOf(button);
       if (position < 0) return;
@@ -103,62 +95,23 @@
     });
     index.append(button); return button;
   });
-  const positionHandle = () => {
-    if (!active) return;
-    const height = handle.getBoundingClientRect().height || 56;
-    const span = Math.max(0, railHeight - height);
-    const fraction = active.available.length > 1 ? currentIndex / (active.available.length - 1) : 0.5;
-    handle.style.top = `${span * fraction}px`;
-    bubble.style.top = `${span * fraction + height / 2}px`;
-    handle.setAttribute('aria-valuemax', String(active.available.length - 1));
-    handle.setAttribute('aria-valuenow', String(currentIndex));
-    const letter = active.available[currentIndex];
-    handle.setAttribute('aria-valuetext', `${active.name}: ${letter === '#' ? 'numbers and other titles' : letter}`);
-    handle.setAttribute('aria-label', `Title index in ${active.name}`);
-    handle.title = `${active.name}: ${letter}`;
-    bubble.textContent = letter;
-  };
   const layout = () => {
-    if (!active) return;
     const view = viewport(), browseOffset = offset();
     const safeBottom = parseFloat(getComputedStyle(side).paddingBottom) || 0;
-    layoutMetrics = [view.top, view.height, window.innerWidth, window.innerHeight, browseOffset, safeBottom].join(':');
-    let top, height, space;
-    if (drag && drag.layoutMetrics === layoutMetrics) {
-      // Title jumps move the heading; the held rail stays fixed to the pointer's viewport.
-      top = drag.railTop; height = space = drag.railHeight;
-    } else if (mobile.matches) {
-      top = Math.max(view.top + browseOffset + 8, active.header.getBoundingClientRect().bottom + 8);
-      height = space = view.top + view.height - 88 - safeBottom - top;
-      if (height < 56) { keyboardSelection = null; stopDrag(); side.hidden = true; return; }
-    } else {
-      const start = view.top + browseOffset + 8;
-      space = Math.max(56, view.height - browseOffset - 8 - safeBottom);
-      height = Math.min(active.available.length * 24 + 8, space);
-      top = start + Math.max(0, (space - height) / 2);
-    }
-    side.style.top = `${top}px`; index.style.maxHeight = `${space}px`;
-    track.style.height = `${height}px`;
-    const rect = track.getBoundingClientRect();
-    const nextTop = rect.top, nextHeight = rect.height || height;
-    const changed = nextTop !== railTop || nextHeight !== railHeight;
-    railTop = nextTop; railHeight = nextHeight;
-    positionHandle();
-    if (drag && changed) {
-      const handleHeight = handle.getBoundingClientRect().height || 56;
-      const fraction = drag.letters.length > 1 ? drag.index / (drag.letters.length - 1) : 0.5;
-      drag.grabOffset = drag.lastY - (railTop + handleHeight / 2 + Math.max(0, railHeight - handleHeight) * fraction);
-    }
-    if (drag) { drag.railTop = railTop; drag.railHeight = railHeight; drag.layoutMetrics = layoutMetrics; }
+    const start = view.top + browseOffset + 8;
+    const space = Math.max(56, view.height - browseOffset - 8 - safeBottom);
+    const height = Math.min(active.available.length * 24 + 8, space);
+    side.style.left = `${Math.min(window.innerWidth - 44, active.section.getBoundingClientRect().right + 8)}px`;
+    side.style.top = `${start + Math.max(0, (space - height) / 2)}px`;
+    index.style.maxHeight = `${space}px`;
   };
   const sync = () => {
     scheduled = false;
+    const previous = active;
     if (focusContext && !shown(focusContext)) focusContext = null;
-    active = chooseContext(); side.hidden = !active;
-    if (keyboardSelection && (active !== keyboardSelection.control || active !== focusContext
-      || document.activeElement !== handle || !active.targets.has(keyboardSelection.letter))) keyboardSelection = null;
-    if (!active) return;
-    currentIndex = drag ? drag.index : keyboardSelection ? active.available.indexOf(keyboardSelection.letter) : atView(active);
+    active = chooseContext();
+    if (mobile.matches || !active || !needsIndex(active)) { hideIndex(previous); return; }
+    side.hidden = false;
     index.setAttribute('aria-label', `Title index in ${active.name}`);
     const focused = document.activeElement;
     const keepRoving = buttons.includes(focused) && active.targets.has(focused.dataset.letter);
@@ -170,106 +123,38 @@
         ...buttons.filter(button => !active.targets.has(button.dataset.letter)));
       renderedControl = active; renderedLetters = signature;
     }
-    let changedCurrent = false;
     buttons.forEach(button => {
       const position = active.available.indexOf(button.dataset.letter);
       button.hidden = position < 0; button.style.order = String(position);
       button.setAttribute('aria-label', `${button.dataset.letter === '#' ? 'Numbers and other titles' : `Titles starting with ${button.dataset.letter}`} in ${active.name}`);
-      const current = position === currentIndex;
-      if (current && button.getAttribute('aria-current') !== 'location') changedCurrent = true;
-      if (current) button.setAttribute('aria-current', 'location'); else button.removeAttribute('aria-current');
-      if (!keepRoving) button.tabIndex = current ? 0 : -1;
+      if (!keepRoving) button.tabIndex = position === 0 ? 0 : -1;
     });
     layout();
-    if (replaceFocus) buttons.find(button => button.dataset.letter === active.available[currentIndex])?.focus({preventScroll:true});
+    if (replaceFocus) buttons.find(button => button.dataset.letter === active.available[0])?.focus({preventScroll:true});
     else if (keepRoving && document.activeElement !== focused) focused.focus({preventScroll:true});
-    if (!mobile.matches && changedCurrent && !index.contains(document.activeElement)) {
-      buttons.find(button => button.dataset.letter === active.available[currentIndex])?.scrollIntoView({block:'nearest', inline:'nearest', behavior:'instant'});
-    }
   };
   const schedule = () => {
     if (scheduled) return;
     scheduled = true; requestAnimationFrame(sync);
   };
-  const stopDrag = (commit = false) => {
-    if (!drag) return;
-    const session = drag; drag = null; bubble.hidden = true;
-    try { handle.releasePointerCapture(session.pointerId); } catch (_) {}
-    if (commit) jump(session.control, session.letters[session.index], true, true);
-    schedule();
-  };
-  const refresh = () => {
-    controls.forEach(rebuild);
-    if (drag && (!shown(drag.control) || drag.letters.join('') !== drag.control.available.join(''))) stopDrag();
-    if (focusContext && !shown(focusContext)) focusContext = null;
-    sync();
-  };
-  handle.addEventListener('pointerdown', event => {
-    if (!mobile.matches || drag || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return;
-    refresh();
-    if (!active || side.hidden) return;
-    event.preventDefault(); focusContext = null; keyboardSelection = null;
-    const height = handle.getBoundingClientRect().height || 56;
-    const fraction = active.available.length > 1 ? currentIndex / (active.available.length - 1) : 0.5;
-    drag = {control:active, letters:[...active.available], index:currentIndex, pointerId:event.pointerId,
-      railTop, railHeight, layoutMetrics, lastY:event.clientY,
-      grabOffset:event.clientY - (railTop + height / 2 + Math.max(0, railHeight - height) * fraction)};
-    bubble.hidden = false;
-    try { handle.setPointerCapture(event.pointerId); } catch (_) {}
-  });
-  document.addEventListener('pointermove', event => {
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    event.preventDefault(); drag.lastY = event.clientY;
-    const height = handle.getBoundingClientRect().height || 56;
-    const span = Math.max(1, railHeight - height);
-    const fraction = Math.max(0, Math.min(1, (event.clientY - drag.grabOffset - railTop - height / 2) / span));
-    const next = Math.round(fraction * (drag.letters.length - 1));
-    if (next === drag.index) return;
-    drag.index = currentIndex = next;
-    positionHandle(); jump(drag.control, drag.letters[next], false, true);
-  }, {passive:false});
-  document.addEventListener('pointerup', event => {
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    event.preventDefault(); stopDrag(true);
-  });
-  document.addEventListener('pointercancel', event => { if (drag && event.pointerId === drag.pointerId) stopDrag(); });
-  handle.addEventListener('lostpointercapture', event => { if (drag && event.pointerId === drag.pointerId) stopDrag(); });
-  handle.addEventListener('keydown', event => {
-    if (event.metaKey || event.ctrlKey || event.altKey || !['ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', ' '].includes(event.key)) return;
-    refresh(); if (!active) return;
-    event.preventDefault(); focusContext = active;
-    if (event.key === 'Enter' || event.key === ' ') {
-      jump(active, active.available[currentIndex], true, true); return;
-    }
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? active.available.length - 1
-      : Math.max(0, Math.min(active.available.length - 1, currentIndex + (event.key === 'ArrowUp' ? -1 : 1)));
-    currentIndex = next; keyboardSelection = {control:active, letter:active.available[next]};
-    positionHandle(); jump(active, active.available[next], false, true);
-  });
-  side.addEventListener('focusin', () => { focusContext = active; });
+  const refresh = () => { controls.forEach(rebuild); sync(); };
+  side.addEventListener('focusin', () => { focusContext = active; indexHadFocus = true; });
   side.addEventListener('focusout', event => {
-    if (event.target === handle && event.relatedTarget !== handle) keyboardSelection = null;
-    if (!side.contains(event.relatedTarget)) { focusContext = null; schedule(); }
+    if (event.relatedTarget && !side.contains(event.relatedTarget)) { focusContext = null; indexHadFocus = false; schedule(); }
   });
   document.addEventListener('focusin', event => {
-    if (event.target !== handle) keyboardSelection = null;
-    if (!side.contains(event.target)) { focusContext = null; schedule(); }
+    if (!side.contains(event.target)) { focusContext = null; indexHadFocus = false; schedule(); }
   });
   document.addEventListener('pointerdown', event => {
-    if (!side.contains(event.target) && !drag) { focusContext = null; keyboardSelection = null; schedule(); }
+    if (!side.contains(event.target)) { focusContext = null; indexHadFocus = false; schedule(); }
   });
   document.addEventListener('wheel', event => {
-    if (drag) return;
-    keyboardSelection = null;
     if (!side.contains(event.target)) focusContext = null;
     schedule();
   }, {passive:true});
-  const cancel = () => { stopDrag(); focusContext = null; keyboardSelection = null; schedule(); };
-  window.addEventListener('blur', cancel); window.addEventListener('pagehide', cancel);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
   window.addEventListener('scroll', schedule, {passive:true}); window.addEventListener('resize', schedule);
   window.visualViewport?.addEventListener('resize', schedule); window.visualViewport?.addEventListener('scroll', schedule);
-  mobile.addEventListener?.('change', () => { cancel(); focusContext = null; schedule(); });
+  mobile.addEventListener?.('change', sync);
   window.KeepAlphabet = {refresh};
   document.getElementById('media-search')?.addEventListener('input', refresh);
   document.getElementById('search-clear')?.addEventListener('click', refresh);
@@ -285,6 +170,10 @@
       requestAnimationFrame(() => { refreshScheduled = false; refresh(); });
     });
     document.querySelectorAll('.media-view').forEach(view => observer.observe(view, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden']}));
+  }
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(schedule);
+    controls.forEach(control => observer.observe(control.section));
   }
   refresh();
 })();

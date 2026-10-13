@@ -60,7 +60,7 @@ class SharedNavigationTests(unittest.TestCase):
              patch.object(keep, 'get_collection_delete_after_days', return_value=30), \
              patch.object(keep, 'build_library_sections', return_value=[]), \
              patch.object(keep, 'granted_library_keys', return_value=['radarr:1']):
-            for path in ('/', '/kept', '/library', '/help', '/settings/users', '/settings/email',
+            for path in ('/', '/kept', '/library', '/help', '/settings/users', '/settings/notifications',
                          '/settings/connections', '/settings/activity', '/settings/jobs',
                          '/settings/api-keys', '/settings/api-reference', '/preferences'):
                 response = self.client.get(path)
@@ -111,7 +111,7 @@ class SharedNavigationTests(unittest.TestCase):
     def test_post_rendered_views_refresh_with_get_without_repeating_the_action(self):
         cases = (
             ('/preferences?source=mobile', {'theme_mode': 'invalid'}, 200, '/preferences?source=mobile'),
-            ('/settings/recipients', {'action': 'add', 'email': 'invalid'}, 400, '/settings/email'),
+            ('/settings/recipients', {'action': 'add', 'email': 'invalid'}, 400, '/settings/notifications'),
             ('/auth/local', {'email': 'absent@example.com', 'password': 'synthetic-wrong-password'}, 401, '/'),
         )
         for path, data, status, refresh_url in cases:
@@ -140,7 +140,7 @@ class SharedNavigationTests(unittest.TestCase):
 
     def test_creation_forms_precede_lists(self):
         for path, creation, listing in (('/settings/users', 'Add local user', '<article class="user-card">'),
-                                        ('/settings/email', 'Add email recipient', '<h2>Email recipients</h2>')):
+                                        ('/settings/notifications', 'Add email recipient', '<h2>Email recipients</h2>')):
             page = self.client.get(path).get_data(as_text=True)
             self.assertLess(page.index(creation), page.index(listing))
             self.assertIn('class="panel creation-panel"', page)

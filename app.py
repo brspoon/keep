@@ -16,9 +16,16 @@ import seerr
 import connection_monitor
 import background_jobs
 import release_updates
+import notifications
+import notification_settings
+import notifications_routes
+import notifications_app
+import pushover
 import email_templates
 import api_v1
-MASKED_CONNECTION_FIELDS = SECRETS + ("PLEX_MACHINE_IDENTIFIER",)
+import maintenance_app
+import maintenance_mailbox
+MASKED_CONNECTION_FIELDS = tuple(name for name in SECRETS if name != 'PUSHOVER_APP_TOKEN') + ("PLEX_MACHINE_IDENTIFIER",)
 from contextvars import ContextVar
 from service_discovery import discover_collections, test_plex
 import smtplib
@@ -46,6 +53,7 @@ from functools import wraps
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
@@ -175,13 +183,43 @@ DUMMY_PASSWORD_HASH = password_hasher.hash(secrets.token_urlsafe(32))
 
 
 KEEP_DB_PATH = os.environ.get("KEEP_DB_PATH", "/app/data/keep.sqlite3")
-os.makedirs(os.path.dirname(os.path.abspath(KEEP_DB_PATH)), exist_ok=True)
 
+connection_settings = None
+onboarding = None
+maintenance_store = maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
 
-connection_settings = ConnectionSettings(KEEP_DB_PATH)
-onboarding = Onboarding(KEEP_DB_PATH, PLEX_OWNER_ID)
-if "PLEX_CLIENT_IDENTIFIER" not in os.environ:
-    PLEX_CLIENT_IDENTIFIER = onboarding.client_id()
+def maintenance_authority():
+    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+        row=db.execute("""SELECT p.plex_id,p.session_version,p.status,p.auth_type,p.plex_access
+            FROM installation i JOIN user_profiles p ON p.plex_id=i.owner
+            WHERE i.id=1 AND i.complete=1""").fetchone()
+    return (maintenance_app.Authority(str(row[0]),row[1],row[2:]==('active','plex','active'))
+        if row else maintenance_app.Authority('',0,False))
+
+def maintenance_configuration():
+    from connection_settings import FIELDS,PLEX_FIELDS,validate
+    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+        values=dict(db.execute('SELECT name,value FROM connection_settings'))
+        overrides={row[0] for row in db.execute('SELECT name FROM plex_connection_overrides')}
+    for name in FIELDS:
+        if name in os.environ and not(name in PLEX_FIELDS and name in overrides):
+            values[name]=os.environ[name]
+    return maintenance_app.configuration_fingerprint(values)
+
+maintenance_controller = maintenance_app.Controller(maintenance_store,
+    maintenance_app.Hooks(maintenance_authority,maintenance_configuration,
+        lambda:APP_VERSION,maintenance_mailbox.runtime_qualified))
+maintenance_app.register_flask(app,maintenance_controller,
+    read_only_about=lambda snapshot:maintenance_about(snapshot))
+
+def maintenance_work(*,authority=False):
+    def decorate(callback):
+        @wraps(callback)
+        def admitted(*args,**kwargs):
+            with maintenance_store.work(authority=authority):
+                return callback(*args,**kwargs)
+        return admitted
+    return decorate
 
 def owner_id():
     return onboarding.owner()
@@ -210,6 +248,35 @@ def email_enabled():
     return connection_value('EMAIL_ENABLED') == 'true'
 
 
+def notification_actor():
+    profile = current_profile()
+    user = session.get('plex_user') or {}
+    return notification_settings.Actor(str(user.get('id', '')),
+        bool(profile and profile['status'] == 'active' and plex_account_access_active(profile)),
+        bool(profile and str(profile['plex_id']) == owner_id()),
+        session_version=user.get('session_version', -1))
+
+
+def notification_settings_store(*, initialize=False):
+    return notification_settings.Settings(KEEP_DB_PATH, initialize=initialize,
+        connections=connection_settings, owner_id=owner_id,
+        profile_access=plex_account_access_active)
+
+
+def notification_store(*, read_only=False):
+    if read_only:
+        return notifications.Store(KEEP_DB_PATH, initialize=False)
+    store = app.extensions.get('keep_notifications')
+    if store is None or store.path != Path(KEEP_DB_PATH):
+        store = notifications.Store(KEEP_DB_PATH)
+        app.extensions['keep_notifications'] = store
+    return store
+
+
+def notification_enabled_providers():
+    return notification_runtime().enabled_providers()
+
+
 @app.before_request
 def load_settings_snapshot():
     from flask import g
@@ -232,153 +299,8 @@ def attribution_db():
     return db
 
 
-with closing(attribution_db()) as db, db:
-    db.execute("BEGIN IMMEDIATE")
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS keep_attribution (
-            collection_id TEXT NOT NULL,
-            media_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            username TEXT NOT NULL,
-            kept_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (collection_id, media_id)
-        )
-    """)
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS keep_schedules (
-            collection_id TEXT NOT NULL,
-            media_id TEXT NOT NULL,
-            expires_at TEXT,
-            extension_available_at TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (collection_id, media_id)
-        )
-    """)
-    schedule_columns = {row["name"] for row in db.execute("PRAGMA table_info(keep_schedules)")}
-    if "extension_available_at" not in schedule_columns:
-        db.execute("ALTER TABLE keep_schedules ADD COLUMN extension_available_at TEXT")
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS keep_migrations (
-            name TEXT PRIMARY KEY,
-            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            completed_at TEXT
-        )
-    """)
-    db.execute("INSERT OR IGNORE INTO keep_migrations(name) VALUES (?)",
-               (TEMPORARY_KEEP_MIGRATION,))
 
 
-with closing(attribution_db()) as db, db:
-    db.execute("BEGIN IMMEDIATE")
-    db.execute("""CREATE TABLE IF NOT EXISTS user_profiles (
-        plex_id TEXT PRIMARY KEY,
-        plex_username TEXT NOT NULL DEFAULT '',
-        email TEXT NOT NULL DEFAULT '',
-        full_name TEXT NOT NULL DEFAULT '',
-        display_name TEXT NOT NULL DEFAULT '',
-        can_remove_any INTEGER NOT NULL DEFAULT 0 CHECK (can_remove_any IN (0, 1)),
-        can_keep_indefinitely INTEGER NOT NULL DEFAULT 0 CHECK (can_keep_indefinitely IN (0, 1)),
-        can_delete_media INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_media IN (0, 1)),
-        can_delete_any INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_any IN (0, 1)),
-        auth_type TEXT NOT NULL DEFAULT 'plex',
-        status TEXT NOT NULL DEFAULT 'active',
-        password_hash TEXT NOT NULL DEFAULT '',
-        invite_token_hash TEXT,
-        invite_expires_at REAL,
-        session_version INTEGER NOT NULL DEFAULT 0,
-        last_seen_at TEXT,
-        plex_access TEXT NOT NULL DEFAULT 'active',
-        plex_checked_at TEXT,
-        plex_sync_visible INTEGER NOT NULL DEFAULT 0,
-        theme_mode TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))
-    )""")
-    profile_columns = {
-        row["name"] for row in db.execute("PRAGMA table_info(user_profiles)")
-    }
-    if "can_remove_any" not in profile_columns:
-        db.execute("ALTER TABLE user_profiles ADD COLUMN can_remove_any INTEGER NOT NULL DEFAULT 0")
-    profile_migrations = {
-        "can_keep_indefinitely": "INTEGER NOT NULL DEFAULT 0",
-        "can_delete_media": "INTEGER NOT NULL DEFAULT 0",
-        "can_delete_any": "INTEGER NOT NULL DEFAULT 0",
-        "auth_type": "TEXT NOT NULL DEFAULT 'plex'",
-        "status": "TEXT NOT NULL DEFAULT 'active'",
-        "password_hash": "TEXT NOT NULL DEFAULT ''",
-        "invite_token_hash": "TEXT",
-        "invite_expires_at": "REAL",
-        "session_version": "INTEGER NOT NULL DEFAULT 0",
-        "welcome_version": "TEXT NOT NULL DEFAULT ''",
-        "plex_access": "TEXT NOT NULL DEFAULT 'active'",
-        "plex_checked_at": "TEXT",
-        "plex_sync_visible": "INTEGER NOT NULL DEFAULT 0",
-        "theme_mode": "TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))",
-    }
-    for column, definition in profile_migrations.items():
-        if column not in profile_columns:
-            db.execute(f"ALTER TABLE user_profiles ADD COLUMN {column} {definition}")
-    db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS local_user_email_unique
-                  ON user_profiles(lower(email)) WHERE auth_type = 'local'""")
-    db.execute("""CREATE TABLE IF NOT EXISTS email_recipients (
-        email TEXT PRIMARY KEY COLLATE NOCASE,
-        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS recipient_subscriptions (
-        email TEXT NOT NULL COLLATE NOCASE,
-        collection_id INTEGER NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-        PRIMARY KEY (email, collection_id)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (
-        action TEXT NOT NULL,
-        client_key TEXT NOT NULL,
-        window_started INTEGER NOT NULL,
-        attempts INTEGER NOT NULL,
-        PRIMARY KEY (action, client_key)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS activity_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        actor_id TEXT NOT NULL DEFAULT '',
-        actor_name TEXT NOT NULL DEFAULT '',
-        action TEXT NOT NULL,
-        description TEXT NOT NULL
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS media_libraries (
-        library_key TEXT PRIMARY KEY,
-        service TEXT NOT NULL CHECK (service IN ('radarr', 'sonarr')),
-        external_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        path TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(service, external_id)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS user_library_permissions (
-        user_id TEXT NOT NULL,
-        library_key TEXT NOT NULL,
-        PRIMARY KEY(user_id, library_key),
-        FOREIGN KEY(user_id) REFERENCES user_profiles(plex_id) ON DELETE CASCADE,
-        FOREIGN KEY(library_key) REFERENCES media_libraries(library_key) ON DELETE CASCADE
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS user_feature_acknowledgements (
-        user_id TEXT NOT NULL,
-        feature_key TEXT NOT NULL,
-        version TEXT NOT NULL,
-        acknowledged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY(user_id, feature_key)
-    )""")
-    for recipient in db.execute("SELECT email FROM email_recipients").fetchall():
-        db.executemany("""INSERT OR IGNORE INTO recipient_subscriptions
-            (email, collection_id, enabled) VALUES (?, ?, 1)""",
-            ((recipient["email"], collection_id)
-             for collection_id in recipient_collection_ids()))
-    # Migrate names cached by the former Seerr integration, if present.
-    old_names = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'keeper_names'"
-    ).fetchone()
-    if old_names:
-        db.execute("""INSERT OR IGNORE INTO user_profiles(plex_id, display_name)
-                      SELECT plex_id, display_name FROM keeper_names""")
 
 
 def short_keeper_name(full_name):
@@ -496,6 +418,7 @@ def get_authorized_plex_user_ids():
     return authorized
 
 
+@maintenance_work(authority=True)
 def sync_plex_user_access():
     authorized = get_authorized_plex_user_ids()
     if authorized is None:
@@ -543,6 +466,7 @@ def token_digest(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+@maintenance_work()
 def persistent_rate_limit(action, limit, window_seconds):
     """Return a 429 response after a per-client fixed-window limit is exhausted."""
     now = int(time.time())
@@ -583,6 +507,7 @@ def activity_actor(user=None):
     )
 
 
+@maintenance_work()
 def log_activity(action, description, actor=None):
     actor_id, actor_name = activity_actor(actor)
     try:
@@ -784,6 +709,7 @@ def keep_migration_started_at():
     return datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
 
+@maintenance_work()
 def migrate_existing_keep_schedules(exclusions_by_collection=None):
     """Give every exclusion present at upgrade a fresh, one-time 30-day keep."""
     with closing(attribution_db()) as db:
@@ -1342,7 +1268,7 @@ def render_auth_page(
         </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
       </head>
       <body class="auth-ui">
@@ -1418,14 +1344,17 @@ def get_recipient_delivery_preferences():
     with closing(attribution_db()) as db:
         rows = db.execute("""SELECT r.email, s.collection_id
             FROM email_recipients r
-            JOIN recipient_subscriptions s ON s.email = r.email AND s.enabled = 1
+            LEFT JOIN recipient_subscriptions s ON s.email = r.email AND s.enabled = 1
             WHERE r.enabled = 1 ORDER BY r.email COLLATE NOCASE, s.collection_id""").fetchall()
     preferences = {}
     for row in rows:
-        preferences.setdefault(row["email"], set()).add(row["collection_id"])
+        selected = preferences.setdefault(row["email"], set())
+        if row["collection_id"] is not None:
+            selected.add(row["collection_id"])
     return preferences
 
 
+@maintenance_work()
 def send_email(to_addresses, subject, html_body, text_body):
     if not email_enabled():
         raise RuntimeError('Email is disabled')
@@ -1462,6 +1391,33 @@ def send_email(to_addresses, subject, html_body, text_body):
             raise RuntimeError("SMTP rejected one or more digest recipients")
 
 
+@maintenance_work()
+def send_notification_email(to_addresses, subject, html_body, text_body):
+    """Recheck effective SMTP settings immediately before delivery."""
+    token = _settings_snapshot.set(connection_settings.snapshot())
+    try:
+        return send_email(to_addresses, subject, html_body, text_body)
+    finally:
+        _settings_snapshot.reset(token)
+
+
+@maintenance_work()
+def send_notification_email_test(address):
+    subject, body, plain = email_templates.notification_email(
+        'Keep test notification', 'Your Keep email notifications are working.',
+        connection_settings.get('KEEP_URL', KEEP_URL))
+    send_notification_email([address], subject, body, plain)
+    return notifications.Outcome('accepted')
+
+
+@maintenance_work()
+def send_notification_push_test(credentials):
+    return pushover.send(credentials.app_token, credentials.user_key,
+        'Your Keep Pushover notifications are working.', title='Keep test notification',
+        device=credentials.device)
+
+
+@maintenance_work()
 def send_local_setup_email(profile, token, reset=False):
     setup_url = f"{connection_value('KEEP_URL').rstrip('/')}/auth/local/setup/{token}"
     name = profile["display_name"] or profile["full_name"] or "there"
@@ -1477,6 +1433,7 @@ def private_setup_link(token):
     return response
 
 
+@maintenance_work(authority=True)
 def issue_local_setup(plex_id, reset=False):
     token = secrets.token_urlsafe(32)
     with closing(attribution_db()) as db, db:
@@ -1520,7 +1477,7 @@ def render_local_setup_page(profile=None, token="", error=None, complete=False):
         color:#ffb0b0;background:rgba(255,118,118,.08);font-size:12px}
     </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script></head><body class="setup-ui"><main><img class="mark" src="/static/keep-icon.svg?v={{ app_version }}" alt="Keep" width="64" height="64">
       {% if complete %}<h1>Password saved</h1><p>Your Keep account is ready.</p>
@@ -1691,6 +1648,7 @@ def get_collection_exclusions(collection_id):
     return cache[cache_key]
 
 
+@maintenance_work()
 def change_maintainerr_exclusion(media_id, collection_id, action):
     response = requests.post(
         f"{connection_value('MAINTAINERR_URL')}/api/rules/exclusion",
@@ -2588,7 +2546,7 @@ def home():
         }
     </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.6.0"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-duration.js?v=2.6.0"></script>
 <style>
@@ -3026,14 +2984,16 @@ def require_owner():
 
 def redirect_to_settings_with_notice(notice_key):
     session["settings_notice"] = notice_key
-    section = "email" if notice_key in ("recipient", "subscriptions") else "users"
+    if notice_key in ("recipient", "subscriptions"):
+        return redirect('/settings/notifications')
+    section = "users"
     return redirect(url_for(f"settings_{section}"))
 
 
 def redirect_to_settings_with_error(message, email_address=""):
     session["settings_error"] = message
     session["settings_error_email"] = email_address
-    return redirect(url_for("settings_email"))
+    return redirect('/settings/notifications')
 
 
 def require_form_csrf():
@@ -3866,49 +3826,83 @@ def email_preferences_page():
     email_address = ((profile["email"] if profile else "") or user.get("email") or "").strip().lower()
     theme = profile['theme_mode'] if profile else 'system'
     error = None
+    test_feedback = None
     saved = request.args.get("saved") == "1"
 
     if request.method == "POST":
         csrf_error = require_form_csrf()
         if csrf_error:
             return csrf_error
-        requested_theme = request.form.get('theme_mode', theme)
-        if requested_theme in ('system', 'light', 'dark'):
-            theme = requested_theme
-        receive_email = request.form.get("receive_email") == "1"
-        try:
-            selected = {int(value) for value in request.form.getlist("collection_id")}
-        except ValueError:
-            selected = set()
-        if requested_theme not in ('system', 'light', 'dark'):
-            error = 'Choose System, Light, or Dark appearance.'
-        elif not profile:
-            error = 'Your account is unavailable. Sign in again.'
-        elif receive_email and not valid_email_address(email_address):
-            error = "Your Keep account does not have an email address. Ask the owner to add one."
-        elif receive_email and (not selected or not selected.issubset(set(recipient_collection_ids()))):
-            error = "Select at least one collection or turn off email delivery."
-        elif selected and not selected.issubset(set(recipient_collection_ids())):
-            error = "Invalid collection preference."
+        action = request.form.get('action', 'email')
+        personal = notification_routes.handle_personal(action)
+        if personal['response'] is not None:
+            return personal['response']
+        if personal['handled']:
+            error, test_feedback, saved = personal['error'], personal['test_feedback'], False
+            if personal['saved']:
+                return redirect(url_for('email_preferences_page', saved='1', **({'fragment': '1'} if request.args.get('fragment') == '1' else {})))
+        elif action != 'email':
+            return 'Unknown preferences action', 400
         else:
-            with closing(attribution_db()) as db, db:
-                db.execute('UPDATE user_profiles SET theme_mode=? WHERE plex_id=?',
-                           (requested_theme, str(user['id'])))
-                if receive_email:
-                    db.execute("""INSERT INTO email_recipients(email, enabled) VALUES (?, 1)
-                        ON CONFLICT(email) DO UPDATE SET enabled = 1""", (email_address,))
-                    ensure_recipient_subscriptions(db, email_address)
-                    db.execute("UPDATE recipient_subscriptions SET enabled = 0 WHERE email = ?",
-                               (email_address,))
-                    db.executemany("""UPDATE recipient_subscriptions SET enabled = 1
-                        WHERE email = ? AND collection_id = ?""",
-                        ((email_address, collection_id) for collection_id in selected))
-                elif email_address:
-                    # Allow opting out of an address saved under older validation rules.
-                    db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?",
-                               (email_address,))
-            log_activity('personal-preferences-updated', 'Updated personal preferences')
-            return redirect(url_for("email_preferences_page", saved="1", **({"fragment": "1"} if request.args.get("fragment") == "1" else {})))
+            if not current_account_session():
+                return 'Your account is unavailable. Sign in again.', 403
+            actor = notification_actor()
+            settings = notification_settings_store()
+            previous_events = settings.email_event_preferences(email_address)['events'] if email_address else notifications.MEDIA_EVENTS
+            chosen_events = (set(request.form.getlist('email_event'))
+                             if 'email_event_present' in request.form or 'email_event' in request.form else set(previous_events))
+            receive_email = request.form.get('receive_email') == '1'
+            requested_theme = request.form.get('theme_mode', theme)
+            if requested_theme in ('system', 'light', 'dark'):
+                theme = requested_theme
+            with closing(attribution_db()) as db:
+                previous_collections = {row[0] for row in db.execute(
+                    'SELECT collection_id FROM recipient_subscriptions WHERE email=? AND enabled=1', (email_address,))}
+            try:
+                selected = ({int(value) for value in request.form.getlist('collection_id')}
+                            if receive_email or 'collection_id' in request.form else previous_collections)
+            except ValueError:
+                selected = set()
+                error = 'Invalid collection preference.'
+            allowed_events = notifications.EVENTS if actor.owner else notifications.MEDIA_EVENTS
+            if requested_theme not in ('system', 'light', 'dark'):
+                error = 'Choose System, Light, or Dark appearance.'
+            elif not chosen_events.issubset(allowed_events):
+                error = 'Choose events available to your account.'
+            elif receive_email and not valid_email_address(email_address):
+                error = 'Your Keep account does not have an email address. Ask the owner to add one.'
+            elif receive_email and not chosen_events:
+                error = 'Select at least one event or turn off email notifications.'
+            elif receive_email and chosen_events & notifications.MEDIA_EVENTS and not selected:
+                error = 'Select at least one collection or turn off email delivery.'
+            elif not selected.issubset(set(recipient_collection_ids())):
+                error = 'Invalid collection preference.'
+            if not error:
+                try:
+                    with closing(attribution_db()) as db, db:
+                        db.execute('BEGIN IMMEDIATE')
+                        settings.validate_actor(actor, db=db)
+                        db.execute('UPDATE user_profiles SET theme_mode=? WHERE plex_id=?',
+                                   (requested_theme, str(user['id'])))
+                        if receive_email:
+                            db.execute('''INSERT INTO email_recipients(email, enabled) VALUES (?,1)
+                                ON CONFLICT(email) DO UPDATE SET enabled=1''', (email_address,))
+                            ensure_recipient_subscriptions(db, email_address)
+                        elif email_address:
+                            db.execute('UPDATE email_recipients SET enabled=0 WHERE email=?', (email_address,))
+                        if email_address:
+                            db.execute('UPDATE recipient_subscriptions SET enabled=0 WHERE email=?', (email_address,))
+                            db.executemany('UPDATE recipient_subscriptions SET enabled=1 WHERE email=? AND collection_id=?',
+                                           ((email_address, cid) for cid in selected))
+                            if db.execute('SELECT 1 FROM email_recipients WHERE email=?', (email_address,)).fetchone():
+                                settings.save_email_events(actor, email_address, chosen_events, db=db)
+                except (PermissionError, ValueError):
+                    error = 'Your account changed. Refresh Preferences and try again.'
+                except (sqlite3.Error, OSError):
+                    error = 'Keep could not save your preferences. Try again shortly.'
+                else:
+                    log_activity('personal-preferences-updated', 'Updated personal preferences')
+                    return redirect(url_for('email_preferences_page', saved='1', **({'fragment': '1'} if request.args.get('fragment') == '1' else {})))
 
     enabled = False
     selected = set(recipient_collection_ids())
@@ -3922,10 +3916,18 @@ def email_preferences_page():
         if rows:
             selected = {row["collection_id"] for row in rows}
 
+    try:
+        notification_context = notification_routes.preferences_context(email_address)
+    except PermissionError:
+        return render_auth_page(title='Sign in again',
+            message='Your account changed. Sign in again to continue.',
+            button_label='Sign in', button_url=url_for('login')), 403
+    except (sqlite3.Error, OSError, ValueError):
+        return 'Keep could not read your notification preferences. Try again shortly.', 503
     if request.args.get("fragment") == "1":
         return render_template("preferences_form.html", preference_id_prefix="dialog-", email=email_address, enabled=enabled,
             selected=selected, collections=get_collections(), error=error, saved=saved, theme=theme,
-            csrf_token=get_csrf_token())
+            test_feedback=test_feedback, csrf_token=get_csrf_token(), **notification_context)
 
     return render_template_string("""
 <!doctype html><html lang="en" data-theme="{{ theme_mode }}"><head><meta charset="utf-8">
@@ -3962,23 +3964,17 @@ def email_preferences_page():
   @media(max-width:520px){main{padding:26px 20px}.topics{grid-template-columns:1fr}}
 </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>{% include 'shared_assets.html' %}
 </head><body class="preferences-ui"><main>
   {% include 'shared_header.html' %}
   {% include 'shared_whats_new.html' %}
-  <div class="page-heading"><h1>Preferences</h1><p class="subtitle">Choose Keep’s appearance and your email reminders.</p></div>
+  <div class="page-heading"><h1>Preferences</h1><p class="subtitle">Choose Keep’s appearance and your notifications.</p></div>
   {% include 'preferences_form.html' %}
   <a class="back" href="/">Back to Keep</a>
-  <script>
-    const receiveEmail = document.getElementById("receive-email");
-    const emailTopics = document.getElementById("email-topics");
-    receiveEmail.addEventListener("change", () => {
-      emailTopics.disabled = !receiveEmail.checked;
-    });
-  </script>
 </main></body></html>""", email=email_address, enabled=enabled, selected=selected, theme=theme,
-        collections=get_collections(), error=error, saved=saved, csrf_token=get_csrf_token())
+        collections=get_collections(), error=error, saved=saved, test_feedback=test_feedback,
+        csrf_token=get_csrf_token(), **notification_context)
 
 
 @app.get("/settings")
@@ -3989,6 +3985,7 @@ def settings_page():
     return redirect(url_for("settings_users"))
 
 
+@maintenance_work()
 def test_smtp_connection(getter=None):
     """Verify encrypted transport and optional authentication without sending mail."""
     import ssl
@@ -4455,7 +4452,7 @@ def settings_users():
 
 @app.get("/settings/email")
 def settings_email():
-    return render_settings_section("email")
+    return notification_routes.legacy_email_redirect()
 
 
 @app.get("/settings/activity")
@@ -4525,6 +4522,30 @@ def about_diagnostics(snapshot):
     return json.dumps(details, indent=2)
 
 
+def maintenance_about(maintenance_snapshot):
+    """Render recorded owner About without normal middleware/context processors."""
+    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
+        db.row_factory=sqlite3.Row
+        profile=db.execute('SELECT * FROM user_profiles WHERE plex_id=?',
+            (str((session.get('plex_user') or {}).get('id','')),)).fetchone()
+        libraries=[dict(row) for row in db.execute('SELECT * FROM media_libraries')]
+    token=_settings_snapshot.set(connection_settings.snapshot())
+    try:
+        snapshot=about_snapshot()
+        snapshot.update(can_check=False,reason='Maintenance is in progress.')
+        document=app.jinja_env.get_template('about.html').render(
+            app_version=APP_VERSION,theme_mode=profile['theme_mode'],owner=True,
+            plex_user=session.get('plex_user'),csrf_token=get_csrf_token(),
+            capabilities={'delete_media':True},granted_libraries=libraries,
+            about_snapshot=snapshot,diagnostics=about_diagnostics(snapshot),
+            maintenance_snapshot=maintenance_snapshot,notice=None,error=None,
+            show_announcement=False,announcement_version=ANNOUNCEMENT_VERSION)
+    finally:
+        _settings_snapshot.reset(token)
+    response=app.response_class(document,mimetype='text/html')
+    response.headers['Cache-Control']='no-store'
+    return response
+
 @app.get('/settings/about')
 def settings_about():
     denied = require_owner()
@@ -4532,7 +4553,7 @@ def settings_about():
         return denied
     snapshot = about_snapshot()
     response = app.make_response(render_template('about.html', about_snapshot=snapshot,
-        diagnostics=about_diagnostics(snapshot), notice=session.pop('about_notice', None),
+        diagnostics=about_diagnostics(snapshot), maintenance_snapshot=maintenance_controller.snapshot(user=session.get('plex_user')), notice=session.pop('about_notice', None),
         error=session.pop('about_error', None)))
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -4959,7 +4980,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         }
     </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 {% include 'shared_assets.html' %}
 </head>
@@ -5229,10 +5250,8 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
 
 
 def recipient_settings_error(message, address='', status=400, new_recipient_email=''):
-    response = app.make_response((render_settings_section('email', error=message,
-        expanded_recipient=address, new_recipient_email=new_recipient_email), status))
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+    return notification_routes.render_page(error=message, status=status,
+        expanded_recipient=address, new_recipient_email=new_recipient_email)
 
 
 @app.post("/settings/users/<plex_id>")
@@ -5384,6 +5403,7 @@ def update_user_access(user_id):
         with closing(attribution_db()) as db, db:
             db.execute("DELETE FROM user_library_permissions WHERE user_id = ?", (user_id,))
             db.execute("DELETE FROM user_feature_acknowledgements WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM pushover_preferences WHERE user_id = ?", (user_id,))
             db.execute("DELETE FROM user_profiles WHERE plex_id = ?", (user_id,))
         log_activity("user-deleted", f"Deleted local user {label}")
         return redirect_to_settings_with_notice("deleted")
@@ -5435,12 +5455,7 @@ def save_recipient_settings():
             if not recipient:
                 validation_error, error_status = 'Recipient not found', 404
             else:
-                enabled_count = db.execute(
-                    "SELECT COUNT(*) FROM email_recipients WHERE enabled = 1"
-                ).fetchone()[0]
-                if recipient["enabled"] and enabled_count <= 1:
-                    validation_error = 'At least one email recipient must remain enabled'
-                elif action == "disable":
+                if action == "disable":
                     db.execute("UPDATE email_recipients SET enabled = 0 WHERE email = ?", (address,))
                 else:
                     db.execute("DELETE FROM email_recipients WHERE email = ?", (address,))
@@ -5747,7 +5762,7 @@ def release_store():
     return store
 
 
-def background_maintenance_once(state):
+def _background_maintenance_once(state):
     """One existing worker pass, with durable, credential-free job results."""
     jobs = job_store()
     try:
@@ -5797,9 +5812,18 @@ def background_maintenance_once(state):
         result_fn=lambda count: ('success', f'Removed {count} titles'))
     if removed:
         app.logger.warning("Removed %s stale titles from the digest queue", removed)
+    try:
+        observe_notification_status()
+    except (sqlite3.Error, OSError, ValueError):
+        app.logger.warning('Notification observations deferred; continuing delivery')
     result = run_maintenance_job(jobs, 'email-digest', process_digest, result_fn=digest_job_result)
     if result == 'review':
-        app.logger.error("Digest delivery requires review; automatic sending paused")
+        app.logger.warning('Some notification deliveries need review')
+
+
+def background_maintenance_once(state):
+    return maintenance_app.worker_step(maintenance_store,
+        lambda:_background_maintenance_once(state),authority=True)[1]
 
 
 def run_maintenance_job(jobs, job_id, callback, *, fallback=None, **options):
@@ -5815,7 +5839,7 @@ def digest_job_result(state):
     if state == 'review':
         return 'review', 'Delivery needs review'
     if state == 'disabled':
-        return 'disabled', 'Email is disabled'
+        return 'disabled', 'Notifications are disabled'
     if state == 'sent':
         return 'success', 'Completed'
     if state == 'empty':
@@ -5839,40 +5863,9 @@ def seerr_job_due(kind, getter, now=None):
         row = db.execute('SELECT updated FROM seerr_cache WHERE scope=?', (scope,)).fetchone()
         return not row or now >= row['updated'] + job_store().interval('seerr-history', seerr.REFRESH_INTERVAL)
 
-with closing(attribution_db()) as db, db:
-    db.execute("BEGIN IMMEDIATE")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_queue (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        collection_id INTEGER NOT NULL,
-        media_id TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        received_at REAL NOT NULL,
-        batch_id TEXT
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_batches (
-        id TEXT PRIMARY KEY,
-        status TEXT NOT NULL,
-        created_at REAL NOT NULL,
-        detail TEXT
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_deliveries (
-        batch_id TEXT NOT NULL,
-        email TEXT NOT NULL COLLATE NOCASE,
-        sent_at REAL NOT NULL,
-        PRIMARY KEY (batch_id, email)
-    )""")
-    db.execute("""CREATE TABLE IF NOT EXISTS notification_reminders (
-        collection_id INTEGER NOT NULL,
-        media_id TEXT NOT NULL,
-        episode TEXT NOT NULL,
-        queue_id INTEGER NOT NULL,
-        queued_at REAL NOT NULL,
-        PRIMARY KEY (collection_id, media_id, episode)
-    )""")
-    db.execute("""CREATE INDEX IF NOT EXISTS notification_pending
-                  ON notification_queue(batch_id, received_at)""")
 
 
+@maintenance_work()
 def cancel_queued_notifications(collection_id, media_id):
     """Remove every unsent notification for one title."""
     with closing(attribution_db()) as db, db:
@@ -5882,6 +5875,7 @@ def cancel_queued_notifications(collection_id, media_id):
         ).rowcount
 
 
+@maintenance_work()
 def queue_notifications(collection_id, media_ids, kind, now=None):
     now = time.time() if now is None else now
     with closing(attribution_db()) as db, db:
@@ -5901,6 +5895,7 @@ def queue_notifications(collection_id, media_ids, kind, now=None):
                            (collection_id, str(media_id), kind, now))
 
 
+@maintenance_work()
 def prune_notification_queue():
     """Drop pending titles that are no longer active in their collection."""
     with closing(attribution_db()) as db:
@@ -6003,6 +5998,7 @@ def reminder_episode(item):
         return None
 
 
+@maintenance_work()
 def reconcile_reminder_queue():
     """Resolve aggregate webhooks and deduplicate warnings before any batch sends.
 
@@ -6057,13 +6053,14 @@ def reconcile_reminder_queue():
                 db.execute("DELETE FROM notification_queue WHERE id = ?", (row["id"],))
 
 
+@maintenance_work()
 def queue_due_reminders(now=None):
     """Catch up active, unprotected titles with at most seven days remaining.
 
-    Only queues mail; normal recipient preferences, batching and SMTP safeguards
+    Only queues notifications; recipient preferences and batching safeguards
     still apply. Dates, retention and collection membership must be known.
     """
-    if not email_enabled():
+    if not notification_enabled_providers():
         return 0
     now = time.time() if now is None else now
     reconcile_reminder_queue()
@@ -6120,6 +6117,7 @@ def resolve_digest(events):
             add_date = item.get("addDate")
             resolved[key] = {
                 "collection_id": cid,
+                "media_id": str(event['media_id']),
                 "collection": get_collections()[cid].replace(" Leaving Plex Soon", ""),
                 "title": media.get("title") or f"Plex item {event['media_id']}",
                 "year": media.get("year"),
@@ -6135,75 +6133,78 @@ def build_digest_email(items, keep_url):
     return email_templates.digest_email(items, keep_url)
 
 
+def fresh_notification_call(callback, *args):
+    token = _settings_snapshot.set(connection_settings.snapshot())
+    try:
+        return callback(*args)
+    finally:
+        _settings_snapshot.reset(token)
+
+
+class MaintenanceNotificationRuntime(notifications_app.Runtime):
+    @maintenance_work(authority=True)
+    def recover_after_lock(self, *args, **kwargs):
+        return super().recover_after_lock(*args, **kwargs)
+
+    @maintenance_work()
+    def process_digest(self, *args, **kwargs):
+        return super().process_digest(*args, **kwargs)
+
+    @maintenance_work()
+    def process_operational(self, *args, **kwargs):
+        return super().process_operational(*args, **kwargs)
+
+    @maintenance_work()
+    def observe_recorded(self, *args, **kwargs):
+        return super().observe_recorded(*args, **kwargs)
+
+    @maintenance_work()
+    def send(self, *args, **kwargs):
+        return super().send(*args, **kwargs)
+
+
+def notification_runtime():
+    return MaintenanceNotificationRuntime(notifications_app.Helpers(
+        store=lambda: notification_store(), settings=lambda: notification_settings_store(),
+        collections=lambda: fresh_notification_call(get_collections),
+        email_preferences=lambda: get_recipient_delivery_preferences(),
+        email_enabled=lambda: fresh_notification_call(email_enabled),
+        value=lambda name: fresh_notification_call(connection_value, name),
+        reconcile=lambda: reconcile_reminder_queue(), resolve=lambda events: resolve_digest(events),
+        build_email=lambda items, url: build_digest_email(items, url),
+        build_event_email=lambda title, message, url: email_templates.notification_email(title, message, url),
+        send_email=lambda addresses, subject, body, plain: send_notification_email(addresses, subject, body, plain)))
+
+
+@maintenance_work()
+def observe_notification_status():
+    settings = connection_settings.snapshot()
+    getter = lambda name: settings.get(name, globals().get(name, ''))
+    scopes = {service: connection_settings.connection_fingerprint(service, getter)
+              for service in notifications.CONNECTIONS
+              if service != 'pushover' and connection_settings.configured(service, getter)
+              and (service != 'email' or getter('EMAIL_ENABLED') == 'true')}
+    job_scopes = {job_id: None for job_id in background_jobs.JOB_IDS}
+    if connection_settings.configured('seerr', getter):
+        job_scopes.update({job_id: seerr.namespace(getter)
+                           for job_id in ('seerr-history', 'seerr-availability')})
+    else:
+        for job_id in ('seerr-history', 'seerr-availability'):
+            job_scopes.pop(job_id, None)
+    return notification_runtime().observe_recorded(
+        connections=notifications_app.recorded_connections(KEEP_DB_PATH),
+        jobs=background_jobs.Store(KEEP_DB_PATH, initialize=False).records(read_only=True),
+        releases=release_updates.Store(KEEP_DB_PATH, initialize=False).snapshot(APP_VERSION),
+        current_connection_scopes=scopes, current_job_scopes=job_scopes)
+
+
+@maintenance_work()
 def process_digest(now=None):
-    if not email_enabled():
-        return "disabled"
-    # A filesystem lock in digest_worker prevents two workers from claiming/sending.
-    now = time.time() if now is None else now
-    reconcile_reminder_queue()
-    with closing(attribution_db()) as db, db:
-        db.execute("BEGIN IMMEDIATE")
-        # SMTP cannot guarantee exactly-once delivery after a crash. Hold uncertain
-        # batches for review rather than resend a potentially delivered email.
-        db.execute("UPDATE notification_batches SET status = 'review', detail = 'Worker interrupted during SMTP delivery' WHERE status = 'sending'")
-        if db.execute("SELECT 1 FROM notification_batches WHERE status = 'review'").fetchone():
-            return "review"
-        batch = db.execute("SELECT id FROM notification_batches WHERE status = 'building' ORDER BY created_at LIMIT 1").fetchone()
-        if batch:
-            batch_id = batch["id"]
-        else:
-            newest = db.execute("SELECT MAX(received_at) FROM notification_queue WHERE batch_id IS NULL").fetchone()[0]
-            if newest is None or now - newest < DIGEST_QUIET_SECONDS:
-                return "waiting"
-            batch_id = uuid.uuid4().hex
-            db.execute("INSERT INTO notification_batches(id, status, created_at) VALUES (?, 'building', ?)", (batch_id, now))
-            db.execute("UPDATE notification_queue SET batch_id = ? WHERE batch_id IS NULL", (batch_id,))
-        events = [dict(row) for row in db.execute("SELECT * FROM notification_queue WHERE batch_id = ?", (batch_id,))]
-    items = resolve_digest(events)  # Failures here are safe to retry; no mail sent.
-    delivery_target_count = 0
-    if items:
-        preferences = get_recipient_delivery_preferences()
-        if preferences and not connection_value('KEEP_URL'):
-            raise RuntimeError('Digest needs KEEP_URL')
-        with closing(attribution_db()) as db:
-            delivered = {row["email"].casefold() for row in db.execute(
-                "SELECT email FROM notification_deliveries WHERE batch_id = ?", (batch_id,)
-            )}
-        for email_address, collection_ids in preferences.items():
-            recipient_items = [item for item in items
-                               if item["collection_id"] in collection_ids]
-            if recipient_items:
-                delivery_target_count += 1
-            if not recipient_items or email_address.casefold() in delivered:
-                continue
-            subject, body, plain = build_digest_email(recipient_items, connection_value('KEEP_URL'))
-            with closing(attribution_db()) as db, db:
-                db.execute("UPDATE notification_batches SET status = 'sending' WHERE id = ?",
-                           (batch_id,))
-            try:
-                send_email([email_address], subject, body, plain)
-            except Exception:
-                with closing(attribution_db()) as db, db:
-                    db.execute("""UPDATE notification_batches SET status = 'review',
-                        detail = 'SMTP delivery failed or is uncertain; check logs before retrying'
-                        WHERE id = ?""", (batch_id,))
-                app.logger.error("Digest %s held for review after SMTP error", batch_id)
-                return "review"
-            with closing(attribution_db()) as db, db:
-                db.execute("""INSERT OR IGNORE INTO notification_deliveries
-                    (batch_id, email, sent_at) VALUES (?, ?, ?)""",
-                    (batch_id, email_address, time.time()))
-                db.execute("UPDATE notification_batches SET status = 'building' WHERE id = ?",
-                           (batch_id,))
-    with closing(attribution_db()) as db, db:
-        db.execute("UPDATE notification_batches SET status = 'sent', detail = ? WHERE id = ?", (f"{len(items)} titles", batch_id))
-        db.execute("DELETE FROM notification_queue WHERE batch_id = ?", (batch_id,))
-        db.execute("DELETE FROM notification_deliveries WHERE batch_id = ?", (batch_id,))
-    app.logger.warning("Digest %s completed: %s titles", batch_id, len(items))
-    log_activity("digest-completed",
-                 f"Completed digest with {len(items)} titles for {delivery_target_count} recipients",
-                 actor={"username": "Keep email worker"})
-    return "sent" if delivery_target_count else "empty"
+    result = notification_runtime().process_digest(now=now, quiet_seconds=DIGEST_QUIET_SECONDS)
+    if result == 'sent':
+        log_activity('digest-completed', 'Delivered queued notifications',
+                     actor={'username': 'Keep background worker'})
+    return result
 
 
 def update_digest_worker_heartbeat(now=None):
@@ -6215,6 +6216,7 @@ def update_digest_worker_heartbeat(now=None):
     os.utime(DIGEST_WORKER_HEARTBEAT_PATH, (timestamp, timestamp))
 
 
+@maintenance_work()
 def expire_due_keeps(now=None):
     """Release due exclusions, retaining local state whenever Maintainerr fails."""
     migrate_existing_keep_schedules()
@@ -6287,6 +6289,7 @@ def expire_due_keeps(now=None):
     return {"released": released, "missing": missing, "failed": failed}
 
 
+@maintenance_work()
 def queue_seerr_availability():
     try:
         seerr_store().queue_availability(connection_value)
@@ -6295,76 +6298,99 @@ def queue_seerr_availability():
         app.logger.warning('Could not queue Seerr availability sync; scheduled Seerr sync remains available')
 
 
+@maintenance_work()
+def seerr_worker_once():
+    try:
+        settings = connection_settings.snapshot()
+        getter = lambda key: settings.get(key, '')
+        store = seerr_store()
+        jobs = job_store()
+        force_availability = jobs.requested('seerr-availability', first_attempt=True,
+                                          scope=seerr.namespace(getter))
+        availability = (jobs.run('seerr-availability', lambda: store.process_availability(
+                getter, **({'force': True} if force_availability else {})),
+            scope=seerr.namespace(getter),
+            result_fn=lambda result: ('success', 'Completed') if result
+                else ('failed', 'Connection unavailable') if jobs.requested('seerr-availability')
+                else ('waiting', 'Waiting for queued work')) if force_availability or seerr_job_due('availability', getter)
+            else store.process_availability(getter))
+        if availability is None and force_availability:
+            jobs.retry_unstarted('seerr-availability')
+        if availability:
+            app.logger.info('Seerr availability sync requested after media deletion')
+    except Exception:
+        app.logger.warning('Seerr availability sync deferred; background retry pending')
+    try:
+        settings = connection_settings.snapshot()
+        getter = lambda key: settings.get(key, '')
+        if connection_settings.configured('seerr', getter):
+            fingerprint = connection_settings.connection_fingerprint('seerr', getter)
+            try:
+                store = seerr_store()
+                jobs = job_store()
+                force_history = jobs.requested('seerr-history', first_attempt=True,
+                                              scope=seerr.namespace(getter))
+                refreshed = (jobs.run('seerr-history', lambda: store.refresh(getter, automatic=not force_history),
+                    interval=jobs.interval('seerr-history', seerr.REFRESH_INTERVAL),
+                    scope=seerr.namespace(getter),
+                    result_fn=lambda result: ('success', 'Completed') if result is not None
+                        else ('failed', 'Connection unavailable') if jobs.requested('seerr-history')
+                        else ('waiting', 'Waiting for the next scheduled check'))
+                    if force_history or seerr_job_due('history', getter) else store.refresh(getter, automatic=True))
+            except (seerr.RefreshBusy, background_jobs.RetryUnstarted):
+                raise
+            except Exception:
+                before, after = connection_settings.record_automatic_check('seerr', fingerprint, False)
+                if after == 2:
+                    app.logger.warning('Seerr automatic connection check failed twice')
+                raise
+            if refreshed is not None:
+                before, _ = connection_settings.record_automatic_check('seerr', fingerprint, True)
+                if before:
+                    app.logger.info('Seerr automatic connection check recovered')
+    except Exception:
+        # No URLs, credentials, upstream response bodies, or account data.
+        app.logger.warning('Seerr background refresh deferred; retaining previous history')
+
+
 def seerr_refresh_worker():
-    """Isolate bounded Seerr I/O from mail delivery and keep maintenance."""
     while True:
         try:
-            settings = connection_settings.snapshot()
-            getter = lambda key: settings.get(key, '')
-            store = seerr_store()
-            jobs = job_store()
-            force_availability = jobs.requested('seerr-availability', first_attempt=True,
-                                              scope=seerr.namespace(getter))
-            availability = (jobs.run('seerr-availability', lambda: store.process_availability(
-                    getter, **({'force': True} if force_availability else {})),
-                scope=seerr.namespace(getter),
-                result_fn=lambda result: ('success', 'Completed') if result
-                    else ('failed', 'Connection unavailable') if jobs.requested('seerr-availability')
-                    else ('waiting', 'Waiting for queued work')) if force_availability or seerr_job_due('availability', getter)
-                else store.process_availability(getter))
-            if availability is None and force_availability:
-                jobs.retry_unstarted('seerr-availability')
-            if availability:
-                app.logger.info('Seerr availability sync requested after media deletion')
+            maintenance_app.worker_step(maintenance_store,seerr_worker_once)
         except Exception:
-            app.logger.warning('Seerr availability sync deferred; background retry pending')
-        try:
-            settings = connection_settings.snapshot()
-            getter = lambda key: settings.get(key, '')
-            if connection_settings.configured('seerr', getter):
-                fingerprint = connection_settings.connection_fingerprint('seerr', getter)
-                try:
-                    store = seerr_store()
-                    jobs = job_store()
-                    force_history = jobs.requested('seerr-history', first_attempt=True,
-                                                  scope=seerr.namespace(getter))
-                    refreshed = (jobs.run('seerr-history', lambda: store.refresh(getter, automatic=not force_history),
-                        interval=jobs.interval('seerr-history', seerr.REFRESH_INTERVAL),
-                        scope=seerr.namespace(getter),
-                        result_fn=lambda result: ('success', 'Completed') if result is not None
-                            else ('failed', 'Connection unavailable') if jobs.requested('seerr-history')
-                            else ('waiting', 'Waiting for the next scheduled check'))
-                        if force_history or seerr_job_due('history', getter) else store.refresh(getter, automatic=True))
-                except (seerr.RefreshBusy, background_jobs.RetryUnstarted):
-                    raise
-                except Exception:
-                    before, after = connection_settings.record_automatic_check('seerr', fingerprint, False)
-                    if after == 2:
-                        app.logger.warning('Seerr automatic connection check failed twice')
-                    raise
-                if refreshed is not None:
-                    before, _ = connection_settings.record_automatic_check('seerr', fingerprint, True)
-                    if before:
-                        app.logger.info('Seerr automatic connection check recovered')
-        except Exception:
-            # No URLs, credentials, upstream response bodies, or account data.
-            app.logger.warning('Seerr background refresh deferred; retaining previous history')
+            app.logger.warning("Background admission is unavailable; retrying")
         time.sleep(30)
 
 
+def worker_startup_recovery():
+    return maintenance_app.worker_step(maintenance_store,_worker_startup_recovery,authority=True)
+
+def _worker_startup_recovery():
+    notification_runtime().recover_after_lock()
+    job_store().interrupt_running()
+
 def digest_worker():
-    import fcntl
-    lock_path = os.path.join(os.path.dirname(KEEP_DB_PATH), "digest-worker.lock")
-    with open(lock_path, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        job_store().interrupt_running()
-        app.logger.warning("Digest worker started; quiet window %s seconds", DIGEST_QUIET_SECONDS)
-        import threading
-        threading.Thread(target=seerr_refresh_worker, name='seerr-refresh', daemon=True).start()
-        threading.Thread(target=connection_monitor_worker, name='connection-monitor', daemon=True).start()
-        state = {'plex_sync': 0, 'reminder_scan': None}
+    import threading
+    lock_path=os.path.join(os.path.dirname(KEEP_DB_PATH),"digest-worker.lock")
+    with open(lock_path,"w") as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        recovered=False
+        state={'plex_sync':0,'reminder_scan':None}
         while True:
             update_digest_worker_heartbeat()
+            if not recovered:
+                try:
+                    admitted,_=worker_startup_recovery()
+                except (maintenance_app.MaintenanceError,maintenance_app.StorageError,sqlite3.Error,OSError):
+                    app.logger.warning("Background admission is unavailable; retrying")
+                    admitted=False
+                if not admitted:
+                    time.sleep(30)
+                    continue
+                recovered=True
+                app.logger.warning("Digest worker started; quiet window %s seconds",DIGEST_QUIET_SECONDS)
+                threading.Thread(target=seerr_refresh_worker,name='seerr-refresh',daemon=True).start()
+                threading.Thread(target=connection_monitor_worker,name='connection-monitor',daemon=True).start()
             try:
                 background_maintenance_once(state)
             except Exception:
@@ -6373,26 +6399,240 @@ def digest_worker():
             time.sleep(30)
 
 
+@maintenance_work()
+def connection_monitor_once():
+    try:
+        settings = connection_settings.snapshot()
+        getter = lambda key: settings.get(key, globals().get(key, ''))
+        jobs = job_store()
+        force = jobs.requested('connection-monitor', first_attempt=True)
+        jobs.run('connection-monitor', lambda:
+            connection_monitor.run_due(connection_settings, getter, test_smtp_connection, app.logger,
+                                       jobs=jobs, force=force),
+                 result_fn=lambda passed: ('success', 'Completed') if passed
+                     else ('failed', 'Connection unavailable'))
+    except Exception:
+        app.logger.warning('Automatic connection checks deferred; retrying')
+
+
 def connection_monitor_worker():
-    """Keep connection I/O out of digest processing and use persisted due times."""
     while True:
         try:
-            settings = connection_settings.snapshot()
-            getter = lambda key: settings.get(key, globals().get(key, ''))
-            jobs = job_store()
-            force = jobs.requested('connection-monitor', first_attempt=True)
-            jobs.run('connection-monitor', lambda:
-                connection_monitor.run_due(connection_settings, getter, test_smtp_connection, app.logger,
-                                           jobs=jobs, force=force),
-                     result_fn=lambda passed: ('success', 'Completed') if passed
-                         else ('failed', 'Connection unavailable'))
+            maintenance_app.worker_step(maintenance_store,connection_monitor_once)
         except Exception:
-            app.logger.warning('Automatic connection checks deferred; retrying')
+            app.logger.warning("Background admission is unavailable; retrying")
         time.sleep(30)
 
 
-job_store()
-api_v1.ApiV1(sys.modules[__name__])
+def _initialize_application_schema():
+    global connection_settings,onboarding,PLEX_CLIENT_IDENTIFIER
+    os.makedirs(os.path.dirname(os.path.abspath(KEEP_DB_PATH)),exist_ok=True)
+    connection_settings=ConnectionSettings(KEEP_DB_PATH)
+    onboarding=Onboarding(KEEP_DB_PATH,PLEX_OWNER_ID,initialize=False,maintenance_store=maintenance_store)
+    onboarding._initialize_schema(PLEX_OWNER_ID)
+    if "PLEX_CLIENT_IDENTIFIER" not in os.environ:
+        PLEX_CLIENT_IDENTIFIER=onboarding.client_id()
+    with closing(attribution_db()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS keep_attribution (
+                collection_id TEXT NOT NULL,
+                media_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                username TEXT NOT NULL,
+                kept_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (collection_id, media_id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS keep_schedules (
+                collection_id TEXT NOT NULL,
+                media_id TEXT NOT NULL,
+                expires_at TEXT,
+                extension_available_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (collection_id, media_id)
+            )
+        """)
+        schedule_columns = {row["name"] for row in db.execute("PRAGMA table_info(keep_schedules)")}
+        if "extension_available_at" not in schedule_columns:
+            db.execute("ALTER TABLE keep_schedules ADD COLUMN extension_available_at TEXT")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS keep_migrations (
+                name TEXT PRIMARY KEY,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT
+            )
+        """)
+        db.execute("INSERT OR IGNORE INTO keep_migrations(name) VALUES (?)",
+                   (TEMPORARY_KEEP_MIGRATION,))
+
+    with closing(attribution_db()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""CREATE TABLE IF NOT EXISTS user_profiles (
+            plex_id TEXT PRIMARY KEY,
+            plex_username TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            full_name TEXT NOT NULL DEFAULT '',
+            display_name TEXT NOT NULL DEFAULT '',
+            can_remove_any INTEGER NOT NULL DEFAULT 0 CHECK (can_remove_any IN (0, 1)),
+            can_keep_indefinitely INTEGER NOT NULL DEFAULT 0 CHECK (can_keep_indefinitely IN (0, 1)),
+            can_delete_media INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_media IN (0, 1)),
+            can_delete_any INTEGER NOT NULL DEFAULT 0 CHECK (can_delete_any IN (0, 1)),
+            auth_type TEXT NOT NULL DEFAULT 'plex',
+            status TEXT NOT NULL DEFAULT 'active',
+            password_hash TEXT NOT NULL DEFAULT '',
+            invite_token_hash TEXT,
+            invite_expires_at REAL,
+            session_version INTEGER NOT NULL DEFAULT 0,
+            last_seen_at TEXT,
+            plex_access TEXT NOT NULL DEFAULT 'active',
+            plex_checked_at TEXT,
+            plex_sync_visible INTEGER NOT NULL DEFAULT 0,
+            theme_mode TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))
+        )""")
+        profile_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(user_profiles)")
+        }
+        if "can_remove_any" not in profile_columns:
+            db.execute("ALTER TABLE user_profiles ADD COLUMN can_remove_any INTEGER NOT NULL DEFAULT 0")
+        profile_migrations = {
+            "can_keep_indefinitely": "INTEGER NOT NULL DEFAULT 0",
+            "can_delete_media": "INTEGER NOT NULL DEFAULT 0",
+            "can_delete_any": "INTEGER NOT NULL DEFAULT 0",
+            "auth_type": "TEXT NOT NULL DEFAULT 'plex'",
+            "status": "TEXT NOT NULL DEFAULT 'active'",
+            "password_hash": "TEXT NOT NULL DEFAULT ''",
+            "invite_token_hash": "TEXT",
+            "invite_expires_at": "REAL",
+            "session_version": "INTEGER NOT NULL DEFAULT 0",
+            "welcome_version": "TEXT NOT NULL DEFAULT ''",
+            "plex_access": "TEXT NOT NULL DEFAULT 'active'",
+            "plex_checked_at": "TEXT",
+            "plex_sync_visible": "INTEGER NOT NULL DEFAULT 0",
+            "theme_mode": "TEXT NOT NULL DEFAULT 'system' CHECK (theme_mode IN ('system', 'light', 'dark'))",
+        }
+        for column, definition in profile_migrations.items():
+            if column not in profile_columns:
+                db.execute(f"ALTER TABLE user_profiles ADD COLUMN {column} {definition}")
+        db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS local_user_email_unique
+                      ON user_profiles(lower(email)) WHERE auth_type = 'local'""")
+        db.execute("""CREATE TABLE IF NOT EXISTS email_recipients (
+            email TEXT PRIMARY KEY COLLATE NOCASE,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS recipient_subscriptions (
+            email TEXT NOT NULL COLLATE NOCASE,
+            collection_id INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            PRIMARY KEY (email, collection_id)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS auth_rate_limits (
+            action TEXT NOT NULL,
+            client_key TEXT NOT NULL,
+            window_started INTEGER NOT NULL,
+            attempts INTEGER NOT NULL,
+            PRIMARY KEY (action, client_key)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            actor_id TEXT NOT NULL DEFAULT '',
+            actor_name TEXT NOT NULL DEFAULT '',
+            action TEXT NOT NULL,
+            description TEXT NOT NULL
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS media_libraries (
+            library_key TEXT PRIMARY KEY,
+            service TEXT NOT NULL CHECK (service IN ('radarr', 'sonarr')),
+            external_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            path TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(service, external_id)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS user_library_permissions (
+            user_id TEXT NOT NULL,
+            library_key TEXT NOT NULL,
+            PRIMARY KEY(user_id, library_key),
+            FOREIGN KEY(user_id) REFERENCES user_profiles(plex_id) ON DELETE CASCADE,
+            FOREIGN KEY(library_key) REFERENCES media_libraries(library_key) ON DELETE CASCADE
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS user_feature_acknowledgements (
+            user_id TEXT NOT NULL,
+            feature_key TEXT NOT NULL,
+            version TEXT NOT NULL,
+            acknowledged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(user_id, feature_key)
+        )""")
+        for recipient in db.execute("SELECT email FROM email_recipients").fetchall():
+            db.executemany("""INSERT OR IGNORE INTO recipient_subscriptions
+                (email, collection_id, enabled) VALUES (?, ?, 1)""",
+                ((recipient["email"], collection_id)
+                 for collection_id in recipient_collection_ids()))
+        # Migrate names cached by the former Seerr integration, if present.
+        old_names = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'keeper_names'"
+        ).fetchone()
+        if old_names:
+            db.execute("""INSERT OR IGNORE INTO user_profiles(plex_id, display_name)
+                          SELECT plex_id, display_name FROM keeper_names""")
+
+    with closing(attribution_db()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_id INTEGER NOT NULL,
+            media_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            received_at REAL NOT NULL,
+            batch_id TEXT
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_batches (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            detail TEXT
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_deliveries (
+            batch_id TEXT NOT NULL,
+            email TEXT NOT NULL COLLATE NOCASE,
+            sent_at REAL NOT NULL,
+            PRIMARY KEY (batch_id, email)
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS notification_reminders (
+            collection_id INTEGER NOT NULL,
+            media_id TEXT NOT NULL,
+            episode TEXT NOT NULL,
+            queue_id INTEGER NOT NULL,
+            queued_at REAL NOT NULL,
+            PRIMARY KEY (collection_id, media_id, episode)
+        )""")
+        db.execute("""CREATE INDEX IF NOT EXISTS notification_pending
+                      ON notification_queue(batch_id, received_at)""")
+    notification_settings_store(initialize=True)
+    job_store()
+    api_v1.ApiV1(sys.modules[__name__])
+
+def initialize_application_schema():
+    if maintenance_mailbox.runtime_qualified():
+        maintenance_store.initialize()
+    with maintenance_store.startup_schema(APP_VERSION):
+        _initialize_application_schema()
+
+initialize_application_schema()
+
+notification_routes = notifications_routes.register_routes(app, SimpleNamespace(
+    require_owner=lambda: require_owner(), require_csrf=lambda: require_form_csrf(),
+    current_account_session=lambda: current_account_session(), actor=lambda: notification_actor(),
+    settings_store=lambda **kwargs: notification_settings_store(**kwargs),
+    core_store=lambda **kwargs: notification_store(**kwargs), db=lambda: attribution_db(),
+    collections=lambda: get_collections(), csrf_token=lambda: get_csrf_token(),
+    log_activity=lambda action, description: log_activity(action, description),
+    connections=connection_settings, quiet_seconds=DIGEST_QUIET_SECONDS,
+    send_email_test=lambda address: send_notification_email_test(address),
+    send_push_test=lambda credentials: send_notification_push_test(credentials)))
 # Keep browser recovery branded after the API installs its HTTP error handlers.
 app.register_error_handler(404, missing_page)
 

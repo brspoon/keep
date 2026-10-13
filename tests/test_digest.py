@@ -11,10 +11,14 @@ class DigestTests(unittest.TestCase):
         self.client = keep.app.test_client()
         keep.app.config['TESTING'] = True
         with closing(keep.attribution_db()) as db, db:
-            db.execute('DELETE FROM notification_queue')
-            db.execute('DELETE FROM notification_batches')
-            db.execute('DELETE FROM notification_deliveries')
-            db.execute('DELETE FROM notification_reminders')
+            for table in ('notification_dispatches', 'notification_runs',
+                          'notification_destination_epochs', 'notification_cooldowns',
+                          'notification_operational_events', 'notification_transitions',
+                          'notification_test_attempts', 'notification_email_events',
+                          'pushover_preferences', 'notification_provider_generations',
+                          'notification_queue', 'notification_batches',
+                          'notification_deliveries', 'notification_reminders'):
+                db.execute('DELETE FROM ' + table)
         self.cid, self.name = next(iter(keep.COLLECTIONS.items()))
 
     def enqueue(self, ids, cid=None, now=1000, kind='MEDIA_ADDED_TO_COLLECTION'):
@@ -63,8 +67,8 @@ class DigestTests(unittest.TestCase):
         self.enqueue(['show'], cid=3)
         def resolve(events):
             self.assertEqual(len(events), 126)
-            return [dict(collection_id=1, collection='Movies', title='<Movie>', year=2026, days=30, urgent=False),
-                    dict(collection_id=3, collection='Shows', title='Show', year=None, days=2, urgent=True)]
+            return [dict(collection_id=1, media_id='0', collection='Movies', title='<Movie>', year=2026, days=30, urgent=False),
+                    dict(collection_id=3, media_id='show', collection='Shows', title='Show', year=None, days=2, urgent=True)]
         with patch.object(keep, 'resolve_digest', side_effect=resolve):
             self.assertEqual(keep.process_digest(now=1700), 'sent')
             self.assertEqual(keep.process_digest(now=1800), 'waiting')
@@ -84,7 +88,7 @@ class DigestTests(unittest.TestCase):
     @patch.object(keep, 'send_email', side_effect=OSError('SMTP disconnected'))
     def test_uncertain_delivery_is_held_not_resent(self, mail, recipients):
         self.enqueue(['1'])
-        item = dict(collection_id=1, collection='Movies', title='One', year=None, days=30, urgent=False)
+        item = dict(collection_id=1, media_id='1', collection='Movies', title='One', year=None, days=30, urgent=False)
         with patch.object(keep, 'resolve_digest', return_value=[item]):
             self.assertEqual(keep.process_digest(now=1700), 'review')
             self.assertEqual(keep.process_digest(now=1800), 'review')
@@ -97,7 +101,7 @@ class DigestTests(unittest.TestCase):
                   return_value={'a@example.com': {1}, 'b@example.com': {1}})
     def test_partial_delivery_records_success_and_does_not_resend_it(self, recipients):
         self.enqueue(['1'])
-        item = dict(collection_id=1, collection='Movies', title='One', year=None,
+        item = dict(collection_id=1, media_id='1', collection='Movies', title='One', year=None,
                     days=30, urgent=False)
         with patch.object(keep, 'resolve_digest', return_value=[item]), \
              patch.object(keep, 'send_email', side_effect=[None, OSError('SMTP'), None]) as mail:
@@ -105,11 +109,17 @@ class DigestTests(unittest.TestCase):
             with closing(keep.attribution_db()) as db, db:
                 batch_id = db.execute("SELECT id FROM notification_batches").fetchone()[0]
                 delivered = db.execute("SELECT email FROM notification_deliveries").fetchall()
-                db.execute("UPDATE notification_batches SET status='building' WHERE id=?", (batch_id,))
             self.assertEqual([row['email'] for row in delivered], ['a@example.com'])
+            self.assertEqual(keep.process_digest(now=1800), 'review')
+            self.assertEqual(mail.call_count, 2)
+            self.assertTrue(keep.notification_store().resolve_review(
+                batch_id, 'email', 'b@example.com', action='retry', now=1800))
             self.assertEqual(keep.process_digest(now=1800), 'sent')
         self.assertEqual([call.args[0] for call in mail.call_args_list],
                          [['a@example.com'], ['b@example.com'], ['b@example.com']])
+        self.assertEqual(self.count('notification_deliveries'), 0)
+        self.assertEqual(self.count('notification_queue'), 0)
+        self.assertEqual({row['state'] for row in keep.notification_store(read_only=True).snapshot()}, {'accepted'})
 
     @patch.object(keep, 'SMTP_PASSWORD', 'test')
     @patch.object(keep, 'KEEP_URL', 'https://keep.example')
@@ -120,9 +130,9 @@ class DigestTests(unittest.TestCase):
         self.enqueue(['movie'])
         self.enqueue(['show'], cid=3)
         items = [
-            dict(collection_id=1, collection='Movies', title='Movie title', year=None,
+            dict(collection_id=1, media_id='movie', collection='Movies', title='Movie title', year=None,
                  days=30, urgent=False),
-            dict(collection_id=3, collection='Shows', title='Show title', year=None,
+            dict(collection_id=3, media_id='show', collection='Shows', title='Show title', year=None,
                  days=30, urgent=False),
         ]
         with patch.object(keep, 'resolve_digest', return_value=items):
@@ -139,22 +149,35 @@ class DigestTests(unittest.TestCase):
     @patch.object(keep, 'send_email')
     def test_no_subscribed_recipients_clears_batch_without_email(self, mail, recipients):
         self.enqueue(['1'])
-        item = dict(collection_id=1, collection='Movies', title='One', year=None,
+        item = dict(collection_id=1, media_id='1', collection='Movies', title='One', year=None,
                     days=30, urgent=False)
         with patch.object(keep, 'resolve_digest', return_value=[item]):
             self.assertEqual(keep.process_digest(now=1700), 'empty')
         mail.assert_not_called()
         self.assertEqual(self.count('notification_queue'), 0)
 
-    def test_preparation_failure_retries_durable_batch(self):
+    @patch.object(keep, 'KEEP_URL', 'https://keep.example')
+    @patch.object(keep, 'get_recipient_delivery_preferences', return_value={'a@example.com': {1}})
+    def test_preparation_failure_retries_durable_batch(self, recipients):
         self.enqueue(['1'])
-        with patch.object(keep, 'resolve_digest', side_effect=RuntimeError('Maintainerr unavailable')):
-            with self.assertRaises(RuntimeError):
-                keep.process_digest(now=1700)
-        self.assertEqual(self.count('notification_queue'), 1)
-        with patch.object(keep, 'resolve_digest', return_value=[]), patch.object(keep, 'send_email') as mail:
-            self.assertEqual(keep.process_digest(now=1800), 'empty')
+        with patch.object(keep, 'resolve_digest', side_effect=RuntimeError('Maintainerr unavailable')), \
+             patch.object(keep, 'send_email') as mail:
+            self.assertEqual(keep.process_digest(now=1700), 'waiting')
             mail.assert_not_called()
+        self.assertEqual(self.count('notification_queue'), 1)
+        pending = keep.notification_store(read_only=True).snapshot()
+        self.assertEqual(len(pending), 1)
+        self.assertEqual((pending[0]['state'], pending[0]['attempts'], pending[0]['error_code']),
+                         ('pending', 0, 'preparation_failed'))
+        self.assertEqual(pending[0]['next_attempt'], 1760)
+        item = dict(collection_id=1, media_id='1', collection='Movies', title='One', year=None, days=30, urgent=False)
+        with patch.object(keep, 'resolve_digest', return_value=[item]), patch.object(keep, 'send_email') as mail:
+            self.assertEqual(keep.process_digest(now=1759), 'waiting')
+            mail.assert_not_called()
+            self.assertEqual(keep.process_digest(now=1800), 'sent')
+            mail.assert_called_once()
+        self.assertEqual(self.count('notification_queue'), 0)
+        self.assertEqual(keep.notification_store(read_only=True).snapshot()[0]['state'], 'accepted')
 
     def test_pagination_includes_more_than_100_and_filters_kept(self):
         def response(url, **kwargs):
@@ -203,6 +226,7 @@ class DigestTests(unittest.TestCase):
             items = keep.resolve_digest(events)
         self.assertEqual(len(items), 1)
         self.assertTrue(items[0]['urgent'])
+        self.assertEqual(items[0]['media_id'], '1')
 
     def test_prune_removes_titles_no_longer_in_collection(self):
         self.enqueue(['1', '2', '3'])

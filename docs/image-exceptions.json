@@ -2,7 +2,7 @@
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
   "approval": "The October 7 verified-fixed review permits only the three exact Python 3.14.8-r0 Grype scopes below through October 20, 2026 UTC inclusive. Scout must report zero findings; complete raw Grype findings remain visible and every other finding blocks. Historical Python 3.14.7-r2 and zlib 1.3.2-r0 approvals are retired, preserved in Git and original release evidence, and authorize nothing in this policy. Fresh successful native qualification, verified source/license records and original-byte promotion revalidation are required. Stable promotion also requires a fresh recorded review of completed Docker Hub analysis showing zero findings for both exact native digests.",
   "reviewed_sources": {
-    "Dockerfile": "cc164eeb929737af1b6bb52a4d68863121ef8b2d27c1c665ea0cc738f20fc745",
+    "Dockerfile": "77387fe29ee120126d2434f3175ee038cdd587ad6160df7a438099c24cdd3ba3",
     "scripts/inspect_candidate.py": "b891ac18d88d613b790902c904c9d5fbe4ce5c4c71a7c578079b250392ecd397",
     "requirements.txt": "26a92d0b3e6ce4a03b950fdd007e549e716ef45a10cb73220b9207581824ea6c",
     "scripts/python_security_patches.json": "dc7d067e4ec8c428cf5a7fde630d5d4c174c4a6671be05e3d0bbe6ea63e79643",
@@ -11,7 +11,7 @@
     "scripts/alpine_expat_sources.py": "3071513ad18bb712499e494f27fbad596ecebda810072b0e58519c2088e719cb",
     "scripts/runtime_dependency_checks.py": "a67eb435387885c813dfe335289c9e07c2efb871a2ccb88e3233af448dcb03d3",
     "docs/os-package-sources.json": "623d37fc478c7affef1264289e41c6ac179a25fe59a18c142a6715986461c5a3",
-    ".dockerignore": "44cb7b1cd64a692ba963f2670cb131f0f454b726b3766a370861e4474e7c1308",
+    ".dockerignore": "c5a7944e8762b16d4d2bac11d737e26075949020a423ca06279d80ef6f3e6650",
     "scripts/review_image.py": "d89635f7a5ee1d9bf7a03aafee94c6c58e79241c5439d9657558b40e75f2116e",
     "scripts/alpine_zlib_sources.py": "1d7742f9e8a35048d65bf4642f37efc988635b6452836d71f5575e4876d983ff",
     "scripts/dhi_python_packages.py": "365374494190fff6879fed735c972ac8053a52a0d3388a207c435ad34a259a6f",
@@ -21,12 +21,17 @@
     "scripts/package_source_notices.py": "4056b9f2df4fa5a040f7c889de75d851d0d812172619b427e997220a713cbfe4",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
     "scripts/publish_release.py": "02edb524c802f0a3adc5bf3a842d6c291a5b7b772a0d0f837be2909fdfdc64bd",
-    "scripts/release_materials.py": "e978a34bbb4a0a5850d1b02e73d91a6e13bc25ddaaa911e1a1348f8e44cc86b9",
+    "scripts/release_materials.py": "c620a5f4522a84d06edccb9361d4b5e6707ce298e63c0ab389aed84d8edfdbc2",
     "scripts/registry_transfer.py": "ddd75f23e65bd7739f0f1f970052efd614cb6ceeb13369ed83c587609f058d47",
     "scripts/candidate_publication.py": "4caa8c48aad6bbf64d89a0cc9278369fd7717a6bd4435357c01f4091db297564",
     "scripts/hub_analysis_review.py": "f6bb592f6408498d39f7983b515c0ffc25132a4f9c506cdeab8b04dfab8a54ad",
-    ".github/workflows/image.yml": "e9044f5aca302c19e90682e769e8d2bd998b6bf7ff9b5ecfc20494cf0856d094",
-    "scripts/publish_portable.py": "4c2b245014387e73354a235ebfe731ae45bc35a1e9cda80cef14445f35136b25"
+    ".github/workflows/image.yml": "d606669150250e2f4a5622076b437bc188e4443e48a46ac545703e05b265bae3",
+    "scripts/publish_portable.py": "4c2b245014387e73354a235ebfe731ae45bc35a1e9cda80cef14445f35136b25",
+    "scripts/package_maintenance_helper.py": "69bf370bc478112e11f5bb25c89e2ba5e4f4d301b31f1fcf5aec765d941a51c9",
+    ".github/workflows/native-image.yml": "0fc29ba40dfff2890b64620ad7169fb5a59050b95725c8b02629187ad162c63b",
+    "scripts/validated_build.py": "8825708adaba054dd0a898a08e528484ff2af9f12abd2631842bab260f0c4dd6",
+    "scripts/maintenance_container_trial.py": "85f9a1eb68978d721960e13f63a6323bb87b0db97b4d26af125fac18b07bbe3d",
+    "tests/maintenance_trial_fixture.py": "31f9eee827dc28c8fd01b9c4b1859e93bfd924832841ce604890c68ef40845c4"
   },
   "exceptions": {
     "CVE-2026-87910": {
