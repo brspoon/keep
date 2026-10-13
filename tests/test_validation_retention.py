@@ -90,15 +90,27 @@ class ValidationRetentionTests(unittest.TestCase):
     def make_legacy(self, number):
         for job in self.jobs[number]:
             if job['name'].startswith('image / '):
-                job['steps'] = [step for step in job['steps'] if step['name'] != retention.LOADER_STEP]
+                job['steps'] = [step for step in job['steps']
+                                if step['name'] != retention.LOADER_STEP and step['name'] not in retention.MAINTENANCE_STEPS]
                 for step in job['steps']:
                     if step['name'] == retention.CURRENT_ACCEPTANCE_STEP:
                         step['name'] = retention.LEGACY_ACCEPTANCE_STEP
         for artifact in self.artifacts[number]:
             index = self.indexes[artifact['id']]
-            index['assets'] = [row for row in index['assets'] if 'candidate-dependencies-' not in row['path']]
+            index['assets'] = [row for row in index['assets'] if 'candidate-dependencies-' not in row['path'] and 'maintenance-native-' not in row['path']]
         self.assets[number + 1000] = [row for row in self.assets[number + 1000]
-                                      if 'candidate-dependencies-' not in row['name']]
+                                      if 'candidate-dependencies-' not in row['name'] and 'maintenance-native-' not in row['name']]
+
+    def make_pre_maintenance(self, number):
+        for job in self.jobs[number]:
+            if job['name'].startswith('image / '):
+                job['steps'] = [step for step in job['steps']
+                                if step['name'] not in retention.MAINTENANCE_STEPS]
+        for artifact in self.artifacts[number]:
+            index = self.indexes[artifact['id']]
+            index['assets'] = [row for row in index['assets'] if 'maintenance-native-' not in row['path']]
+        self.assets[number + 1000] = [row for row in self.assets[number + 1000]
+                                      if 'maintenance-native-' not in row['name']]
 
     def cleanup_run(self):
         return {'id': 900, 'workflow_id': 80, 'path': retention.CLEANUP_WORKFLOW,
@@ -200,6 +212,80 @@ class ValidationRetentionTests(unittest.TestCase):
         newest = next(row for row in plan['candidates'] if row['run_id'] == 200)
         self.assertIn('current validation unavailable', newest['reason'])
 
+    def test_current_retention_inventory_matches_native_publisher(self):
+        for arch in retention.builds.ARCHES:
+            with patch.object(retention.builds, 'context', return_value=('2.26.0', 'a' * 40)):
+                self.assertEqual(retention.expected_paths('2.26.0', arch),
+                                 set(retention.builds.input_paths(arch)))
+
+    def test_current_maintenance_evidence_is_indexed_and_protected(self):
+        plan = self.inventory()
+        self.assertTrue(all(row['usable'] for row in plan['candidates'] if row['successful']))
+        self.assertEqual(plan['protected_release_ids'], [1200])
+        for arch, artifact in zip(retention.builds.ARCHES, self.artifacts[200]):
+            self.assertIn(f'maintenance-native-{arch}.json',
+                          {row['path'] for row in self.indexes[artifact['id']]['assets']})
+        self.assertEqual(self.deletes, [])
+
+    def test_pre_maintenance_inventory_is_authenticated_but_not_usable(self):
+        self.make_pre_maintenance(100)
+        plan = self.inventory()
+        older = next(row for row in plan['candidates'] if row['run_id'] == 100)
+        self.assertFalse(older['usable'])
+        self.assertTrue(older['successful'])
+        self.assertEqual(plan['protected_release_ids'], [1200])
+        for artifact in self.artifacts[100]:
+            self.assertEqual(len(self.indexes[artifact['id']]['assets']), 19)
+        self.assertEqual(self.deletes, [])
+
+    def test_pre_maintenance_fallback_remains_protected(self):
+        self.make_pre_maintenance(100)
+        self.make_pre_maintenance(200)
+        plan = self.inventory()
+        self.assertTrue(all(not row['usable'] for row in plan['candidates']))
+        self.assertEqual(plan['protected_release_ids'], [1200])
+        self.assertEqual(self.deletes, [])
+
+    def test_partial_maintenance_gates_never_become_an_older_profile(self):
+        saved = copy.deepcopy((self.jobs, self.indexes, self.assets))
+        for missing in retention.MAINTENANCE_STEPS:
+            self.jobs, self.indexes, self.assets = copy.deepcopy(saved)
+            for job in self.jobs[100]:
+                if job['name'].startswith('image / '):
+                    job['steps'] = [step for step in job['steps'] if step['name'] != missing]
+            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, 'maintenance validation profile'):
+                self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_failed_or_skipped_maintenance_gates_block_planning(self):
+        saved = copy.deepcopy(self.jobs)
+        for name in retention.MAINTENANCE_STEPS:
+            for conclusion in ('failure', 'skipped', None):
+                self.jobs = copy.deepcopy(saved)
+                job = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+                next(step for step in job['steps'] if step['name'] == name)['conclusion'] = conclusion
+                with self.subTest(name=name, conclusion=conclusion), self.assertRaisesRegex(ValueError, 'gate did not succeed'):
+                    self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_maintenance_evidence_cannot_be_removed_from_current_profile(self):
+        for artifact in self.artifacts[100]:
+            index = self.indexes[artifact['id']]
+            index['assets'] = [row for row in index['assets'] if 'maintenance-native-' not in row['path']]
+        self.assets[1100] = [row for row in self.assets[1100] if 'maintenance-native-' not in row['name']]
+        with self.assertRaisesRegex(ValueError, 'evidence inventory is incomplete'):
+            self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_pre_maintenance_architecture_cannot_mix_with_current_profile(self):
+        self.make_pre_maintenance(100)
+        current = next(row for row in self.jobs[200] if row['name'].endswith('(arm64)'))
+        older = next(row for row in self.jobs[100] if row['name'].endswith('(arm64)'))
+        older['steps'] = copy.deepcopy(current['steps'])
+        with self.assertRaisesRegex(ValueError, 'disagree on the validation profile'):
+            self.inventory()
+        self.assertEqual(self.deletes, [])
+
     def test_exact_legacy_contract_authenticates_original_indexes_but_is_not_usable(self):
         self.make_legacy(100)
         plan = self.inventory()
@@ -216,7 +302,7 @@ class ValidationRetentionTests(unittest.TestCase):
                              retention.expected_paths('2.21.4', index['architecture'], legacy=True))
             self.assertEqual(len(index['assets']), 18)
         for artifact in self.artifacts[200]:
-            self.assertEqual(len(self.indexes[artifact['id']]['assets']), 19)
+            self.assertEqual(len(self.indexes[artifact['id']]['assets']), 20)
         self.assertEqual(self.deletes, [])
 
     def test_only_legacy_candidates_preserve_latest_successful_fallback(self):
