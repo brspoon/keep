@@ -39,6 +39,7 @@ jobs:
         run: |
           mkdir -p _site/assets
           cp site/index.html site/styles.css _site/
+          cp site/assets/*.webp _site/assets/
           cp static/keep-icon.svg static/favicon-32.png static/apple-touch-icon.png _site/assets/
           cp docs/branding/social-preview.png _site/assets/
           cp docs/screenshots/leaving.png docs/screenshots/leaving-mobile.png docs/screenshots/kept.png docs/screenshots/manage-library.png _site/assets/
