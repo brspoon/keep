@@ -9,7 +9,7 @@
   <p id="maintenance-reason" class="about-check-reason">{{ 'In-app maintenance is not available for this installation.' if not maintenance.supported else 'In-app maintenance is not configured.' if not maintenance.enrolled else 'Checking maintenance status…' }}</p>
   <div id="maintenance-operation" class="maintenance-operation" hidden>
     <h3 id="maintenance-operation-title" tabindex="-1"></h3>
-    <p id="maintenance-phase" class="about-badge" role="status" aria-live="polite" aria-atomic="true"></p>
+    <p id="maintenance-phase" class="about-badge status-badge" data-status="neutral" role="status" aria-live="polite" aria-atomic="true"></p>
   </div>
   <p id="maintenance-feedback" class="about-feedback" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden></p>
   <div class="maintenance-resources">

@@ -156,7 +156,14 @@ class FakeDocker:
             'Labels':{'com.docker.compose.project':self.f.profile.project,'com.docker.compose.volume':'keep-data'}})
         if first=='ps':
             rows=list(self.containers.values())
-            if any(value.startswith('label=io.keep.maintenance.install=') for value in args):ids=list(self.helpers)
+            if any(value.startswith(('label=io.keep.maintenance.install=','id=')) for value in args):
+                selected=rows+list(self.helpers.values())
+                for value in args:
+                    if value.startswith('id='):selected=[row for row in selected if row['Id']==value[3:]]
+                    if value.startswith('label='):
+                        name,expected=value[6:].split('=',1)
+                        selected=[row for row in selected if row.get('Labels',{}).get(name)==expected]
+                ids=[row['Id'] for row in selected]
             elif any(value.startswith('volume=') for value in args):
                 ids=[row['Id'] for row in rows+list(self.helpers.values()) if row['State']['Running']]+(['f'*64] if self.foreign else [])
             else:ids=[row['Id'] for row in rows]
@@ -220,6 +227,11 @@ class FakeDocker:
             self.f.paths.publish(Path(args[-1]),(self.f.volume/relative).read_bytes());return b''
         if first=='stop':
             self.helpers[args[-1]]['State'].update(Running=False,Restarting=False,Status='exited');return b''
+        if first=='rm':
+            if len(args)!=2 or self.helpers[args[1]]['State']['Running']:
+                raise EngineError('Synthetic container removal rejected')
+            del self.helpers[args[1]]
+            return (args[1]+'\n').encode()
         if first=='exec':
             if args[-2]=='-c':return canonical(volume_worker.dispatch(parse_json(plan.stdin),self.f.volume))
             verb=args[-1];command=verify(self.f.enrollment,plan.stdin)
@@ -345,6 +357,12 @@ class AdapterTests(DraftFixture):
         with sqlite3.connect(self.volume/'keep.sqlite3') as db:
             self.assertEqual(db.execute('SELECT * FROM keep_schedules').fetchall(),[('1','42',None)])
         self.assertTrue((self.adapter.operation/'recovery'/'image.tar').exists())
+        self.assertEqual(self.fake.helpers,{})
+        removed=[plan.argv[3:] for plan in self.fake.plans if plan.argv[3]=='rm']
+        self.assertEqual(removed,[('rm','3'*64)])
+        self.assertEqual(parse_json((self.adapter.operation/'helper-snapshot.json').read_bytes())['container_id'],'3'*64)
+        self.assertEqual(parse_json((self.adapter.operation/'helper-cleanup-receipt.json').read_bytes())['phase'],'success')
+        self.assertTrue((self.volume/'.maintenance'/'recovery'/self.command.request_id/'database.sqlite3').exists())
         self.assertNotIn('do-not-log',repr([(plan.argv,plan.stdin) for plan in self.fake.plans]))
 
     def test_real_matching_restore_recovers_old_database_config_image_after_migration_failure(self):
@@ -361,6 +379,124 @@ class AdapterTests(DraftFixture):
             self.assertIn('migration_marker',{row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")})
         journal=Journal(self.paths,self.state,self.command.request_id,self.command.payload_sha256)
         self.assertEqual(journal.records()[-1]['phase'],'recovered')
+        self.assertEqual(self.fake.helpers,{})
+        self.assertEqual(len([plan for plan in self.fake.plans if plan.argv[3]=='rm']),4)
+
+    def completed_with_cleanup_held(self):
+        with patch.object(self.adapter,'cleanup_completed_helpers',side_effect=EngineError('Synthetic cleanup hold')):
+            with self.assertRaises(EngineError):HostEngine(self.paths,self.profile,self.adapter).execute(self.command)
+        self.assertEqual(Journal(self.paths,self.state,self.command.request_id,self.command.payload_sha256).records()[-1]['phase'],'success')
+        self.assertEqual(parse_json((self.adapter.operation/'app-progress-receipt.json').read_bytes())['phase'],'committed')
+        self.assertEqual(self.fake.gate,'open')
+        return next(iter(self.fake.helpers))
+
+    def test_cleanup_does_not_touch_workers_of_other_operations_or_installations(self):
+        cid=self.completed_with_cleanup_held()
+        for identifier,label in (('a'*64,'io.keep.maintenance.operation'),('b'*64,'io.keep.maintenance.install')):
+            row=copy.deepcopy(self.fake.helpers[cid]);row['Id']=identifier;row['Labels'][label]='other-owner'
+            self.fake.helpers[identifier]=row
+        self.assertEqual(HostEngine(self.paths,self.profile,self.adapter).resume(self.command)['phase'],'success')
+        self.assertEqual(set(self.fake.helpers),{'a'*64,'b'*64})
+
+    def test_cleanup_holds_for_unfinished_recovery_and_preserves_snapshot_worker(self):
+        self.fake.crash_candidate=True
+        with self.assertRaises(SystemExit):HostEngine(self.paths,self.profile,self.adapter).execute(self.command)
+        before=copy.deepcopy(self.fake.helpers);self.fake.plans.clear()
+        with self.assertRaisesRegex(EngineError,'requires completed maintenance'):
+            self.adapter.cleanup_completed_helpers(self.command)
+        self.assertEqual(self.fake.helpers,before);self.assertEqual(self.fake.plans,[])
+
+    def test_cleanup_revalidates_full_ownership_isolation_and_stopped_state(self):
+        cid=self.completed_with_cleanup_held();original=copy.deepcopy(self.fake.helpers[cid])
+        mutations=(
+            lambda row:row['Labels'].update({'io.keep.maintenance.install':'other-install'}),
+            lambda row:row['Labels'].update({'io.keep.maintenance.operation':'other-operation'}),
+            lambda row:row['Labels'].update({'io.keep.maintenance.purpose':'restore'}),
+            lambda row:row.update(Image=self.target.image_id,Source=self.target.reference),
+            lambda row:row['Mounts'].append({'Type':'bind','Source':'/foreign','Destination':'/foreign','RW':True}),
+            lambda row:row['Guard'].update(Privileged=True),
+            lambda row:row.update(Command=['-c','other code']),
+            lambda row:row['State'].update(Running=True,Status='running'),
+            lambda row:row['State'].update(Restarting=True),
+            lambda row:row['State'].update(Status='dead'),
+        )
+        for mutate in mutations:
+            self.fake.helpers[cid]=copy.deepcopy(original);mutate(self.fake.helpers[cid]);self.fake.plans.clear()
+            with self.subTest(mutation=mutate),self.assertRaises(EngineError):
+                self.adapter.cleanup_completed_helpers(self.command)
+            self.assertIn(cid,self.fake.helpers)
+            self.assertFalse(any(plan.argv[3] in ('rm','stop') for plan in self.fake.plans))
+
+    def test_cleanup_refuses_unrecorded_helpers_before_removing_known_workers(self):
+        cid=self.completed_with_cleanup_held()
+        row=copy.deepcopy(self.fake.helpers[cid]);row['Id']='a'*64
+        self.fake.helpers[row['Id']]=row;self.fake.plans.clear()
+        with self.assertRaisesRegex(EngineError,'Unrecorded'):
+            self.adapter.cleanup_completed_helpers(self.command)
+        self.assertEqual(set(self.fake.helpers),{cid,'a'*64})
+        self.assertFalse(any(plan.argv[3]=='rm' for plan in self.fake.plans))
+
+    def test_cleanup_holds_when_sealed_recovery_has_changed(self):
+        cid=self.completed_with_cleanup_held()
+        self.paths.publish(self.adapter.operation/'recovery'/'config-0',b'damaged',overwrite=True)
+        self.fake.plans.clear()
+        with self.assertRaises(Exception):self.adapter.cleanup_completed_helpers(self.command)
+        self.assertIn(cid,self.fake.helpers)
+        self.assertFalse(any(plan.argv[3]=='rm' for plan in self.fake.plans))
+
+    def test_cleanup_preserves_workers_when_original_id_or_source_record_changes(self):
+        cid=self.completed_with_cleanup_held();path=self.adapter.operation/'helper-snapshot.json'
+        original=parse_json(path.read_bytes())
+        for field,value in (('container_id','a'*64),('source_sha256','0'*64)):
+            self.paths.publish(path,canonical({**original,field:value}),overwrite=True);self.fake.plans.clear()
+            with self.subTest(field=field),self.assertRaises(EngineError):
+                self.adapter.cleanup_completed_helpers(self.command)
+            self.assertIn(cid,self.fake.helpers)
+            self.assertFalse(any(plan.argv[3]=='rm' for plan in self.fake.plans))
+
+    def test_cleanup_rechecks_state_immediately_before_non_force_removal(self):
+        cid=self.completed_with_cleanup_held();inspect=self.adapter.inspect;observations=[]
+        def changed(identifier,helper=False):
+            if identifier==cid:
+                observations.append(identifier)
+                if len(observations)==2:self.fake.helpers[cid]['State'].update(Running=True,Status='running')
+            return inspect(identifier,helper=helper)
+        self.fake.plans.clear()
+        with patch.object(self.adapter,'inspect',side_effect=changed),self.assertRaises(EngineError):
+            self.adapter.cleanup_completed_helpers(self.command)
+        self.assertEqual(len(observations),2)
+        self.assertIn(cid,self.fake.helpers)
+        self.assertFalse(any(plan.argv[3] in ('rm','stop') for plan in self.fake.plans))
+
+    def test_lost_cleanup_reply_resumes_without_repeating_cutover_or_removing_recovery(self):
+        run=self.fake.run
+        def lose_reply(plan):
+            result=run(plan)
+            if plan.argv[3]=='rm':raise EngineError('Synthetic lost remove reply')
+            return result
+        with patch.object(self.fake,'run',side_effect=lose_reply),self.assertRaises(EngineError):
+            HostEngine(self.paths,self.profile,self.adapter).execute(self.command)
+        self.assertEqual(self.fake.helpers,{})
+        self.assertEqual(parse_json((self.adapter.operation/'app-progress-receipt.json').read_bytes())['phase'],'committed')
+        before={str(path):path.read_bytes() for path in self.adapter.operation.rglob('*') if path.is_file()}
+        self.fake.plans.clear()
+        self.assertEqual(HostEngine(self.paths,self.profile,self.adapter).resume(self.command)['phase'],'success')
+        self.assertFalse(any(plan.argv[3] in ('create','compose','rm','stop','pull') for plan in self.fake.plans))
+        for name,body in before.items():
+            if Path(name).name!='app-progress-receipt.json':self.assertEqual(Path(name).read_bytes(),body)
+        self.assertTrue((self.adapter.operation/'helper-cleanup-receipt.json').exists())
+
+    def test_cleanup_failure_after_recovery_commit_does_not_restart_rollback(self):
+        self.fake.fail_candidate=True
+        with patch.object(self.adapter,'cleanup_completed_helpers',side_effect=EngineError('Synthetic cleanup hold')):
+            with self.assertRaises(EngineError):HostEngine(self.paths,self.profile,self.adapter).execute(self.command)
+        journal=Journal(self.paths,self.state,self.command.request_id,self.command.payload_sha256)
+        self.assertEqual(journal.records()[-1]['phase'],'recovered')
+        self.assertEqual(len(self.fake.helpers),4)
+        before=journal.records();self.fake.plans.clear()
+        self.assertEqual(HostEngine(self.paths,self.profile,self.adapter).resume(self.command)['phase'],'recovered')
+        self.assertEqual(journal.records(),before);self.assertEqual(self.fake.helpers,{})
+        self.assertFalse(any(plan.argv[3] in ('create','compose','start','stop','pull') for plan in self.fake.plans))
 
     def test_post_commit_reconnect_keeps_new_user_data_and_handles_changed_session_version(self):
         self.fake.lost_complete=True

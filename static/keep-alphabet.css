@@ -1,17 +1,15 @@
-/* Keep section headings in view; the shared index occupies a reserved edge gutter. */
+/* Keep section headings in view; desktop title navigation sits beside the grid. */
 html.alphabet-scroller-ready { scroll-padding-top:var(--browse-offset,80px); }
 .library-ui section[data-alphabet-section] { scroll-margin-top:0; }
 .library-ui section[data-alphabet-section] > .section-header {
-  position:sticky; top:var(--browse-offset,80px); z-index:25;
+  position:sticky; top:calc(var(--browse-offset,80px) - 1px); z-index:25;
   gap:6px 12px; padding:6px 0; background:var(--background);
 }
-.library-ui.alphabet-scroller-ready .media-view { padding-right:calc(16px + env(safe-area-inset-right)); }
 .library-ui .alphabet-side-navigation {
   position:fixed; right:max(6px,env(safe-area-inset-right)); width:44px; z-index:35;
   padding-bottom:env(safe-area-inset-bottom);
 }
-.library-ui .alphabet-side-navigation[hidden],.library-ui .alphabet-side-letter[hidden],
-.library-ui .alphabet-scrub-bubble[hidden] { display:none!important; }
+.library-ui .alphabet-side-navigation[hidden],.library-ui .alphabet-side-letter[hidden] { display:none!important; }
 .library-ui .alphabet-side-letters {
   display:flex; flex-direction:column; width:44px; padding:4px 0;
   overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none;
@@ -24,38 +22,18 @@ html.alphabet-scroller-ready { scroll-padding-top:var(--browse-offset,80px); }
   background:transparent; color:var(--muted); font:inherit; font-size:12px;
   font-weight:650; line-height:1; box-shadow:none; cursor:pointer;
 }
-.library-ui .alphabet-side-letter:hover { background:var(--surface-hover); color:var(--text); transform:none; }
-.library-ui .alphabet-side-letter:active,.library-ui .alphabet-scrub-handle:active { transform:none; }
-.library-ui .alphabet-side-letter[aria-current="location"] { background:var(--accent); color:var(--on-accent); }
-.library-ui .alphabet-side-letter:focus-visible,.library-ui .alphabet-scrub-handle:focus-visible,
-.library-ui .card[data-alphabet-target]:focus-visible { outline:2px solid var(--focus,var(--accent)); outline-offset:2px; }
+.library-ui .alphabet-side-letter:hover { background:transparent; color:var(--accent-ink); transform:none; }
+.library-ui .alphabet-side-letter:active { transform:none; }
+.library-ui .alphabet-side-letter:focus-visible,.library-ui [data-alphabet-target]:focus-visible {
+  outline:2px solid var(--focus,var(--accent)); outline-offset:2px;
+}
 .library-ui .alphabet-side-letter:focus-visible { outline-offset:-2px; }
-.library-ui .alphabet-scrub-track { display:none; position:relative; width:44px; }
-.library-ui .alphabet-scrub-handle {
-  position:absolute; left:0; display:grid; place-items:center; width:44px; min-width:44px;
-  height:56px; min-height:56px; margin:0; padding:0; border:0; border-radius:12px;
-  background:transparent; color:var(--muted); box-shadow:none; cursor:ns-resize; touch-action:none;
-}
-.library-ui .alphabet-scrub-handle::before {
-  content:""; display:block; width:10px; height:36px; border:1px solid var(--border);
-  border-radius:999px; background:var(--muted); opacity:.65;
-}
-.library-ui .alphabet-scrub-handle:hover { background:transparent; transform:none; }
-.library-ui .alphabet-scrub-handle:active::before { background:var(--accent); border-color:var(--accent); opacity:1; }
-.library-ui .alphabet-scrub-bubble {
-  position:absolute; right:52px; display:grid; place-items:center; width:68px; height:68px;
-  transform:translateY(-50%); border-radius:18px; background:var(--accent);
-  color:var(--on-accent); font-size:32px; font-weight:700; pointer-events:none;
-  box-shadow:0 6px 24px #0003;
-}
 @media(min-width:701px) {
+  .library-ui.alphabet-scroller-ready .media-view { padding-right:calc(52px + env(safe-area-inset-right)); }
   .library-ui.alphabet-scroller-ready .back-to-top { right:max(64px,calc(env(safe-area-inset-right) + 56px)); }
 }
 @media(max-width:700px) {
-  .library-ui.alphabet-scroller-ready .media-view { padding-right:calc(36px + env(safe-area-inset-right)); }
-  .library-ui .alphabet-side-navigation { right:max(0px,env(safe-area-inset-right)); }
-  .library-ui .alphabet-side-letters { display:none; }
-  .library-ui .alphabet-scrub-track { display:block; }
+  .library-ui .alphabet-side-navigation { display:none; }
 }
 @media(prefers-reduced-motion:reduce) {
   .library-ui .alphabet-side-navigation { scroll-behavior:auto; }

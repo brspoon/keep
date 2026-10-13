@@ -55,9 +55,11 @@
   const busy = () => snapshot.check_state !== 'idle';
   const failed = () => ['failed', 'rate_limited'].includes(snapshot.status);
   const newFailure = previous => failed() && ['status', 'last_attempt_at', 'error_code'].some(key => snapshot[key] !== previous[key]);
-  const notify = (message, error = false) => {
+  const notify = (message, error = false, tone = !busy() && snapshot.status === 'success' && !snapshot.stale ? 'ok' : 'neutral') => {
     text(feedback, message); if (!feedback) return;
-    feedback.hidden = !message; feedback.classList.toggle('is-error', error);
+    feedback.hidden = !message || !error && typeof window.showToast === 'function';
+    feedback.classList.toggle('is-error', error);
+    if (message && !error) window.showToast?.(message, tone);
   };
   const formatTime = (node, value, fallback = 'Not checked') => {
     const date = new Date(value || '');
@@ -72,8 +74,9 @@
     form.setAttribute('aria-busy', String(pending || busy()));
     if (retry) { retry.hidden = !recovery && snapshot.worker_available || unauthorized; retry.disabled = pending || refreshing; }
   };
-  const badge = label => {
-    const node = document.createElement('span'); node.className = 'about-badge'; node.textContent = label; return node;
+  const badge = (label, status = 'ok') => {
+    const node = document.createElement('span'); node.className = 'about-badge status-badge';
+    node.setAttribute('data-status', status); node.textContent = label; return node;
   };
   const renderReleases = () => {
     const releases = Array.isArray(snapshot.releases) ? snapshot.releases.slice(0, 5).filter(release =>
@@ -89,7 +92,7 @@
       const title = document.createElement('div'); title.className = 'about-release-title';
       const heading = document.createElement('h3'); heading.textContent = release.version; title.append(heading);
       if (release.version === snapshot.installed_version) title.append(badge('Current'));
-      if (release.tag === snapshot.latest_tag) title.append(badge(snapshot.stale ? 'Last known' : 'Latest'));
+      if (release.tag === snapshot.latest_tag) title.append(badge(snapshot.stale ? 'Last known' : 'Latest', snapshot.stale ? 'neutral' : 'ok'));
       const published = document.createElement('div'); formatTime(published, release.published_at, '');
       const link = document.createElement('a'); link.className = 'about-link secondary';
       link.href = releaseUrl(release.tag); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'View changelog';
@@ -106,10 +109,16 @@
     const label = snapshot.stale && snapshot.latest_version ? 'Last known'
       : ({update_available:'Update available', up_to_date:'Up to date', ahead:'Ahead of latest stable'})[snapshot.comparison] || '';
     text(comparison, label);
-    if (comparison) { comparison.hidden = !label; comparison.classList.toggle('is-update', snapshot.comparison === 'update_available'); }
+    if (comparison) {
+      comparison.hidden = !label;
+      comparison.setAttribute('data-comparison', snapshot.comparison);
+      comparison.setAttribute('data-status', snapshot.comparison === 'up_to_date' ? 'ok' : snapshot.comparison === 'update_available' ? 'warn' : 'neutral');
+    }
     formatTime(byId('about-last-check'), snapshot.last_attempt_at);
     text(byId('about-check-state'), snapshot.check_state === 'queued' ? 'Queued' : snapshot.check_state === 'running' ? 'Checking'
       : ({never:'Not checked', success:'Checked', failed:'Failed', rate_limited:'Rate limited'})[snapshot.status]);
+    byId('about-check-state')?.setAttribute('data-status', busy() ? 'neutral' : snapshot.status === 'failed' ? 'error'
+      : snapshot.status === 'rate_limited' ? 'warn' : snapshot.status === 'success' && !snapshot.stale ? 'ok' : 'neutral');
     const reason = byId('about-check-reason'); text(reason, snapshot.reason);
     if (reason) reason.hidden = !snapshot.reason || busy() && snapshot.worker_available;
     renderReleases(); controls();
@@ -184,6 +193,7 @@
     if (pending || uncertain || unauthorized || busy() || !snapshot.can_check || !snapshot.worker_available) return;
     pending = true; recovery = false; deadline = 0;
     const version = ++mutationVersion; pollController?.abort(); refreshing = false; clearTimeout(timer); controls();
+    notify('Checking for updates…', false, 'neutral');
     try {
       const {response, body} = await request('/settings/about/check', {method:'POST', body:new URLSearchParams(new FormData(form))});
       if (stopped || version !== mutationVersion) return;
@@ -195,7 +205,7 @@
       const previous = snapshot;
       adopt(body);
       if (newFailure(previous)) notify(snapshot.message, true);
-      else notify(typeof body.message === 'string' ? body.message : busy() ? 'Release check queued.' : snapshot.message, !busy() && failed());
+      else notify(typeof body.message === 'string' ? body.message : busy() ? 'Release check queued.' : snapshot.message, !busy() && failed(), 'neutral');
     } catch (error) {
       if (stopped || version !== mutationVersion) return;
       if (error.unauthorized) { unauthorized = true; notify(error.message, true); }

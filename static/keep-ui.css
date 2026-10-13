@@ -91,7 +91,7 @@ body.auth-ui, body.setup-ui, body.preferences-ui {
 .appearance-choices .choice:has(:checked) { border-color:var(--accent); background:var(--accent-soft); }
 .appearance-help { margin:8px 0 12px; color:var(--muted); font-size:12px; line-height:1.5; }
 /* Library */
-.library-ui .page { width: min(1440px,100%); padding: 40px 40px 80px; }
+.library-ui .page { width:100%; padding:40px 40px 80px; }
 .library-ui .hero { align-items: center; gap: 24px; margin-bottom: 30px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
 .library-ui h1 { font-size: 38px; }
 .library-ui .subtitle { font-size: 14px; max-width: 360px; }

@@ -6,7 +6,7 @@
   };
   const controls = document.querySelector('.browse-controls') || document.querySelector('.section-nav');
   const resize = () => {
-    if (controls) document.documentElement.style.setProperty('--browse-offset', `${controls.getBoundingClientRect().height + 16}px`);
+    if (controls) document.documentElement.style.setProperty('--browse-offset', `${controls.getBoundingClientRect().height}px`);
   };
   resize();
   if (controls && window.ResizeObserver) new ResizeObserver(resize).observe(controls);

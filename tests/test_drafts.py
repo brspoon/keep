@@ -250,7 +250,7 @@ class EngineTests(DraftFixture):
         self.assertEqual([row["phase"] for row in journal.records()][-2:], ["committed", "success"])
         calls = list(adapter.calls)
         self.assertEqual(engine.execute(command), result)
-        self.assertEqual(adapter.calls[len(calls):], ['bind', 'publish_status'])
+        self.assertEqual(adapter.calls[len(calls):], ['bind', 'cleanup_completed_helpers', 'publish_status'])
 
     def test_restart_never_pulls_or_resolves_another_image(self):
         adapter = FakeAdapter()

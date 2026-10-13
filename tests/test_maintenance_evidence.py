@@ -61,10 +61,10 @@ def synthetic_maintenance_proof(root, identity):
         3: {'request_id': '10000000-0000-4000-8000-000000000001', 'journal_records': 12,
             'gate_closed_with_writer_held': True, 'ordinary_http_status': 503,
             'protected_write_before_stop': True, 'protected_write_in_snapshot': True,
-            'duplicate_operation_unchanged': True},
-        4: {'request_id': '10000000-0000-4000-8000-000000000002', 'schema': 2},
+            'duplicate_operation_unchanged': True, 'completed_helpers_removed': 1},
+        4: {'request_id': '10000000-0000-4000-8000-000000000002', 'schema': 2, 'completed_helpers_removed': 1},
         5: {'request_id': '10000000-0000-4000-8000-000000000003', 'schema_restored': 2,
-            'failed_schema_preserved': 3, 'matched_recovery_retained': True},
+            'failed_schema_preserved': 3, 'matched_recovery_retained': True, 'completed_helpers_removed': 4},
         6: {'request_id': '10000000-0000-4000-8000-000000000003', 'image': images['0.0.2'],
             'empty_before_load': True, 'original_index_loaded': True, 'original_native_selected': True,
             'original_config_verified': True, 'registry_assistance': False, 'prior_cache_assistance': False,
@@ -72,7 +72,7 @@ def synthetic_maintenance_proof(root, identity):
         7: {'request_id': '10000000-0000-4000-8000-000000000004', 'terminated_helper_pid': 100,
             'fresh_helper_pid': 101, 'new_admitted_write_preserved': True,
             'fresh_private_state_reconstruction': True, 'registry_assistance': False,
-            'post_commit_rollback': False, 'schema': 4},
+            'post_commit_rollback': False, 'schema': 4, 'completed_helpers_removed': 1},
     }
     for index, extra in fields.items():
         phases[index].update(extra)
@@ -187,6 +187,14 @@ class MaintenanceEvidenceTests(unittest.TestCase):
                            ('held', 'TrialError'), ('tooling_containers_removed', ['a' * 64, 'b' * 64])):
             proof = copy.deepcopy(self.proof); proof['cleanup'][key] = value
             with self.subTest(key=key), self.assertRaises(ValueError): self.validate(proof)
+
+    def test_trial_teardown_cannot_substitute_for_completed_helper_cleanup(self):
+        for index in (3,4,5,7):
+            for value in (None,0,True,99):
+                proof=copy.deepcopy(self.proof)
+                if value is None:proof['phases'][index].pop('completed_helpers_removed')
+                else:proof['phases'][index]['completed_helpers_removed']=value
+                with self.subTest(index=index,value=value),self.assertRaises(ValueError):self.validate(proof)
 
     def test_enrollment_namespace_and_exact_cleanup_identities_are_required(self):
         changes = ((('activation', 'context'), 'other'), (('activation', 'install_id'), 'bad'),

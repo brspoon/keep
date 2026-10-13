@@ -1268,7 +1268,7 @@ def render_auth_page(
         </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
       </head>
       <body class="auth-ui">
@@ -1477,7 +1477,7 @@ def render_local_setup_page(profile=None, token="", error=None, complete=False):
         color:#ffb0b0;background:rgba(255,118,118,.08);font-size:12px}
     </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <link rel="stylesheet" href="/static/keep-theme.css?v={{ app_version }}">
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script></head><body class="setup-ui"><main><img class="mark" src="/static/keep-icon.svg?v={{ app_version }}" alt="Keep" width="64" height="64">
       {% if complete %}<h1>Password saved</h1><p>Your Keep account is ready.</p>
@@ -2546,7 +2546,7 @@ def home():
         }
     </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.6.0"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-duration.js?v=2.6.0"></script>
 <style>
@@ -3964,7 +3964,7 @@ def email_preferences_page():
   @media(max-width:520px){main{padding:26px 20px}.topics{grid-template-columns:1fr}}
 </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>{% include 'shared_assets.html' %}
 </head><body class="preferences-ui"><main>
   {% include 'shared_header.html' %}
@@ -4980,7 +4980,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         }
     </style>
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
-<script defer src="/static/keep-toast.js?v=2.4.6"></script>
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 {% include 'shared_assets.html' %}
 </head>

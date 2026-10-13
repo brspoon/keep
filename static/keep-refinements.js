@@ -30,7 +30,12 @@
       const button = form.querySelector('.save-button');
       if (button?.disabled) continue;
       tracked.set(form, snapshot(form));
-      const update = () => { if (button && button.getAttribute('aria-busy') !== 'true') button.disabled = !dirty(form); };
+      const update = () => {
+        if (!button || button.getAttribute('aria-busy') === 'true') return;
+        const changed = dirty(form);
+        button.disabled = !changed;
+        button.setAttribute('data-save-state', changed ? 'dirty' : 'pristine');
+      };
       form.addEventListener('input', update);
       form.addEventListener('change', update);
       if (button) update();

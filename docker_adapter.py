@@ -22,6 +22,7 @@ from private_store import PrivatePaths, StorageError
 from recovery_set import MAX_CONFIG, MAX_DATABASE, MAX_IMAGE, RecoverySet, file_digest
 
 SERVICES = ("keep-app", "keep-digest")
+HELPER_PURPOSES = ('snapshot', 'preserve', 'prepare-restore', 'restore', 'upload')
 CONTAINER = re.compile(r"[a-f0-9]{64}\Z")
 HASH = re.compile(r"[a-f0-9]{64}\Z")
 INSPECT_CONTAINER = ('{"Id":{{json .Id}},"Image":{{json .Image}},"Source":{{json .Config.Image}},'
@@ -393,7 +394,7 @@ class PosixDockerAdapter:
                 'services':{name:'stopped' for name in SERVICES}}
 
     def helper(self,purpose):
-        if purpose not in ('snapshot','preserve','prepare-restore','restore','upload'):raise EngineError("Data helper purpose is not allowed")
+        if purpose not in HELPER_PURPOSES:raise EngineError("Data helper purpose is not allowed")
         self.stopped_proof();metadata=self.image(self.request.expected)
         path=self.operation/('helper-'+purpose+'.json')
         if path.exists():
@@ -449,7 +450,7 @@ changed identity hold. No container or artifact is removed.
         seen=set()
         for cid in ids:
             row=self.inspect(cid,helper=True);purpose=(row.get('Labels') or {}).get('io.keep.maintenance.purpose')
-            if purpose not in ('snapshot','preserve','prepare-restore','restore','upload') or purpose in seen:
+            if purpose not in HELPER_PURPOSES or purpose in seen:
                 raise EngineError('Unexpected or duplicated operation helper purpose')
             seen.add(purpose);self.validate_helper(row,purpose,stopped=False)
             path=self.operation/('helper-'+purpose+'.json')
@@ -466,6 +467,84 @@ changed identity hold. No container or artifact is removed.
                 if not stop.exists():self.paths.publish(stop,canonical({'container_id':cid,'purpose':purpose}))
                 self.run('stop exact interrupted data helper',(*self.plans.base,'stop','--time','10',cid),timeout=30,limit=4096)
                 self.validate_helper(self.inspect(cid,helper=True),purpose,stopped=True)
+
+    def cleanup_completed_helpers(self,request):
+        """Retire exact stopped workers after a durable successful completion.
+
+The engine holds the operation/deployment locks. Keep all creation records and
+recovery artifacts; a lost Docker reply can then be retried without another
+cutover. Never stop a worker here, force removal, or remove its data volume.
+"""
+        from private_store import Journal
+        self.bind(request)
+        journal=Journal(self.paths,self.profile.state,request.request_id,request.payload_sha256)
+        records=journal.records()
+        if not records or records[-1]['phase'] not in ('success','recovered'):
+            raise EngineError('Helper cleanup requires completed maintenance')
+        self.paths.flush_directory(journal.root)
+        self.assert_daemon()
+        owned={}
+        for purpose in HELPER_PURPOSES:
+            path=self.operation/('helper-'+purpose+'.json')
+            if not path.exists() and not path.is_symlink():continue
+            value=parse_json(self.paths.read(path,limit=4096))
+            if (not isinstance(value,dict) or set(value)!={'container_id','source_sha256'}
+                    or not isinstance(value['container_id'],str) or not CONTAINER.fullmatch(value['container_id'])
+                    or value['source_sha256']!=self.source_sha or value['container_id'] in owned):
+                raise EngineError('Original helper cleanup identity changed')
+            owned[value['container_id']]=purpose
+
+        def inventory(*filters):
+            args=(*self.plans.base,'ps','--all','--no-trunc')
+            for selected in filters:args+=('--filter',selected)
+            ids=self.run('completed operation helper inventory',(*args,'--format','{{.ID}}'),limit=4096).decode().split()
+            if len(ids)>len(HELPER_PURPOSES) or len(ids)!=len(set(ids)) or any(not CONTAINER.fullmatch(cid) for cid in ids):
+                raise EngineError('Unexpected completed helper inventory')
+            return set(ids)
+
+        def present(cid):
+            ids=inventory('id='+cid)
+            if ids not in (set(),{cid}):raise EngineError('Docker returned another cleanup container')
+            return bool(ids)
+
+        # Query recorded IDs independently of labels: changed ownership cannot
+        # disguise an existing worker as absent. Validate every worker before
+        # deleting any, including operation-owned workers without an ID record.
+        selected=[]
+        for cid,purpose in owned.items():
+            if not present(cid):continue
+            row=self.inspect(cid,helper=True)
+            self.validate_helper(row,purpose,stopped=True)
+            if row['State'].get('Status') not in ('created','exited'):
+                raise EngineError('Completed data helper is not safely stopped')
+            selected.append((cid,purpose))
+        labeled=inventory('label=io.keep.maintenance.install='+self.enrollment.install_id,
+                          'label=io.keep.maintenance.operation='+request.request_id)
+        if labeled!={cid for cid,_ in selected}:
+            raise EngineError('Unrecorded completed operation helper requires review')
+        if selected:
+            self.verify_matched_recovery(request.request_id,request.expected,self.profile)
+        intent=self.operation/'helper-cleanup-intent.json'
+        receipt=canonical({'request_id':request.request_id,'payload_sha256':request.payload_sha256,
+            'phase':records[-1]['phase'],'containers':owned})
+        if intent.exists() or intent.is_symlink():
+            if self.paths.read(intent)!=receipt:raise EngineError('Helper cleanup intent changed')
+        else:self.paths.publish(intent,receipt)
+        for cid,purpose in selected:
+            self.assert_daemon()
+            row=self.inspect(cid,helper=True)
+            self.validate_helper(row,purpose,stopped=True)
+            if row['State'].get('Status') not in ('created','exited'):
+                raise EngineError('Completed data helper changed before removal')
+            self.run('remove exact completed data helper',(*self.plans.base,'rm',cid),limit=4096)
+            if present(cid):raise EngineError('Completed data helper removal is unconfirmed')
+        if inventory('label=io.keep.maintenance.install='+self.enrollment.install_id,
+                     'label=io.keep.maintenance.operation='+request.request_id):
+            raise EngineError('Completed operation still has data helpers')
+        path=self.operation/'helper-cleanup-receipt.json'
+        if path.exists() or path.is_symlink():
+            if self.paths.read(path)!=receipt:raise EngineError('Helper cleanup receipt changed')
+        else:self.paths.publish(path,receipt)
 
     def volume(self,operation,*,attempt=None,expected=None,columns=None):
         cid=self.helper(operation if operation!='prepare-restore' else 'prepare-restore')
