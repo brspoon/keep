@@ -1,6 +1,7 @@
 """Notification integration through Keep's real authenticated Flask routes."""
 from contextlib import closing
 from html.parser import HTMLParser
+import json
 import os
 from pathlib import Path
 import sqlite3
@@ -102,11 +103,20 @@ class NotificationAppRoutesTests(TestCase):
             enabled=True, token_mode='replace', token='A' * 30, now=100)
 
     def push(self, user_id='7'):
+        if user_id != '7':
+            # Older versions allowed personal push destinations. Preserve a
+            # legacy row to verify the owner-only boundary without bypassing it.
+            generation = self.settings().synchronize(now=200)
+            with closing(keep.attribution_db()) as db, db:
+                db.execute('INSERT INTO pushover_preferences VALUES (?,?,?,?,?,?,?,?,?,?)',
+                    (user_id, 1, 'B' * 30, '', json.dumps(sorted({self.cid})),
+                     json.dumps(sorted(notifications.MEDIA_EVENTS)), user_id + '-legacy', generation, 0, 200))
+            return
         self.settings().save_preferences(notification_settings.Actor(user_id, True, user_id == '7'),
             enabled=True, key_mode='replace', user_key='B' * 30, collections={self.cid},
             events=notifications.MEDIA_EVENTS, available_collections=keep.get_collections(), now=200)
 
-    def test_owner_and_viewer_full_and_fragment_preferences_render_two_independent_channels(self):
+    def test_owner_and_viewer_preferences_show_only_appearance_and_email(self):
         self.install()
         self.push()
         self.push('8')
@@ -119,12 +129,15 @@ class NotificationAppRoutesTests(TestCase):
                     html = response.text
                     forms = Forms(html).forms
                     channels = [form for form in forms if 'data-notification-channel' in form['attrs']]
-                    self.assertEqual([form['attrs']['data-notification-channel'] for form in channels], ['email', 'pushover'])
-                    self.assertTrue(any(field.get('name') == 'email_event_present' for field in channels[0]['fields']))
+                    self.assertEqual([form['attrs']['data-notification-channel'] for form in channels], ['email'])
+                    self.assertNotIn('Pushover', html)
+                    self.assertEqual(any(field.get('name') == 'email_event_present' for field in channels[0]['fields']), user_id == '7')
                     self.assertNotIn('A' * 30, html)
                     self.assertNotIn('B' * 30, html)
                     self.assertTrue(all('value' not in field for form in forms for field in form['fields'] if field.get('type') == 'password'))
                     self.assertEqual('value="JOB_FAILED"' in html, user_id == '7')
+                    shown_events = {field.get('value') for field in channels[0]['fields'] if field.get('name') == 'email_event'}
+                    self.assertEqual(shown_events, notifications.EVENTS if user_id == '7' else set())
                     if 'fragment' in path:
                         self.assertNotIn('<html', html)
                     else:
@@ -149,6 +162,10 @@ class NotificationAppRoutesTests(TestCase):
                 self.assertEqual(response.text.count('/static/keep-notifications.js?'), 1)
                 self.assertNotIn('A' * 30, response.text)
                 self.assertNotIn('B' * 30, response.text)
+                self.assertIn('action="/settings/notifications/pushover/preferences"', response.text)
+                self.assertIn('name="user_key"', response.text)
+                self.assertIn('Keep saved key', response.text)
+                self.assertNotIn('Add your user key in Preferences', response.text)
         self.assertEqual(self.query('SELECT * FROM notification_test_attempts'), before)
         self.email_send.assert_not_called()
         self.push_send.assert_not_called()
@@ -204,27 +221,61 @@ class NotificationAppRoutesTests(TestCase):
         self.install()
         self.push()
         email = self.query('SELECT * FROM email_recipients')
-        response = self.post('/preferences', action='pushover', receive_pushover='1', key_mode='keep',
+        response = self.post('/settings/notifications/pushover/preferences', receive_pushover='1', key_mode='keep',
             pushover_collection_id=str(self.cid), pushover_event='MEDIA_ADDED_TO_COLLECTION',
             device='phone', theme_mode='light', receive_email='1', email_event='JOB_FAILED')
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 303)
         self.assertEqual(self.query("SELECT theme_mode FROM user_profiles WHERE plex_id='7'"), [('system',)])
         self.assertEqual(self.query('SELECT * FROM email_recipients'), email)
         self.assertEqual(self.query("SELECT device FROM pushover_preferences WHERE user_id='7'"), [('phone',)])
         self.assertEqual(self.settings().email_event_preferences('owner@example.com')['events'], notifications.MEDIA_EVENTS)
 
-    def test_viewers_cannot_opt_in_to_owner_operational_events_on_either_channel(self):
+    def test_viewer_pushover_is_forbidden_and_forged_email_events_use_the_fixed_media_policy(self):
         self.install()
         self.push('8')
         self.login('8')
-        for values in ({'action':'email','receive_email':'1','collection_id':str(self.cid),'email_event':'JOB_FAILED'},
-                       {'action':'pushover','receive_pushover':'1','pushover_collection_id':str(self.cid),'pushover_event':'JOB_FAILED'}):
-            before = self.query('SELECT * FROM pushover_preferences')
-            response = self.post('/preferences?fragment=1', **values)
-            self.assertEqual(response.status_code, 200)
-            self.assertIn('role="alert"', response.text)
-            self.assertEqual(self.query('SELECT * FROM pushover_preferences'), before)
-        self.assertEqual(self.query("SELECT email FROM email_recipients WHERE email='viewer@example.com'"), [])
+        before = self.query('SELECT * FROM pushover_preferences')
+        response = self.post('/preferences?fragment=1', action='pushover', receive_pushover='1',
+            pushover_collection_id=str(self.cid), pushover_event='JOB_FAILED')
+        self.assertEqual(response.status_code, 403)
+        for events in ([], [notifications.ADDED], [notifications.REMINDER], sorted(notifications.OPERATIONAL_EVENTS), ['unknown']):
+            response = self.post('/preferences?fragment=1', action='email', receive_email='1',
+                collection_id=str(self.cid), email_event_present='1', email_event=events)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(self.settings().email_event_preferences('viewer@example.com')['events'], notifications.MEDIA_EVENTS)
+        self.assertEqual(self.query('SELECT * FROM pushover_preferences'), before)
+
+    def test_regular_user_saves_appearance_optin_and_lists_without_event_fields(self):
+        self.login('8')
+        with closing(keep.attribution_db()) as db, db:
+            db.execute("INSERT INTO notification_email_events VALUES ('viewer@example.com',?,NULL)",
+                       (json.dumps([notifications.ADDED]),))
+        response = self.post('/preferences?fragment=1', action='email', theme_mode='dark',
+            receive_email='1', collection_id=str(self.cid))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.query("SELECT theme_mode FROM user_profiles WHERE plex_id='8'"), [('dark',)])
+        self.assertEqual(self.settings().email_event_preferences('viewer@example.com')['events'], notifications.MEDIA_EVENTS)
+        self.assertEqual(self.query("SELECT collection_id FROM recipient_subscriptions WHERE email='viewer@example.com' AND enabled=1"), [(self.cid,)])
+        response = self.post('/preferences?fragment=1', action='email', theme_mode='light')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.query("SELECT enabled FROM email_recipients WHERE email='viewer@example.com'"), [(0,)])
+        self.assertEqual(self.query("SELECT collection_id FROM recipient_subscriptions WHERE email='viewer@example.com' AND enabled=1"), [(self.cid,)])
+        self.assertEqual(self.settings().email_event_preferences('viewer@example.com')['events'], notifications.MEDIA_EVENTS)
+
+    def test_former_owner_preferences_lose_event_controls_without_changing_subscriptions(self):
+        self.settings().save_email_events(notification_settings.Actor('7', True, True),
+            'owner@example.com', {notifications.REMINDER, 'UPDATE_AVAILABLE'})
+        before = {table: self.query('SELECT * FROM ' + table) for table in
+                  ('email_recipients', 'recipient_subscriptions', 'notification_email_events')}
+        with patch.object(keep, 'owner_id', return_value='8'):
+            page = self.client.get('/preferences?fragment=1')
+            self.assertEqual(page.status_code, 200)
+            self.assertNotIn('name="email_event"', page.text)
+            self.assertNotIn('name="email_event_present"', page.text)
+            self.assertIn('Receive email notifications', page.text)
+            self.assertIn('name="collection_id"', page.text)
+            self.assertEqual(self.settings().email_event_preferences('owner@example.com')['events'], notifications.MEDIA_EVENTS)
+        self.assertEqual({table: self.query('SELECT * FROM ' + table) for table in before}, before)
 
     def test_recipient_create_errors_and_notices_use_notifications_and_preserve_edit_state(self):
         response = self.post('/settings/recipients', action='add', email='bad-address')
@@ -271,17 +322,17 @@ class NotificationAppRoutesTests(TestCase):
         self.assertNotIn('Injected', ' '.join(map(str, args)))
         self.assertEqual(self.post('/settings/notifications/test/email').status_code, 400)
         self.assertEqual(self.email_send.call_count, 1)
-        response = self.post('/preferences?fragment=1', action='test-pushover', app_token='C'*30, user_key='D'*30, device='forged', message='Injected')
-        self.assertEqual(response.status_code, 200)
+        response = self.post('/settings/notifications/test/pushover', app_token='C'*30, user_key='D'*30, device='forged', message='Injected')
+        self.assertEqual(response.status_code, 303)
         args, values = self.push_send.call_args
         self.assertEqual(args[:2], ('A'*30, 'B'*30))
         self.assertEqual(args[2], 'Your Keep Pushover notifications are working.')
         self.assertEqual(values['title'], 'Keep test notification')
         self.assertEqual(values['device'], '')
-        self.assertIn('Test notification sent.', response.text)
+        self.assertIn('Test notification sent.', self.client.get(response.headers['Location']).text)
         self.assertNotIn('Your preferences were saved.', response.text)
         self.assertNotIn('B'*30, response.text)
-        self.assertEqual(self.post('/preferences?fragment=1', action='test-pushover').status_code, 200)
+        self.assertEqual(self.post('/settings/notifications/test/pushover').status_code, 400)
         self.assertEqual(self.push_send.call_count, 1)
 
     def test_fresh_key_change_between_reservation_and_real_test_send_blocks_transport(self):

@@ -1,8 +1,10 @@
 """Owner controls, recorded state and safe support information for About."""
 from contextlib import closing
+import json
 from pathlib import Path
 import re
 import sqlite3
+import time
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
@@ -127,6 +129,32 @@ class AboutRoutesTests(TestCase):
     def test_release_store_reuses_initialized_store_for_the_same_database(self):
         first = keep.release_store()
         self.assertIs(keep.release_store(), first)
+        self.assertEqual(first.installed_version, keep.APP_VERSION)
+        with patch.object(keep, 'APP_VERSION', '9.9.9'):
+            replaced = keep.release_store()
+        self.assertIsNot(replaced, first)
+        self.assertEqual(replaced.installed_version, '9.9.9')
+
+    def test_new_version_does_not_render_the_previous_check_as_a_fresh_ahead_comparison(self):
+        keep.release_updates.Store(keep.KEEP_DB_PATH, installed_version='1.0.0')
+        release = {'version': '1.0.0', 'tag': '1.0.0', 'name': 'Release 1.0.0',
+                   'published_at': '2026-10-11T12:00:00Z'}
+        now = time.time()
+        with closing(keep.attribution_db()) as db, db:
+            db.execute('''UPDATE release_checks SET latest_json=?,recent_json=?,last_attempt=?,last_success=?,
+                next_attempt=?,outcome='success',attempted_version='1.0.0',checked_version='1.0.0' WHERE id=1''',
+                (json.dumps(release), json.dumps([release]), now - 120, now - 120,
+                 now + keep.release_updates.CHECK_INTERVAL))
+        before = Path(keep.KEEP_DB_PATH).read_bytes()
+        with patch.object(keep.release_updates.Store, 'check') as check:
+            response = self.client.get('/settings/about/status')
+        self.assertEqual(response.json['snapshot']['comparison'], 'unknown')
+        self.assertTrue(response.json['snapshot']['stale'])
+        self.assertTrue(response.json['snapshot']['version_refresh_pending'])
+        self.assertEqual(response.json['snapshot']['latest_version'], '1.0.0')
+        check.assert_not_called()
+        self.assertEqual(Path(keep.KEEP_DB_PATH).read_bytes(), before)
+        self.assertTrue(keep.release_store().due())
 
     def test_diagnostics_allowlist_rejects_unexpected_stored_job_status(self):
         snapshot = keep.about_snapshot()

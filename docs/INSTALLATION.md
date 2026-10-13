@@ -30,7 +30,7 @@ is missing or unusable. It does not install prerequisites or change Docker's
 permissions automatically. See [missing prerequisite help](#missing-prerequisites).
 
 Keep starts on your trusted local network. Git, a domain, and a reverse proxy
-are not required. The installation uses the prebuilt `brspoon/keep:2.26.1` image
+are not required. The installation uses the prebuilt `brspoon/keep:2.26.2` image
 for both the web app and worker, with a shared `keep-data` volume. Docker selects
 the amd64 or arm64 image for your server.
 
@@ -43,13 +43,13 @@ are optional alternatives; they are not additional steps for a default install.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1 | iex
 ```
 
 The installer checks prerequisites, downloads the release files into your home
@@ -125,13 +125,13 @@ server. You can also choose another available port or installation directory:
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
 ```
 
 Replace the example address with your server's address. If automatic detection
@@ -150,7 +150,7 @@ The commands above execute a versioned installation script. To review the Linux/
 macOS launcher first, download the same file, read it, then run it:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh -o install.sh
 less install.sh
 sh install.sh
 ```
@@ -159,7 +159,7 @@ On Windows, fetch the PowerShell launcher into a variable, inspect it, then
 execute that exact text:
 
 ```powershell
-$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1'
+$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1'
 $installer
 & ([scriptblock]::Create($installer))
 ```
@@ -200,13 +200,13 @@ HTTP. Replace the example hostname with the hostname configured in your proxy.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.sh | sh -s -- --url https://keep.example.com
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh -s -- --url https://keep.example.com
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.1/install.ps1'))) --url https://keep.example.com
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1'))) --url https://keep.example.com
 ```
 
 HTTPS mode binds the app to `127.0.0.1:5000` by default and uses secure session
@@ -392,9 +392,10 @@ SMTP settings remain in **Admin → Connections**. Existing email recipients and
 collection subscriptions carry forward on upgrade.
 
 For Pushover, register an application in your [Pushover account](https://pushover.net/apps/build)
-and save its application token under **Admin → Notifications**. Each person saves
-their own Pushover user key in **Preferences**, optionally selects a device, and
-chooses events and collections. Keep uses normal-priority notifications. See the
+and save its application token under **Admin → Notifications**. Pushover is
+available only to the Keep owner. On the same page, save your user key,
+optionally select a device, and choose events and collections. Keep uses
+normal-priority notifications. See the
 [Pushover API guide](https://pushover.net/api) for tokens, keys, and device names.
 Saved Pushover tokens and user keys cannot be revealed in Keep; replace or clear
 them through their respective settings.
@@ -402,16 +403,19 @@ them through their respective settings.
 Email and Pushover choices are independent. Pushover starts with new events after
 activation; enabling it does not replay an earlier email backlog. Re-enabling
 Pushover or changing its key, device, or application token starts a new delivery
-generation. Account disablement and lost Plex access stop that account's push
-notifications.
+generation. Account disablement, lost Plex access, or a change of owner stops
+the former owner's push notifications. Existing user keys remain saved on
+upgrade, but non-owner accounts cannot configure or receive Pushover notifications.
 
-**Test notification** sends a fixed message to the signed-in person's saved
+**Send me a test** sends a fixed message only to the owner's saved
 destination. The email test requires enabled, configured email; the Pushover test
 requires a saved application token and personal user key. Tests are limited to
 prevent repeated sends. Provider acceptance does not prove inbox or device delivery.
 
-The owner can choose connection, job, and available-update alerts in Preferences.
-Other accounts receive only the media events they select. An uncertain delivery
+The owner can choose connection, job, and available-update alerts in Preferences
+for email or in Admin Notifications for Pushover. Other accounts can opt in or
+out of email and choose collections. Opting in includes both Leaving summaries
+and seven-day reminders. An uncertain delivery
 is held for review rather than automatically resent. Check the destination before
 choosing **Resend**, which can create a duplicate. Discarding a delivery changes
 only its notification record.

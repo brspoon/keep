@@ -260,9 +260,7 @@ class Settings:
             raise ValueError('Enter a valid Pushover device name')
         now = time.time() if now is None else now
         with closing(self._connect(read_only=True)) as db:
-            _, owner = self._actor(db, actor)
-            if not owner and event_set & notifications.OPERATIONAL_EVENTS:
-                raise PermissionError('Operational notifications are available only to the Keep owner.')
+            self._actor(db, actor, owner=True)
             previous = db.execute('SELECT * FROM pushover_preferences WHERE user_id=?', (actor.user_id,)).fetchone()
         key = previous['user_key'] if previous else ''
         if key_mode == 'clear':
@@ -275,9 +273,7 @@ class Settings:
         provider_generation = self.synchronize(now=now)
         with closing(self._connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
-            _, owner = self._actor(db, actor)
-            if not owner and event_set & notifications.OPERATIONAL_EVENTS:
-                raise PermissionError('Operational notifications are available only to the Keep owner.')
+            self._actor(db, actor, owner=True)
             # Credential keep/clear and unchanged device controls use the latest
             # committed row, so concurrent forms cannot restore an old user key.
             provider = db.execute("SELECT fingerprint,generation FROM notification_provider_generations WHERE provider='pushover'").fetchone()
@@ -316,7 +312,9 @@ class Settings:
             return None
         owner = (row['user_id'] == str(self.owner_id()) and profile.get('auth_type') == 'plex'
                  and profile.get('plex_access') == 'active')
-        events = frozenset(view['events']) & (notifications.EVENTS if owner else notifications.MEDIA_EVENTS)
+        if not owner:
+            return None
+        events = frozenset(view['events']) & notifications.EVENTS
         return notifications.Destination('pushover', row['user_id'], row['generation'],
             frozenset(view['collections']), events, row['after_queue_id'], row['provider_generation'], owner)
 
@@ -355,7 +353,7 @@ class Settings:
         """Private saved own-key access for explicit tests, even while disabled."""
         token = self._effective('PUSHOVER_APP_TOKEN')
         with closing(self._connect(read_only=True)) as db:
-            self._actor(db, actor)
+            self._actor(db, actor, owner=True)
             row = db.execute('SELECT user_key,device,generation FROM pushover_preferences WHERE user_id=?', (actor.user_id,)).fetchone()
             if reservation_id is not None:
                 reservation = db.execute("SELECT credential_scope,destination_generation FROM notification_test_attempts WHERE id=? AND user_id=? AND state='reserved'", (reservation_id, actor.user_id)).fetchone()
@@ -395,7 +393,7 @@ class Settings:
         result = None
         with closing(self._connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
-            profile, _ = self._actor(db, actor)
+            profile, _ = self._actor(db, actor, owner=kind != 'email')
             if kind == 'email':
                 email = self._email_test_address(db, profile)
                 if not email:
@@ -443,7 +441,7 @@ class Settings:
             return {'can_test': state == 'ready', 'state': state, 'retry_after_seconds': retry}
 
         with closing(self._connect(read_only=True)) as db:
-            profile, _ = self._actor(db, actor)
+            profile, _ = self._actor(db, actor, owner=kind != 'email')
             if kind == 'email':
                 if not self._email_test_address(db, profile):
                     return view('unconfigured')
@@ -554,7 +552,7 @@ class Settings:
             events = frozenset(json.loads(row[0])) & notifications.EVENTS if row else notifications.MEDIA_EVENTS
         except (TypeError, ValueError, RecursionError):
             events = frozenset()
-        return {'events': events & (notifications.EVENTS if owner else notifications.MEDIA_EVENTS),
+        return {'events': events if owner else notifications.MEDIA_EVENTS,
                 'owner_verified': owner, 'generation': self.email_generation(email)}
 
     def save_email_events(self, actor, email_address, events, *, db=None, now=None):
@@ -576,8 +574,12 @@ class Settings:
         recipient = next((row for row in db.execute('SELECT email FROM email_recipients') if self._email_id(row[0]) == email), None)
         if not recipient:
             raise ValueError('Notification recipient is unavailable')
+        if not owner:
+            selected = notifications.MEDIA_EVENTS
         if selected & notifications.OPERATIONAL_EVENTS and (not owner or email != self._active_owner_email(db)):
             raise PermissionError('Operational email alerts require the active owner account address.')
+        if email != self._active_owner_email(db):
+            selected = notifications.MEDIA_EVENTS
         previous = db.execute('SELECT owner_alerts_activated_at FROM notification_email_events WHERE email=?', (email,)).fetchone()
         activated_at = previous[0] if previous else None
         if selected & notifications.OPERATIONAL_EVENTS and activated_at is None:

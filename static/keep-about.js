@@ -40,6 +40,7 @@
     const latest = validVersion(value.latest_version) ? value.latest_version : null;
     return {...value, installed_version:validVersion(value.installed_version) ? value.installed_version : 'Unknown',
       latest_version:latest, comparison:value.status === 'success' && value.stale === false && latest ? value.comparison : 'unknown',
+      version_refresh_pending:value.version_refresh_pending === true,
       stale:value.stale !== false, reason:typeof value.reason === 'string' ? value.reason : '',
       message:typeof value.message === 'string' ? value.message : 'Release information checked.',
       retry_after_seconds:Number.isInteger(value.retry_after_seconds) && value.retry_after_seconds > 0 ? Math.min(value.retry_after_seconds, 86400) : 0};
@@ -53,6 +54,7 @@
   let releasesSignature = '';
   const controllers = new Set();
   const busy = () => snapshot.check_state !== 'idle';
+  const awaitingCheck = () => busy() || uncertain || snapshot.version_refresh_pending && snapshot.worker_available;
   const failed = () => ['failed', 'rate_limited'].includes(snapshot.status);
   const newFailure = previous => failed() && ['status', 'last_attempt_at', 'error_code'].some(key => snapshot[key] !== previous[key]);
   const notify = (message, error = false, tone = !busy() && snapshot.status === 'success' && !snapshot.stale ? 'ok' : 'neutral') => {
@@ -155,7 +157,7 @@
   const plan = () => {
     clearTimeout(timer);
     if (stopped || document.hidden || unauthorized) return;
-    if (busy() || uncertain) {
+    if (awaitingCheck()) {
       if (!deadline) deadline = Date.now() + 120000;
       if (Date.now() >= deadline) { waitMessage(); return; }
       timer = setTimeout(() => void refreshStatus(), Math.min(2000, deadline - Date.now()));
@@ -170,7 +172,7 @@
     if (!manual && deadline && Date.now() >= deadline) { waitMessage(); return; }
     if (manual) { deadline = Date.now() + 120000; recovery = false; }
     refreshing = true; controls();
-    const version = mutationVersion, wasBusy = busy() || uncertain;
+    const version = mutationVersion, wasBusy = awaitingCheck();
     try {
       const {response, body} = await request('/settings/about/status', {}, true);
       if (stopped || version !== mutationVersion) return;
@@ -178,7 +180,7 @@
       adopt(body);
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Could not refresh release information.');
       uncertain = false; recovery = false;
-      if (newFailure(previous) || (wasBusy && !busy()) || manual) notify(snapshot.message, failed());
+      if (newFailure(previous) || (wasBusy && !awaitingCheck()) || manual) notify(snapshot.message, failed());
     } catch (error) {
       if (stopped || version !== mutationVersion) return;
       if (error.unauthorized) { unauthorized = true; recovery = false; notify(error.message, true); }
@@ -216,6 +218,7 @@
     }
   });
   retry?.addEventListener('click', () => void refreshStatus(true));
+  window.addEventListener('keep-maintenance-completed', () => void refreshStatus());
   document.addEventListener('visibilitychange', () => {
     clearTimeout(timer);
     if (!document.hidden && !stopped) { deadline = 0; void refreshStatus(); }

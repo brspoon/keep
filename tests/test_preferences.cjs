@@ -19,7 +19,7 @@ function fixture(fetcher, options={}) {
     const button=el({textContent:channel==='email'?'Save preferences':'Save Pushover'});
     const fields=[{name:'csrf_token',value:'synthetic-csrf'},{name:'action',value:channel},toggle];
     if(channel==='email') fields.push({name:'theme_mode',value:'system'});
-    const form=el({action:'http://localhost/preferences',channel,groups,toggle,button,fields,
+    const form=el({action:'http://localhost/preferences',getAttribute(name){return name==='action'?(this.actionAttribute??'http://localhost/preferences'):null;},channel,groups,toggle,button,fields,
       querySelector(selector){return selector==='[data-channel-toggle]'?toggle:selector==='.save-button'?button:null;},
       querySelectorAll(selector){return selector==='[data-channel-options]'?groups:[];}});
     return form;
@@ -35,7 +35,7 @@ function fixture(fetcher, options={}) {
     push.fields.push(key.mode,key.input,{name:'device',value:'phone'});
     const testAction=options.testAction||'test-pushover';
     const button=el({textContent:testAction==='discard-pushover-test'?'Discard test':'Test notification'});
-    const testForm=el({action:'http://localhost/preferences',button,fields:[{name:'csrf_token',value:'synthetic-csrf'},{name:'action',value:testAction},...(testAction==='discard-pushover-test'?[{name:'test_id',value:'a'.repeat(32)}]:[])],
+    const testForm=el({action:'http://localhost/preferences',getAttribute(name){return name==='action'?(this.actionAttribute??'http://localhost/preferences'):null;},button,fields:[{name:'csrf_token',value:'synthetic-csrf'},{name:'action',value:testAction},...(testAction==='discard-pushover-test'?[{name:'test_id',value:'a'.repeat(32)}]:[])],
       querySelector:s=>s==='.save-button'?button:s===`[name="action"][value="${testAction}"]`?{value:testAction}:null});
     return {email,push,key,testForm};
   };
@@ -130,9 +130,18 @@ test('failed personal test restores its original button label',async()=>{
   let count=0;const f=fixture(()=>++count===1?success():Promise.reject(Error('offline')));await f.click();const button=f.forms.testForm.button;await f.submit(f.forms.testForm);assert.equal(button.textContent,'Test notification');assert.equal(button.disabled,false);assert.match(f.error.textContent,/Could not confirm/);
 });
 test('foreign form actions are refused before fetch or credential serialization',async()=>{
-  const f=fixture(success);await f.click();f.forms.push.action='https://other.example/preferences';await f.submit(f.forms.push);assert.equal(f.calls.length,1);assert.match(f.error.textContent,/Could not confirm/);
+  const f=fixture(success);await f.click();f.forms.push.actionAttribute='https://other.example/preferences';await f.submit(f.forms.push);assert.equal(f.calls.length,1);assert.match(f.error.textContent,/Could not confirm/);
 });
 test('keyboard focus includes the secret mode select and wraps within the dialog',async()=>{
   const f=fixture(success);await f.click();f.document.activeElement=f.cancel;let prevented=false;f.dialog.emit('keydown',{key:'Tab',preventDefault(){prevented=true;}});assert.equal(prevented,true);assert.equal(f.document.activeElement,f.close);
   f.document.activeElement=f.forms.key.mode;prevented=false;f.dialog.emit('keydown',{key:'Tab',preventDefault(){prevented=true;}});assert.equal(prevented,false);
+});
+
+test('the hidden action control cannot shadow the Preferences submission URL',async()=>{
+  const f=fixture(async()=>response(f.calls.length>1?'saved':'form'));await f.click();
+  f.forms.email.action={name:'action',value:'email',toString:()=> '[object HTMLInputElement]'};
+  await f.submit(f.forms.email);
+  assert.equal(f.calls.length,2);assert.equal(f.calls[1][0],'/preferences?fragment=1');
+  assert.deepEqual(f.calls[1][1].body.getAll('action'),['email']);
+  assert.equal(f.dialog.open,false);assert.deepEqual(f.toasts,['Preferences saved']);
 });

@@ -89,8 +89,8 @@
   const terminalPhases = new Set(['success','failed','recovered']);
   const active = () => ['queued','claimed'].includes(snapshot.operation?.state)
     || snapshot.operation?.state === 'completed' && !terminalPhases.has(snapshot.operation.phase);
-  const waiting = () => Boolean(pendingId) || active() || snapshot.reason === 'busy';
-  const locked = () => submitting || refreshing || Boolean(pendingId) || active() || unauthorized || storageFailed || !cryptographicIds();
+  const waiting = () => Boolean(pendingId) || active() || ['busy','helper_unavailable','state_unavailable'].includes(snapshot.reason);
+  const locked = () => submitting || recovery || connectionLost || Boolean(pendingId) || active() || unauthorized || storageFailed || !cryptographicIds();
   const target = operation => operation === 'install' ? snapshot.latest_version : snapshot.installed_version;
   const permitted = operation => !locked() && snapshot.supported && snapshot.enrolled && snapshot.helper_available
     && Boolean(snapshot.confirmation) && (operation === 'install' ? snapshot.can_install : snapshot.can_restart);
@@ -102,6 +102,8 @@
     const reason = !snapshot.supported ? 'In-app maintenance is not available for this installation.'
       : storageFailed || !cryptographicIds() ? 'This browser cannot track maintenance. Use the update guide.'
       : unauthorized ? reasons.owner_unavailable
+      : ['helper_unavailable','state_unavailable'].includes(snapshot.reason) && !recovery
+        ? 'Waiting for maintenance to become available.'
       : snapshot.reason === 'target_unavailable' && id('about-comparison')?.getAttribute('data-comparison') === 'up_to_date'
         ? 'Keep is up to date.' : reasons[snapshot.reason];
     text(id('maintenance-reason'), reason); id('maintenance-reason').hidden = !reason;
@@ -114,7 +116,7 @@
       id('maintenance-phase').setAttribute('data-status', op.phase === 'success' ? 'ok'
         : op.phase === 'failed' ? 'error' : ['held','recovery-needed','recovered'].includes(op.phase) ? 'warn' : 'neutral');
     }
-    refresh.hidden = !recovery && !waiting() && snapshot.reason !== 'helper_unavailable' && snapshot.reason !== 'state_unavailable';
+    refresh.hidden = (!recovery && !connectionLost) || unauthorized;
     refresh.disabled = submitting || refreshing || unauthorized;
     id('maintenance-reload').hidden = !(snapshot.operation?.phase === 'success' && !active() && snapshot.installed_version !== originalVersion);
     if (dialog.open) id('maintenance-confirm-submit').disabled = !modal || !permitted(modal.operation);
@@ -169,7 +171,7 @@
   };
   async function readStatus(manual=false) {
     if (stopped || document.hidden || unauthorized || submitting || refreshing) return;
-    if (manual) { recovery=false; deadline=Date.now()+300000; }
+    if (manual) deadline=Date.now()+300000;
     if (!manual && deadline && Date.now()>=deadline) { wait(); return; }
     const epoch=mutation, query=pendingId?`?request_id=${encodeURIComponent(pendingId)}`:'';
     refreshing=true; render();
@@ -182,6 +184,8 @@
       if (!pendingId && !active()) {
         if (wasPending && snapshot.request_state==='not_received') notify('The request was not received. You can try again.');
         else if (wasPending || manual) completion();
+        if (wasPending && snapshot.operation?.phase === 'success')
+          window.dispatchEvent?.(new CustomEvent('keep-maintenance-completed'));
         if (!snapshot.operation && manual && !wasPending) notify('Maintenance status refreshed.');
       } else if (snapshot.request_state==='unknown') notify('Keep could not confirm this request. Checking its recorded status.',true);
       else if (snapshot.operation?.phase==='held' || snapshot.operation?.phase==='recovery-needed') completion();
@@ -252,14 +256,14 @@
   id('maintenance-reload').addEventListener('click',()=>window.location.reload());
   window.addEventListener('keep-release-updated',()=>void readStatus());
   document.addEventListener('visibilitychange',()=>{
-    clearTimeout(timer); if (!document.hidden&&!stopped) { recovery=false; deadline=0; void readStatus(); }
+    clearTimeout(timer); if (!document.hidden&&!stopped) { deadline=0; void readStatus(); }
   });
   window.addEventListener('pagehide',()=>{
     stopped=true; clearTimeout(timer); ++mutation; submitting=refreshing=false;
     controllers.forEach(controller=>controller.abort());
   });
   window.addEventListener('pageshow',()=>{
-    if (!stopped) return; stopped=false; recovery=false; deadline=0; render(); void readStatus();
+    if (!stopped) return; stopped=false; deadline=0; render(); void readStatus();
   });
   if (!pendingId&&active()) { try { persist(snapshot.operation.request_id); } catch (_) {} }
   render();

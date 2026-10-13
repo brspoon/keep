@@ -135,26 +135,32 @@ class Routes:
                 'can_test': available, 'test_reason': reason}
 
     def preferences_context(self, email_address=''):
-        """Readonly additions for full-page and fragment Preferences rendering."""
+        """Email choices for full-page and fragment Preferences rendering."""
+        settings, actor = self._settings(), self.adapter.actor()
+        with closing(self.adapter.db()) as db:
+            _, owner = settings.validate_actor(actor, db)
+        allowed = notifications.EVENTS if owner else notifications.MEDIA_EVENTS
+        email_events = (settings.email_event_preferences(email_address)['events'] if email_address else notifications.MEDIA_EVENTS) & allowed
+        return {'email_events': set(email_events), 'event_labels': EVENT_LABELS}
+
+    def pushover_context(self):
+        """Saved owner delivery settings, shown only in Admin Notifications."""
         settings, actor = self._settings(), self.adapter.actor()
         collections = self.adapter.collections()
         view = settings.preferences_view(actor, available_collections=collections)
         tests = settings.test_views(actor)
         installation = settings.installation_view()
         if installation['configuration_error']:
-            view['can_test'], view['test_reason'] = False, 'Pushover is unavailable. Ask the owner to check its provider settings.'
+            view['can_test'], view['test_reason'] = False, 'Pushover is unavailable. Check the provider settings.'
         else:
             view['can_test'], view['test_reason'] = self._test_available(
                 settings, actor, 'notification', view['configured'] and installation['configured'])
-        allowed = notifications.EVENTS if view['owner_events_available'] else notifications.MEDIA_EVENTS
-        email_events = (settings.email_event_preferences(email_address)['events'] if email_address else notifications.MEDIA_EVENTS) & allowed
         reviews = [self._test_row(row, actor.user_id) for row in tests
                    if row['kind'] == 'notification' and (row['state'] == 'review' or
                        row['state'] == 'reserved' and self.now() - row['reserved_at'] > pushover.REQUEST_BUDGET + 30)]
         for row in reviews:
             row.pop('_time', None)
-        return {'push_preferences': view, 'email_events': set(email_events),
-                'event_labels': EVENT_LABELS, 'test_reviews': reviews}
+        return {'push_preferences': view, 'event_labels': EVENT_LABELS, 'test_reviews': reviews}
 
     def _recipients(self):
         with closing(self.adapter.db()) as db:
@@ -224,7 +230,7 @@ class Routes:
             settings, actor = self._settings(), self.adapter.actor()
             context, profiles = self._recipients()
             tests = settings.test_views(actor)
-            push = self.preferences_context()
+            push = self.pushover_context()
             context.update(push, pushover_installation=settings.installation_view(), owner_push=push['push_preferences'],
                            email_installation=self._email_installation(settings, actor),
                            delivery_rows=self._delivery_rows(profiles, tests, actor))
@@ -354,7 +360,7 @@ class Routes:
                       saved=False, error=None, test_feedback=None, response=None)
         if not result['handled']:
             return result
-        denied = self._guard(csrf=True)
+        denied = self._guard(owner=True, csrf=True)
         if denied:
             result['response'] = denied
             return result
@@ -388,6 +394,14 @@ class Routes:
             result['error'] = ('Keep could not record the test. Check its status before trying again.'
                                if action == 'test-pushover' else 'Keep could not save notification settings. Try again shortly.')
         return result
+
+    def save_owner_preferences(self):
+        result = self.handle_personal('pushover')
+        if result['response'] is not None:
+            return result['response']
+        if result['saved']:
+            return self._redirect('Pushover delivery settings saved.')
+        return self.render_page(error=result['error'], status=400)
 
     def review(self):
         denied = self._guard(owner=True, csrf=True)
@@ -435,6 +449,7 @@ def register_routes(app, adapter):
     app.add_url_rule('/settings/notifications', 'settings_notifications', routes.render_page, methods=['GET'])
     app.add_url_rule('/settings/notifications/email', 'save_notification_email', routes.save_email, methods=['POST'])
     app.add_url_rule('/settings/notifications/pushover', 'save_notification_pushover', routes.save_installation, methods=['POST'])
+    app.add_url_rule('/settings/notifications/pushover/preferences', 'save_owner_pushover_preferences', routes.save_owner_preferences, methods=['POST'])
     app.add_url_rule('/settings/notifications/test/<provider>', 'test_notification_provider', routes.test, methods=['POST'])
     app.add_url_rule('/settings/notifications/review', 'review_notification_delivery', routes.review, methods=['POST'])
     if not any(rule.rule == '/settings/email' for rule in app.url_map.iter_rules()):

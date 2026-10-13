@@ -34,13 +34,13 @@ function fixture(options={}){
   ids['maintenance-csrf'].value='synthetic-csrf';ids['maintenance-snapshot'].textContent=options.json??JSON.stringify(options.snapshot||base());
   document.getElementById=name=>ids[name]||null;
   ids['about-comparison'].attrs['data-comparison']=options.comparison||'unknown';
-  const window=new Element();if(options.toast)window.showToast=(message,tone)=>toasts.push({message,tone});window.location={reload(){reloads++;}};
+  const window=new Element();window.events=[];window.dispatchEvent=event=>{window.events.push(event.type);return true;};if(options.toast)window.showToast=(message,tone)=>toasts.push({message,tone});window.location={reload(){reloads++;}};
   window.crypto=options.crypto===false?null:options.crypto==='fallback'?{getRandomValues(bytes){bytes.fill(1);return bytes;}}:{randomUUID(){idsCreated++;return idsCreated===1?requestId:otherId;}};
   window.sessionStorage={getItem(key){if(options.storageFailure==='read')throw Error('Blocked');return stored.get(key)||null;},
     setItem(key,value){if(options.storageFailure==='write')throw Error('Blocked');stored.set(key,value);},
     removeItem(key){stored.delete(key);}};
   const fetch=(url,settings)=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});settings.signal.addEventListener('abort',()=>reject(Error('Aborted')),{once:true});calls.push({url,settings,resolve,reject});return promise;};
-  vm.runInNewContext(source,{document,window,fetch:options.fetchAvailable===false?undefined:fetch,AbortController,Date:ClockDate,Uint8Array,
+  vm.runInNewContext(source,{document,window,CustomEvent:class{constructor(type){this.type=type;}},fetch:options.fetchAvailable===false?undefined:fetch,AbortController,Date:ClockDate,Uint8Array,
     setTimeout(fn,delay){const key=++timerId;timers.set(key,{fn,due:now+delay});return key;},clearTimeout:key=>timers.delete(key)});
   return {ids,document,window,calls,timers,toasts,stored,reloads:()=>reloads,idsCreated:()=>idsCreated,
     respond(index,status,body,extra={}){calls[index].resolve({ok:status>=200&&status<300,status,redirected:false,json:async()=>body,...extra});},
@@ -63,9 +63,40 @@ test('unsupported or unenrolled runtime never exposes an active maintenance cont
 test('native host capability cannot be inferred from invalid contradictory flags',async()=>{
   const f=fixture({snapshot:base({supported:false})});await f.open();assert.equal(f.ids['maintenance-actions'].hidden,true);assert.equal(f.calls.length,0);
 });
-test('confirmed helper unavailability disables actions and offers GET-only status refresh',async()=>{
-  const f=fixture({snapshot:base({helper_available:false,can_install:false,can_restart:false,reason:'helper_unavailable'})});assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-refresh'].hidden,false);
-  await f.ids['maintenance-refresh'].fire('click');await settle();assert.equal(f.calls[0].url,'/settings/about/maintenance/status');assert.equal(f.calls[0].settings.method,undefined);
+test('confirmed helper unavailability remains locked while its heartbeat recovers automatically through GET',async()=>{
+  const f=fixture({snapshot:base({helper_available:false,can_install:false,can_restart:false,reason:'helper_unavailable'})});assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-refresh'].hidden,true);
+  await f.advance(2000);assert.equal(f.calls[0].url,'/settings/about/maintenance/status');assert.equal(f.calls[0].settings.method,undefined);
+  f.respond(0,200,{snapshot:base({can_install:false,latest_version:null,reason:'target_unavailable'})});await settle();
+  assert.equal(f.ids['maintenance-restart'].disabled,false);assert.equal(f.ids['maintenance-install'].hidden,true);assert.equal(f.ids['maintenance-refresh'].hidden,true);assert.equal(f.timers.size,0);
+});
+test('helper readiness retry is bounded and exposes status recovery only after failure or timeout',async()=>{
+  const f=fixture({snapshot:base({helper_available:false,can_install:false,can_restart:false,reason:'helper_unavailable'})});
+  await f.advance(2000);f.fail(0);await settle();assert.equal(f.ids['maintenance-refresh'].hidden,false);assert.equal(f.ids['maintenance-restart'].disabled,true);
+  assert.equal(f.timers.size,0);await f.ids['maintenance-refresh'].fire('click');await settle();f.respond(1,200,{snapshot:base({helper_available:false,can_install:false,can_restart:false,reason:'helper_unavailable'})});await settle();
+  assert.equal(f.ids['maintenance-refresh'].hidden,true);await f.advance(300000);assert.equal(f.ids['maintenance-refresh'].hidden,false);assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.timers.size,0);
+});
+test('a background capability read does not temporarily disable an already verified Restart action',async()=>{
+  const f=fixture();await f.window.fire('keep-release-updated');await settle();assert.equal(f.calls.length,1);assert.equal(f.ids['maintenance-restart'].disabled,false);
+  f.respond(0,200,{snapshot:base({can_restart:false,can_install:false,reason:'busy'})});await settle();assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-refresh'].hidden,true);
+});
+test('a failed idle capability read requires a confirmed status recovery before another action',async()=>{
+  const f=fixture();await f.window.fire('keep-release-updated');await settle();f.fail(0);await settle();
+  assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-refresh'].hidden,false);
+  await f.ids['maintenance-refresh'].fire('click');await settle();
+  assert.equal(f.calls.length,2);assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-install'].disabled,true);
+  await f.open('restart');assert.equal(f.ids['maintenance-confirm'].open,false);assert.equal(f.calls.filter(call=>call.settings.method==='POST').length,0);
+  f.respond(1,200,{snapshot:base()});await settle();
+  assert.equal(f.ids['maintenance-restart'].disabled,false);assert.equal(f.ids['maintenance-refresh'].hidden,true);
+});
+test('returning to a visible or restored page retains the recovery lock until its GET succeeds',async()=>{
+  for(const restore of ['visibilitychange','pageshow']){
+    const f=fixture();await f.window.fire('keep-release-updated');await settle();f.fail(0);await settle();
+    if(restore==='pageshow'){await f.window.fire('pagehide');await f.window.fire('pageshow');}
+    else{f.document.hidden=false;await f.document.fire('visibilitychange');}
+    await settle();assert.equal(f.calls.length,2);assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-install'].disabled,true);
+    await f.open('restart');assert.equal(f.ids['maintenance-confirm'].open,false);
+    f.respond(1,200,{snapshot:base()});await settle();assert.equal(f.ids['maintenance-restart'].disabled,false);assert.equal(f.ids['maintenance-refresh'].hidden,true);
+  }
 });
 test('a verified enrolled installation may restart without exposing an unverified update',async()=>{
   const f=fixture({snapshot:base({can_install:false,latest_version:null,reason:'target_unavailable'})});assert.equal(f.ids['maintenance-install'].hidden,true);assert.equal(f.ids['maintenance-restart'].disabled,false);await f.open('restart');assert.equal(f.ids['maintenance-confirm-description'].textContent,'Restart Keep 2.25.0?');
@@ -109,6 +140,7 @@ test('queued progress follows the original request ID and never sends a polling 
 test('success requires matching recorded completion before unlocking and offers a page reload',async()=>{
   const f=fixture();await f.start();const complete=base({installed_version:'2.26.0',can_install:false,operation:operation({state:'completed',phase:'success',sequence:10}),requested_request_id:requestId,request_state:'completed'});await f.poll(complete);
   assert.equal(f.stored.size,0);assert.equal(f.ids['maintenance-restart'].disabled,false);assert.equal(f.ids['maintenance-reload'].hidden,false);assert.equal(f.ids['maintenance-feedback'].textContent,'Keep 2.26.0 is ready.');assert.equal(f.timers.size,0);await f.ids['maintenance-reload'].fire('click');assert.equal(f.reloads(),1);
+  assert.deepEqual(f.window.events,['keep-maintenance-completed']);assert.equal(f.ids['maintenance-refresh'].hidden,true);
 });
 test('the durable commit boundary remains in progress until final host completion is recorded',async()=>{
   const f=fixture();await f.start();await f.poll(base({operation:operation({state:'completed',phase:'committed',sequence:9}),requested_request_id:requestId,request_state:'completed'}));
@@ -116,7 +148,7 @@ test('the durable commit boundary remains in progress until final host completio
   await f.poll(base({installed_version:'2.26.0',operation:operation({state:'completed',phase:'success',sequence:10}),requested_request_id:requestId,request_state:'completed'}));assert.equal(f.stored.size,0);assert.equal(f.ids['maintenance-restart'].disabled,false);assert.equal(f.timers.size,0);
 });
 test('busy recorded gate without an operation still watches status and never permits a host action',async()=>{
-  const f=fixture({snapshot:base({can_install:false,can_restart:false,reason:'busy'})});assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-refresh'].hidden,false);await f.advance(2000);assert.equal(f.calls[0].settings.method,undefined);assert.equal(f.calls[0].url,'/settings/about/maintenance/status');
+  const f=fixture({snapshot:base({can_install:false,can_restart:false,reason:'busy'})});assert.equal(f.ids['maintenance-restart'].disabled,true);assert.equal(f.ids['maintenance-refresh'].hidden,true);await f.advance(2000);assert.equal(f.calls[0].settings.method,undefined);assert.equal(f.calls[0].url,'/settings/about/maintenance/status');
 });
 test('an uncertain transport retains the UUID and resolves through GET rather than replay',async()=>{
   const f=fixture();await f.open();const posting=f.ids['maintenance-confirm-form'].fire('submit');await settle();f.fail(0);await posting;assert.equal(f.stored.get('keep-maintenance-request'),requestId);assert.equal(f.ids['maintenance-restart'].disabled,true);
@@ -166,7 +198,7 @@ test('hidden documents pause progress polling until visible again',async()=>{
   const f=fixture({snapshot:running(),hidden:true});assert.equal(f.calls.length,0);assert.equal(f.timers.size,0);f.document.hidden=false;await f.document.fire('visibilitychange');await settle();assert.equal(f.calls[0].settings.method,undefined);assert.equal(f.calls[0].url,`/settings/about/maintenance/status?request_id=${requestId}`);
 });
 test('a release check refreshes maintenance capability and invalidates a changed confirmation',async()=>{
-  const f=fixture();await f.open();await f.window.fire('keep-release-updated');await settle();f.respond(0,200,{snapshot:base({latest_version:'2.27.0',confirmation:'b'.repeat(64)})});await settle();assert.equal(f.ids['maintenance-confirm'].open,false);assert.equal(f.document.activeElement,f.ids['maintenance-title']);assert.match(f.ids['maintenance-feedback'].textContent,/status changed/);await f.ids['maintenance-confirm-form'].fire('submit');assert.equal(f.calls.length,1);await f.open();assert.equal(f.ids['maintenance-confirm-description'].textContent,'Install Keep 2.27.0?');
+  const f=fixture();await f.open();await f.window.fire('keep-release-updated');await settle();f.respond(0,200,{snapshot:base({latest_version:'2.27.0',confirmation:'b'.repeat(64)})});await settle();assert.equal(f.ids['maintenance-confirm'].open,false);assert.equal(f.document.activeElement,f.ids['maintenance-install']);assert.match(f.ids['maintenance-feedback'].textContent,/status changed/);await f.ids['maintenance-confirm-form'].fire('submit');assert.equal(f.calls.length,1);await f.open();assert.equal(f.ids['maintenance-confirm-description'].textContent,'Install Keep 2.27.0?');
 });
 test('the confirmed operation retains its original target after another latest release is advertised',async()=>{
   const f=fixture();await f.start();await f.poll(running({latest_version:'2.27.0',operation:operation({state:'claimed',phase:'pulling',sequence:2})}));assert.equal(f.ids['maintenance-operation-title'].textContent,'Update to 2.26.0');

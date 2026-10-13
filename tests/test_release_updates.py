@@ -125,6 +125,63 @@ class ReleaseUpdateTests(unittest.TestCase):
         self.assertEqual(self.store.check(now=120, force=True)['status'], 'waiting')
         self.session.get.assert_not_called()
 
+    def test_new_installed_version_refreshes_once_without_trusting_the_previous_version_check(self):
+        previous = updates.Store(self.path, installed_version='2.9.0')
+        previous.check(now=100)
+        current = updates.Store(self.path, installed_version='2.11.0')
+        snapshot = current.snapshot('2.11.0', now=120)
+        self.assertTrue(snapshot['stale'])
+        self.assertTrue(snapshot['version_refresh_pending'])
+        self.assertEqual(snapshot['comparison'], 'unknown')
+        self.assertEqual(snapshot['latest_version'], '2.10.0')
+        self.assertFalse(current.due(now=159))
+        self.assertTrue(current.due(now=160))
+        self.session.get.side_effect = [Response(status=304), Response(status=304)]
+        current.check(now=160)
+        self.assertFalse(current.snapshot('2.11.0', now=160)['version_refresh_pending'])
+        self.assertEqual(current.snapshot('2.11.0', now=160)['comparison'], 'ahead')
+        restarted = updates.Store(self.path, installed_version='2.11.0')
+        self.assertFalse(restarted.due(now=220))
+        self.assertEqual(self.row()['checked_version'], '2.11.0')
+
+    def test_changed_version_check_keeps_failure_backoff_and_rate_limit_guards(self):
+        previous = updates.Store(self.path, installed_version='2.9.0')
+        previous.check(now=100)
+        current = updates.Store(self.path, installed_version='2.10.0')
+        self.session.get.side_effect = requests.ConnectionError('offline')
+        current.check(now=160)
+        self.assertFalse(current.due(now=220))
+        self.assertTrue(current.due(now=160 + updates.RETRY_INTERVAL))
+        self.assertFalse(current.snapshot('2.10.0', now=220)['version_refresh_pending'])
+        self.assertEqual(current.snapshot('2.10.0', now=220)['comparison'], 'unknown')
+        upgraded_after_failure = updates.Store(self.path, installed_version='2.11.0')
+        self.assertFalse(upgraded_after_failure.due(now=220))
+        self.assertFalse(upgraded_after_failure.snapshot('2.11.0', now=220)['version_refresh_pending'])
+        self.assertTrue(upgraded_after_failure.due(now=1660))
+        self.session.get.side_effect = [Response(status=429, headers={'Retry-After': '3600'})]
+        current.check(now=1660)
+        upgraded = updates.Store(self.path, installed_version='2.11.0')
+        self.assertFalse(upgraded.due(now=1720))
+        self.assertFalse(upgraded.snapshot('2.11.0', now=1720)['version_refresh_pending'])
+        self.assertTrue(upgraded.due(now=5260))
+
+    def test_legacy_release_cache_is_read_only_until_the_worker_migrates_and_refreshes_it(self):
+        self.store.check(now=100)
+        with sqlite3.connect(self.path) as db:
+            db.execute('ALTER TABLE release_checks DROP COLUMN attempted_version')
+            db.execute('ALTER TABLE release_checks DROP COLUMN checked_version')
+        before = self.path.read_bytes()
+        observer = updates.Store(self.path, initialize=False, installed_version='2.11.0')
+        snapshot = observer.snapshot('2.11.0', now=200)
+        self.assertTrue(snapshot['stale'])
+        self.assertEqual(snapshot['comparison'], 'unknown')
+        self.assertTrue(snapshot['version_refresh_pending'])
+        self.assertEqual(self.path.read_bytes(), before)
+        worker = updates.Store(self.path, installed_version='2.11.0')
+        self.succeed(latest=release('2.11.0'))
+        worker.check(now=200)
+        self.assertEqual(observer.snapshot('2.11.0', now=200)['comparison'], 'up_to_date')
+
     def test_failed_checks_preserve_cache_and_never_report_up_to_date(self):
         self.store.check(now=100)
         before = self.row()

@@ -13,6 +13,8 @@
   if (!controls.length) return;
 
   const mobile = window.matchMedia('(max-width: 700px)');
+  const pageHeader = document.querySelector('.app-header');
+  const backToTop = document.getElementById('back-to-top');
   const side = document.createElement('aside');
   side.className = 'alphabet-side-navigation'; side.hidden = true;
   const index = document.createElement('nav'); index.className = 'alphabet-side-letters';
@@ -98,12 +100,22 @@
   const layout = () => {
     const view = viewport(), browseOffset = offset();
     const safeBottom = parseFloat(getComputedStyle(side).paddingBottom) || 0;
-    const start = view.top + browseOffset + 8;
-    const space = Math.max(56, view.height - browseOffset - 8 - safeBottom);
+    // The app header scrolls away, while browse controls remain sticky. A long
+    // index must clear whichever is still visible instead of covering its divider.
+    const start = Math.max(view.top + browseOffset, pageHeader?.getBoundingClientRect().bottom || 0) + 8;
+    const left = Math.min(window.innerWidth - 44, active.section.getBoundingClientRect().right + 8);
+    let bottom = view.top + view.height - safeBottom - 8;
+    if (backToTop?.classList.contains('visible')) {
+      const button = backToTop.getBoundingClientRect();
+      if (button.right > left && button.left < left + 44) bottom = Math.min(bottom, button.top - 8);
+    }
+    const space = Math.max(0, bottom - start);
+    if (space < 32) return false;
     const height = Math.min(active.available.length * 24 + 8, space);
-    side.style.left = `${Math.min(window.innerWidth - 44, active.section.getBoundingClientRect().right + 8)}px`;
+    side.style.left = `${left}px`;
     side.style.top = `${start + Math.max(0, (space - height) / 2)}px`;
     index.style.maxHeight = `${space}px`;
+    return true;
   };
   const sync = () => {
     scheduled = false;
@@ -129,7 +141,7 @@
       button.setAttribute('aria-label', `${button.dataset.letter === '#' ? 'Numbers and other titles' : `Titles starting with ${button.dataset.letter}`} in ${active.name}`);
       if (!keepRoving) button.tabIndex = position === 0 ? 0 : -1;
     });
-    layout();
+    if (!layout()) { hideIndex(previous); return; }
     if (replaceFocus) buttons.find(button => button.dataset.letter === active.available[0])?.focus({preventScroll:true});
     else if (keepRoving && document.activeElement !== focused) focused.focus({preventScroll:true});
   };
@@ -174,6 +186,7 @@
   if (window.ResizeObserver) {
     const observer = new ResizeObserver(schedule);
     controls.forEach(control => observer.observe(control.section));
+    if (pageHeader) observer.observe(pageHeader);
   }
   refresh();
 })();

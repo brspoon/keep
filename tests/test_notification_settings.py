@@ -52,14 +52,14 @@ class NotificationSettingTests(unittest.TestCase):
         values = {'enabled': True, 'collections': {1}, 'events': notifications.MEDIA_EVENTS,
                   'available_collections': self.collections, 'key_mode': 'replace',
                   'user_key': 'B' * 30, 'now': 200, **kwargs}
-        return self.store.save_preferences(actor or self.user, **values)
+        return self.store.save_preferences(actor or self.owner, **values)
 
     def destinations(self):
         return self.store.destinations(available_collections=self.collections)
 
     def test_disabled_defaults_and_safe_masks_never_echo_provider_or_personal_secrets(self):
         self.assertFalse(self.store.installation_view()['enabled'])
-        self.assertFalse(self.store.preferences_view(self.user, available_collections=self.collections)['enabled'])
+        self.assertFalse(self.store.preferences_view(self.owner, available_collections=self.collections)['enabled'])
         view = self.install()
         preferences = self.preferences()
         self.assertTrue(view['configured'])
@@ -77,7 +77,7 @@ class NotificationSettingTests(unittest.TestCase):
         self.assertNotIn('B' * 30, str(credentials))
         self.store.save_installation(self.owner, enabled=True, token_mode='clear')
         self.assertFalse(self.store.installation_view()['ready'])
-        self.assertFalse(self.store.preferences_view(self.user, available_collections=self.collections)['provider_available'])
+        self.assertFalse(self.store.preferences_view(self.owner, available_collections=self.collections)['provider_available'])
 
     def test_environment_precedence_and_managed_fields_cannot_be_written_or_cleared(self):
         self.install()
@@ -153,7 +153,7 @@ class NotificationSettingTests(unittest.TestCase):
             self.preferences(key_mode='clear')
         self.assertEqual(self.query('SELECT user_key FROM pushover_preferences'), [('B' * 30,)])
         self.preferences(enabled=False, key_mode='clear')
-        self.assertFalse(self.store.preferences_view(self.user, available_collections=self.collections)['configured'])
+        self.assertFalse(self.store.preferences_view(self.owner, available_collections=self.collections)['configured'])
         self.store.save_installation(self.owner, enabled=False, token_mode='clear')
         self.assertEqual(self.connections.get('PUSHOVER_APP_TOKEN'), '')
 
@@ -162,36 +162,75 @@ class NotificationSettingTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 self.store.save_installation(actor, enabled=True, token_mode='replace', token='A' * 30)
         with self.assertRaises(PermissionError):
-            self.preferences(events=notifications.EVENTS)
+            self.preferences(self.user, events=notifications.EVENTS)
         self.preferences(self.owner, events=notifications.EVENTS)
         self.assertTrue(self.destinations()[0].owner_verified)
-        self.preferences(settings.Actor('local', True))
-        self.assertFalse(next(target for target in self.destinations() if target.id == 'local').owner_verified)
+        with self.assertRaises(PermissionError):
+            self.preferences(settings.Actor('local', True))
+
+    def test_legacy_nonowner_push_state_is_preserved_but_cannot_be_configured_tested_or_sent(self):
+        self.install()
+        self.preferences()
+        owner_destination = self.destinations()[0]
+        with sqlite3.connect(self.path) as db:
+            db.execute("""INSERT INTO pushover_preferences
+                SELECT 'user',enabled,user_key,device,collections_json,events_json,generation,
+                    provider_generation,after_queue_id,updated_at FROM pushover_preferences WHERE user_id='owner'""")
+        before = self.query("SELECT * FROM pushover_preferences WHERE user_id='user'")
+        for actor in (self.user, replace(self.user, owner=True)):
+            with self.subTest(actor=actor):
+                with self.assertRaises(PermissionError):
+                    self.preferences(actor, events=notifications.MEDIA_EVENTS)
+                with self.assertRaises(PermissionError):
+                    self.store.validation_credentials(actor)
+                for kind in ('notification', 'validation'):
+                    with self.assertRaises(PermissionError):
+                        self.store.reserve_test(actor, kind, now=1000)
+                    with self.assertRaises(PermissionError):
+                        self.store.test_availability(actor, kind, now=1000)
+        self.assertEqual([target.id for target in self.destinations()], ['owner'])
+        legacy_destination = replace(owner_destination, id='user', owner_verified=False)
+        self.assertIsNone(self.store.sending_credentials(legacy_destination, available_collections=self.collections))
+        self.assertEqual(self.query("SELECT * FROM pushover_preferences WHERE user_id='user'"), before)
+
+    def test_owner_change_invalidates_form_authority_and_pending_delivery_credentials(self):
+        self.install()
+        self.preferences(events=notifications.EVENTS)
+        destination = self.destinations()[0]
+        before = self.query('SELECT * FROM pushover_preferences')
+        self.store.owner_id = lambda: 'user'
+        with self.assertRaises(PermissionError):
+            self.preferences(user_key='C' * 30)
+        with self.assertRaises(PermissionError):
+            self.store.validation_credentials(self.owner)
+        self.assertEqual(self.destinations(), [])
+        self.assertIsNone(self.store.sending_credentials(destination, available_collections=self.collections))
+        self.assertEqual(self.query('SELECT * FROM pushover_preferences'), before)
 
     def test_inactive_or_revoked_profiles_cannot_read_save_or_send_with_a_stale_actor(self):
         self.install()
         self.preferences()
         destination = self.destinations()[0]
         with sqlite3.connect(self.path) as db:
-            db.execute("UPDATE user_profiles SET plex_access='revoked' WHERE plex_id='user'")
+            db.execute("UPDATE user_profiles SET plex_access='revoked' WHERE plex_id='owner'")
         with self.assertRaises(PermissionError):
             self.preferences(key_mode='keep')
         with self.assertRaises(PermissionError):
-            self.store.preferences_view(self.user, available_collections=self.collections)
+            self.store.preferences_view(self.owner, available_collections=self.collections)
         self.assertEqual(self.destinations(), [])
         self.assertIsNone(self.store.sending_credentials(destination, available_collections=self.collections))
 
     def test_session_authority_is_strict_and_legacy_profile_version_defaults_to_zero(self):
-        self.assertFalse(self.store.preferences_view(self.user, available_collections=self.collections)['enabled'])
+        self.assertFalse(self.store.preferences_view(self.owner, available_collections=self.collections)['enabled'])
         for version in (None, True, False, -1, '0', 0.0, 1):
             with self.subTest(version=version), self.assertRaises(PermissionError):
-                self.store.preferences_view(replace(self.user, session_version=version), available_collections=self.collections)
+                self.store.preferences_view(replace(self.owner, session_version=version), available_collections=self.collections)
         with sqlite3.connect(self.path) as db:
             db.execute('ALTER TABLE user_profiles ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0')
-            db.execute("UPDATE user_profiles SET session_version=1 WHERE plex_id='user'")
+            db.execute("UPDATE user_profiles SET session_version=1 WHERE plex_id='owner'")
         with self.assertRaises(PermissionError):
             self.preferences(key_mode='keep', enabled=False)
-        current = replace(self.user, session_version=1)
+        current = replace(self.owner, session_version=1)
         self.assertFalse(self.store.preferences_view(current, available_collections=self.collections)['enabled'])
         self.preferences(current)
 
@@ -205,7 +244,7 @@ class NotificationSettingTests(unittest.TestCase):
         def revoke(**kwargs):
             generation = synchronize(**kwargs)
             with sqlite3.connect(self.path) as db:
-                db.execute("UPDATE user_profiles SET session_version=session_version+1 WHERE plex_id='user'")
+                db.execute("UPDATE user_profiles SET session_version=session_version+1 WHERE plex_id='owner'")
             return generation
         with patch.object(self.store, 'synchronize', side_effect=revoke), self.assertRaises(PermissionError):
             self.preferences(user_key='C' * 30, device='phone', collections={2}, events={notifications.REMINDER})
@@ -315,7 +354,7 @@ class NotificationSettingTests(unittest.TestCase):
         with patch.object(settings.Settings, 'initialize', side_effect=AssertionError('read initializes')), \
              patch.object(settings.pushover.requests, 'Session', side_effect=AssertionError('read sends')):
             observer.installation_view()
-            observer.preferences_view(self.user, available_collections=self.collections)
+            observer.preferences_view(self.owner, available_collections=self.collections)
             observer.destinations(available_collections=self.collections)
         self.assertEqual(self.path.read_bytes(), before)
 
@@ -326,7 +365,7 @@ class NotificationSettingTests(unittest.TestCase):
         def concurrent_update(**kwargs):
             generation = synchronize(**kwargs)
             with sqlite3.connect(self.path) as db:
-                db.execute("UPDATE pushover_preferences SET user_key=? WHERE user_id='user'", ('C' * 30,))
+                db.execute("UPDATE pushover_preferences SET user_key=? WHERE user_id='owner'", ('C' * 30,))
             return generation
         with patch.object(self.store, 'synchronize', side_effect=concurrent_update):
             self.preferences(key_mode='keep', user_key='', device='iphone')
@@ -340,7 +379,7 @@ class NotificationSettingTests(unittest.TestCase):
             db.execute("INSERT INTO notification_queue(collection_id,media_id,kind,received_at) VALUES (1,'new','MEDIA_ADDED_TO_COLLECTION',300)")
         def sender(target, message):
             with sqlite3.connect(self.path) as db:
-                db.execute("UPDATE pushover_preferences SET enabled=0 WHERE user_id='user'")
+                db.execute("UPDATE pushover_preferences SET enabled=0 WHERE user_id='owner'")
             credentials = self.store.sending_credentials(target, available_collections=self.collections)
             self.assertIsNone(credentials)
             return notifications.Outcome('cancelled', 'preferences_changed')
@@ -372,76 +411,78 @@ class NotificationSettingTests(unittest.TestCase):
         self.install()
         self.preferences(enabled=False)
         self.store.save_installation(self.owner, enabled=False)
-        credentials = self.store.validation_credentials(self.user)
+        credentials = self.store.validation_credentials(self.owner)
         self.assertEqual(credentials.user_key, 'B' * 30)
         self.assertNotIn('B' * 30, str(credentials))
         with sqlite3.connect(self.path) as db:
-            db.execute("UPDATE user_profiles SET status='disabled' WHERE plex_id='user'")
+            db.execute("UPDATE user_profiles SET status='disabled' WHERE plex_id='owner'")
         with self.assertRaises(PermissionError):
-            self.store.validation_credentials(self.user)
+            self.store.validation_credentials(self.owner)
 
     def test_test_reservation_is_durable_per_user_kind_and_serialized_across_accounts(self):
         self.install()
         self.preferences()
-        self.preferences(self.owner)
-        first = self.store.reserve_test(self.user, 'validation', now=1000)
+        with sqlite3.connect(self.path) as db:
+            db.execute("INSERT INTO email_recipients VALUES ('shared@example.test',1)")
+        first = self.store.reserve_test(self.owner, 'validation', now=1000)
         self.assertEqual(first.state, 'reserved')
-        self.assertEqual(self.store.reserve_test(self.user, 'validation', now=1001).state, 'cooldown')
+        self.assertEqual(self.store.reserve_test(self.owner, 'validation', now=1001).state, 'cooldown')
         self.assertEqual(self.store.reserve_test(self.owner, 'notification', now=1001).state, 'busy')
+        self.assertEqual(self.store.reserve_test(self.user, 'email', now=1001).state, 'busy')
         self.assertTrue(self.store.complete_test(first.id, notifications.Outcome('accepted'), now=1002))
-        second = self.store.reserve_test(self.user, 'notification', now=1002)
+        second = self.store.reserve_test(self.owner, 'notification', now=1002)
         self.assertEqual(second.state, 'reserved')
         self.store.complete_test(second.id, notifications.Outcome('accepted'), now=1003)
         restarted = settings.Settings(self.path, initialize=False, owner_id=lambda: 'owner', profile_access=self.access)
-        self.assertEqual(restarted.reserve_test(self.user, 'validation', now=1059).state, 'cooldown')
-        self.assertEqual(restarted.reserve_test(self.user, 'validation', now=1060).state, 'reserved')
+        self.assertEqual(restarted.reserve_test(self.owner, 'validation', now=1059).state, 'cooldown')
+        self.assertEqual(restarted.reserve_test(self.owner, 'validation', now=1060).state, 'reserved')
 
     def test_interrupted_test_notification_is_held_and_never_replayed_without_discard(self):
         self.install()
         self.preferences()
-        first = self.store.reserve_test(self.user, 'notification', now=1000)
+        first = self.store.reserve_test(self.owner, 'notification', now=1000)
         restarted = settings.Settings(self.path, initialize=False, owner_id=lambda: 'owner', profile_access=self.access)
-        result = restarted.reserve_test(self.user, 'notification', now=1100)
+        result = restarted.reserve_test(self.owner, 'notification', now=1100)
         self.assertEqual((result.state, result.id), ('review', first.id))
         self.assertEqual(self.query("SELECT state,error_code FROM notification_test_attempts"), [('review', 'worker_interrupted')])
-        self.assertFalse(restarted.discard_test(self.owner, first.id))
-        self.assertTrue(restarted.discard_test(self.user, first.id))
-        self.assertEqual(restarted.reserve_test(self.user, 'notification', now=1100).state, 'reserved')
+        self.assertFalse(restarted.discard_test(self.user, first.id))
+        self.assertTrue(restarted.discard_test(self.owner, first.id))
+        self.assertEqual(restarted.reserve_test(self.owner, 'notification', now=1100).state, 'reserved')
 
     def test_uncertain_test_results_are_safe_owned_and_cannot_overwrite_accepted_proof(self):
         self.install()
         self.preferences()
-        first = self.store.reserve_test(self.user, 'notification', now=1000)
+        first = self.store.reserve_test(self.owner, 'notification', now=1000)
         self.store.complete_test(first.id, notifications.Outcome('review', 'SECRET-ERROR', request_id='B' * 30), now=1001)
-        self.assertEqual(self.store.reserve_test(self.user, 'notification', now=1100).state, 'review')
-        views = self.store.test_views(self.user)
+        self.assertEqual(self.store.reserve_test(self.owner, 'notification', now=1100).state, 'review')
+        views = self.store.test_views(self.owner)
         self.assertNotIn('SECRET-ERROR', str(views))
         self.assertNotIn('B' * 30, str(views))
         self.assertEqual(views[0]['state'], 'review')
-        self.assertEqual(self.store.test_views(self.owner), [])
+        self.assertEqual(self.store.test_views(self.user), [])
         self.assertFalse(self.store.complete_test(first.id, notifications.Outcome('accepted')))
 
     def test_test_reservation_refuses_changed_credentials_and_results_mark_changed_settings(self):
         self.install()
         self.preferences()
-        first = self.store.reserve_test(self.user, 'validation', now=1000)
-        self.assertIsNotNone(self.store.validation_credentials(self.user, reservation_id=first.id))
+        first = self.store.reserve_test(self.owner, 'validation', now=1000)
+        self.assertIsNotNone(self.store.validation_credentials(self.owner, reservation_id=first.id))
         self.preferences(user_key='C' * 30)
-        self.assertIsNone(self.store.validation_credentials(self.user, reservation_id=first.id))
+        self.assertIsNone(self.store.validation_credentials(self.owner, reservation_id=first.id))
         self.store.complete_test(first.id, notifications.Outcome('cancelled', 'preferences_changed'))
-        self.assertFalse(self.store.test_views(self.user)[0]['current'])
+        self.assertFalse(self.store.test_views(self.owner)[0]['current'])
 
     def test_provider_toggle_preserves_application_quota_for_delivery_and_test_reservations(self):
         self.install()
         self.preferences()
         scope = self.destinations()[0].provider_generation
-        first = self.store.reserve_test(self.user, 'notification', now=1000)
+        first = self.store.reserve_test(self.owner, 'notification', now=1000)
         self.store.complete_test(first.id, notifications.Outcome('retry', 'quota', retry_at=4000), now=1001)
         self.store.save_installation(self.owner, enabled=False)
         self.store.save_installation(self.owner, enabled=True)
         self.assertEqual(self.destinations()[0].provider_generation, scope)
-        self.assertEqual(self.store.reserve_test(self.user, 'notification', now=1100).state, 'quota')
-        self.assertEqual(self.store.reserve_test(self.user, 'validation', now=1100).state, 'reserved')
+        self.assertEqual(self.store.reserve_test(self.owner, 'notification', now=1100).state, 'quota')
+        self.assertEqual(self.store.reserve_test(self.owner, 'validation', now=1100).state, 'reserved')
 
     def test_email_event_defaults_and_changes_preserve_original_recipient_and_subscription_data(self):
         original = self.query('SELECT * FROM email_recipients')
@@ -450,7 +491,7 @@ class NotificationSettingTests(unittest.TestCase):
         self.assertEqual(default['events'], notifications.MEDIA_EVENTS)
         self.assertFalse(default['owner_verified'])
         self.store.save_email_events(self.owner, 'originalcase@example.test', {notifications.REMINDER}, now=1000)
-        self.assertEqual(self.store.email_event_preferences('OriginalCase@Example.test')['events'], frozenset((notifications.REMINDER,)))
+        self.assertEqual(self.store.email_event_preferences('OriginalCase@Example.test')['events'], notifications.MEDIA_EVENTS)
         self.assertEqual(self.query('SELECT * FROM email_recipients'), original)
         self.assertEqual(self.query('SELECT * FROM recipient_subscriptions'), subscriptions)
         self.assertEqual(self.store.email_event_preferences('OriginalCase@Example.test')['generation'], default['generation'])
@@ -459,13 +500,28 @@ class NotificationSettingTests(unittest.TestCase):
         with sqlite3.connect(self.path) as db:
             db.execute("INSERT INTO email_recipients VALUES ('shared@example.test',1)")
         self.store.save_email_events(self.user, 'shared@example.test', {notifications.ADDED})
-        self.assertEqual(self.store.email_event_preferences('shared@example.test')['events'], frozenset((notifications.ADDED,)))
+        self.assertEqual(self.store.email_event_preferences('shared@example.test')['events'], notifications.MEDIA_EVENTS)
         with self.assertRaises(PermissionError):
             self.store.save_email_events(self.user, 'OriginalCase@Example.test', notifications.MEDIA_EVENTS)
-        with self.assertRaises(PermissionError):
-            self.store.save_email_events(self.user, 'shared@example.test', notifications.EVENTS)
+        self.store.save_email_events(self.user, 'shared@example.test', notifications.EVENTS)
+        self.assertEqual(self.store.email_event_preferences('shared@example.test')['events'], notifications.MEDIA_EVENTS)
         with self.assertRaises(PermissionError):
             self.store.save_email_events(self.owner, 'shared@example.test', notifications.EVENTS)
+
+    def test_nonowner_legacy_event_choices_do_not_change_optin_or_collection_subscriptions(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute("INSERT INTO email_recipients VALUES ('shared@example.test',0)")
+            db.execute("INSERT INTO recipient_subscriptions VALUES ('shared@example.test',2,1)")
+            db.execute("INSERT INTO notification_email_events VALUES ('shared@example.test',?,NULL)",
+                       ('["MEDIA_ABOUT_TO_BE_HANDLED"]',))
+        before = self.path.read_bytes()
+        self.assertEqual(self.store.email_event_preferences('shared@example.test')['events'], notifications.MEDIA_EVENTS)
+        self.assertEqual(self.path.read_bytes(), before)
+        for choices in (set(), {notifications.ADDED}, {notifications.REMINDER}, notifications.EVENTS):
+            self.store.save_email_events(self.user, 'shared@example.test', choices)
+            self.assertEqual(self.store.email_event_preferences('shared@example.test')['events'], notifications.MEDIA_EVENTS)
+        self.assertEqual(self.query("SELECT enabled FROM email_recipients WHERE email='shared@example.test'"), [(0,)])
+        self.assertEqual(self.query("SELECT collection_id,enabled FROM recipient_subscriptions WHERE email='shared@example.test'"), [(2, 1)])
 
     def test_first_owner_alert_email_opt_in_sets_only_operational_boundary_without_losing_media_backlog(self):
         with sqlite3.connect(self.path) as db:
@@ -505,15 +561,15 @@ class NotificationSettingTests(unittest.TestCase):
             db.execute('BEGIN IMMEDIATE')
             db.execute("UPDATE email_recipients SET enabled=0 WHERE email='OriginalCase@Example.test'")
             view = self.store.save_email_events(self.owner, 'OriginalCase@Example.test', {notifications.REMINDER}, db=db)
-            self.assertEqual(view['events'], frozenset((notifications.REMINDER,)))
+            self.assertEqual(view['events'], notifications.MEDIA_EVENTS)
         self.assertEqual(self.query('SELECT enabled FROM email_recipients'), [(0,)])
-        self.assertEqual(self.store.email_event_preferences('OriginalCase@Example.test')['events'], frozenset((notifications.REMINDER,)))
+        self.assertEqual(self.store.email_event_preferences('OriginalCase@Example.test')['events'], notifications.MEDIA_EVENTS)
 
     def test_invalid_email_events_roll_back_the_callers_existing_preferences_changes(self):
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(ValueError):
             with sqlite3.connect(self.path) as db, db:
                 db.execute("INSERT INTO email_recipients VALUES ('shared@example.test',1)")
-                self.store.save_email_events(self.user, 'shared@example.test', notifications.EVENTS, db=db)
+                self.store.save_email_events(self.user, 'shared@example.test', {'unknown'}, db=db)
         self.assertEqual(self.query("SELECT * FROM email_recipients WHERE email='shared@example.test'"), [])
 
     def test_smtp_test_uses_only_saved_own_account_address_without_any_push_configuration(self):
@@ -578,7 +634,7 @@ class NotificationSettingTests(unittest.TestCase):
             db.execute("INSERT INTO notification_cooldowns VALUES ('pushover','old-opaque-generation',4000)")
         generation = self.store.synchronize(now=1000)
         self.assertEqual(self.query("SELECT until_at FROM notification_cooldowns WHERE provider='pushover' AND generation=?", (generation,)), [(4000,)])
-        self.assertEqual(self.store.reserve_test(self.user, 'notification', now=1100).state, 'quota')
+        self.assertEqual(self.store.reserve_test(self.owner, 'notification', now=1100).state, 'quota')
 
 
 if __name__ == '__main__':

@@ -55,13 +55,41 @@
         </div>
         {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed %}<p class="help">App token is managed by the environment.</p>{% endif %}
       </div>
-      <button class="notification-button save-button" data-save-state="pristine" type="submit" {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed and pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Save Pushover</button>
+      <button class="notification-button save-button" data-save-state="pristine" type="submit" {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed and pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Save provider</button>
+    </form>
+    <form class="notification-owner-preferences" method="post" action="/settings/notifications/pushover/preferences" data-save-key="notification-owner-pushover" data-notification-channel="pushover">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>Your notifications</h3>
+      <p class="help">Pushover is available to the Keep owner.</p>
+      <label class="notification-choice"><input type="checkbox" name="receive_pushover" value="1" data-channel-toggle {% if owner_push.enabled %}checked{% endif %}>Receive Pushover notifications</label>
+      <div class="notification-secret" data-secret-control>
+        <label for="notification-user-key-mode">User key</label>
+        <select id="notification-user-key-mode" name="key_mode" data-secret-mode>
+          {% if owner_push.configured %}<option value="keep">Keep saved key</option>{% endif %}
+          <option value="replace">{{ 'Replace key' if owner_push.configured else 'Add key' }}</option>
+          {% if owner_push.configured %}<option value="clear">Remove key</option>{% endif %}
+        </select>
+        <div data-secret-replacement>
+          <label for="notification-user-key">New user key</label>
+          <input id="notification-user-key" name="user_key" type="password" maxlength="30" autocomplete="new-password" spellcheck="false">
+        </div>
+      </div>
+      <div class="notification-field"><label for="notification-device">Device <span class="help">(optional)</span></label><input id="notification-device" name="device" value="{{ owner_push.device }}" maxlength="25" autocomplete="off" spellcheck="false"></div>
+      <fieldset class="notification-topics" data-channel-options {% if not owner_push.enabled %}disabled{% endif %}>
+        <legend>Events</legend>
+        {% for event, label in event_labels.items() %}<label class="subscription"><input type="checkbox" name="pushover_event" value="{{ event }}" {% if event in owner_push.events %}checked{% endif %}>{{ label }}</label>{% endfor %}
+      </fieldset>
+      <fieldset class="notification-topics" data-channel-options {% if not owner_push.enabled %}disabled{% endif %}>
+        <legend>Collections</legend>
+        {% for collection_id, collection_name in collections.items() %}<label class="subscription"><input type="checkbox" name="pushover_collection_id" value="{{ collection_id }}" {% if collection_id in owner_push.collections %}checked{% endif %}>{{ collection_name.replace(' Leaving Plex Soon', '') }}</label>{% else %}<p class="help">No collections available.</p>{% endfor %}
+      </fieldset>
+      <button class="notification-button save-button" data-save-state="pristine" type="submit">Save delivery settings</button>
     </form>
     {% set push_can_test = owner_push.can_test|default(owner_push.configured and pushover_installation.ready) %}
     <form class="notification-test" method="post" action="/settings/notifications/test/pushover" data-notification-test>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="notification-button secondary" type="submit" {% if not push_can_test %}disabled aria-describedby="notification-pushover-test-reason"{% endif %}>Send me a test</button>
-      {% if not push_can_test %}<p class="help" id="notification-pushover-test-reason">{{ owner_push.test_reason|default('Add your user key in Preferences and enable Pushover above.', true) }}</p>{% endif %}
+      {% if not push_can_test %}<p class="help" id="notification-pushover-test-reason">{{ owner_push.test_reason|default('Save your user key and enable Pushover above.', true) }}</p>{% endif %}
     </form>
   </section>
 </div>

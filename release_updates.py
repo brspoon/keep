@@ -191,8 +191,11 @@ def _fetch(session, url, etag, cached, deadline, now):
 
 
 class Store:
-    def __init__(self, path, *, initialize=True):
+    def __init__(self, path, *, initialize=True, installed_version=None):
         self.path = Path(path)
+        if installed_version is not None and not version(installed_version):
+            raise ValueError('Invalid installed version')
+        self.installed_version = version(installed_version)
         self._initialized = False
         if initialize:
             self._initialize()
@@ -204,8 +207,13 @@ class Store:
                 recent_json TEXT NOT NULL DEFAULT '[]', latest_etag TEXT, recent_etag TEXT,
                 last_attempt REAL, last_success REAL, next_attempt REAL NOT NULL DEFAULT 0,
                 rate_limit_until REAL NOT NULL DEFAULT 0, failures INTEGER NOT NULL DEFAULT 0,
-                outcome TEXT NOT NULL DEFAULT 'never', error_code TEXT
+                outcome TEXT NOT NULL DEFAULT 'never', error_code TEXT,
+                attempted_version TEXT, checked_version TEXT
             )''')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(release_checks)')}
+            for column in ('attempted_version', 'checked_version'):
+                if column not in columns:
+                    db.execute('ALTER TABLE release_checks ADD COLUMN ' + column + ' TEXT')
             db.execute('INSERT OR IGNORE INTO release_checks(id) VALUES (1)')
         self._initialized = True
 
@@ -221,13 +229,16 @@ class Store:
             row = db.execute('SELECT * FROM release_checks WHERE id=1').fetchone()
             return dict(row) if row else None
 
-    @staticmethod
-    def _due(row, now, force):
+    def _due(self, row, now, force):
         if row is None:
             return True
         if (_number(row.get('rate_limit_until')) or 0) > now:
             return False
         if force:
+            attempted = _number(row.get('last_attempt'))
+            return attempted is None or now >= attempted + MANUAL_INTERVAL
+        if (self.installed_version and row.get('attempted_version') != self.installed_version
+                and row.get('outcome') in ('never', 'success')):
             attempted = _number(row.get('last_attempt'))
             return attempted is None or now >= attempted + MANUAL_INTERVAL
         return now >= (_number(row.get('next_attempt')) or 0)
@@ -258,7 +269,8 @@ class Store:
         if interrupted and (attempted is None or now - attempted > REQUEST_BUDGET + 30):
             status, error = 'failed', 'check_interrupted'
         fresh = bool(latest and status == 'success' and not error and not interrupted and succeeded is not None
-                     and 0 <= now - succeeded <= CHECK_INTERVAL)
+                     and 0 <= now - succeeded <= CHECK_INTERVAL
+                     and (not self.installed_version or row.get('checked_version') == self.installed_version))
         installed = version(installed_version)
         comparison, update_available = 'unknown', None
         if fresh and installed:
@@ -276,6 +288,10 @@ class Store:
                 'latest_published_at': latest['published_at'] if latest else None,
                 'releases': recent, 'comparison': comparison, 'update_available': update_available,
                 'stale': not fresh, 'error_code': error,
+                'version_refresh_pending': bool(self.installed_version and
+                    (not row or row.get('attempted_version') != self.installed_version)
+                    and (not row or row.get('outcome') in ('never', 'success'))
+                    and not (row and (_number(row.get('rate_limit_until')) or 0) > now)),
                 'message': ERROR_MESSAGES[error] if error else 'Release information checked.' if status == 'success'
                            else 'Release information has not been checked yet.',
                 'can_check': self._due(row, now, True), 'retry_after_seconds': max(0, math.ceil(retry_at - now))}
@@ -294,8 +310,8 @@ class Store:
             if not self._due(row, now, force):
                 return {'status': 'waiting', 'error_code': None, 'latest_version': None}
             # Reserve the attempt before I/O, including recovery after interruption.
-            db.execute("UPDATE release_checks SET last_attempt=?,next_attempt=?,outcome='checking',error_code=NULL WHERE id=1",
-                       (now, now + RETRY_INTERVAL))
+            db.execute("""UPDATE release_checks SET last_attempt=?,next_attempt=?,outcome='checking',error_code=NULL,
+                          attempted_version=? WHERE id=1""", (now, now + RETRY_INTERVAL, self.installed_version))
         try:
             latest_cached, recent_cached = _cache(row)
         except ReleaseCheckError:
@@ -346,9 +362,10 @@ class Store:
                 return {'status': outcome, 'error_code': failure.code,
                         'latest_version': latest_cached['version'] if latest_cached else None}
             db.execute('''UPDATE release_checks SET latest_json=?,recent_json=?,latest_etag=?,recent_etag=?,
-                          last_success=?,next_attempt=?,rate_limit_until=0,failures=0,outcome='success',error_code=NULL
+                          last_success=?,next_attempt=?,rate_limit_until=0,failures=0,outcome='success',error_code=NULL,
+                          checked_version=?
                           WHERE id=1''', (json.dumps(latest), json.dumps(recent), latest_etag, recent_etag,
-                                         completed, completed + interval))
+                                         completed, completed + interval, self.installed_version))
         return {'status': 'success', 'error_code': None, 'latest_version': latest['version']}
 
 

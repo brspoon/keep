@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.26.2 — 2026-10-13
+
+- Fix saving appearance and email preferences.
+- Move Pushover settings to Admin Notifications and make Pushover available only to the owner. Other users can receive Leaving summaries and seven-day reminders by email.
+- Keep desktop letter navigation below the header and within short windows.
+- Refresh release information after an upgrade and recover maintenance controls automatically when the helper becomes available.
+
 ## 2.26.1 — 2026-10-13
 
 - Simplify desktop letter navigation and hide it for short collections. Remove the mobile scroller to give posters more room.
