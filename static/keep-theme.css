@@ -236,3 +236,38 @@ html[data-appearance="light"] .keep-duration-option.is-current { color:var(--tex
 .details-state-badge.kept {
  background:var(--purple-surface); color:var(--purple); border-color:var(--purple-border);
 }
+
+/* Semantic status colors are shared by badges, inline indicators, and feedback. */
+:root {
+  --status-ok-text:var(--positive); --status-ok-bg:var(--positive-surface); --status-ok-border:var(--positive-border);
+  --status-neutral-text:var(--muted); --status-neutral-bg:var(--surface-2); --status-neutral-border:var(--border);
+  --status-warn-text:var(--accent-ink); --status-warn-bg:var(--accent-soft); --status-warn-border:var(--option-accent-border);
+  --status-error-text:var(--negative); --status-error-bg:var(--negative-surface); --status-error-border:var(--negative-border);
+}
+html :is(.status-badge,.status-indicator,.toast)[data-status] {
+  --status-text:var(--status-neutral-text); --status-bg:var(--status-neutral-bg); --status-border:var(--status-neutral-border);
+}
+html :is(.status-badge,.status-indicator,.toast)[data-status="ok"] {
+  --status-text:var(--status-ok-text); --status-bg:var(--status-ok-bg); --status-border:var(--status-ok-border);
+}
+html :is(.status-badge,.status-indicator,.toast)[data-status="warn"] {
+  --status-text:var(--status-warn-text); --status-bg:var(--status-warn-bg); --status-border:var(--status-warn-border);
+}
+html :is(.status-badge,.status-indicator,.toast)[data-status="error"] {
+  --status-text:var(--status-error-text); --status-bg:var(--status-error-bg); --status-border:var(--status-error-border);
+}
+html .status-badge[data-status] {
+  display:inline-flex; align-items:center; gap:6px; width:fit-content; max-width:100%;
+  padding:3px 8px; border:1px solid var(--status-border); border-radius:7px;
+  color:var(--status-text); background:var(--status-bg); font-size:11px; font-weight:600; line-height:1.5;
+}
+html:root .status-indicator[data-status] { color:var(--status-text); }
+html:root :is(.toast,.library-ui .toast)[data-status] {
+  color:var(--status-text); background:var(--status-bg); border-color:var(--status-border);
+}
+html:root :is(.toast,.library-ui .toast)[data-status] .toast-check { color:inherit; }
+html:root .toast[data-status="neutral"] .toast-check { display:none; }
+html:root :is(.admin-ui .status.on,.setup-state.ready) { color:var(--status-ok-text); }
+html:root .admin-ui .status.off { color:var(--status-neutral-text); }
+html:root :is(.admin-ui .status.warn,.setup-state.pending) { color:var(--status-warn-text); }
+html:root .setup-state.error { color:var(--status-error-text); }

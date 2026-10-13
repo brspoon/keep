@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.26.1 — 2026-10-13
+
+- Simplify desktop letter navigation and hide it for short collections. Remove the mobile scroller to give posters more room.
+- Use more space for library grids on wide screens and close the gap beneath sticky navigation.
+- Make Admin layouts, status colors, and action notifications consistent.
+- Fix notification checkbox click areas and Save buttons flashing during page load.
+- Remove completed maintenance snapshot containers while preserving recovery files. Update the optional host helper to receive this fix; updating the app image alone does not update the helper.
+
 ## 2.26.0 — 2026-10-12
 
 - Add Admin Notifications with email and Pushover settings, test notifications, and delivery history.

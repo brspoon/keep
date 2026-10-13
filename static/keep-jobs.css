@@ -14,8 +14,9 @@
 .job-summary h3 { font-size:15px; font-weight:650; }
 .job-status { display:inline-flex; align-items:center; min-height:25px; max-width:100%; padding:2px 8px; border:1px solid var(--border); border-radius:6px; color:var(--muted); font-size:11px; font-weight:600; }
 .job-status-success { color:var(--positive); background:var(--positive-surface); border-color:var(--positive-border); }
-.job-status-failed, .job-status-review, .job-status-stale { color:var(--negative); background:var(--negative-surface); border-color:var(--negative-border); }
-.job-status-running, .job-status-queued { color:var(--accent-ink); background:var(--accent-soft); border-color:var(--option-accent-border); }
+.job-status-failed { color:var(--status-error-text); background:var(--status-error-bg); border-color:var(--status-error-border); }
+.job-status-review, .job-status-stale, .job-status-interrupted { color:var(--status-warn-text); background:var(--status-warn-bg); border-color:var(--status-warn-border); }
+.job-status-running, .job-status-queued { color:var(--status-neutral-text); background:var(--status-neutral-bg); border-color:var(--status-neutral-border); }
 .jobs-ui .job-description { margin-top:7px; color:var(--muted); font-size:13px; line-height:1.6; }
 .jobs-ui .job-result { margin-top:7px; color:var(--muted); font-size:12px; line-height:1.5; }
 .job-details { display:contents; }

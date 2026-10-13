@@ -11,13 +11,14 @@ const running=changes=>base({can_install:false,can_restart:false,reason:'busy',o
 async function settle(){for(let i=0;i<14;i++)await Promise.resolve();}
 function fixture(options={}){
   let now=1000000,document,timerId=0,reloads=0,idsCreated=0;
-  const timers=new Map(),calls=[],stored=new Map(options.pendingId?[['keep-maintenance-request',options.pendingId]]:[]);
+  const timers=new Map(),calls=[],toasts=[],stored=new Map(options.pendingId?[['keep-maintenance-request',options.pendingId]]:[]);
   class ClockDate extends Date{static now(){return now;}}
   class Element{
-    constructor(){this.listeners={};this.hidden=false;this.disabled=false;this.open=false;this.value='';this._text='';this.classes=new Set();
+    constructor(){this.attrs={};this.listeners={};this.hidden=false;this.disabled=false;this.open=false;this.value='';this._text='';this.classes=new Set();
       this.classList={toggle:(name,on)=>on?this.classes.add(name):this.classes.delete(name),contains:name=>this.classes.has(name)};}
     set innerHTML(_){throw Error('No HTML interpretation');}
     set textContent(value){this._text=String(value);}get textContent(){return this._text;}
+    setAttribute(name,value){this.attrs[name]=value;}getAttribute(name){return this.attrs[name]??null;}
     addEventListener(name,fn){(this.listeners[name]||=[]).push(fn);}
     async fire(name,extra={}){const event={target:this,defaultPrevented:false,preventDefault(){this.defaultPrevented=true;},...extra};await Promise.all((this.listeners[name]||[]).map(fn=>fn(event)));return event;}
     focus(settings){document.activeElement=this;this.focusSettings=settings;}
@@ -28,11 +29,12 @@ function fixture(options={}){
   for(const name of ['maintenance-snapshot','maintenance-confirm','maintenance-confirm-form','maintenance-install','maintenance-restart',
     'maintenance-refresh','maintenance-feedback','maintenance-actions','maintenance-reason','maintenance-guide','maintenance-operation',
     'maintenance-operation-title','maintenance-phase','maintenance-reload','maintenance-confirm-submit','maintenance-confirm-title',
-    'maintenance-confirm-description','maintenance-confirm-cancel','maintenance-csrf','maintenance-title'])ids[name]=new Element();
+    'maintenance-confirm-description','maintenance-confirm-cancel','maintenance-csrf','maintenance-title','about-comparison'])ids[name]=new Element();
   ids['maintenance-actions'].hidden=true;ids['maintenance-feedback'].hidden=true;ids['maintenance-install'].disabled=ids['maintenance-restart'].disabled=true;
   ids['maintenance-csrf'].value='synthetic-csrf';ids['maintenance-snapshot'].textContent=options.json??JSON.stringify(options.snapshot||base());
   document.getElementById=name=>ids[name]||null;
-  const window=new Element();window.location={reload(){reloads++;}};
+  ids['about-comparison'].attrs['data-comparison']=options.comparison||'unknown';
+  const window=new Element();if(options.toast)window.showToast=(message,tone)=>toasts.push({message,tone});window.location={reload(){reloads++;}};
   window.crypto=options.crypto===false?null:options.crypto==='fallback'?{getRandomValues(bytes){bytes.fill(1);return bytes;}}:{randomUUID(){idsCreated++;return idsCreated===1?requestId:otherId;}};
   window.sessionStorage={getItem(key){if(options.storageFailure==='read')throw Error('Blocked');return stored.get(key)||null;},
     setItem(key,value){if(options.storageFailure==='write')throw Error('Blocked');stored.set(key,value);},
@@ -40,7 +42,7 @@ function fixture(options={}){
   const fetch=(url,settings)=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});settings.signal.addEventListener('abort',()=>reject(Error('Aborted')),{once:true});calls.push({url,settings,resolve,reject});return promise;};
   vm.runInNewContext(source,{document,window,fetch:options.fetchAvailable===false?undefined:fetch,AbortController,Date:ClockDate,Uint8Array,
     setTimeout(fn,delay){const key=++timerId;timers.set(key,{fn,due:now+delay});return key;},clearTimeout:key=>timers.delete(key)});
-  return {ids,document,window,calls,timers,stored,reloads:()=>reloads,idsCreated:()=>idsCreated,
+  return {ids,document,window,calls,timers,toasts,stored,reloads:()=>reloads,idsCreated:()=>idsCreated,
     respond(index,status,body,extra={}){calls[index].resolve({ok:status>=200&&status<300,status,redirected:false,json:async()=>body,...extra});},
     fail(index){calls[index].reject(Error('offline'));},
     async advance(ms){now+=ms;const ready=[...timers].filter(([,timer])=>timer.due<=now);for(const [key,timer]of ready){timers.delete(key);timer.fn();}await settle();},
@@ -179,4 +181,21 @@ test('HTML-looking error data stays plain text and injected version data cannot 
 });
 test('missing fetch or malformed initial JSON leaves the manual fallback without active controls',async()=>{
   for(const options of [{fetchAvailable:false},{json:'<invalid>'}]){const f=fixture(options);await f.open();assert.equal(f.ids['maintenance-actions'].hidden,true);assert.equal(f.calls.length,0);}
+});
+
+test('maintenance acknowledges requests neutrally, preserves progress, and toasts verified completion',async()=>{
+  const f=fixture({toast:true});await f.start();assert.equal(f.toasts.at(-1).tone,'neutral');assert.equal(f.ids['maintenance-feedback'].hidden,true);
+  assert.equal(f.document.activeElement,f.ids['maintenance-title']);assert.equal(f.ids['maintenance-operation'].hidden,false);assert.equal(f.ids['maintenance-phase'].attrs['data-status'],'neutral');
+  await f.poll(base({installed_version:'2.26.0',operation:operation({state:'completed',phase:'success',sequence:10}),requested_request_id:requestId,request_state:'completed'}));
+  assert.equal(f.toasts.at(-1).tone,'ok');assert.equal(f.toasts.at(-1).message,'Keep 2.26.0 is ready.');assert.equal(f.ids['maintenance-phase'].attrs['data-status'],'ok');
+});
+test('maintenance shows up-to-date copy only with a fresh positive release comparison',()=>{
+  const snapshot=base({can_install:false,latest_version:null,reason:'target_unavailable'});
+  assert.equal(fixture({snapshot,comparison:'up_to_date'}).ids['maintenance-reason'].textContent,'Keep is up to date.');
+  assert.equal(fixture({snapshot,comparison:'unknown'}).ids['maintenance-reason'].textContent,'An update is not ready to install.');
+});
+test('release refresh does not announce a historical maintenance completion',async()=>{
+  const snapshot=base({operation:operation({state:'completed',phase:'success',sequence:10})});
+  const f=fixture({toast:true,snapshot});await f.window.fire('keep-release-updated');await settle();
+  f.respond(0,200,{snapshot});await settle();assert.equal(f.toasts.length,0);
 });

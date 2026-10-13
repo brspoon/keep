@@ -2,8 +2,8 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
-function fixture(withSaveButton=true) {
-  const handlers={},events={},button=withSaveButton?{disabled:false,getAttribute:()=>null}:null;
+function fixture(withSaveButton=true,initiallyDisabled=false) {
+  const handlers={},events={},button=withSaveButton?{disabled:initiallyDisabled,attrs:{},getAttribute:()=>null,setAttribute(name,value){this.attrs[name]=value;}}:null;
   const field={name:'name',type:'text',value:'Alex'};
   const form={elements:[field],isConnected:true,dataset:{},querySelector:()=>button,addEventListener:(n,f)=>events[n]=f,checkValidity:()=>true,matches:s=>s==='[data-saved-test]'&&form.dataset.savedTest==='true',closest:()=>null,reset(){field.value='Alex';},dispatchEvent(e){events[e.type]?.();}};
   const document={body:{},querySelector:()=>null,querySelectorAll:s=>s==='form[data-save-key], form[data-protect-unsaved]'?[form]:[],getElementById:()=>null,addEventListener:(n,f)=>handlers[n]=f};
@@ -117,4 +117,11 @@ test('email search matches profile names and aliases regardless of case and reta
   assert.match(status.textContent,/No matching email recipients/);
   listeners['clear-click']();
   assert.equal(rows.every(row=>!row.hidden),true);
+});
+
+test('save presentation stays neutral until a change and environment-managed buttons stay disabled',()=>{
+  const f=fixture();assert.equal(f.button.attrs['data-save-state'],'pristine');
+  f.field.value='Changed';f.events.input();assert.equal(f.button.attrs['data-save-state'],'dirty');assert.equal(f.button.disabled,false);
+  f.field.value='Alex';f.events.change();assert.equal(f.button.attrs['data-save-state'],'pristine');assert.equal(f.button.disabled,true);
+  const managed=fixture(true,true);assert.equal(managed.button.disabled,true);assert.equal(managed.events.input,undefined);assert.equal(managed.window.keepHasUnsavedChanges(),false);
 });

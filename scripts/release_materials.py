@@ -355,17 +355,19 @@ def maintenance_evidence_bytes(data, arch, identity):
         'restart-active-work-drain-and-duplicate': {
             'gate_closed_with_writer_held': True, 'ordinary_http_status': 503,
             'protected_write_before_stop': True, 'protected_write_in_snapshot': True,
-            'duplicate_operation_unchanged': True},
-        'real-schema-upgrade': {'schema': 2},
+            'duplicate_operation_unchanged': True, 'completed_helpers_removed': 1},
+        'real-schema-upgrade': {'schema': 2, 'completed_helpers_removed': 1},
         'unhealthy-schema-upgrade-matched-rollback': {
-            'schema_restored': 2, 'failed_schema_preserved': 3, 'matched_recovery_retained': True},
+            'schema_restored': 2, 'failed_schema_preserved': 3, 'matched_recovery_retained': True,
+            'completed_helpers_removed': 4},
         'empty-store-original-index-reacquisition': {
             'empty_before_load': True, 'original_index_loaded': True, 'original_native_selected': True,
             'original_config_verified': True, 'registry_assistance': False,
             'prior_cache_assistance': False, 'runtime_uid': 10001},
         'post-commit-crash-preserves-new-write': {
             'new_admitted_write_preserved': True, 'fresh_private_state_reconstruction': True,
-            'registry_assistance': False, 'post_commit_rollback': False, 'schema': 4},
+            'registry_assistance': False, 'post_commit_rollback': False, 'schema': 4,
+            'completed_helpers_removed': 1},
     }
     for name, fields in required.items():
         phase = by_name[name]

@@ -22,12 +22,12 @@
 {% if settings_error %}<div class="settings-error" role="alert">{{ settings_error }}</div>{% endif %}
 <div class="notification-providers">
   <section class="notification-panel" aria-labelledby="notification-email-title">
-    <div class="notification-heading"><h2 id="notification-email-title">Email</h2><span class="notification-state">{{ 'Enabled' if email_installation.enabled else 'Disabled' }}</span></div>
+    <div class="notification-heading"><h2 id="notification-email-title">Email</h2><span class="notification-state status-badge" data-status="{{ 'ok' if email_installation.enabled else 'neutral' }}">{{ 'Enabled' if email_installation.enabled else 'Disabled' }}</span></div>
     <form method="post" action="/settings/notifications/email" data-save-key="notification-email">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="notification-choice"><input type="checkbox" name="enabled" value="1" {% if email_installation.enabled %}checked{% endif %} {% if email_installation.managed %}disabled{% endif %}>Enable email notifications</label>
       <p class="help">{{ 'SMTP configured in Connections.' if email_installation.configured else 'Set up SMTP in Connections.' }}{% if email_installation.managed %} Enabled setting is managed by the environment.{% endif %}</p>
-      <button class="notification-button save-button" type="submit" {% if email_installation.managed %}disabled{% endif %}>Save Email</button>
+      <button class="notification-button save-button" data-save-state="pristine" type="submit" {% if email_installation.managed %}disabled{% endif %}>Save Email</button>
     </form>
     <form class="notification-test" method="post" action="/settings/notifications/test/email" data-notification-test>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -36,7 +36,7 @@
     </form>
   </section>
   <section class="notification-panel" aria-labelledby="notification-pushover-title">
-    <div class="notification-heading"><h2 id="notification-pushover-title">Pushover</h2><span class="notification-state">{{ 'Enabled' if pushover_installation.enabled else 'Disabled' }}</span></div>
+    <div class="notification-heading"><h2 id="notification-pushover-title">Pushover</h2><span class="notification-state status-badge" data-status="{{ 'ok' if pushover_installation.enabled else 'neutral' }}">{{ 'Enabled' if pushover_installation.enabled else 'Disabled' }}</span></div>
     {% if pushover_installation.configuration_error|default('') %}<p class="notification-provider-error" role="alert">{{ pushover_installation.configuration_error }}</p>{% endif %}
     <form method="post" action="/settings/notifications/pushover" data-save-key="notification-pushover">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -55,7 +55,7 @@
         </div>
         {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed %}<p class="help">App token is managed by the environment.</p>{% endif %}
       </div>
-      <button class="notification-button save-button" type="submit" {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed and pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Save Pushover</button>
+      <button class="notification-button save-button" data-save-state="pristine" type="submit" {% if pushover_installation.fields.PUSHOVER_APP_TOKEN.managed and pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Save Pushover</button>
     </form>
     {% set push_can_test = owner_push.can_test|default(owner_push.configured and pushover_installation.ready) %}
     <form class="notification-test" method="post" action="/settings/notifications/test/pushover" data-notification-test>
@@ -70,7 +70,7 @@
   <div class="notification-heading"><h2 id="notification-deliveries-title">Recent deliveries</h2></div>
   {% for delivery in delivery_rows %}
   <article class="notification-delivery">
-    <div class="notification-delivery-main"><div class="notification-delivery-title"><strong>{{ delivery.event_label }}</strong><span class="notification-delivery-state tone-{{ delivery.tone }}">{{ 'Delivery needs review' if delivery.review_needed else delivery.label }}</span></div>
+    <div class="notification-delivery-main"><div class="notification-delivery-title"><strong>{{ delivery.event_label }}</strong><span class="notification-delivery-state status-badge" data-status="{{ {'success':'ok', 'warning':'warn', 'error':'error'}.get(delivery.tone, 'neutral') }}">{{ 'Delivery needs review' if delivery.review_needed else delivery.label }}</span></div>
       <p>{{ 'Pushover' if delivery.provider == 'pushover' else 'Email' }} · {{ delivery.destination }}</p><time>{{ delivery.when }}</time>
     </div>
     {% if delivery.review_needed %}

@@ -263,6 +263,10 @@ effects; it never repeats an install based solely on a phase label.
 
     def append(self, journal, request, phase, **details):
         record = journal.append(phase, **details)
+        if phase in ('success', 'recovered'):
+            # Keep terminal delivery pending if cleanup needs a retry. Resume
+            # then retires workers without reopening a committed transaction.
+            self.adapter.cleanup_completed_helpers(request)
         # The host journal is authoritative. Mirror only after its durable
         # publication, synchronously at the commit/open/reuse boundaries.
         self.adapter.publish_status(request, record)
@@ -279,6 +283,8 @@ effects; it never repeats an install based solely on a phase label.
             if records:
                 if records[-1]["phase"] in TERMINAL:
                     self.adapter.bind(request)
+                    if records[-1]['phase'] in ('success', 'recovered'):
+                        self.adapter.cleanup_completed_helpers(request)
                     self.adapter.publish_status(request, records[-1])
                     return records[-1]
                 if records[-1]["phase"] in ("committed", "recovery-committed"):
@@ -346,7 +352,7 @@ effects; it never repeats an install based solely on a phase label.
             self.append(journal, request, "recovery-committed", image=request.expected.as_dict())
             return self.finish_commit(journal, request)
         except Exception as error:
-            if journal.records()[-1]["phase"] != "recovery-committed":
+            if not any(row['phase'] == 'recovery-committed' for row in journal.records()):
                 self.append(journal, request, "recovery-needed", reason=type(error).__name__)
             raise EngineError("Recovery remains held; preserve all recovery files") from error
 
@@ -368,6 +374,8 @@ abort after proving the original runtime/config; no CLI side effect is replayed.
             self.adapter.bind(request)
             phase=records[-1]['phase']
             if phase in TERMINAL:
+                if phase in ('success', 'recovered'):
+                    self.adapter.cleanup_completed_helpers(request)
                 self.adapter.publish_status(request, records[-1])
                 return records[-1]
             if phase in ('committed','recovery-committed'):return self.finish_commit(journal,request)

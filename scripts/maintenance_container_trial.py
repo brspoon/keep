@@ -1172,6 +1172,28 @@ volumes:
             if isinstance(error,TrialError):entry['error_code']=error.code
             raise
 
+    def assert_completed_helpers_removed(self,request):
+        operation=self.state/'operations'/request.request_id
+        receipt=parse_json(self.paths.read(operation/'helper-cleanup-receipt.json',limit=4096))
+        terminal=Journal(self.paths,self.state,request.request_id,request.payload_sha256).records()[-1]
+        require(terminal['phase'] in ('success','recovered') and receipt.get('request_id')==request.request_id
+            and receipt.get('payload_sha256')==request.payload_sha256 and receipt.get('phase')==terminal['phase'],
+            'Completed helper cleanup receipt differs')
+        helpers=receipt.get('containers')
+        require(isinstance(helpers,dict) and 1<=len(helpers)<=5,'Completed helper cleanup inventory is invalid')
+        for identifier,purpose in helpers.items():
+            require(re.fullmatch('[a-f0-9]{64}',identifier) and purpose in ('snapshot','preserve','prepare-restore','restore','upload'),
+                'Completed helper cleanup identity is invalid')
+            original=parse_json(self.paths.read(operation/('helper-'+purpose+'.json'),limit=4096))
+            require(original.get('container_id')==identifier,'Completed helper creation record was not retained')
+            require(not self.inner('ps','--all','--no-trunc','--filter','id='+identifier,'--format','{{.ID}}').strip(),
+                'A completed helper remains before trial teardown')
+        require(not self.inner('ps','--all','--no-trunc','--filter',
+            'label=io.keep.maintenance.install='+self.backend.mailbox.enrollment.install_id,'--filter',
+            'label=io.keep.maintenance.operation='+request.request_id,'--format','{{.ID}}').strip(),
+            'Completed operation left an unrecorded helper')
+        return len(helpers)
+
     def restart_and_drain(self):
         request=self.request('restart')
         trial=self
@@ -1249,14 +1271,17 @@ volumes:
         self.backend.mailbox.queue('restart',request_id=request.request_id)
         result=self.execute(request)
         require(result==old_rows[-1] and journal.records()==old_rows and self.ids()==after,'Duplicate operation repeated a cutover')
-        return {'request_id':request.request_id,'journal_records':len(old_rows),'duplicate_operation_unchanged':True,**proof}
+        removed=self.assert_completed_helpers_removed(request)
+        return {'request_id':request.request_id,'journal_records':len(old_rows),'duplicate_operation_unchanged':True,
+                'completed_helpers_removed':removed,**proof}
 
     def successful_install(self):
         request=self.request('install',self.images_by_schema[2]);result=self.execute(request)
         require(result['phase']=='success' and self.fixture('inspect')['schema']==2,'Real candidate schema migration failed')
         require(self.backend.mailbox.probe().image==self.images_by_schema[2],'Candidate native/config identity mismatch')
         require(self.profile.env_file.read_text().splitlines()[0]=='KEEP_IMAGE='+self.images_by_schema[2].reference,'Normal image environment setting not applied')
-        return {'request_id':request.request_id,'schema':2}
+        return {'request_id':request.request_id,'schema':2,
+                'completed_helpers_removed':self.assert_completed_helpers_removed(request)}
 
     def failed_upgrade(self):
         before={str(path):path.read_bytes() for path in (self.profile.env_file,*self.profile.compose_files,self.installation/'VERSION')}
@@ -1275,7 +1300,8 @@ volumes:
         code="from pathlib import Path; import sqlite3; roots=list(Path('/app/data/.maintenance/recovery').glob('"+request.request_id+"/failed/*/keep.sqlite3')); assert len(roots)==1; db=sqlite3.connect(roots[0].as_uri()+'?mode=ro',uri=True); assert db.execute('SELECT value FROM maintenance_trial_schema').fetchone()==(3,); print('preserved')"
         require(self.inner('exec',self.ids()['keep-app'],'python','-B','-c',code).strip()==b'preserved','Failed migrated database evidence was lost')
         self.reacquire_request=request
-        return {'request_id':request.request_id,'schema_restored':2,'failed_schema_preserved':3,'matched_recovery_retained':True}
+        return {'request_id':request.request_id,'schema_restored':2,'failed_schema_preserved':3,'matched_recovery_retained':True,
+                'completed_helpers_removed':self.assert_completed_helpers_removed(request)}
 
     def empty_store_reacquisition(self):
         request=self.reacquire_request
@@ -1364,7 +1390,8 @@ volumes:
         require(not any(row['phase'].startswith('recover') for row in latest),'Post-commit resume attempted rollback')
         return {'request_id':request.request_id,'terminated_helper_pid':crash['pid'],'fresh_helper_pid':receipt['pid'],
             'new_admitted_write_preserved':True,'fresh_private_state_reconstruction':True,'registry_assistance':False,
-            'post_commit_rollback':False,'schema':4}
+            'post_commit_rollback':False,'schema':4,
+            'completed_helpers_removed':self.assert_completed_helpers_removed(request)}
 
     def cleanup(self):
         # Only exact owned disposable tools/data. Recovery files remain in the

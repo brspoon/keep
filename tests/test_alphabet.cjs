@@ -3,22 +3,21 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 
-function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,capture=true,moveLosesFocus=false,
+function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,moveLosesFocus=false,
   viewportHeight=800,viewportOffset=0,scrollY=250}={}) {
   let document,window,nextFrame=0,offset='120px';
-  const frames=new Map(),observers=[],scrolls=[];
+  const frames=new Map(),observers=[],resizeObservers=[],scrolls=[];
   class Element {
     constructor(tag='div',className='',text='') {
       this.tagName=tag.toUpperCase(); this.className=className; this._text=text;
       this.children=[]; this.parentElement=null; this.dataset={}; this.attrs={}; this.listeners={};
-      this.hidden=false; this.disabled=false; this.value=''; this.tabIndex=0; this.captured=new Set();
+      this.hidden=false; this.disabled=false; this.value=''; this.tabIndex=0;
       this.style={setProperty(name,value){this[name]=value;},removeProperty(name){delete this[name];}};
       this.classList={contains:name=>this.className.split(/\s+/).includes(name),
         add:(...names)=>{this.className=[...new Set([...this.className.split(/\s+/).filter(Boolean),...names])].join(' ');},
         remove:(...names)=>{this.className=this.className.split(/\s+/).filter(name=>!names.includes(name)).join(' ');},
         toggle:(name,force)=>{const on=force===undefined?!this.classList.contains(name):Boolean(force);on?this.classList.add(name):this.classList.remove(name);return on;}};
       this.docTop=null; this.rect={top:0,left:740,width:44,height:44};
-      if(!capture) this.setPointerCapture=undefined;
     }
     set innerHTML(_) {throw new Error('Collection and title content must remain text');}
     get textContent(){return this._text+this.children.map(child=>child.textContent).join('');}
@@ -66,14 +65,9 @@ function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,captu
       document.activeElement=this;this.focusOptions=options;this.focusCount=(this.focusCount||0)+1;this.fire('focusin',{relatedTarget:previous,bubbles:true});}
     blur(){const previous=document.activeElement;document.activeElement=document.body;previous?.fire('focusout',{relatedTarget:document.body,bubbles:true});}
     scrollIntoView(options){this.scrollOptions=options;}
-    setPointerCapture(pointerId){if(capture==='throw')throw new Error('Pointer capture unavailable');this.captured.add(pointerId);}
-    hasPointerCapture(pointerId){return this.captured.has(pointerId);}
-    releasePointerCapture(pointerId){this.captured.delete(pointerId);this.fire('lostpointercapture',{pointerId});}
     getBoundingClientRect(){let top=this.docTop===null?this.rect.top:this.docTop-window.scrollY,height=this.rect.height;
       if(this.classList.contains('section-header')){const section=this.parentElement;top=Math.min(Math.max(top,parseFloat(offset)||80),section.docTop+section.rect.height-window.scrollY-height);}
       if(this.classList.contains('alphabet-side-navigation'))top=parseFloat(this.style.top)||0;
-      if(this.classList.contains('alphabet-scrub-track')){top=this.parentElement.getBoundingClientRect().top;height=parseFloat(this.style.height)||200;}
-      if(this.classList.contains('alphabet-scrub-handle')){const track=this.parentElement.getBoundingClientRect();top=track.top+(parseFloat(this.style.top)||0);height=56;}
       return {top,height,left:this.rect.left,width:this.rect.width,right:this.rect.left+this.rect.width,bottom:top+height};}
     getClientRects(){return this.hidden||!this.isConnected?[]:[this.getBoundingClientRect()];}
   }
@@ -98,20 +92,20 @@ function fixture(groups, {mobile=false,reduced=true,observerAvailable=true,captu
   const media=new Map();window.matchMedia=query=>{if(!media.has(query)){const match=new Element('media');match.matches=query.includes('max-width')?mobile:reduced;media.set(query,match);}return media.get(query);};
   window.scrollTo=(options,y)=>{const top=typeof options==='object'?options.top:y;scrolls.push({top,behavior:typeof options==='object'?options.behavior:'auto',focus:document.activeElement});window.scrollY=top;window.fire('scroll');};
   class MutationObserver{constructor(callback){this.callback=callback;observers.push(this);}observe(target,options){this.target=target;this.options=options;}disconnect(){}}
+  class ResizeObserver{constructor(callback){this.callback=callback;this.targets=[];resizeObservers.push(this);}observe(target){this.targets.push(target);}}
   if(observerAvailable)window.MutationObserver=MutationObserver;
-  vm.runInNewContext(fs.readFileSync('static/keep-alphabet.js','utf8'),{document,window,MutationObserver,requestAnimationFrame:callback=>{frames.set(++nextFrame,callback);return nextFrame;},cancelAnimationFrame:id=>frames.delete(id),
+  window.ResizeObserver=ResizeObserver;
+  vm.runInNewContext(fs.readFileSync('static/keep-alphabet.js','utf8'),{document,window,MutationObserver,ResizeObserver,requestAnimationFrame:callback=>{frames.set(++nextFrame,callback);return nextFrame;},cancelAnimationFrame:id=>frames.delete(id),
     getComputedStyle:element=>({getPropertyValue:name=>name==='--browse-offset'?offset:'',height:`${element.getBoundingClientRect().height}px`}),parseFloat,performance:{now:()=>0}});
   const flush=()=>{let count=0;while(frames.size){if(++count>100)throw new Error('Animation frame loop');const batch=[...frames];frames.clear();batch.forEach(([,fn])=>fn());}};
   const side=()=>document.querySelector('.alphabet-side-navigation'),buttons=()=>side()?.querySelectorAll('.alphabet-side-letter')||[];
-  return {document,window,sections,search,clear,scope,view,frames,observers,scrolls,flush,side,visible:()=>buttons().filter(button=>!button.hidden).sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(button=>button.dataset.letter),
-    button:letter=>buttons().find(button=>button.dataset.letter===letter),handle:()=>side()?.querySelector('.alphabet-scrub-handle'),track:()=>side()?.querySelector('.alphabet-scrub-track'),bubble:()=>side()?.querySelector('.alphabet-scrub-bubble'),
+  return {document,window,sections,search,clear,scope,view,frames,observers,resizeObservers,scrolls,flush,side,visible:()=>buttons().filter(button=>!button.hidden).sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(button=>button.dataset.letter),
+    button:letter=>buttons().find(button=>button.dataset.letter===letter),
     setOffset:value=>{offset=value;},scroll:top=>{window.scrollY=top;window.fire('scroll');flush();},
     setMobile:matches=>{mobile=matches;window.innerWidth=matches?390:1200;const match=window.matchMedia('(max-width: 700px)');match.matches=matches;match.fire('change',{matches});window.fire('resize');flush();},
     pointer:(type,extra={})=>document.fire(type,{pointerId:1,pointerType:'touch',isPrimary:true,...extra})};
 }
 const movies=()=>[{name:'Movies',titles:['Alpha','Another','Beta','Zulu']}];
-function beginDrag(f,extra={}){const handle=f.handle(),rect=handle.getBoundingClientRect();return handle.fire('pointerdown',{clientY:rect.top+rect.height/2,...extra});}
-
 test('one page index follows the visible section and preserves card order',()=>{
   const f=fixture([...movies(),{name:'Shows',titles:['Charlie','Zulu']}]);f.flush();
   assert.equal(f.document.querySelectorAll('.alphabet-side-navigation').length,1);assert.equal(f.side().parentElement,f.document.body);assert.deepEqual(f.visible(),['A','B','Z']);
@@ -142,49 +136,6 @@ test('wheel scrolling outside the index releases keyboard context while wheel in
   f.document.fire('wheel',{target:f.button('A')});f.flush();assert.deepEqual(f.visible(),['A','B','Z']);
   f.document.fire('wheel',{target:f.search});f.flush();assert.deepEqual(f.visible(),['C','D']);
 });
-test('mobile slider keys jump with handle focus and explicitly commit to a card',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();const handle=f.handle();assert.equal(handle.getAttribute('role'),'slider');handle.focus();
-  handle.fire('keydown',{key:'End'});f.flush();assert.equal(f.document.activeElement,handle);assert.match(handle.getAttribute('aria-valuetext'),/Z/);assert.equal(f.scrolls.at(-1).behavior,'instant');
-  handle.fire('keydown',{key:'Enter'});f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[3]);handle.focus();handle.fire('keydown',{key:'Home'});handle.fire('keydown',{key:' '});f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[0]);
-});
-test('drag scrubs without card focus, locks its section, and commits only on release',()=>{
-  const f=fixture([...movies(),{name:'Shows',titles:['Charlie','Delta']}],{mobile:true});f.flush();assert.equal(beginDrag(f).defaultPrevented,true);assert.equal(f.bubble().hidden,false);assert.equal(f.handle().captured.has(1),true);
-  f.window.scrollY=2300;f.window.fire('scroll');f.flush();assert.deepEqual(f.visible(),['A','B','Z']);f.pointer('pointermove',{clientY:10000});f.flush();assert.equal(f.bubble().textContent,'Z');assert.equal(f.document.activeElement,f.document.body);assert.equal(f.scrolls.at(-1).behavior,'instant');
-  f.pointer('pointerup',{clientY:10000});f.flush();assert.equal(f.bubble().hidden,true);assert.equal(f.document.activeElement,f.sections[0].cards[3]);assert.equal(f.sections[0].cards[3].focusCount,1);assert.equal(f.handle().captured.has(1),false);
-});
-test('drag coordinates clamp to the first and last available letters',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.pointer('pointermove',{clientY:-10000});f.flush();assert.equal(f.bubble().textContent,'A');f.pointer('pointermove',{clientY:10000});f.flush();assert.equal(f.bubble().textContent,'Z');f.pointer('pointerup',{clientY:10000});f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[3]);
-});
-test('off-center handle grabs do not immediately select another initial',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();const handle=f.handle();handle.focus();handle.fire('keydown',{key:'ArrowDown'});f.flush();const before=handle.getAttribute('aria-valuenow'),rect=handle.getBoundingClientRect();
-  beginDrag(f,{clientY:rect.bottom-2});f.flush();assert.equal(handle.getAttribute('aria-valuenow'),before);f.pointer('pointermove',{clientY:rect.bottom-2});f.flush();assert.equal(handle.getAttribute('aria-valuenow'),before);f.pointer('pointercancel');f.flush();assert.equal(f.document.activeElement,handle);
-});
-test('secondary pointers and nonprimary mouse buttons cannot hijack scrubbing',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f,{isPrimary:false,pointerId:2});assert.equal(f.bubble().hidden,true);beginDrag(f,{pointerType:'mouse',button:2});assert.equal(f.bubble().hidden,true);
-  beginDrag(f);const before=f.bubble().textContent;f.pointer('pointermove',{pointerId:2,clientY:10000});f.flush();assert.equal(f.bubble().textContent,before);f.pointer('pointerup',{pointerId:2});f.flush();assert.equal(f.bubble().hidden,false);f.pointer('pointercancel',{pointerId:1});f.flush();assert.equal(f.bubble().hidden,true);
-});
-test('pointer cancellation and lost capture never commit media focus',()=>{
-  for(const type of ['pointercancel','lostpointercapture']){const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.pointer('pointermove',{clientY:10000});f.flush();type==='lostpointercapture'?f.handle().fire(type,{pointerId:1}):f.pointer(type);f.flush();assert.equal(f.bubble().hidden,true);assert.equal(f.document.activeElement,f.document.body);f.pointer('pointerup');f.flush();assert.equal(f.document.activeElement,f.document.body);}
-});
-test('document pointer events support scrubbing when capture is unavailable',()=>{
-  for(const capture of [false,'throw']){const f=fixture(movies(),{mobile:true,capture});f.flush();assert.doesNotThrow(()=>beginDrag(f));f.pointer('pointermove',{clientY:10000});f.flush();f.pointer('pointerup',{clientY:10000});f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[3]);}
-});
-test('changing letters or hiding the section cancels a drag instead of using stale media',()=>{
-  for(const change of ['letter','section']){const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.pointer('pointermove',{clientY:10000});f.flush();if(change==='letter')f.sections[0].cards[3].hidden=true;else f.sections[0].hidden=true;f.search.fire('input');f.flush();assert.equal(f.bubble().hidden,true);f.pointer('pointerup',{clientY:10000});f.flush();assert.equal(f.document.activeElement,f.document.body);}
-});
-test('removing the first card of a drag letter safely retargets its remaining card',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.sections[0].cards[0].remove();f.window.KeepAlphabet.refresh();f.flush();f.pointer('pointermove',{clientY:-1000});f.flush();f.pointer('pointerup',{clientY:-1000});f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[1]);
-});
-test('visualViewport layout changes rebase a drag without changing the selected initial',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();const handle=f.handle();handle.focus();handle.fire('keydown',{key:'ArrowDown'});f.flush();
-  const before=handle.getAttribute('aria-valuenow'),rect=handle.getBoundingClientRect(),lastY=rect.top+rect.height/2;
-  beginDrag(f,{clientY:lastY});f.window.visualViewport.offsetTop=80;f.window.visualViewport.height=400;f.window.visualViewport.fire('resize');f.flush();
-  assert.equal(f.bubble().hidden,false);assert.equal(handle.getAttribute('aria-valuenow'),before);f.pointer('pointermove',{clientY:lastY});f.flush();assert.equal(handle.getAttribute('aria-valuenow'),before);
-  f.pointer('pointercancel');f.flush();assert.equal(f.document.activeElement,handle);
-});
-test('switching to desktop cancels an active mobile pointer session',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.setMobile(false);assert.equal(f.bubble().hidden,true);f.pointer('pointerup');f.flush();assert.equal(f.document.activeElement,f.document.body);
-});
 test('removing the keyboard-selected letter preserves a reachable desktop tab stop',()=>{
   const f=fixture(movies());f.flush();f.button('A').focus();f.button('A').fire('keydown',{key:'ArrowDown'});assert.equal(f.document.activeElement,f.button('B'));
   f.sections[0].cards[2].hidden=true;f.search.fire('input');f.flush();
@@ -194,76 +145,84 @@ test('reordering the letter nodes preserves an available keyboard selection if t
   const f=fixture(movies(),{moveLosesFocus:true});f.flush();f.button('A').focus();f.button('A').fire('keydown',{key:'ArrowDown'});const focused=f.button('B');
   f.sections[0].cards[3].hidden=true;f.search.fire('input');f.flush();assert.equal(f.document.activeElement,focused);assert.equal(focused.tabIndex,0);assert.equal(focused.focusOptions.preventScroll,true);
 });
-test('a mobile rail waits below an intro heading, freezes during scrubbing, then expands after release',()=>{
-  const f=fixture([{...movies()[0],top:500}],{mobile:true,viewportHeight:844,scrollY:0});f.flush();
-  const header=f.sections[0].querySelector('.section-header').getBoundingClientRect(),before=f.track().getBoundingClientRect();
-  assert.equal(before.top,header.bottom+8);assert.ok(before.bottom<=844-88);assert.equal(f.side().hidden,false);
-  beginDrag(f);f.pointer('pointermove',{clientY:before.bottom});f.flush();assert.equal(f.bubble().textContent,'Z');assert.ok(f.window.scrollY>0);
-  const held=f.track().getBoundingClientRect();assert.equal(held.top,before.top);assert.equal(held.height,before.height);assert.equal(f.document.activeElement,f.document.body);
-  f.pointer('pointerup',{clientY:before.bottom});f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[3]);
-  const after=f.track().getBoundingClientRect();assert.equal(after.top,f.sections[0].querySelector('.section-header').getBoundingClientRect().bottom+8);assert.ok(after.height>before.height);assert.ok(after.bottom<=844-88);
-});
-test('a near-bottom bare heading hides the mobile rail until its titles have usable space',()=>{
-  const f=fixture([{...movies()[0],top:740}],{mobile:true,viewportHeight:844,scrollY:0});f.flush();
-  assert.equal(f.side().hidden,true);assert.equal(f.bubble().hidden,true);beginDrag(f);assert.equal(f.bubble().hidden,true);assert.equal(f.scrolls.length,0);
-  f.scroll(500);assert.equal(f.side().hidden,false);assert.ok(f.track().getBoundingClientRect().height>=56);
-});
-test('insufficient mobile visual-viewport space hides the rail without starting a stale pointer session',()=>{
-  const f=fixture(movies(),{mobile:true,viewportHeight:260,viewportOffset:60});f.flush();
-  assert.equal(f.side().hidden,true);beginDrag(f);assert.equal(f.bubble().hidden,true);assert.equal(f.scrolls.length,0);
-  f.window.visualViewport.height=600;f.window.visualViewport.fire('resize');f.flush();assert.equal(f.side().hidden,false);
-  const rect=f.track().getBoundingClientRect();assert.ok(rect.top>=60+120+8);assert.ok(rect.bottom<=60+600-88);
-});
-test('desktop and mobile indices follow first appearances when the other-title bucket occurs last',()=>{
-  for(const mobile of [false,true]){const f=fixture([{name:'Shows',titles:['Alpha','Zulu','Éclair']}],{mobile});f.flush();assert.deepEqual(f.visible(),['A','Z','#']);
-    assert.deepEqual(f.side().querySelectorAll('.alphabet-side-letter').filter(button=>!button.hidden).map(button=>button.dataset.letter),['A','Z','#']);
-    if(mobile){f.handle().focus();f.handle().fire('keydown',{key:'End'});f.handle().fire('keydown',{key:'Enter'});}else{f.button('A').focus();f.button('A').fire('keydown',{key:'End'});assert.equal(f.document.activeElement,f.button('#'));f.button('#').fire('click');}
-    f.flush();assert.equal(f.document.activeElement,f.sections[0].cards[2]);}
-});
-test('the first title on the nearest visible grid row determines the current letter',()=>{
-  for(const mobile of [false,true]){const f=fixture([{name:'Movies',titles:['Alpha','Beta','Beta again','Zulu']}],{mobile});
-    const cards=f.sections[0].cards;cards[1].docTop=cards[0].docTop;cards[2].docTop=600;
-    f.window.KeepAlphabet.refresh();f.flush();assert.equal(f.button('A').getAttribute('aria-current'),'location');assert.equal(f.button('B').getAttribute('aria-current'),null);
-    if(mobile)assert.match(f.handle().getAttribute('aria-valuetext'),/: A$/);
-    f.scroll(500);assert.equal(f.button('B').getAttribute('aria-current'),'location');assert.equal(f.button('A').getAttribute('aria-current'),null);
-    if(mobile)assert.match(f.handle().getAttribute('aria-valuetext'),/: B$/);}
-});
-test('mobile keyboard selection survives scroll tracking when two initials share the destination row',()=>{
-  const f=fixture([{name:'Movies',titles:['Alpha','X title','Y title','Z title']}],{mobile:true});
-  f.sections[0].cards[3].docTop=f.sections[0].cards[2].docTop;f.window.KeepAlphabet.refresh();f.flush();
-  const handle=f.handle();handle.focus();handle.fire('keydown',{key:'End'});f.flush();
-  assert.match(handle.getAttribute('aria-valuetext'),/: Z$/);assert.equal(f.button('Z').getAttribute('aria-current'),'location');
-  assert.equal(handle.getAttribute('aria-valuenow'),'3');assert.equal(f.document.activeElement,handle);
-  handle.fire('keydown',{key:'ArrowUp'});f.flush();assert.match(handle.getAttribute('aria-valuetext'),/: Y$/);
-  assert.equal(handle.getAttribute('aria-valuenow'),'2');assert.equal(f.button('Y').getAttribute('aria-current'),'location');
-});
-test('mobile keyboard selection returns to row tracking after focus leaves, outside wheel or selected-letter removal',()=>{
-  for(const reset of ['focus','wheel','filter']){const f=fixture([{name:'Movies',titles:['Alpha','X title','Y title','Z title']}],{mobile:true});
-    f.sections[0].cards[3].docTop=f.sections[0].cards[2].docTop;f.window.KeepAlphabet.refresh();f.flush();const handle=f.handle();handle.focus();handle.fire('keydown',{key:'End'});f.flush();
-    assert.match(handle.getAttribute('aria-valuetext'),/: Z$/);
-    if(reset==='focus')f.search.focus();else if(reset==='wheel')f.document.fire('wheel',{target:f.search});else{f.sections[0].cards[3].hidden=true;f.search.fire('input');}
-    f.flush();assert.match(handle.getAttribute('aria-valuetext'),/: Y$/);assert.equal(f.button('Y').getAttribute('aria-current'),'location');
-    if(reset==='filter'){assert.equal(f.button('Z').hidden,true);assert.equal(handle.getAttribute('aria-valuemax'),'2');}}
-});
-test('page restoration refreshes hidden cards and cancels old pointer sessions',()=>{
-  const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.sections[0].cards.forEach(card=>{card.hidden=true;});f.window.fire('pageshow');f.flush();assert.equal(f.side().hidden,true);assert.equal(f.bubble().hidden,true);f.pointer('pointerup');f.flush();assert.equal(f.document.activeElement,f.document.body);
-});
-test('blur, page exit and hidden-document transitions cancel without a later commit',()=>{
-  for(const event of ['blur','pagehide','visibilitychange']){const f=fixture(movies(),{mobile:true});f.flush();beginDrag(f);f.pointer('pointermove',{clientY:10000});f.flush();
-    if(event==='visibilitychange'){f.document.hidden=true;f.document.fire(event);}else f.window.fire(event);
-    f.flush();assert.equal(f.bubble().hidden,true);f.pointer('pointerup');f.flush();assert.equal(f.document.activeElement,f.document.body);}
-});
 test('jump offsets use current sticky dimensions and reduced motion',()=>{
   const f=fixture(movies(),{reduced:false});f.flush();f.setOffset('200px');f.sections[0].querySelector('.section-header').rect.height=100;
   const expected=Math.max(0,f.sections[0].cards[2].docTop-200-100-8);f.button('B').fire('click');assert.equal(f.scrolls.at(-1).top,expected);assert.equal(f.scrolls.at(-1).behavior,'smooth');const reduced=fixture(movies());reduced.flush();reduced.button('Z').fire('click');assert.equal(reduced.scrolls.at(-1).behavior,'instant');
 });
 test('card removals refresh once while generated side nodes do not cause observer loops',()=>{
-  const f=fixture(movies());f.flush();const observer=f.observers.find(item=>item.target===f.view);assert.ok(observer);observer.callback([{type:'childList',target:f.side(),addedNodes:[f.handle()],removedNodes:[]}]);assert.equal(f.frames.size,0);
+  const f=fixture(movies());f.flush();const observer=f.observers.find(item=>item.target===f.view);assert.ok(observer);observer.callback([{type:'childList',target:f.side(),addedNodes:[f.button('A')],removedNodes:[]}]);assert.equal(f.frames.size,0);
   const removed=f.sections[0].cards[3];removed.remove();observer.callback([{type:'childList',target:f.sections[0],addedNodes:[],removedNodes:[removed]}]);observer.callback([{type:'attributes',target:f.sections[0].cards[0]}]);assert.equal(f.frames.size,1);f.flush();assert.deepEqual(f.visible(),['A','B']);
 });
 test('untrusted names stay text and refresh works without MutationObserver',()=>{
-  const f=fixture([{name:'<img onerror=alert(1)>',titles:['Alpha']}],{observerAvailable:false});f.flush();assert.match(f.button('A').getAttribute('aria-label'),/<img onerror=/);assert.equal(f.side().querySelectorAll('img').length,0);f.sections[0].cards[0].hidden=true;f.window.fire('pageshow');f.flush();assert.equal(f.side().hidden,true);
+  const f=fixture([{name:'<img onerror=alert(1)>',titles:['Alpha','Beta']}],{observerAvailable:false});f.flush();assert.match(f.button('A').getAttribute('aria-label'),/<img onerror=/);assert.equal(f.side().querySelectorAll('img').length,0);f.sections[0].cards[0].hidden=true;f.window.fire('pageshow');f.flush();assert.equal(f.side().hidden,true);
 });
 test('empty media pages do not add an unused side navigation',()=>{
   const f=fixture([]);f.flush();assert.equal(f.side(),null);assert.equal(f.observers.length,0);
+});
+test('the index depends on rendered section height and available initials, not title count',()=>{
+  const f=fixture([...movies(),{name:'Shows',titles:['Charlie','Delta','Echo','Foxtrot'],height:420}]);f.flush();
+  assert.equal(f.side().hidden,false);f.scroll(2200);assert.equal(f.side().hidden,true);
+  f.sections[1].rect.height=1600;f.resizeObservers[0].callback();f.flush();assert.equal(f.side().hidden,false);
+  f.window.visualViewport.height=1200;f.window.visualViewport.fire('resize');f.flush();assert.equal(f.side().hidden,true);
+  f.window.visualViewport.height=600;f.window.visualViewport.fire('resize');f.flush();assert.equal(f.side().hidden,false);
+  f.sections[1].cards.slice(1).forEach(card=>{card.hidden=true;});f.search.fire('input');f.flush();assert.equal(f.side().hidden,true);
+});
+test('filtering a large section down to a short grid hides its index and restoration brings it back',()=>{
+  const f=fixture(movies());f.flush();assert.equal(f.side().hidden,false);
+  f.sections[0].rect.height=450;f.search.fire('input');f.flush();assert.equal(f.side().hidden,true);
+  f.sections[0].rect.height=1750;f.clear.fire('click');f.flush();assert.equal(f.side().hidden,false);
+});
+test('desktop rail sits beside the current grid even on a wide viewport',()=>{
+  const f=fixture(movies());f.window.innerWidth=2560;f.sections[0].rect.left=40;f.sections[0].rect.width=1300;f.window.fire('resize');f.flush();
+  assert.equal(f.side().style.left,'1348px');
+  f.sections[0].rect.width=2400;f.window.fire('resize');f.flush();assert.equal(f.side().style.left,'2448px');
+  f.setMobile(true);assert.equal(f.side().hidden,true);
+});
+test('desktop letters remain neutral while scrolling and retain one predictable tab stop',()=>{
+  const f=fixture([{name:'Movies',titles:['Alpha','Beta','Beta again','Zulu']}]);
+  const cards=f.sections[0].cards;cards[1].docTop=cards[0].docTop;cards[2].docTop=600;
+  f.window.KeepAlphabet.refresh();f.flush();f.scroll(500);
+  assert.equal(f.button('A').getAttribute('aria-current'),null);assert.equal(f.button('B').getAttribute('aria-current'),null);
+  assert.equal(f.button('A').tabIndex,0);assert.equal(f.button('B').tabIndex,-1);assert.equal(f.button('B').scrollOptions,undefined);
+});
+test('mobile has no scrubber, bubble, or visible letter index and ordinary pointer events remain untouched',()=>{
+  const f=fixture(movies(),{mobile:true});f.flush();
+  assert.equal(f.side().hidden,true);assert.equal(f.document.querySelector('[role="slider"]'),null);
+  assert.equal(f.document.querySelector('.alphabet-scrub-track'),null);assert.equal(f.document.querySelector('.alphabet-scrub-bubble'),null);
+  assert.equal(f.document.listeners.pointermove,undefined);assert.equal(f.document.listeners.pointerup,undefined);
+  const event=f.pointer('pointerdown',{clientY:200});assert.equal(event.defaultPrevented,false);
+  f.scroll(700);f.button('B').fire('click');f.search.fire('input');f.clear.fire('click');f.flush();
+  assert.equal(f.side().hidden,true);assert.equal(f.scrolls.length,0);
+  f.setMobile(false);assert.equal(f.side().hidden,false);assert.deepEqual(f.visible(),['A','B','Z']);
+});
+test('a focused desktop index hands focus to its section before becoming too short to show',()=>{
+  for(const change of ['height','viewport','one-letter']){
+    const f=fixture(movies());f.flush();f.button('B').focus();
+    if(change==='height'){f.sections[0].rect.height=450;f.resizeObservers[0].callback();}
+    else if(change==='viewport'){f.window.visualViewport.height=1200;f.window.visualViewport.fire('resize');}
+    else{f.sections[0].cards.slice(2).forEach(card=>{card.hidden=true;});f.search.fire('input');}
+    f.flush();const header=f.sections[0].querySelector('.section-header');
+    assert.equal(f.side().hidden,true);assert.equal(f.document.activeElement,header);assert.equal(header.tabIndex,-1);
+    assert.equal(header.focusOptions.preventScroll,true);assert.equal(f.scrolls.length,0);
+  }
+});
+test('crossing into mobile restores keyboard focus even when CSS first drops it to body',()=>{
+  for(const browserDropsFocus of [false,true]){
+    const f=fixture(movies());f.flush();f.button('B').focus();
+    if(browserDropsFocus)f.document.activeElement=f.document.body;
+    f.setMobile(true);const header=f.sections[0].querySelector('.section-header');
+    assert.equal(f.side().hidden,true);assert.equal(f.document.activeElement,header);assert.equal(header.focusOptions.preventScroll,true);
+    f.setMobile(false);assert.equal(f.side().hidden,false);assert.equal(f.document.activeElement,header);assert.equal(f.scrolls.length,0);
+  }
+});
+test('removing the focused index collection leaves focus on an available heading or search',()=>{
+  const f=fixture([...movies(),{name:'Shows',titles:['Charlie','Delta']}]);f.flush();f.button('A').focus();
+  f.sections[0].hidden=true;f.window.KeepAlphabet.refresh();f.flush();
+  const header=f.sections[1].querySelector('.section-header');assert.equal(f.document.activeElement,header);assert.equal(header.focusOptions.preventScroll,true);
+  const all=fixture(movies());all.flush();all.button('A').focus();all.sections[0].hidden=true;all.window.KeepAlphabet.refresh();all.flush();
+  assert.equal(all.document.activeElement,all.search);assert.equal(all.search.focusOptions.preventScroll,true);assert.equal(all.scrolls.length,0);
+});
+test('hiding an unfocused desktop index does not steal focus from search',()=>{
+  const f=fixture(movies());f.flush();f.search.focus();f.sections[0].rect.height=450;f.search.fire('input');f.flush();
+  assert.equal(f.side().hidden,true);assert.equal(f.document.activeElement,f.search);
 });

@@ -60,8 +60,11 @@
   let unauthorized = false, recovery = false, connectionLost = false, deadline = 0, timer = 0, mutation = 0, modal = null;
   const controllers = new Set();
   const text = (node, value) => { if (node && node.textContent !== value) node.textContent = value; };
-  const notify = (message, error=false) => {
-    text(feedback, message); feedback.hidden = !message; feedback.classList.toggle('is-error', error);
+  const notify = (message, error=false, tone='neutral') => {
+    const changed = feedback.textContent !== message;
+    text(feedback, message); feedback.hidden = !message || !error && typeof window.showToast === 'function';
+    feedback.classList.toggle('is-error', error);
+    if (changed && message && !error) window.showToast?.(message,tone);
   };
   const cryptographicIds = () => Boolean(window.crypto?.randomUUID || window.crypto?.getRandomValues);
   const newId = () => {
@@ -98,7 +101,9 @@
     install.disabled = !permitted('install'); restart.disabled = !permitted('restart');
     const reason = !snapshot.supported ? 'In-app maintenance is not available for this installation.'
       : storageFailed || !cryptographicIds() ? 'This browser cannot track maintenance. Use the update guide.'
-      : unauthorized ? reasons.owner_unavailable : reasons[snapshot.reason];
+      : unauthorized ? reasons.owner_unavailable
+      : snapshot.reason === 'target_unavailable' && id('about-comparison')?.getAttribute('data-comparison') === 'up_to_date'
+        ? 'Keep is up to date.' : reasons[snapshot.reason];
     text(id('maintenance-reason'), reason); id('maintenance-reason').hidden = !reason;
     id('maintenance-guide').hidden = eligible && snapshot.helper_available && !storageFailed && cryptographicIds() && !unauthorized;
     const op = snapshot.operation;
@@ -106,6 +111,8 @@
     if (op) {
       text(id('maintenance-operation-title'), `${op.operation === 'install' ? 'Update to' : 'Restart Keep'} ${op.target_version}`);
       text(id('maintenance-phase'), op.operation === 'restart' && op.phase === 'resolving' ? 'Checking installation' : phases[op.phase]);
+      id('maintenance-phase').setAttribute('data-status', op.phase === 'success' ? 'ok'
+        : op.phase === 'failed' ? 'error' : ['held','recovery-needed','recovered'].includes(op.phase) ? 'warn' : 'neutral');
     }
     refresh.hidden = !recovery && !waiting() && snapshot.reason !== 'helper_unavailable' && snapshot.reason !== 'state_unavailable';
     refresh.disabled = submitting || refreshing || unauthorized;
@@ -155,7 +162,7 @@
   };
   const completion = () => {
     const op = snapshot.operation;
-    if (op?.phase === 'success') notify(`Keep ${op.target_version} is ready.`);
+    if (op?.phase === 'success') notify(`Keep ${op.target_version} is ready.`,false,'ok');
     else if (op?.phase === 'recovered') notify('The previous version was restored.', true);
     else if (op?.state === 'aborted' || op?.phase === 'failed') notify('Maintenance did not complete.', true);
     else if (op?.phase === 'held' || op?.phase === 'recovery-needed') notify('Maintenance needs attention. Check the installation before continuing.', true);
@@ -174,7 +181,7 @@
       adopt(body,true); recovery=false;
       if (!pendingId && !active()) {
         if (wasPending && snapshot.request_state==='not_received') notify('The request was not received. You can try again.');
-        else completion();
+        else if (wasPending || manual) completion();
         if (!snapshot.operation && manual && !wasPending) notify('Maintenance status refreshed.');
       } else if (snapshot.request_state==='unknown') notify('Keep could not confirm this request. Checking its recorded status.',true);
       else if (snapshot.operation?.phase==='held' || snapshot.operation?.phase==='recovery-needed') completion();
@@ -211,7 +218,7 @@
   });
   dialog.addEventListener('close',()=>{
     const previous=modal; modal=null; render();
-    if (previous?.accepted) feedback.focus({preventScroll:true});
+    if (previous?.accepted) (feedback.hidden ? id('maintenance-title') : feedback).focus({preventScroll:true});
     else (previous?.trigger && !previous.trigger.disabled && !previous.trigger.hidden ? previous.trigger : id('maintenance-title')).focus({preventScroll:true});
   });
   form.addEventListener('submit',async event=>{

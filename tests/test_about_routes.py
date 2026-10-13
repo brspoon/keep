@@ -79,6 +79,36 @@ class AboutRoutesTests(TestCase):
         self.assertFalse(observed[0]['can_check'])
         self.assertEqual(observed[0]['reason'], 'A check is running.')
 
+    def test_native_check_feedback_is_neutral_while_queued(self):
+        page = self.client.post('/settings/about/check', data={'csrf_token': 'test-csrf'},
+                                follow_redirects=True).get_data(as_text=True)
+        feedback = re.search(r'<p id="about-feedback".*?</p>', page, re.S).group()
+        self.assertIn('data-feedback-status="neutral"', feedback)
+        self.assertIn('Update check queued.', feedback)
+        self.assertNotIn('is-error', feedback)
+
+    def test_server_comparison_badge_hides_unknown_labels_and_keeps_stale_data_neutral(self):
+        original = keep.about_snapshot()
+        for changes, label, tone in (
+            ({'status': 'success', 'stale': False, 'comparison': 'unknown'}, '', 'neutral'),
+            ({'status': 'success', 'stale': False, 'comparison': 'unexpected'}, '', 'neutral'),
+            ({'status': 'success', 'stale': False, 'comparison': 'up_to_date'}, 'Up to date', 'ok'),
+            ({'status': 'success', 'stale': True, 'comparison': 'up_to_date'}, 'Last known', 'neutral'),
+            ({'status': 'failed', 'stale': True, 'comparison': 'up_to_date'}, 'Last known', 'neutral'),
+        ):
+            with self.subTest(changes=changes), patch.object(keep, 'about_snapshot', return_value={
+                    **original, 'latest_version': keep.APP_VERSION, **changes}):
+                page = self.client.get('/settings/about').get_data(as_text=True)
+                badge = re.search(r'<span id="about-comparison".*?</span>', page, re.S).group()
+                self.assertIn('data-status="' + tone + '"', badge)
+                self.assertIn('>' + label + '</span>', badge)
+                self.assertEqual('hidden' in badge, not bool(label))
+                if changes['status'] == 'failed':
+                    feedback = re.search(r'<p id="about-feedback".*?</p>', page, re.S).group()
+                    self.assertIn('data-feedback-status="error"', feedback)
+                    self.assertIn('is-error', feedback)
+                    self.assertNotIn('hidden', feedback)
+
     def test_unavailable_worker_prevents_queueing_without_becoming_an_update_result(self):
         self.heartbeat.unlink()
         response = self.check()
