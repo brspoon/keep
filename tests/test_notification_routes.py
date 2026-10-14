@@ -1,5 +1,6 @@
 """Isolated Flask routes with real notification storage and synthetic senders."""
 from contextlib import closing
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,42 @@ from connection_settings import ConnectionSettings
 import notification_settings
 import notifications
 import notifications_routes
+
+
+class NotificationProviderMarkup(HTMLParser):
+    """Read the native disclosure headers without relying on attribute order."""
+    def __init__(self, html):
+        super().__init__()
+        self.providers = {}
+        self.summary_text = {}
+        self.current_provider = None
+        self.in_summary = False
+        self.feed(html)
+
+    def handle_starttag(self, tag, attributes):
+        attributes = dict(attributes)
+        if tag == 'details' and 'notification-provider' in attributes.get('class', '').split():
+            self.current_provider = attributes['id']
+            self.providers[self.current_provider] = attributes
+            self.summary_text[self.current_provider] = []
+        elif tag == 'summary' and self.current_provider:
+            self.in_summary = True
+
+    def handle_endtag(self, tag):
+        if tag == 'summary':
+            self.in_summary = False
+        elif tag == 'details':
+            self.current_provider = None
+
+    def handle_data(self, text):
+        if self.current_provider and self.in_summary:
+            self.summary_text[self.current_provider].append(text)
+
+    def opened(self):
+        return {name for name, attributes in self.providers.items() if 'open' in attributes}
+
+    def summary(self, provider):
+        return ' '.join(' '.join(self.summary_text['notification-' + provider]).split())
 
 
 class NotificationRoutesTests(unittest.TestCase):
@@ -151,6 +188,126 @@ class NotificationRoutesTests(unittest.TestCase):
         self.assertNotIn('A' * 30, response.text)
         self.assertNotIn('B' * 30, response.text)
         self.assertIn('&lt;b&gt;Viewer&lt;/b&gt;', response.text)
+
+    def test_email_summary_precedes_collapsed_providers_and_recipient_controls(self):
+        response = self.client.get('/settings/notifications')
+        self.assertEqual(response.status_code, 200)
+        markup = NotificationProviderMarkup(response.text)
+        self.assertEqual(set(markup.providers), {'notification-email', 'notification-pushover'})
+        self.assertEqual(markup.opened(), set())
+        self.assertIn('aria-label="Email delivery summary"', response.text)
+        positions = [response.text.index(label) for label in (
+            'Active email recipients', 'Queued titles', 'Next email digest',
+            'id="notification-email"', 'id="notification-pushover"',
+            '>Email recipients</h2>', 'placeholder="Search email recipients"',
+            'class="recipient-row"', 'id="recent-deliveries"')]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_collapsed_headers_explain_provider_setup_and_owner_delivery_state(self):
+        markup = NotificationProviderMarkup(self.client.get('/settings/notifications').text)
+        self.assertIn('Enabled', markup.summary('email'))
+        self.assertIn('SMTP configured in Connections.', markup.summary('email'))
+        self.assertIn('Disabled', markup.summary('pushover'))
+        self.assertIn('App token needed.', markup.summary('pushover'))
+        self.assertIn('Your delivery is off.', markup.summary('pushover'))
+        self.connections.save({'SMTP_HOST': ''})
+        markup = NotificationProviderMarkup(self.client.get('/settings/notifications').text)
+        self.assertIn('SMTP setup needed in Connections.', markup.summary('email'))
+        self.install()
+        self.push_preferences()
+        markup = NotificationProviderMarkup(self.client.get('/settings/notifications').text)
+        self.assertIn('App token saved.', markup.summary('pushover'))
+        self.assertIn('Your delivery is enabled.', markup.summary('pushover'))
+        self.assertEqual(markup.opened(), set())
+        self.settings.save_installation(notification_settings.Actor('owner', True, True), enabled=False)
+        markup = NotificationProviderMarkup(self.client.get('/settings/notifications').text)
+        self.assertIn('Your delivery needs setup.', markup.summary('pushover'))
+        self.assertEqual(markup.opened(), set())
+
+    def test_provider_configuration_error_remains_visible_in_its_collapsed_header(self):
+        with patch.dict(os.environ, {'PUSHOVER_APP_TOKEN': 'invalid-private-token'}):
+            response = self.client.get('/settings/notifications')
+        markup = NotificationProviderMarkup(response.text)
+        self.assertEqual(markup.opened(), set())
+        self.assertIn('Needs attention', markup.summary('pushover'))
+        self.assertIn('Pushover configuration needs attention.', markup.summary('pushover'))
+        self.assertNotIn('invalid-private-token', response.text)
+
+    def test_native_provider_validation_errors_open_only_the_affected_disclosure(self):
+        with patch.dict(os.environ, {'EMAIL_ENABLED': 'true'}):
+            response = self.post('/settings/notifications/email', enabled='1')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('id="settings-error-notice"', response.text)
+        self.assertEqual(NotificationProviderMarkup(response.text).opened(), {'notification-email'})
+        for path, values in (
+            ('/settings/notifications/pushover', {'enabled': '1', 'token_mode': 'replace', 'app_token': '<secret>'}),
+            ('/settings/notifications/pushover/preferences', {'receive_pushover': '1', 'pushover_event': 'unknown'}),
+            ('/settings/notifications/test/pushover', {}),
+        ):
+            with self.subTest(path=path):
+                response = self.post(path, **values)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('id="settings-error-notice"', response.text)
+                self.assertEqual(NotificationProviderMarkup(response.text).opened(), {'notification-pushover'})
+                self.assertNotIn('<secret>', response.text)
+        self.push_send.assert_not_called()
+
+    def test_rejected_and_uncertain_email_tests_reopen_email_without_repeating_a_send(self):
+        for outcome in (notifications.Outcome('rejected'), notifications.Outcome('review', 'email_uncertain')):
+            with self.subTest(outcome=outcome.state):
+                self.email_send.return_value = outcome
+                response = self.post('/settings/notifications/test/email')
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(NotificationProviderMarkup(response.text).opened(), {'notification-email'})
+                sent = self.email_send.call_count
+                self.client.get('/settings/notifications')
+                self.assertEqual(self.email_send.call_count, sent)
+                self.clock += 200
+
+    def test_successful_provider_and_owner_settings_reopen_only_once_after_redirect(self):
+        self.install()
+        self.push_preferences()
+        for path, provider, values in (
+            ('/settings/notifications/email', 'email', {'enabled': '1'}),
+            ('/settings/notifications/pushover', 'pushover', {'enabled': '1', 'token_mode': 'keep'}),
+            ('/settings/notifications/pushover/preferences', 'pushover', {'key_mode': 'keep', 'device': 'phone'}),
+        ):
+            with self.subTest(path=path):
+                response = self.post(path, **values)
+                self.assertEqual(response.status_code, 303)
+                followup = self.client.get(response.headers['Location'])
+                self.assertIn('id="settings-saved-notice"', followup.text)
+                self.assertNotIn('id="settings-error-notice"', followup.text)
+                self.assertEqual(NotificationProviderMarkup(followup.text).opened(), {'notification-' + provider})
+                self.assertEqual(NotificationProviderMarkup(self.client.get('/settings/notifications').text).opened(), set())
+        self.email_send.assert_not_called()
+        self.push_send.assert_not_called()
+
+    def test_successful_test_redirects_reopen_only_the_tested_provider_once(self):
+        self.install()
+        self.push_preferences()
+        for provider in ('email', 'pushover'):
+            with self.subTest(provider=provider):
+                response = self.post('/settings/notifications/test/' + provider)
+                self.assertEqual(response.status_code, 303)
+                followup = self.client.get(response.headers['Location'])
+                self.assertEqual(NotificationProviderMarkup(followup.text).opened(), {'notification-' + provider})
+                self.assertEqual(NotificationProviderMarkup(self.client.get('/settings/notifications').text).opened(), set())
+                self.clock += 200
+        self.email_send.assert_called_once()
+        self.push_send.assert_called_once()
+
+    def test_delivery_review_warning_is_visible_above_providers_and_links_to_history(self):
+        self.held_delivery()
+        response = self.client.get('/settings/notifications')
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(response.text.index('class="notification-held"'), response.text.index('id="notification-email"'))
+        self.assertIn('href="#recent-deliveries"', response.text)
+        self.assertIn('id="recent-deliveries"', response.text)
+        self.assertIn('Delivery needs review', response.text)
+        self.assertEqual(NotificationProviderMarkup(response.text).opened(), set())
+        self.email_send.assert_not_called()
+        self.push_send.assert_not_called()
 
     def test_only_current_owner_can_read_or_change_owner_notifications(self):
         for user in ('viewer', 'missing'):

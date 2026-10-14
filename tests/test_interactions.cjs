@@ -25,6 +25,7 @@ function fixture({ reduced = true, success = false, error = false, saved = null,
   const formElement = { closest: () => editor, dataset: { saveKey: 'user-7' }, querySelector: () => button, addEventListener: (n, f) => listeners[n] = f };
   let stored = saved && JSON.stringify(saved);
   const cards = [];
+  const writes = [];
   const document = {
     body: {}, activeElement: {},
     documentElement: { classList: { add: x => rootClasses.add(x), remove: x => rootClasses.delete(x), contains: x => rootClasses.has(x) } },
@@ -40,12 +41,13 @@ function fixture({ reduced = true, success = false, error = false, saved = null,
   };
   const context = {
     window, document, location: { pathname: '/settings/users' }, scrollY: 120,
-    sessionStorage: { getItem: () => stored, setItem: (_, v) => stored = v, removeItem: () => stored = null },
+    sessionStorage: { getItem: () => stored, setItem: (_, v) => { writes.push(v); stored = v; }, removeItem: () => stored = null },
     requestAnimationFrame: f => f(),
     setTimeout: (f, ms) => { if (ms < 1000) f(); return 1; }
   };
   vm.runInNewContext(source, context);
-  return { context, window, document, cards, button, listeners, windowListeners, documentListeners, rootClasses, stored: () => stored };
+  const finishSubmit = event => windowListeners.submit({...event, target: formElement});
+  return { context, window, document, cards, button, listeners, windowListeners, documentListeners, rootClasses, writes, finishSubmit, stored: () => stored };
 }
 test('pointer focus rings stay quiet until keyboard navigation resumes', () => {
   const f = fixture();
@@ -89,6 +91,7 @@ test('normal motion waits for exit, removes once, then animates neighboring card
 test('client-side validation cancellation leaves the save button enabled', () => {
   const f = fixture({ form: true });
   f.listeners.submit({ defaultPrevented: true });
+  f.finishSubmit({defaultPrevented: true});
   assert.equal(f.button.disabled, false);
   assert.equal(f.button.textContent, 'Save');
   assert.equal(f.stored(), null);
@@ -96,6 +99,9 @@ test('client-side validation cancellation leaves the save button enabled', () =>
 test('native submission records no fields, prevents duplicates, and recovers on back navigation', () => {
   const f = fixture({ form: true });
   f.listeners.submit({ defaultPrevented: false });
+  assert.equal(f.button.textContent, 'Save');
+  assert.equal(f.stored(), null);
+  f.finishSubmit({defaultPrevented: false});
   assert.equal(f.button.textContent, 'Saving…');
   assert.equal(f.button.disabled, true);
   assert.deepEqual(Object.keys(JSON.parse(f.stored())).sort(), ['at', 'key', 'path', 'scroll']);
@@ -105,6 +111,38 @@ test('native submission records no fields, prevents duplicates, and recovers on 
   f.windowListeners.pageshow({ persisted: true });
   assert.equal(f.button.textContent, 'Save');
   assert.equal(f.button.disabled, false);
+});
+test('a later submit guard can cancel without creating busy state or stale save feedback', () => {
+  const f = fixture({ form: true });
+  const event = {defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }};
+  f.listeners.submit(event);
+  event.preventDefault();
+  f.finishSubmit(event);
+  assert.equal(f.button.textContent, 'Save');
+  assert.equal(f.button.disabled, false);
+  assert.equal(f.button.getAttribute('aria-busy'), undefined);
+  assert.equal(f.stored(), null);
+  assert.equal(f.writes.length, 0);
+  f.listeners.submit({defaultPrevented: false});
+  f.finishSubmit({defaultPrevented: false});
+  assert.equal(f.button.textContent, 'Saving…');
+  assert.equal(f.writes.length, 1);
+});
+test('submission marks busy only at the window phase and blocks a following duplicate', () => {
+  const f = fixture({ form: true });
+  f.listeners.submit({defaultPrevented: false});
+  assert.equal(f.button.disabled, false);
+  assert.equal(f.writes.length, 0);
+  f.finishSubmit({defaultPrevented: false});
+  let prevented = false;
+  f.listeners.submit({defaultPrevented: false, preventDefault() { prevented = true; }});
+  assert.equal(prevented, true);
+  assert.equal(f.button.disabled, true);
+  assert.equal(f.writes.length, 1);
+  f.windowListeners.pageshow({persisted: true});
+  f.listeners.submit({defaultPrevented: false});
+  f.finishSubmit({defaultPrevented: false});
+  assert.equal(f.writes.length, 2);
 });
 test('Saved feedback requires a fresh matching submission and server success without errors', () => {
   const saved = { key: 'user-7', path: '/settings/users', at: Date.now(), scroll: 120 };

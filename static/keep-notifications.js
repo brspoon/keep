@@ -1,5 +1,18 @@
 /* Native form submissions preserve the ordinary settings redirects and CSRF checks. */
 (() => {
+  const isNotifications = document.body.classList.contains('notifications-ui');
+  const showError = message => {
+    if (!isNotifications || !message || typeof window.showToast !== 'function') return false;
+    window.showToast(message, 'error');
+    return true;
+  };
+  const errorNotice = isNotifications && document.getElementById('settings-error-notice');
+  if (errorNotice && showError(errorNotice.textContent.trim())) errorNotice.hidden = true;
+
+  document.querySelectorAll('details.notification-provider').forEach(provider => {
+    // Reveal invalid controls before the browser tries to focus them.
+    provider.addEventListener('invalid', () => { provider.open = true; }, true);
+  });
   document.querySelectorAll('.subscriptions').forEach(form => {
     const topics = [...form.querySelectorAll('input[name="collection_id"]')];
     const error = form.querySelector('.subscription-error');
@@ -13,6 +26,7 @@
     form.addEventListener('submit', event => {
       if (validate()) return;
       event.preventDefault();
+      showError(error?.textContent?.trim() || 'Choose at least one email topic.');
       const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       error?.scrollIntoView({ behavior: reduced ? 'instant' : 'smooth', block: 'center' });
       topics.find(input => !input.disabled)?.focus({ preventScroll: true });
@@ -42,6 +56,7 @@
       if (event.submitter !== retry || confirm.checked) return;
       event.preventDefault();
       error.hidden = false;
+      showError(error.textContent?.trim() || 'Confirm the possible duplicate before resending.');
       confirm.focus({ preventScroll: true });
     });
     window.addEventListener('pageshow', () => { error.hidden = true; });
