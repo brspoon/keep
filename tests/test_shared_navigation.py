@@ -140,7 +140,7 @@ class SharedNavigationTests(unittest.TestCase):
 
     def test_creation_forms_precede_lists(self):
         for path, creation, listing in (('/settings/users', 'Add local user', '<article class="user-card">'),
-                                        ('/settings/notifications', 'Add email recipient', '<h2>Email recipients</h2>')):
+                                        ('/settings/notifications', 'Add email recipient', '<section class="panel admin-card-list">')):
             page = self.client.get(path).get_data(as_text=True)
             self.assertLess(page.index(creation), page.index(listing))
             self.assertIn('class="panel creation-panel"', page)

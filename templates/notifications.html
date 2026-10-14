@@ -19,10 +19,24 @@
 <div class="page-heading"><h2>Notifications</h2></div>
 {% include 'shared_admin_tabs.html' %}
 {% if notice %}<div class="notice" id="settings-saved-notice" role="status">{{ notice }}</div>{% endif %}
-{% if settings_error %}<div class="settings-error" role="alert">{{ settings_error }}</div>{% endif %}
+{% if settings_error %}<div class="settings-error" id="settings-error-notice" role="alert">{{ settings_error }}</div>{% endif %}
+<section class="summary notification-summary" aria-label="Email delivery summary">
+  <div class="stat"><div class="eyebrow">Active email recipients</div><div class="stat-value">{{ active_recipients }}</div></div>
+  <div class="stat"><div class="eyebrow">Queued titles</div><div class="stat-value">{{ pending }}</div></div>
+  <div class="stat"><div class="eyebrow">Next email digest</div><div class="stat-value">{{ due_text }}</div></div>
+</section>
+{% if held or delivery_rows|selectattr('review_needed')|list %}<div class="notification-held" role="status">Delivery needs review. <a href="#recent-deliveries">Review recent deliveries</a>.</div>{% endif %}
 <div class="notification-providers">
-  <section class="notification-panel" aria-labelledby="notification-email-title">
-    <div class="notification-heading"><h2 id="notification-email-title">Email</h2><span class="notification-state status-badge" data-status="{{ 'ok' if email_installation.enabled else 'neutral' }}">{{ 'Enabled' if email_installation.enabled else 'Disabled' }}</span></div>
+  <details class="notification-panel notification-provider" id="notification-email" aria-labelledby="notification-email-title" {% if expanded_provider == 'email' %}open{% endif %}>
+    <summary class="notification-provider-summary">
+      <span class="notification-provider-info">
+        <span class="notification-provider-title"><strong id="notification-email-title">Email</strong><span class="notification-state status-badge" data-status="{{ 'ok' if email_installation.enabled and email_installation.configured else 'warn' if email_installation.enabled else 'neutral' }}">{{ 'Enabled' if email_installation.enabled else 'Disabled' }}</span></span>
+        <span class="help">Leaving summaries and reminders by email.</span>
+        <span class="notification-provider-status">{{ 'SMTP configured in Connections.' if email_installation.configured else 'SMTP setup needed in Connections.' }}</span>
+      </span>
+      {% include 'admin_chevron.html' %}
+    </summary>
+    <div class="notification-provider-editor">
     <form method="post" action="/settings/notifications/email" data-save-key="notification-email">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="notification-choice"><input type="checkbox" name="enabled" value="1" {% if email_installation.enabled %}checked{% endif %} {% if email_installation.managed %}disabled{% endif %}>Enable email notifications</label>
@@ -34,10 +48,18 @@
       <button class="notification-button secondary" type="submit" {% if not email_installation.can_test %}disabled aria-describedby="notification-email-test-reason"{% endif %}>Send me a test</button>
       {% if not email_installation.can_test and email_installation.test_reason %}<p class="help" id="notification-email-test-reason">{{ email_installation.test_reason }}</p>{% endif %}
     </form>
-  </section>
-  <section class="notification-panel" aria-labelledby="notification-pushover-title">
-    <div class="notification-heading"><h2 id="notification-pushover-title">Pushover</h2><span class="notification-state status-badge" data-status="{{ 'ok' if pushover_installation.enabled else 'neutral' }}">{{ 'Enabled' if pushover_installation.enabled else 'Disabled' }}</span></div>
-    {% if pushover_installation.configuration_error|default('') %}<p class="notification-provider-error" role="alert">{{ pushover_installation.configuration_error }}</p>{% endif %}
+    </div>
+  </details>
+  <details class="notification-panel notification-provider" id="notification-pushover" aria-labelledby="notification-pushover-title" {% if expanded_provider == 'pushover' %}open{% endif %}>
+    <summary class="notification-provider-summary">
+      <span class="notification-provider-info">
+        <span class="notification-provider-title"><strong id="notification-pushover-title">Pushover</strong><span class="notification-state status-badge" data-status="{{ 'error' if pushover_installation.configuration_error else 'ok' if pushover_installation.ready else 'warn' if pushover_installation.enabled else 'neutral' }}">{{ 'Needs attention' if pushover_installation.configuration_error else 'Enabled' if pushover_installation.enabled else 'Disabled' }}</span></span>
+        <span class="help">Push notifications for the Keep owner.</span>
+        {% if pushover_installation.configuration_error %}<span class="notification-provider-error" role="alert">{{ pushover_installation.configuration_error }}</span>{% else %}<span class="notification-provider-status">{{ 'App token saved.' if pushover_installation.configured else 'App token needed.' }} {{ 'Your delivery is enabled.' if owner_push.enabled and owner_push.configured and pushover_installation.ready else 'Your delivery needs setup.' if owner_push.enabled else 'Your delivery is off.' }}</span>{% endif %}
+      </span>
+      {% include 'admin_chevron.html' %}
+    </summary>
+    <div class="notification-provider-editor">
     <form method="post" action="/settings/notifications/pushover" data-save-key="notification-pushover">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="notification-choice"><input type="checkbox" name="enabled" value="1" {% if pushover_installation.enabled %}checked{% endif %} {% if pushover_installation.fields.PUSHOVER_ENABLED.managed %}disabled{% endif %}>Enable Pushover notifications</label>
@@ -91,10 +113,11 @@
       <button class="notification-button secondary" type="submit" {% if not push_can_test %}disabled aria-describedby="notification-pushover-test-reason"{% endif %}>Send me a test</button>
       {% if not push_can_test %}<p class="help" id="notification-pushover-test-reason">{{ owner_push.test_reason|default('Save your user key and enable Pushover above.', true) }}</p>{% endif %}
     </form>
-  </section>
+    </div>
+  </details>
 </div>
 {% include 'notification_email_recipients.html' %}
-<section class="notification-panel notification-deliveries" aria-labelledby="notification-deliveries-title">
+<section class="notification-panel notification-deliveries" id="recent-deliveries" aria-labelledby="notification-deliveries-title">
   <div class="notification-heading"><h2 id="notification-deliveries-title">Recent deliveries</h2></div>
   {% for delivery in delivery_rows %}
   <article class="notification-delivery">

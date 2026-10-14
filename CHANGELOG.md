@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.27.1 — 2026-10-14
+
+- Move the Notifications summary to the top and keep Email and Pushover settings collapsed until opened. Show provider setup status and delivery review notices above email recipients.
+- Use the shared confirmation banner for success and error messages on Notifications.
+- Keep Save buttons available when an unsaved-changes confirmation is canceled.
+
 ## 2.27.0 — 2026-10-14
 
 - Remove the host maintenance helper and the in-app Install update and Restart controls. About still checks for releases and links to the manual Docker upgrade guide.

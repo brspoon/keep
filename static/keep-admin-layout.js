@@ -17,6 +17,7 @@
     const content = creation.querySelector('.creation-content');
     dialog.append(heading,close,content,cancel); document.body.append(dialog); creation.remove();
     const form=dialog.querySelector('form');
+    let notificationToast;
     const error=document.createElement('p');error.className='settings-error';error.setAttribute('role','alert');error.hidden=true;content.prepend(error);
     form.addEventListener('submit',async event=>{
       // Local invitations may return a private setup page instead of a redirect.
@@ -29,7 +30,17 @@
         const problem=page.querySelector('.settings-error');
         if(!response.ok || problem || new URL(response.url).pathname!==location.pathname)throw Error(problem?.textContent.trim() || 'Could not confirm the request. Please try again.');
         location.assign(response.url);
-      }catch(failure){error.textContent=failure.message;error.hidden=false;button.disabled=false;button.textContent=label;}
+      }catch(failure){
+        error.textContent=failure.message;error.hidden=false;button.disabled=false;button.textContent=label;
+        if(document.body.classList.contains('notifications-ui') && typeof window.showToast==='function') {
+          // Keep the shared toast above the modal backdrop and in its accessible subtree.
+          if(dialog.open) {
+            notificationToast=document.getElementById('toast');
+            if(notificationToast)dialog.append(notificationToast);
+          }
+          window.showToast(failure.message,'error');
+        }
+      }
     });
     const values=()=>JSON.stringify([...form.elements].map(x=>[x.value,x.checked])); let initial=values();
     const dismiss=()=>{if(values()!==initial){document.dispatchEvent(new CustomEvent('keep-confirm-discard',{detail:()=>{form.reset();dialog.close();}}));return;}dialog.close();};
@@ -37,7 +48,14 @@
     cancel.addEventListener('click',dismiss);
     close.addEventListener('click',dismiss);
     dialog.addEventListener('cancel',event=>{event.preventDefault();dismiss();});
-    dialog.addEventListener('close',()=>open.focus());
+    dialog.addEventListener('close',()=>{
+      if(notificationToast) {
+        notificationToast.classList.remove('visible');
+        document.body.append(notificationToast);
+        notificationToast=null;
+      }
+      open.focus();
+    });
     open.disabled=false;
   }
   const select = document.querySelector('.activity-mobile-filter select');

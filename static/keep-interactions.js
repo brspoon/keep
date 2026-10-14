@@ -142,6 +142,7 @@
     toggle.addEventListener('click', () => setUserEditor(toggle.closest('.user-card, .recipient-row'), toggle.getAttribute('aria-expanded') !== 'true'));
   });
   const forms = [...document.querySelectorAll('form[data-save-key]')];
+  const saveButtons = new Map();
   const reset = button => {
     button.textContent = button.dataset.saveLabel;
     button.disabled = false;
@@ -151,25 +152,32 @@
   for (const form of forms) {
     const button = form.querySelector('.save-button');
     if (!button) continue;
+    saveButtons.set(form, button);
     button.dataset.saveLabel = button.textContent;
     button.setAttribute('aria-live', 'polite');
     form.addEventListener('submit', event => {
       if (event.defaultPrevented) return;
       if (button.disabled) { event.preventDefault(); return; }
-      // Store only a form identifier, never its field values or credentials.
-      try {
-        sessionStorage.setItem(storageKey, JSON.stringify({
-          key: form.dataset.saveKey, path: location.pathname, at: Date.now(), scroll: scrollY
-        }));
-      } catch (_) { /* Native form submission still works without storage. */ }
-      button.disabled = true;
-      button.setAttribute('aria-busy', 'true');
-      button.textContent = 'Saving…';
     });
     form.addEventListener('input', () => {
       if (button.classList.contains('action-succeeded')) reset(button);
     });
   }
+  // Document-level validation and unsaved-change guards run before this phase.
+  window.addEventListener('submit', event => {
+    const form = event.target;
+    const button = saveButtons.get(form);
+    if (!button || event.defaultPrevented) return;
+    // Store only a form identifier, never its field values or credentials.
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        key: form.dataset.saveKey, path: location.pathname, at: Date.now(), scroll: scrollY
+      }));
+    } catch (_) { /* Native form submission still works without storage. */ }
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Saving…';
+  });
   let saved;
   try {
     saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');

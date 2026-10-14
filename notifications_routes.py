@@ -91,8 +91,12 @@ class Routes:
     def _core(self, *, read_only=True):
         return self.adapter.core_store(read_only=read_only)
 
-    def _redirect(self, message):
+    def _redirect(self, message, *, provider=''):
         session['notifications_notice'] = message
+        if provider in notifications.PROVIDERS:
+            session['notifications_open_provider'] = provider
+        else:
+            session.pop('notifications_open_provider', None)
         response = redirect('/settings/notifications', code=303)
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -222,7 +226,7 @@ class Routes:
                 'review_needed': state == 'review', 'can_retry': False, 'request_id': row['request_id'],
                 '_time': row['finished_at'] or row['reserved_at']}
 
-    def render_page(self, *, error=None, status=200, expanded_recipient='', new_recipient_email=''):
+    def render_page(self, *, error=None, status=200, expanded_provider='', expanded_recipient='', new_recipient_email=''):
         denied = self._guard(owner=True)
         if denied:
             return denied
@@ -239,11 +243,16 @@ class Routes:
         except (sqlite3.Error, OSError, ValueError):
             return self._response(STORAGE_ERROR, 503)
         notice = session.pop('notifications_notice', None) or NOTICES.get(session.pop('settings_notice', None))
+        saved_provider = session.pop('notifications_open_provider', '')
+        expanded_provider = expanded_provider or saved_provider
+        if expanded_provider not in notifications.PROVIDERS:
+            expanded_provider = ''
         context.update(section='notifications', admin_active_path='/settings/notifications',
                        collections=self.adapter.collections(), csrf_token=self.adapter.csrf_token(),
                        notice=notice if not error else None,
                        settings_error=error or session.pop('settings_error', None),
                        settings_error_email=session.pop('settings_error_email', ''),
+                       expanded_provider=expanded_provider,
                        expanded_recipient=expanded_recipient, new_recipient_email=new_recipient_email)
         return self._response(render_template('notifications.html', **context), status)
 
@@ -261,7 +270,7 @@ class Routes:
             return denied
         try:
             if 'EMAIL_ENABLED' in os.environ:
-                return self.render_page(error='Email notifications are managed by the environment.', status=400)
+                return self.render_page(error='Email notifications are managed by the environment.', status=400, expanded_provider='email')
             settings, actor = self._settings(), self.adapter.actor()
             self.adapter.connections.save({'EMAIL_ENABLED': 'true' if request.form.get('enabled') == '1' else 'false'},
                 guard=lambda db: settings.validate_actor(actor, db, owner=True))
@@ -270,7 +279,7 @@ class Routes:
         except (sqlite3.Error, OSError, ValueError):
             return self._response('Keep could not save Email settings. Try again shortly.', 503)
         self.adapter.log_activity('notification-email-updated', 'Updated Email notifications')
-        return self._redirect('Email settings saved.')
+        return self._redirect('Email settings saved.', provider='email')
 
     def save_installation(self):
         denied = self._guard(owner=True, csrf=True)
@@ -280,17 +289,17 @@ class Routes:
             settings = self._settings(initialize=True)
             managed = settings.installation_view()['fields']['PUSHOVER_ENABLED']['managed']
             if managed and 'enabled' in request.form:
-                return self.render_page(error='Pushover notifications are managed by the environment.', status=400)
+                return self.render_page(error='Pushover notifications are managed by the environment.', status=400, expanded_provider='pushover')
             settings.save_installation(self.adapter.actor(), enabled=None if managed else request.form.get('enabled') == '1',
                                        token_mode=request.form.get('token_mode', 'keep'), token=request.form.get('app_token', ''), now=self.now())
         except PermissionError:
             return self._response(ACCESS_ERROR, 403)
         except ValueError:
-            return self.render_page(error='Check the Pushover settings and try again.', status=400)
+            return self.render_page(error='Check the Pushover settings and try again.', status=400, expanded_provider='pushover')
         except (sqlite3.Error, OSError):
             return self._response('Keep could not save Pushover settings. Try again shortly.', 503)
         self.adapter.log_activity('notification-pushover-updated', 'Updated Pushover notifications')
-        return self._redirect('Pushover settings saved.')
+        return self._redirect('Pushover settings saved.', provider='pushover')
 
     def _run_test(self, provider):
         settings, actor = self._settings(initialize=True), self.adapter.actor()
@@ -347,7 +356,7 @@ class Routes:
             return self._response(ACCESS_ERROR, 403)
         except (sqlite3.Error, OSError, ValueError):
             return self._response('Keep could not record the test. Check recent deliveries before trying again.', 503)
-        return self._redirect(message) if accepted else self.render_page(error=message, status=400)
+        return self._redirect(message, provider=provider) if accepted else self.render_page(error=message, status=400, expanded_provider=provider)
 
     def handle_personal(self, action, form=None):
         """Root calls before its legacy Email/appearance branch.
@@ -400,8 +409,8 @@ class Routes:
         if result['response'] is not None:
             return result['response']
         if result['saved']:
-            return self._redirect('Pushover delivery settings saved.')
-        return self.render_page(error=result['error'], status=400)
+            return self._redirect('Pushover delivery settings saved.', provider='pushover')
+        return self.render_page(error=result['error'], status=400, expanded_provider='pushover')
 
     def review(self):
         denied = self._guard(owner=True, csrf=True)
