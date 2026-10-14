@@ -54,7 +54,7 @@ def inspected_image(arch, config=None):
 class ReleasePublishTests(unittest.TestCase):
     @contextmanager
     def original_release_evidence(self, *, matches=None, config_digests=None,
-                                  empty_exceptions=False, day=None):
+                                  empty_exceptions=False, day=None, legacy=False):
         import tests.test_release_materials as fixtures
         fixture = fixtures.ReleaseMaterialsTests()
         fixture.VERSION = Path('VERSION').read_text().strip()
@@ -67,6 +67,7 @@ class ReleasePublishTests(unittest.TestCase):
                 matches=matches, native_digests=DIGESTS,
                 config_digests=config_digests or CONFIGS,
                 empty_exceptions=empty_exceptions, validation=True,
+                legacy=legacy,
             )
             original = dict(bodies)
             downloads = []
@@ -309,6 +310,13 @@ class ReleasePublishTests(unittest.TestCase):
                  patch.object(publisher.subprocess, 'run', side_effect=self.publishing_docker(calls, before_command)), \
                  patch('builtins.print'), self.original_release_evidence(**evidence_options) as evidence:
                 yield Path(directory), evidence
+
+    def test_historical_layout_blocks_direct_stable_publication_before_login_or_push(self):
+        calls = []
+        with self.assertRaisesRegex(ValueError, 'v2 release evidence layout'), \
+             self.publication_fixture(calls, legacy=True) as (artifacts, _):
+            publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
 
     def needed_exception(self):
         return [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},

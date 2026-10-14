@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.27.0 — 2026-10-14
+
+- Remove the host maintenance helper and the in-app Install update and Restart controls. About still checks for releases and links to the manual Docker upgrade guide.
+- If you enrolled the helper, finish or recover pending work and stop its host service before upgrading through Docker. Keep preserves earlier recovery records and refuses to start with unfinished or inconsistent state.
+
 ## 2.26.2 — 2026-10-13
 
 - Fix saving appearance and email preferences.

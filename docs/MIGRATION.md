@@ -2,29 +2,51 @@
 
 ## Upgrade an installation
 
-An enrolled Linux installation can use **Admin → About → Install update**.
-See [in-app maintenance](MAINTENANCE.md) to configure the optional host helper.
-The following steps remain available for installations without that helper.
+Keep upgrades through Docker on the host. **Admin → About** checks for releases
+and links to this guide. It does not install updates or restart services.
+Choose a published image version and read its release notes before upgrading.
 
-Work from the installation directory (`~/keep` on Linux/macOS, `$HOME\keep` in
-Windows PowerShell for the one-command installer).
+If your installation enrolled an earlier maintenance helper, follow the
+[retirement guide](MAINTENANCE.md) first. Finish or recover pending operations,
+confirm the helper is idle, and stop its worker before the upgrade. Preserve all
+maintenance state and recovery records.
+
+Work from the existing installation directory. For the one-command install on
+Linux or macOS:
+
+```sh
+cd "$HOME/keep"
+```
+
+On Windows, open PowerShell on the host, start Docker Desktop in Linux-container
+mode, and use:
+
+```powershell
+Set-Location "$HOME\keep"
+```
+
 Read the target release notes and [create a verified backup](PORTABLE_BACKUP.md)
 of the database, `.env`, Compose files, and exact current image before upgrading.
 Test the new release on an isolated copy when it changes data or recovery behavior.
+On Docker Desktop, verify the container's effective ownership and permissions for
+the backup destination. Windows host ACLs alone do not meet the portable backup
+module's Linux UID and mode requirements; use a controlled volume/export or a
+prepared bind mount as described in the backup guide.
 
-Edit `KEEP_IMAGE` in `.env` to select the new version. For example, to select
-Keep 2.26.1:
+Edit `KEEP_IMAGE` in `.env` to select the new version. Replace `<published-version>`
+with the exact published version you reviewed:
 
 ```dotenv
-KEEP_IMAGE=brspoon/keep:2.26.1
+KEEP_IMAGE=brspoon/keep:<published-version>
 ```
 
-Then pull and recreate both services together:
+The following Docker commands work in a Linux/macOS shell or Windows PowerShell.
+Validate the configuration, then pull and recreate both services together:
 
 ```sh
-docker compose pull
 docker compose config --quiet
-docker compose up -d
+docker compose pull keep-app keep-digest
+docker compose up -d keep-app keep-digest
 docker compose ps
 ```
 
@@ -32,6 +54,11 @@ Confirm both services are healthy. Sign in and verify connections, Keeps,
 preferences, and background work before considering the upgrade complete.
 Rerunning the installation command preserves the existing version and settings;
 it does not perform this upgrade for you.
+
+For a planned restart without changing the image, finish active work first, then
+run `docker compose restart keep-app keep-digest` from the same installation
+directory and confirm both services become healthy. Docker Desktop must remain
+running on Windows and macOS.
 
 ## Data and rollback
 

@@ -30,11 +30,13 @@ locking and launcher behavior in the same main validation run. Full Windows Dock
 Desktop, LAN-device and Plex acceptance remain separate checks; see
 [development testing](DEVELOPMENT_TESTING.md#installation-platforms).
 
-Native maintenance trials also verify paired restart, active-work draining,
-schema upgrades, matched rollback, image reacquisition and crash reconciliation.
-Initial trials may run with maintenance disabled in the app. Candidate and stable
-publication require the checked-out runtime to declare maintenance qualified;
-the release cannot publish with that support flag disabled.
+Native validation retains portable backup, restore, failed-upgrade, and installer
+checks. Future releases do not include a host maintenance helper archive or
+require helper lifecycle trials or a helper support flag. The
+`keep.validated-native-build.v2` and `keep.native-evidence.v2` layouts record that
+change explicitly. Earlier layout
+records remain readable only with their original evidence bytes and checksums;
+historical maintenance reports do not qualify a new release.
 
 Candidate publication runs only from a manual `workflow_dispatch` on `main`, with
 `publish_release` set to `true`, confirmation set to `release-stable`, and

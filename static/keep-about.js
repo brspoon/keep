@@ -131,7 +131,6 @@
       latestDiagnostics = body.diagnostics; syncDiagnostics();
     }
     render();
-    window.dispatchEvent?.(new CustomEvent('keep-release-updated'));
   };
   async function request(url, options = {}, polling = false) {
     const controller = new AbortController(); controllers.add(controller);
@@ -218,7 +217,6 @@
     }
   });
   retry?.addEventListener('click', () => void refreshStatus(true));
-  window.addEventListener('keep-maintenance-completed', () => void refreshStatus());
   document.addEventListener('visibilitychange', () => {
     clearTimeout(timer);
     if (!document.hidden && !stopped) { deadline = 0; void refreshStatus(); }

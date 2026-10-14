@@ -88,11 +88,6 @@ jobs:
         run: |
           python -B -m unittest discover -s tests -p test_install_platform.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Test native optional helper durability and process bounds
-        shell: powershell
-        run: |
-          python -B -m unittest discover -s tests -p test_windows_native.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   contributor-tests:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -278,12 +273,6 @@ jobs:
           KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
           KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
         run: python3 scripts/release_materials.py prepare
-      - name: Archive exact optional maintenance helper source
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          KEEP_RELEASE_PUBLISH: ${{ inputs.publish_release }}
-          KEEP_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
-        run: python3 scripts/release_materials.py archive-helper
   publish-release:
     needs: [release-native, release-needed, tested-images, prepare-release, validated-main]
     if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && !inputs.candidate_only && inputs.confirmation == 'release-stable' && needs.release-needed.outputs.publish == 'true' && needs.validated-main.result == 'success' && needs.tested-images.result == 'success'

@@ -60,12 +60,6 @@ test('a new installed version watches the worker refresh through status GETs wit
   f.respond(0,200,{snapshot:baseline({installed_version:'2.26.0',latest_version:'2.26.0',version_refresh_pending:false})});await settle();
   assert.equal(f.ids['about-comparison'].textContent,'Up to date');assert.equal(f.timers.size,0);assert.equal(f.calls.length,1);
 });
-test('a confirmed maintenance completion refreshes recorded release information without starting another check',async()=>{
-  const f=fixture();await f.window.fire('keep-maintenance-completed');await settle();
-  assert.equal(f.calls.length,1);assert.equal(f.calls[0].url,'/settings/about/status');assert.equal(f.calls[0].options.method,undefined);
-  f.respond(0,200,{snapshot:baseline({installed_version:'2.26.0',latest_version:'2.26.0'})});await settle();
-  assert.equal(f.ids['about-installed'].textContent,'2.26.0');assert.equal(f.ids['about-comparison'].textContent,'Up to date');
-});
 test('one CSRF form POST queues work, polling follows recorded status, and completion updates controls',async()=>{
   const f=fixture(),action=f.ids['about-check-form'].fire('submit');await settle();assert.equal(f.calls.length,1);assert.equal(f.calls[0].url,'/settings/about/check');assert.equal(f.calls[0].options.method,'POST');assert.equal(f.calls[0].options.body.get('csrf_token'),'synthetic-csrf');assert.equal(f.calls[0].options.credentials,'same-origin');
   await f.ids['about-check-form'].fire('submit');assert.equal(f.calls.length,1);f.respond(0,202,{snapshot:baseline({check_state:'queued',can_check:false}),message:'Update check queued.'});await action;await settle();assert.equal(f.ids['about-check'].textContent,'Queued');assert.equal(f.ids['about-check'].disabled,true);
@@ -181,7 +175,6 @@ test('missing fetch or malformed initial JSON preserves ordinary form fallback a
   for(const options of [{fetchAvailable:false},{initialJson:'<not-json>'}]){const f=fixture(options);assert.equal((f.ids['about-check-form'].listeners.submit||[]).length,0);await f.ids['about-copy'].fire('click');assert.equal(f.copies.length,1);assert.equal(f.calls.length,0);}
 });
 
-test('adopting a recorded release snapshot emits one read-only maintenance refresh signal',async()=>{const f=fixture();await f.queue(baseline({check_state:'queued',can_check:false}));assert.deepEqual(f.window.events,['keep-release-updated']);});
 
 test('fresh positive badges are green while stale and ongoing checks remain neutral',()=>{
   const ready=fixture();assert.equal(ready.ids['about-comparison'].attrs['data-status'],'ok');assert.equal(ready.ids['about-check-state'].attrs['data-status'],'ok');

@@ -22,7 +22,6 @@ import release_materials as materials
 import registry_transfer
 import review_image
 from tests.native_dependency_fixture import dependency_report
-from tests.test_maintenance_evidence import write_maintenance_sources, synthetic_maintenance_proof
 
 
 def tar_bytes(entries):
@@ -60,18 +59,114 @@ class ReleaseMaterialsTests(unittest.TestCase):
     REVISION = 'a' * 40
     DIGEST = 'sha256:' + 'b' * 64
 
+    def test_release_guard_requires_current_main_and_authorization_without_host_source(self):
+        with chdir(self.root), patch.object(materials, 'require_manual_dispatch') as manual, \
+             patch.object(materials, 'require_current_source') as current:
+            self.assertEqual(materials.guard(), self.VERSION)
+        manual.assert_called_once_with(True)
+        current.assert_called_once_with(self.REVISION, True)
+        self.assertFalse((self.root / 'maintenance_mailbox.py').exists())
+
+    def test_new_evidence_inventory_has_no_retired_helper_proof(self):
+        rows, bodies = self.verify_fixture()
+        with chdir(self.root), patch.object(materials, 'api', return_value=rows), \
+             patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]):
+            identities = materials.verify_identities(self.VERSION, {'id': 88})
+        for arch, identity in identities.items():
+            self.assertEqual(identity['evidence_layout'], materials.EVIDENCE_LAYOUT)
+            self.assertNotIn(f'maintenance-native-{arch}.json', {row['path'] for row in identity['evidence']})
+
+    def test_historical_evidence_remains_hash_bound_without_deleted_helper_source(self):
+        rows, bodies = self.verify_fixture(legacy=True)
+        originals = dict(bodies)
+        with chdir(self.root), patch.object(materials, 'api', return_value=rows), \
+             patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]):
+            identities = materials.verify_identities(self.VERSION, {'id': 88}, allow_legacy=True)
+        self.assertEqual(bodies, originals)
+        for arch, identity in identities.items():
+            self.assertNotIn('evidence_layout', identity)
+            self.assertIn(f'maintenance-native-{arch}.json', {row['path'] for row in identity['evidence']})
+        self.assertFalse((self.root / 'host_cli.py').exists())
+
+    def test_unknown_or_missing_evidence_layout_cannot_reduce_required_inventory(self):
+        for changes in ({'evidence_layout': 'keep.native-evidence.v99'},
+                        {'evidence_layout': materials.LEGACY_EVIDENCE_LAYOUT}):
+            rows, bodies = self.verify_fixture(identity_error=changes)
+            with self.subTest(changes=changes), chdir(self.root), \
+                 patch.object(materials, 'api', return_value=rows), \
+                 patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
+                 self.assertRaises(ValueError):
+                materials.verify_identities(self.VERSION, {'id': 88})
+
+    def test_current_readback_aggregate_and_verify_reject_historical_layout_before_writes(self):
+        rows, bodies = self.verify_fixture(legacy=True, validation=True)
+        original = dict(bodies)
+        for action in (lambda: materials.verify_identities(self.VERSION, {'id': 88}),
+                       materials.aggregate, materials.verify):
+            with self.subTest(action=action), chdir(self.root), \
+                 patch.object(materials, 'guard', return_value=self.VERSION), \
+                 patch.object(materials, 'draft', return_value={'id': 88}), \
+                 patch.object(materials, 'api', return_value=rows), \
+                 patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
+                 patch.object(materials, 'verify_durable_validation') as provenance, \
+                 patch.object(materials, 'upload') as upload, patch.object(materials, 'hub') as hub:
+                with self.assertRaisesRegex(ValueError, 'v2 release evidence layout'):
+                    action()
+                provenance.assert_not_called()
+                upload.assert_not_called()
+                hub.assert_not_called()
+        self.assertEqual(bodies, original)
+
+    def test_current_durable_provenance_cannot_infer_legacy_permission_from_identity(self):
+        import validated_build
+        index, proof = self.main_validation_fixture()
+        index['schema'] = validated_build.LEGACY_SCHEMA
+        identity = {'config_digest': index['config_digest'], 'evidence_layout': materials.LEGACY_EVIDENCE_LAYOUT}
+        with patch.object(validated_build, 'verify_provenance') as origin:
+            with self.assertRaisesRegex(ValueError, 'v2 release evidence layout'):
+                materials.verify_durable_validation(identity, proof, 'amd64')
+            identity.pop('evidence_layout')
+            with self.assertRaisesRegex(ValueError, 'v2 release evidence layout'):
+                materials.verify_durable_validation(identity, proof, 'amd64')
+        origin.assert_not_called()
+
+    def test_current_archive_rejects_historical_main_index_before_review_or_upload(self):
+        import validated_build
+        index, proof = self.main_validation_fixture()
+        index['schema'] = validated_build.LEGACY_SCHEMA
+        (self.root / 'validation-provenance-amd64.json').write_text(json.dumps(proof))
+        with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
+             patch.object(materials.subprocess, 'run') as review, patch.object(materials, 'draft') as draft, \
+             patch.object(materials, 'upload') as upload, patch.object(validated_build, 'api') as api:
+            with self.assertRaisesRegex(ValueError, 'v2 validation evidence layout'):
+                materials.archive('amd64', native_digest=self.DIGEST)
+        review.assert_not_called()
+        draft.assert_not_called()
+        upload.assert_not_called()
+        api.assert_not_called()
+
+    def test_explicit_read_only_historical_provenance_can_authenticate_v1_index(self):
+        import validated_build
+        index, proof = self.main_validation_fixture()
+        index['schema'] = validated_build.LEGACY_SCHEMA
+        source = next(row for row in index['assets'] if row['path'].endswith('.tar.gz'))
+        identity = {'version': self.VERSION, 'config_digest': index['config_digest'],
+                    'evidence_layout': materials.LEGACY_EVIDENCE_LAYOUT,
+                    'source': {'name': Path(source['path']).name, 'sha256': source['sha256'],
+                               'bytes': source['bytes']},
+                    'main_validation': materials.validation_summary(proof),
+                    'evidence': [{'path': Path(row['path']).name, 'sha256': row['sha256'], 'bytes': row['bytes']}
+                                 for row in index['assets'] if not row['path'].endswith(('.tar', '.tar.gz', '.sha256'))]}
+        original = copy.deepcopy((identity, proof))
+        with patch.object(validated_build, 'verify_provenance', return_value=index) as origin:
+            materials.verify_durable_validation(identity, proof, 'amd64', allow_legacy=True)
+        origin.assert_called_once_with(proof, 'amd64', index['config_digest'], allow_legacy=True)
+        self.assertEqual((identity, proof), original)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
-        write_maintenance_sources(self.root)
-        # Publication tests declare qualification only in their copied source;
-        # this synthetic fixture does not qualify the real application.
-        shim = self.root / 'maintenance_mailbox.py'
-        shim.write_bytes(shim.read_bytes().replace(b'RUNTIME_QUALIFIED = False', b'RUNTIME_QUALIFIED = True'))
-        maintenance_root = patch.object(materials, 'MAINTENANCE_ROOT', self.root)
-        maintenance_root.start()
-        self.addCleanup(maintenance_root.stop)
         self.distribution = self.root / 'distribution'
         self.distribution.mkdir()
         (self.root / 'VERSION').write_text(self.VERSION + '\n')
@@ -175,8 +270,6 @@ class ReleaseMaterialsTests(unittest.TestCase):
         identity = {'version': self.VERSION, 'revision': self.REVISION, 'architecture': 'amd64',
                     'native_digest': self.DIGEST, 'config_digest': 'sha256:' + 'd' * 64}
         (self.root / 'release-image-amd64.json').write_text(json.dumps(identity))
-        (self.root / 'maintenance-native-amd64.json').write_bytes(
-            ('  ' + json.dumps(synthetic_maintenance_proof(self.root, identity), indent=3) + '\r\n').encode())
         report_paths = []
         for name in materials.evidence_names('amd64'):
             if name == missing_report:
@@ -211,7 +304,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
     def verify_fixture(self, *, sidecar_error=None, identity_error=None, evidence_error=False,
                        inventory_error=None, review_changes=None, matches=None,
                        empty_exceptions=False, native_digests=None, config_digests=None,
-                       validation=False, require_zero_findings=False, maintenance_mutation=None):
+                       validation=False, require_zero_findings=False, legacy=False):
         policy = self.write_reviewed_policy(empty_exceptions=empty_exceptions,
                                             require_zero_findings=require_zero_findings)
         rows, bodies = [], {}
@@ -232,13 +325,12 @@ class ReleaseMaterialsTests(unittest.TestCase):
                         reports[name].update(changes)
             evidence_payloads.update({name: (json.dumps(body, indent=3) + '\r\n').encode()
                                       for name, body in reports.items()})
-            maintenance_identity = {'version': self.VERSION, 'revision': self.REVISION, 'architecture': arch,
-                                    'config_digest': (config_digests or {}).get(arch, 'sha256:' + 'd' * 64)}
-            maintenance = synthetic_maintenance_proof(self.root, maintenance_identity)
-            if maintenance_mutation and arch == 'amd64':
-                maintenance_mutation(maintenance)
-            evidence_payloads[f'maintenance-native-{arch}.json'] = (
-                '  ' + json.dumps(maintenance, indent=3) + '\r\n').encode()
+            if legacy:
+                historical = {'schema': 'keep.maintenance-native-trial.v1', 'outcome': 'passed',
+                    'architecture': arch, 'candidate': {'version': self.VERSION, 'revision': self.REVISION,
+                    'architecture': arch, 'os': 'linux',
+                    'image_id': (config_digests or {}).get(arch, 'sha256:' + 'd' * 64)}}
+                evidence_payloads[f'maintenance-native-{arch}.json'] = json.dumps(historical).encode()
             if validation:
                 evidence_payloads[f'validation-provenance-{arch}.json'] = b'{}\n'
             evidence = [{'path': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
@@ -255,6 +347,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
                         'run_attempt': 3,
                         'source': {'name': source_name, 'sha256': source_digest,
                                    'bytes': len(source_body)}, 'evidence': evidence}
+            if not legacy:
+                identity['evidence_layout'] = materials.EVIDENCE_LAYOUT
             if identity_error and arch == 'amd64':
                 identity.update(identity_error)
             prefix = security_name.removesuffix('.tar.gz') + '/'
@@ -395,69 +489,6 @@ class ReleaseMaterialsTests(unittest.TestCase):
         draft.assert_not_called()
         upload.assert_not_called()
 
-    def test_manual_publication_rejects_disabled_missing_or_ambiguous_qualification(self):
-        cases = (
-            b'RUNTIME_QUALIFIED = False\n',
-            b'# RUNTIME_QUALIFIED = True\n',
-            b'RUNTIME_QUALIFIED = bool(1)\n',
-            b'RUNTIME_QUALIFIED = 1\n',
-            b'RUNTIME_QUALIFIED = "True"\n',
-            b'RUNTIME_QUALIFIED = True\nRUNTIME_QUALIFIED = False\n',
-            b'RUNTIME_QUALIFIED = True\nRUNTIME_QUALIFIED = True\n',
-            b'RUNTIME_QUALIFIED = other = True\n',
-            b'RUNTIME_QUALIFIED = True\nfrom module import value as RUNTIME_QUALIFIED\n',
-            b'RUNTIME_QUALIFIED = True\ndef RUNTIME_QUALIFIED():\n    return False\n',
-            b'if True:\n    RUNTIME_QUALIFIED = True\n',
-            b'RUNTIME_QUALIFIED = True\nif condition:\n    RUNTIME_QUALIFIED = False\n',
-            b'RUNTIME_QUALIFIED = True\ndel RUNTIME_QUALIFIED\n',
-            b'RUNTIME_QUALIFIED = (\n',
-        )
-        for body in cases:
-            (self.root / 'maintenance_mailbox.py').write_bytes(body)
-            with self.subTest(body=body), chdir(self.root), \
-                 patch.object(materials, 'require_manual_dispatch'), \
-                 patch.object(materials, 'require_current_source'):
-                with self.assertRaisesRegex(ValueError, 'explicitly qualified before publication'):
-                    materials.guard()
-        (self.root / 'maintenance_mailbox.py').unlink()
-        with chdir(self.root), patch.object(materials, 'require_manual_dispatch'), \
-             patch.object(materials, 'require_current_source'):
-            with self.assertRaisesRegex(ValueError, 'maintenance source is unavailable'):
-                materials.guard()
-
-    def test_candidate_prepare_and_stable_verify_hold_before_external_writes_when_disabled(self):
-        (self.root / 'maintenance_mailbox.py').write_bytes(b'RUNTIME_QUALIFIED = False\n')
-        for candidate_only, action in ((True, lambda: materials.main()), (False, materials.verify)):
-            with self.subTest(candidate_only=candidate_only), chdir(self.root), \
-                 patch.dict(os.environ, {'KEEP_CANDIDATE_ONLY': str(candidate_only).lower()}), \
-                 patch.object(sys, 'argv', ['release_materials.py', 'prepare']), \
-                 patch.object(materials, 'require_manual_dispatch'), \
-                 patch.object(materials, 'require_current_source'), \
-                 patch.object(materials, 'draft') as draft, patch.object(materials, 'upload') as upload, \
-                 patch.object(materials, 'api') as api, patch.object(materials, 'hub') as hub:
-                with self.assertRaisesRegex(ValueError, 'explicitly qualified before publication'):
-                    action()
-            draft.assert_not_called(); upload.assert_not_called(); api.assert_not_called(); hub.assert_not_called()
-
-    def test_disabled_source_remains_available_for_initial_native_validation(self):
-        path = self.root / 'maintenance_mailbox.py'
-        path.write_bytes(b'RUNTIME_QUALIFIED = False\n')
-        _, sources, _, _ = materials.maintenance_sources()
-        self.assertEqual(sources['maintenance_mailbox.py'], {
-            'source_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
-            'fixture_sha256': hashlib.sha256(b'RUNTIME_QUALIFIED = True\n').hexdigest()})
-
-    def test_checked_out_source_flag_controls_manual_publication(self):
-        actual = Path(materials.__file__).resolve().parents[1]
-        body = (actual / 'maintenance_mailbox.py').read_bytes()
-        enabled = b'RUNTIME_QUALIFIED = True' in body
-        with chdir(self.root), patch.object(materials, 'MAINTENANCE_ROOT', actual), \
-             patch.object(materials, 'require_manual_dispatch'), patch.object(materials, 'require_current_source'):
-            if enabled:
-                self.assertEqual(materials.guard(), self.VERSION)
-            else:
-                with self.assertRaisesRegex(ValueError, 'explicitly qualified before publication'):
-                    materials.guard()
 
     def test_draft_reuses_only_one_matching_source_and_prepare_creates_once(self):
         matching = {'id': 44, 'tag_name': self.VERSION, 'target_commitish': self.REVISION,
@@ -596,11 +627,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
                         'name': source.name, 'sha256': proof['sha256'], 'bytes': proof['bytes']})
                     records = {row['path']: row for row in identity['evidence']}
                     installer = self.root / 'installer-trial-amd64.json'
-                    maintenance = self.root / 'maintenance-native-amd64.json'
                     expected_paths = {path.name for path in reports} | {portable.name, installer.name,
-                                                                         maintenance.name, 'source-bundle-amd64.json'}
+                                                                         'source-bundle-amd64.json'}
                     self.assertEqual(set(records), expected_paths)
-                    for evidence_path in [*reports, portable, installer, maintenance, self.distribution / 'source-bundle-amd64.json']:
+                    for evidence_path in [*reports, portable, installer, self.distribution / 'source-bundle-amd64.json']:
                         row = records[evidence_path.name]
                         body = evidence_path.read_bytes()
                         self.assertEqual(row['bytes'], len(body))
@@ -652,43 +682,6 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     materials.portable_evidence(evidence, 'amd64', identity)
 
-    def test_archive_blocks_missing_failed_or_stale_maintenance_proof_before_upload(self):
-        for failure in ('missing', 'failed', 'stale-source', 'false-cleanup'):
-            self.prepare_archive_inputs()
-            path = self.root / 'maintenance-native-amd64.json'
-            if failure == 'missing':
-                path.unlink()
-            else:
-                proof = json.loads(path.read_bytes())
-                if failure == 'failed': proof['phases'][6]['status'] = 'failed'
-                elif failure == 'stale-source': proof['source_files']['app.py']['source_sha256'] = '0' * 64
-                else: proof['cleanup']['resources_absent'] = False
-                path.write_text(json.dumps(proof))
-            with self.subTest(failure=failure), chdir(self.root), \
-                 patch.object(materials, 'guard', return_value=self.VERSION), \
-                 patch.object(materials.subprocess, 'run'), patch.object(materials, 'draft') as draft, \
-                 patch.object(materials, 'upload') as upload:
-                with self.assertRaisesRegex(ValueError, 'maintenance|Maintenance'):
-                    materials.archive('amd64')
-            draft.assert_not_called(); upload.assert_not_called()
-
-    def test_durable_readback_revalidates_maintenance_semantics_after_hash_checks(self):
-        mutations = (
-            lambda proof: proof['candidate'].update(image_id='sha256:' + 'e' * 64),
-            lambda proof: proof['source_files']['app.py'].update(source_sha256='0' * 64),
-            lambda proof: proof['phases'][3].update(protected_write_in_snapshot=False),
-            lambda proof: proof['phases'][7].update(fresh_helper_pid=100),
-            lambda proof: proof['cleanup'].update(resources_absent=False),
-        )
-        for mutate in mutations:
-            rows, bodies = self.verify_fixture(maintenance_mutation=mutate)
-            with self.subTest(mutation=mutate), chdir(self.root), \
-                 patch.object(materials, 'api', return_value=rows), \
-                 patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
-                 patch.object(materials, 'upload') as upload:
-                with self.assertRaisesRegex(ValueError, 'Maintenance'):
-                    materials.verify_identities(self.VERSION, {'id': 44})
-            upload.assert_not_called()
 
     def test_installer_evidence_requires_candidate_complete_lifecycle_and_verified_cleanup(self):
         _, identity = self.portable_proof()
@@ -782,13 +775,12 @@ class ReleaseMaterialsTests(unittest.TestCase):
              patch.object(materials, 'draft', return_value=release), \
              patch.object(materials, 'api', return_value=rows), \
              patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
-             patch.object(materials, 'verify_helper', return_value={'name':'synthetic-helper-proof'}) as helper, \
              patch.object(materials, 'upload', side_effect=record_identity) as upload:
             materials.verify()
         upload.assert_called_once()
         self.assertEqual(upload.call_args.args[0], release)
-        helper.assert_called_once_with(self.VERSION, release)
-        self.assertEqual(uploaded['maintenance_helper'], {'name':'synthetic-helper-proof'})
+        self.assertNotIn('maintenance_helper', uploaded)
+        self.assertEqual(uploaded['evidence_layout'], materials.EVIDENCE_LAYOUT)
         self.assertEqual(uploaded['run_id'], '123456')
         self.assertEqual(uploaded['revision'], self.REVISION)
         self.assertEqual(uploaded['images']['amd64']['architecture'], 'amd64')
@@ -1598,6 +1590,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
         index, proof = self.main_validation_fixture()
         original_source = next(row for row in index['assets'] if row['path'].endswith('.tar.gz'))
         identity = {'version': self.VERSION, 'config_digest': index['config_digest'],
+                    'evidence_layout': materials.EVIDENCE_LAYOUT,
                     'source': {'name': Path(original_source['path']).name, 'sha256': original_source['sha256'],
                                'bytes': original_source['bytes']},
                     'main_validation': materials.validation_summary(proof),

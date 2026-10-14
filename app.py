@@ -23,8 +23,7 @@ import notifications_app
 import pushover
 import email_templates
 import api_v1
-import maintenance_app
-import maintenance_mailbox
+import helper_retirement
 MASKED_CONNECTION_FIELDS = tuple(name for name in SECRETS if name != 'PUSHOVER_APP_TOKEN') + ("PLEX_MACHINE_IDENTIFIER",)
 from contextvars import ContextVar
 from service_discovery import discover_collections, test_plex
@@ -186,41 +185,6 @@ KEEP_DB_PATH = os.environ.get("KEEP_DB_PATH", "/app/data/keep.sqlite3")
 
 connection_settings = None
 onboarding = None
-maintenance_store = maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
-
-def maintenance_authority():
-    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
-        row=db.execute("""SELECT p.plex_id,p.session_version,p.status,p.auth_type,p.plex_access
-            FROM installation i JOIN user_profiles p ON p.plex_id=i.owner
-            WHERE i.id=1 AND i.complete=1""").fetchone()
-    return (maintenance_app.Authority(str(row[0]),row[1],row[2:]==('active','plex','active'))
-        if row else maintenance_app.Authority('',0,False))
-
-def maintenance_configuration():
-    from connection_settings import FIELDS,PLEX_FIELDS,validate
-    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
-        values=dict(db.execute('SELECT name,value FROM connection_settings'))
-        overrides={row[0] for row in db.execute('SELECT name FROM plex_connection_overrides')}
-    for name in FIELDS:
-        if name in os.environ and not(name in PLEX_FIELDS and name in overrides):
-            values[name]=os.environ[name]
-    return maintenance_app.configuration_fingerprint(values)
-
-maintenance_controller = maintenance_app.Controller(maintenance_store,
-    maintenance_app.Hooks(maintenance_authority,maintenance_configuration,
-        lambda:APP_VERSION,maintenance_mailbox.runtime_qualified))
-maintenance_app.register_flask(app,maintenance_controller,
-    read_only_about=lambda snapshot:maintenance_about(snapshot))
-
-def maintenance_work(*,authority=False):
-    def decorate(callback):
-        @wraps(callback)
-        def admitted(*args,**kwargs):
-            with maintenance_store.work(authority=authority):
-                return callback(*args,**kwargs)
-        return admitted
-    return decorate
-
 def owner_id():
     return onboarding.owner()
 
@@ -418,7 +382,6 @@ def get_authorized_plex_user_ids():
     return authorized
 
 
-@maintenance_work(authority=True)
 def sync_plex_user_access():
     authorized = get_authorized_plex_user_ids()
     if authorized is None:
@@ -466,7 +429,6 @@ def token_digest(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-@maintenance_work()
 def persistent_rate_limit(action, limit, window_seconds):
     """Return a 429 response after a per-client fixed-window limit is exhausted."""
     now = int(time.time())
@@ -507,7 +469,6 @@ def activity_actor(user=None):
     )
 
 
-@maintenance_work()
 def log_activity(action, description, actor=None):
     actor_id, actor_name = activity_actor(actor)
     try:
@@ -709,7 +670,6 @@ def keep_migration_started_at():
     return datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
 
-@maintenance_work()
 def migrate_existing_keep_schedules(exclusions_by_collection=None):
     """Give every exclusion present at upgrade a fresh, one-time 30-day keep."""
     with closing(attribution_db()) as db:
@@ -1354,7 +1314,6 @@ def get_recipient_delivery_preferences():
     return preferences
 
 
-@maintenance_work()
 def send_email(to_addresses, subject, html_body, text_body):
     if not email_enabled():
         raise RuntimeError('Email is disabled')
@@ -1391,7 +1350,6 @@ def send_email(to_addresses, subject, html_body, text_body):
             raise RuntimeError("SMTP rejected one or more digest recipients")
 
 
-@maintenance_work()
 def send_notification_email(to_addresses, subject, html_body, text_body):
     """Recheck effective SMTP settings immediately before delivery."""
     token = _settings_snapshot.set(connection_settings.snapshot())
@@ -1401,7 +1359,6 @@ def send_notification_email(to_addresses, subject, html_body, text_body):
         _settings_snapshot.reset(token)
 
 
-@maintenance_work()
 def send_notification_email_test(address):
     subject, body, plain = email_templates.notification_email(
         'Keep test notification', 'Your Keep email notifications are working.',
@@ -1410,14 +1367,12 @@ def send_notification_email_test(address):
     return notifications.Outcome('accepted')
 
 
-@maintenance_work()
 def send_notification_push_test(credentials):
     return pushover.send(credentials.app_token, credentials.user_key,
         'Your Keep Pushover notifications are working.', title='Keep test notification',
         device=credentials.device)
 
 
-@maintenance_work()
 def send_local_setup_email(profile, token, reset=False):
     setup_url = f"{connection_value('KEEP_URL').rstrip('/')}/auth/local/setup/{token}"
     name = profile["display_name"] or profile["full_name"] or "there"
@@ -1433,7 +1388,6 @@ def private_setup_link(token):
     return response
 
 
-@maintenance_work(authority=True)
 def issue_local_setup(plex_id, reset=False):
     token = secrets.token_urlsafe(32)
     with closing(attribution_db()) as db, db:
@@ -1648,7 +1602,6 @@ def get_collection_exclusions(collection_id):
     return cache[cache_key]
 
 
-@maintenance_work()
 def change_maintainerr_exclusion(media_id, collection_id, action):
     response = requests.post(
         f"{connection_value('MAINTAINERR_URL')}/api/rules/exclusion",
@@ -3989,7 +3942,6 @@ def settings_page():
     return redirect(url_for("settings_users"))
 
 
-@maintenance_work()
 def test_smtp_connection(getter=None):
     """Verify encrypted transport and optional authentication without sending mail."""
     import ssl
@@ -4527,30 +4479,6 @@ def about_diagnostics(snapshot):
     return json.dumps(details, indent=2)
 
 
-def maintenance_about(maintenance_snapshot):
-    """Render recorded owner About without normal middleware/context processors."""
-    with closing(sqlite3.connect(Path(KEEP_DB_PATH).absolute().as_uri()+'?mode=ro',uri=True,timeout=.25)) as db:
-        db.row_factory=sqlite3.Row
-        profile=db.execute('SELECT * FROM user_profiles WHERE plex_id=?',
-            (str((session.get('plex_user') or {}).get('id','')),)).fetchone()
-        libraries=[dict(row) for row in db.execute('SELECT * FROM media_libraries')]
-    token=_settings_snapshot.set(connection_settings.snapshot())
-    try:
-        snapshot=about_snapshot()
-        snapshot.update(can_check=False,reason='Maintenance is in progress.')
-        document=app.jinja_env.get_template('about.html').render(
-            app_version=APP_VERSION,theme_mode=profile['theme_mode'],owner=True,
-            plex_user=session.get('plex_user'),csrf_token=get_csrf_token(),
-            capabilities={'delete_media':True},granted_libraries=libraries,
-            about_snapshot=snapshot,diagnostics=about_diagnostics(snapshot),
-            maintenance_snapshot=maintenance_snapshot,notice=None,error=None,
-            show_announcement=False,announcement_version=ANNOUNCEMENT_VERSION)
-    finally:
-        _settings_snapshot.reset(token)
-    response=app.response_class(document,mimetype='text/html')
-    response.headers['Cache-Control']='no-store'
-    return response
-
 @app.get('/settings/about')
 def settings_about():
     denied = require_owner()
@@ -4558,7 +4486,7 @@ def settings_about():
         return denied
     snapshot = about_snapshot()
     response = app.make_response(render_template('about.html', about_snapshot=snapshot,
-        diagnostics=about_diagnostics(snapshot), maintenance_snapshot=maintenance_controller.snapshot(user=session.get('plex_user')), notice=session.pop('about_notice', None),
+        diagnostics=about_diagnostics(snapshot), notice=session.pop('about_notice', None),
         error=session.pop('about_error', None)))
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -5827,8 +5755,7 @@ def _background_maintenance_once(state):
 
 
 def background_maintenance_once(state):
-    return maintenance_app.worker_step(maintenance_store,
-        lambda:_background_maintenance_once(state),authority=True)[1]
+    return _background_maintenance_once(state)
 
 
 def run_maintenance_job(jobs, job_id, callback, *, fallback=None, **options):
@@ -5870,7 +5797,6 @@ def seerr_job_due(kind, getter, now=None):
 
 
 
-@maintenance_work()
 def cancel_queued_notifications(collection_id, media_id):
     """Remove every unsent notification for one title."""
     with closing(attribution_db()) as db, db:
@@ -5880,7 +5806,6 @@ def cancel_queued_notifications(collection_id, media_id):
         ).rowcount
 
 
-@maintenance_work()
 def queue_notifications(collection_id, media_ids, kind, now=None):
     now = time.time() if now is None else now
     with closing(attribution_db()) as db, db:
@@ -5900,7 +5825,6 @@ def queue_notifications(collection_id, media_ids, kind, now=None):
                            (collection_id, str(media_id), kind, now))
 
 
-@maintenance_work()
 def prune_notification_queue():
     """Drop pending titles that are no longer active in their collection."""
     with closing(attribution_db()) as db:
@@ -6003,7 +5927,6 @@ def reminder_episode(item):
         return None
 
 
-@maintenance_work()
 def reconcile_reminder_queue():
     """Resolve aggregate webhooks and deduplicate warnings before any batch sends.
 
@@ -6058,7 +5981,6 @@ def reconcile_reminder_queue():
                 db.execute("DELETE FROM notification_queue WHERE id = ?", (row["id"],))
 
 
-@maintenance_work()
 def queue_due_reminders(now=None):
     """Catch up active, unprotected titles with at most seven days remaining.
 
@@ -6146,30 +6068,8 @@ def fresh_notification_call(callback, *args):
         _settings_snapshot.reset(token)
 
 
-class MaintenanceNotificationRuntime(notifications_app.Runtime):
-    @maintenance_work(authority=True)
-    def recover_after_lock(self, *args, **kwargs):
-        return super().recover_after_lock(*args, **kwargs)
-
-    @maintenance_work()
-    def process_digest(self, *args, **kwargs):
-        return super().process_digest(*args, **kwargs)
-
-    @maintenance_work()
-    def process_operational(self, *args, **kwargs):
-        return super().process_operational(*args, **kwargs)
-
-    @maintenance_work()
-    def observe_recorded(self, *args, **kwargs):
-        return super().observe_recorded(*args, **kwargs)
-
-    @maintenance_work()
-    def send(self, *args, **kwargs):
-        return super().send(*args, **kwargs)
-
-
 def notification_runtime():
-    return MaintenanceNotificationRuntime(notifications_app.Helpers(
+    return notifications_app.Runtime(notifications_app.Helpers(
         store=lambda: notification_store(), settings=lambda: notification_settings_store(),
         collections=lambda: fresh_notification_call(get_collections),
         email_preferences=lambda: get_recipient_delivery_preferences(),
@@ -6181,7 +6081,6 @@ def notification_runtime():
         send_email=lambda addresses, subject, body, plain: send_notification_email(addresses, subject, body, plain)))
 
 
-@maintenance_work()
 def observe_notification_status():
     settings = connection_settings.snapshot()
     getter = lambda name: settings.get(name, globals().get(name, ''))
@@ -6203,7 +6102,6 @@ def observe_notification_status():
         current_connection_scopes=scopes, current_job_scopes=job_scopes)
 
 
-@maintenance_work()
 def process_digest(now=None):
     result = notification_runtime().process_digest(now=now, quiet_seconds=DIGEST_QUIET_SECONDS)
     if result == 'sent':
@@ -6221,7 +6119,6 @@ def update_digest_worker_heartbeat(now=None):
     os.utime(DIGEST_WORKER_HEARTBEAT_PATH, (timestamp, timestamp))
 
 
-@maintenance_work()
 def expire_due_keeps(now=None):
     """Release due exclusions, retaining local state whenever Maintainerr fails."""
     migrate_existing_keep_schedules()
@@ -6294,7 +6191,6 @@ def expire_due_keeps(now=None):
     return {"released": released, "missing": missing, "failed": failed}
 
 
-@maintenance_work()
 def queue_seerr_availability():
     try:
         seerr_store().queue_availability(connection_value)
@@ -6303,7 +6199,6 @@ def queue_seerr_availability():
         app.logger.warning('Could not queue Seerr availability sync; scheduled Seerr sync remains available')
 
 
-@maintenance_work()
 def seerr_worker_once():
     try:
         settings = connection_settings.snapshot()
@@ -6361,14 +6256,14 @@ def seerr_worker_once():
 def seerr_refresh_worker():
     while True:
         try:
-            maintenance_app.worker_step(maintenance_store,seerr_worker_once)
+            seerr_worker_once()
         except Exception:
-            app.logger.warning("Background admission is unavailable; retrying")
+            app.logger.warning("Background refresh is unavailable; retrying")
         time.sleep(30)
 
 
 def worker_startup_recovery():
-    return maintenance_app.worker_step(maintenance_store,_worker_startup_recovery,authority=True)
+    return _worker_startup_recovery()
 
 def _worker_startup_recovery():
     notification_runtime().recover_after_lock()
@@ -6385,11 +6280,9 @@ def digest_worker():
             update_digest_worker_heartbeat()
             if not recovered:
                 try:
-                    admitted,_=worker_startup_recovery()
-                except (maintenance_app.MaintenanceError,maintenance_app.StorageError,sqlite3.Error,OSError):
-                    app.logger.warning("Background admission is unavailable; retrying")
-                    admitted=False
-                if not admitted:
+                    worker_startup_recovery()
+                except (sqlite3.Error,OSError):
+                    app.logger.warning("Background startup recovery is unavailable; retrying")
                     time.sleep(30)
                     continue
                 recovered=True
@@ -6404,7 +6297,6 @@ def digest_worker():
             time.sleep(30)
 
 
-@maintenance_work()
 def connection_monitor_once():
     try:
         settings = connection_settings.snapshot()
@@ -6423,9 +6315,9 @@ def connection_monitor_once():
 def connection_monitor_worker():
     while True:
         try:
-            maintenance_app.worker_step(maintenance_store,connection_monitor_once)
+            connection_monitor_once()
         except Exception:
-            app.logger.warning("Background admission is unavailable; retrying")
+            app.logger.warning("Background refresh is unavailable; retrying")
         time.sleep(30)
 
 
@@ -6433,7 +6325,7 @@ def _initialize_application_schema():
     global connection_settings,onboarding,PLEX_CLIENT_IDENTIFIER
     os.makedirs(os.path.dirname(os.path.abspath(KEEP_DB_PATH)),exist_ok=True)
     connection_settings=ConnectionSettings(KEEP_DB_PATH)
-    onboarding=Onboarding(KEEP_DB_PATH,PLEX_OWNER_ID,initialize=False,maintenance_store=maintenance_store)
+    onboarding=Onboarding(KEEP_DB_PATH,PLEX_OWNER_ID,initialize=False)
     onboarding._initialize_schema(PLEX_OWNER_ID)
     if "PLEX_CLIENT_IDENTIFIER" not in os.environ:
         PLEX_CLIENT_IDENTIFIER=onboarding.client_id()
@@ -6621,10 +6513,8 @@ def _initialize_application_schema():
     api_v1.ApiV1(sys.modules[__name__])
 
 def initialize_application_schema():
-    if maintenance_mailbox.runtime_qualified():
-        maintenance_store.initialize()
-    with maintenance_store.startup_schema(APP_VERSION):
-        _initialize_application_schema()
+    helper_retirement.check_retired_helper_state(root=helper_retirement.FIXED_ROOT)
+    _initialize_application_schema()
 
 initialize_application_schema()
 

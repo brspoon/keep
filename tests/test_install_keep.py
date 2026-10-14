@@ -1,3 +1,5 @@
+import ast
+import io
 import stat
 import sys
 import tempfile
@@ -20,6 +22,21 @@ class InstallKeepTests(unittest.TestCase):
 
     def read(self):
         return self.env.read_bytes()
+
+    def test_installer_keeps_python39_compatibility(self):
+        ast.parse(Path(install_keep.__file__).read_text(), feature_version=(3, 9))
+        with patch.object(install_keep.sys, 'version_info', (3, 9)), \
+             patch.object(install_keep, 'install') as install, patch('sys.stdout', new=io.StringIO()):
+            install_keep.main(['--url', 'https://keep.example.test'])
+        install.assert_called_once()
+
+    def test_retired_helper_options_fail_before_installation_changes(self):
+        for option in ('--maintenance-helper', '--no-maintenance-helper', '--stage-maintenance-helper'):
+            with self.subTest(option=option), patch.object(install_keep, 'start_installation') as start, \
+                 patch('sys.stderr', new=io.StringIO()), self.assertRaises(SystemExit) as exit:
+                install_keep.main(['--start', option])
+            self.assertEqual(exit.exception.code, 2)
+            start.assert_not_called()
 
     def test_first_creation_generates_distinct_secrets_and_restricts_file(self):
         install_keep.install(self.env, "https://keep.example.com")

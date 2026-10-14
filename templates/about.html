@@ -10,8 +10,6 @@
 <link rel="stylesheet" href="/static/keep-about.css?v={{ app_version }}">
 <script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-about.js?v={{ app_version }}"></script>
-<link rel="stylesheet" href="/static/keep-maintenance.css?v={{ app_version }}">
-<script defer src="/static/keep-maintenance.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
 {% include 'shared_assets.html' %}
 </head>
@@ -43,7 +41,6 @@
   <p id="about-check-reason" class="about-check-reason" {% if not about_snapshot.reason or (busy and about_snapshot.worker_available) %}hidden{% endif %}>{{ about_snapshot.reason or '' }}</p>
   <button id="about-refresh" class="about-button secondary" type="button" hidden>Refresh status</button>
 </section>
-{% include 'about_maintenance.html' %}
 <section class="about-panel" aria-labelledby="about-releases-title">
   <div class="about-section-heading"><h2 id="about-releases-title">Recent releases</h2></div>
   <p id="about-releases-empty" class="about-empty" {% if about_snapshot.releases %}hidden{% endif %}>No releases checked yet.</p>
@@ -57,7 +54,7 @@
 <section class="about-panel" aria-labelledby="about-resources-title">
   <div class="about-section-heading"><h2 id="about-resources-title">Project</h2></div>
   <nav class="about-resources" aria-label="Keep resources">
-    {% for label, path in [('GitHub', 'https://github.com/brspoon/keep'), ('Documentation', 'https://github.com/brspoon/keep/blob/main/docs/README.md'), ('Report an issue', 'https://github.com/brspoon/keep/issues'), ('License', '/settings/about/notices/license'), ('Third-party notices', '/settings/about/notices/third-party')] %}<a class="about-link secondary" href="{{ path }}" target="_blank" rel="noopener noreferrer">{{ label }}<span class="visually-hidden"> (opens a new tab)</span></a>{% endfor %}
+    {% for label, path in [('GitHub', 'https://github.com/brspoon/keep'), ('Documentation', 'https://github.com/brspoon/keep/blob/main/docs/README.md'), ('Update guide', 'https://github.com/brspoon/keep/blob/main/docs/MIGRATION.md#upgrade-an-installation'), ('Report an issue', 'https://github.com/brspoon/keep/issues'), ('License', '/settings/about/notices/license'), ('Third-party notices', '/settings/about/notices/third-party')] %}<a class="about-link secondary" href="{{ path }}" target="_blank" rel="noopener noreferrer">{{ label }}<span class="visually-hidden"> (opens a new tab)</span></a>{% endfor %}
   </nav>
 </section>
 <section class="about-panel" aria-labelledby="about-diagnostics-title">

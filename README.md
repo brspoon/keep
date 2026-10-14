@@ -54,13 +54,13 @@ After installing the prerequisites, run one command for your system on the compu
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.
@@ -70,6 +70,12 @@ The installer downloads the release files into a `keep` folder in your home dire
 3. Select **Return to Setup** and review the checklist. **Verify services and finish setup** becomes available once the required configuration is saved; the checklist explains anything still missing. Select it to verify Plex and the selected Maintainerr collections, plus SMTP if you enabled email. Select **Open Keep** after verification succeeds.
 
 Radarr, Sonarr, Seerr, Tautulli, email, and Pushover are optional. See the [installation guide](docs/INSTALLATION.md) to choose a port or address, use an HTTPS proxy, or troubleshoot setup. Keep the installation's `.env` file and data volume private, and back them up before upgrading.
+
+**Admin → About** checks for releases and links to the
+[manual Docker upgrade guide](docs/MIGRATION.md#upgrade-an-installation).
+App updates and restarts are performed on the Docker host. If you previously
+enrolled a maintenance helper, read the [retirement guide](docs/MAINTENANCE.md)
+before upgrading.
 
 ## Guides
 
