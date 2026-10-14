@@ -13,7 +13,7 @@ and work on Keep itself.
 | [Installation and configuration](INSTALLATION.md) | Linux/macOS and Windows one-command installs, local access, optional HTTPS, connections, and email |
 | [Backup and restore](PORTABLE_BACKUP.md) | Back up or restore the database and deployment files |
 | [Upgrade and migration](MIGRATION.md) | Upgrade an installation or move from a legacy layout |
-| [In-app maintenance](MAINTENANCE.md) | Enroll the optional Linux helper for updates and coordinated restarts |
+| [Maintenance helper retirement](MAINTENANCE.md) | Prepare an earlier enrolled installation for manual Docker upgrades |
 | [API guide](API.md) | Use Keep's versioned API and manage API keys |
 | [OpenAPI specification](../static/openapi.json) | Machine-readable API reference |
 | [Seerr setup and deletion policy](seerr-attribution.md) | Configure Seerr and understand request-based deletion limits |

@@ -87,6 +87,23 @@ class ValidationRetentionTests(unittest.TestCase):
                 'build': {'run_id': number, 'run_attempt': 1, 'job_id': job['id'],
                           'job_name': job['name'], 'workflow_id': 40}}
 
+    def make_maintenance(self, number):
+        for job in self.jobs[number]:
+            if job['name'].startswith('image / '):
+                job['steps'].extend({'name': name, 'status': 'completed', 'conclusion': 'success'}
+                                    for name in retention.MAINTENANCE_STEPS)
+        for artifact in self.artifacts[number]:
+            index = self.indexes[artifact['id']]
+            index['schema'] = retention.builds.LEGACY_SCHEMA
+            arch = index['architecture']
+            path = f'maintenance-native-{arch}.json'
+            digest = hashlib.sha256(path.encode()).hexdigest()
+            asset_id = number * 1000 + (500 if arch == 'amd64' else 501)
+            name = f'build-{number}-1-{arch}--' + path
+            index['assets'].append({'id': asset_id, 'path': path, 'name': name, 'bytes': 50, 'sha256': digest})
+            self.assets[number + 1000].append({'id': asset_id, 'name': name, 'size': 50,
+                                             'digest': 'sha256:' + digest, 'state': 'uploaded'})
+
     def make_legacy(self, number):
         for job in self.jobs[number]:
             if job['name'].startswith('image / '):
@@ -97,6 +114,7 @@ class ValidationRetentionTests(unittest.TestCase):
                         step['name'] = retention.LEGACY_ACCEPTANCE_STEP
         for artifact in self.artifacts[number]:
             index = self.indexes[artifact['id']]
+            index['schema'] = retention.builds.LEGACY_SCHEMA
             index['assets'] = [row for row in index['assets'] if 'candidate-dependencies-' not in row['path'] and 'maintenance-native-' not in row['path']]
         self.assets[number + 1000] = [row for row in self.assets[number + 1000]
                                       if 'candidate-dependencies-' not in row['name'] and 'maintenance-native-' not in row['name']]
@@ -108,6 +126,7 @@ class ValidationRetentionTests(unittest.TestCase):
                                 if step['name'] not in retention.MAINTENANCE_STEPS]
         for artifact in self.artifacts[number]:
             index = self.indexes[artifact['id']]
+            index['schema'] = retention.builds.LEGACY_SCHEMA
             index['assets'] = [row for row in index['assets'] if 'maintenance-native-' not in row['path']]
         self.assets[number + 1000] = [row for row in self.assets[number + 1000]
                                       if 'maintenance-native-' not in row['name']]
@@ -218,12 +237,12 @@ class ValidationRetentionTests(unittest.TestCase):
                 self.assertEqual(retention.expected_paths('2.26.0', arch),
                                  set(retention.builds.input_paths(arch)))
 
-    def test_current_maintenance_evidence_is_indexed_and_protected(self):
+    def test_current_v2_inventory_is_indexed_and_protected_without_helper_evidence(self):
         plan = self.inventory()
         self.assertTrue(all(row['usable'] for row in plan['candidates'] if row['successful']))
         self.assertEqual(plan['protected_release_ids'], [1200])
         for arch, artifact in zip(retention.builds.ARCHES, self.artifacts[200]):
-            self.assertIn(f'maintenance-native-{arch}.json',
+            self.assertNotIn(f'maintenance-native-{arch}.json',
                           {row['path'] for row in self.indexes[artifact['id']]['assets']})
         self.assertEqual(self.deletes, [])
 
@@ -247,6 +266,7 @@ class ValidationRetentionTests(unittest.TestCase):
         self.assertEqual(self.deletes, [])
 
     def test_partial_maintenance_gates_never_become_an_older_profile(self):
+        self.make_maintenance(100)
         saved = copy.deepcopy((self.jobs, self.indexes, self.assets))
         for missing in retention.MAINTENANCE_STEPS:
             self.jobs, self.indexes, self.assets = copy.deepcopy(saved)
@@ -258,6 +278,7 @@ class ValidationRetentionTests(unittest.TestCase):
         self.assertEqual(self.deletes, [])
 
     def test_failed_or_skipped_maintenance_gates_block_planning(self):
+        self.make_maintenance(100)
         saved = copy.deepcopy(self.jobs)
         for name in retention.MAINTENANCE_STEPS:
             for conclusion in ('failure', 'skipped', None):
@@ -268,9 +289,11 @@ class ValidationRetentionTests(unittest.TestCase):
                     self.inventory()
         self.assertEqual(self.deletes, [])
 
-    def test_maintenance_evidence_cannot_be_removed_from_current_profile(self):
+    def test_historical_maintenance_evidence_cannot_be_removed_from_its_original_profile(self):
+        self.make_maintenance(100)
         for artifact in self.artifacts[100]:
             index = self.indexes[artifact['id']]
+            index['schema'] = retention.builds.LEGACY_SCHEMA
             index['assets'] = [row for row in index['assets'] if 'maintenance-native-' not in row['path']]
         self.assets[1100] = [row for row in self.assets[1100] if 'maintenance-native-' not in row['name']]
         with self.assertRaisesRegex(ValueError, 'evidence inventory is incomplete'):
@@ -279,6 +302,7 @@ class ValidationRetentionTests(unittest.TestCase):
 
     def test_pre_maintenance_architecture_cannot_mix_with_current_profile(self):
         self.make_pre_maintenance(100)
+        self.make_maintenance(200)
         current = next(row for row in self.jobs[200] if row['name'].endswith('(arm64)'))
         older = next(row for row in self.jobs[100] if row['name'].endswith('(arm64)'))
         older['steps'] = copy.deepcopy(current['steps'])
@@ -302,7 +326,7 @@ class ValidationRetentionTests(unittest.TestCase):
                              retention.expected_paths('2.21.4', index['architecture'], legacy=True))
             self.assertEqual(len(index['assets']), 18)
         for artifact in self.artifacts[200]:
-            self.assertEqual(len(self.indexes[artifact['id']]['assets']), 20)
+            self.assertEqual(len(self.indexes[artifact['id']]['assets']), 19)
         self.assertEqual(self.deletes, [])
 
     def test_only_legacy_candidates_preserve_latest_successful_fallback(self):
@@ -331,6 +355,7 @@ class ValidationRetentionTests(unittest.TestCase):
 
     def test_legacy_and_current_native_profiles_cannot_be_mixed(self):
         self.make_legacy(100)
+        self.make_maintenance(200)
         current = next(row for row in self.jobs[200] if row['name'].endswith('(arm64)'))
         legacy = next(row for row in self.jobs[100] if row['name'].endswith('(arm64)'))
         legacy['steps'] = copy.deepcopy(current['steps'])

@@ -31,7 +31,8 @@ from registry_transfer import checked_digest
 REPOSITORY = 'brspoon/keep'
 WORKFLOW = '.github/workflows/image.yml'
 ARCHES = ('amd64', 'arm64')
-SCHEMA = 'keep.validated-native-build.v1'
+SCHEMA = 'keep.validated-native-build.v2'
+LEGACY_SCHEMA = 'keep.validated-native-build.v1'
 PROVENANCE_SCHEMA = 'keep.main-validation-provenance.v1'
 INDEX_LIMIT = 128 * 1024
 ZIP_LIMIT = 512 * 1024
@@ -50,10 +51,6 @@ NATIVE_STEPS = (
     'Smoke-test packaged web and worker with durable data',
     'Exercise portable installation, restore and failed-upgrade recovery',
     'Exercise one-command installation and owner-preserving reruns',
-    'Set up the optional host helper runtime',
-    'Preload pinned isolated native maintenance tooling',
-    'Exercise the real optional maintenance lifecycle on the native architecture',
-    'Preserve native maintenance delivery evidence',
     'Capture verified vendor evidence and Scout assessment',
     'Inventory installed notices and inspect every image layer',
     'Scan candidate without suppressions',
@@ -64,6 +61,12 @@ NATIVE_STEPS = (
     'Obtain matching sources for every installed OS package',
     'Package sources and notices for the exact tested runtime',
     'Print source bundle manifest and compact summary',
+)
+LEGACY_NATIVE_STEPS = NATIVE_STEPS + (
+    'Set up the optional host helper runtime',
+    'Preload pinned isolated native maintenance tooling',
+    'Exercise the real optional maintenance lifecycle on the native architecture',
+    'Preserve native maintenance delivery evidence',
 )
 RETAIN_STEP = 'Retain exact tested image, sources and original evidence'
 INDEX_STEP = 'Retain immutable validation index'
@@ -159,7 +162,7 @@ def job_name(arch):
     return f'image / image ({arch})'
 
 
-def job_success(job, *, native=False):
+def job_success(job, *, native=False, schema=SCHEMA):
     if job.get('status') != 'completed' or job.get('conclusion') != 'success':
         raise ValueError('A required validation job did not succeed')
     if native:
@@ -167,13 +170,14 @@ def job_success(job, *, native=False):
         if not isinstance(steps, list):
             raise ValueError('Native validation steps are unavailable')
         by_name = {step.get('name'): step for step in steps}
-        for name in (*NATIVE_STEPS, RETAIN_STEP, INDEX_STEP):
+        required = LEGACY_NATIVE_STEPS if schema == LEGACY_SCHEMA else NATIVE_STEPS
+        for name in (*required, RETAIN_STEP, INDEX_STEP):
             step = by_name.get(name, {})
             if step.get('status') != 'completed' or step.get('conclusion') != 'success':
                 raise ValueError('Native validation gate did not succeed: ' + name)
 
 
-def latest_job(jobs, run, name):
+def latest_job(jobs, run, name, *, schema=SCHEMA):
     matches = [job for job in jobs if job.get('name') == name]
     if not matches:
         raise ValueError('Missing required main validation job: ' + name)
@@ -186,7 +190,7 @@ def latest_job(jobs, run, name):
     newest = [job for job in matches if job['run_attempt'] == attempt]
     if len(newest) != 1:
         raise ValueError('Duplicate required main validation job: ' + name)
-    job_success(newest[0], native=name.startswith('image / '))
+    job_success(newest[0], native=name.startswith('image / '), schema=schema)
     return newest[0]
 
 
@@ -255,13 +259,18 @@ def inspect_image(arch, config=None):
     return digest
 
 
-def input_paths(arch):
+def input_paths(arch, *, schema=SCHEMA):
     version, _ = context()
     source = f'distribution/keep-{version}-source-materials-{arch}.tar.gz'
-    return [f'keep-tested-{arch}.tar', source, source + '.sha256',
+    paths = [f'keep-tested-{arch}.tar', source, source + '.sha256',
             *materials.evidence_names(arch), f'portable-recovery-{arch}.json',
-            f'installer-trial-{arch}.json', f'maintenance-native-{arch}.json',
+            f'installer-trial-{arch}.json',
             f'distribution/source-bundle-{arch}.json']
+    if schema == LEGACY_SCHEMA:
+        paths.append(f'maintenance-native-{arch}.json')
+    elif schema != SCHEMA:
+        raise ValueError('Unsupported validation evidence layout')
+    return paths
 
 
 def regular(path, limit=ASSET_LIMIT):
@@ -310,7 +319,7 @@ def upload(release, path, name):
     return result
 
 
-def native_job(run, arch, attempt, *, job_id=None, completed=True):
+def native_job(run, arch, attempt, *, job_id=None, completed=True, schema=SCHEMA):
     path = f"/actions/runs/{run['id']}/attempts/{positive(attempt, 'producer attempt')}/jobs"
     # GitHub's step metadata can lag the runner by a few seconds at the start
     # of retention. Retry only nonterminal metadata, never a failed/skipped gate.
@@ -325,7 +334,7 @@ def native_job(run, arch, attempt, *, job_id=None, completed=True):
             raise ValueError('Original native producer identity differs')
         positive(job.get('id'), 'native job ID')
         if completed:
-            job_success(job, native=True)
+            job_success(job, native=True, schema=schema)
             return job
         if job.get('status') != 'in_progress':
             raise ValueError('Candidate retention must run in its original native job')
@@ -357,7 +366,6 @@ def retain(arch):
         raise ValueError('Original source summary differs from the verified bundle')
     materials.portable_evidence(regular(f'portable-recovery-{arch}.json', JSON_LIMIT), arch, identity)
     materials.installer_evidence(regular(f'installer-trial-{arch}.json', JSON_LIMIT), arch, identity)
-    materials.maintenance_evidence(regular(f'maintenance-native-{arch}.json', JSON_LIMIT), arch, identity)
     release = candidate(run['id'])
     prefix = f"build-{run['id']}-{attempt}-{arch}--"
     with tempfile.TemporaryDirectory(prefix='keep-retain-image-') as directory:
@@ -480,7 +488,7 @@ def read_index(artifact):
 def validate_index(index, run, repository_id, artifact, arch):
     version, revision = context()
     attempt = artifact_metadata(artifact, run, repository_id, arch)
-    if (not isinstance(index, dict) or index.get('schema') != SCHEMA or index.get('repository') != REPOSITORY or
+    if (not isinstance(index, dict) or index.get('schema') not in (SCHEMA, LEGACY_SCHEMA) or index.get('repository') != REPOSITORY or
             index.get('version') != version or index.get('revision') != revision or index.get('architecture') != arch):
         raise ValueError('Original validation index source identity differs')
     checked_digest(index.get('config_digest'))
@@ -488,15 +496,15 @@ def validate_index(index, run, repository_id, artifact, arch):
     if (build.get('run_id') != run['id'] or build.get('run_attempt') != attempt or
             build.get('workflow_id') != run['workflow_id'] or build.get('job_name') != job_name(arch)):
         raise ValueError('Original validation index producer differs')
-    native_job(run, arch, attempt, job_id=positive(build.get('job_id'), 'native job ID'))
-    newest = latest_job(pages(f"/actions/runs/{run['id']}/jobs?filter=all", 'jobs'), run, job_name(arch))
+    native_job(run, arch, attempt, job_id=positive(build.get('job_id'), 'native job ID'), schema=index['schema'])
+    newest = latest_job(pages(f"/actions/runs/{run['id']}/jobs?filter=all", 'jobs'), run, job_name(arch), schema=index['schema'])
     if newest.get('id') != build['job_id'] or newest.get('run_attempt') != attempt:
         raise ValueError('Immutable index does not belong to the latest native validation job')
     release = candidate(run['id'])
     if index.get('candidate') != {'id': release['id'], 'tag_name': release['tag_name']}:
         raise ValueError('Original candidate draft identity differs')
     records = index.get('assets')
-    expected = set(input_paths(arch))
+    expected = set(input_paths(arch, schema=index['schema']))
     if (not isinstance(records, list) or len(records) != len(expected) or
             any(not isinstance(row, dict) for row in records) or {row.get('path') for row in records} != expected):
         raise ValueError('Original image, source or evidence inventory is incomplete')
@@ -525,7 +533,9 @@ def check():
     rows = pages(f"/actions/runs/{run['id']}/artifacts", 'artifacts')
     for arch in ARCHES:
         _, artifact = select_artifact(rows, run, repository_id, arch)
-        validate_index(read_index(artifact), run, repository_id, artifact, arch)
+        index = read_index(artifact)
+        require_current_layout(index)
+        validate_index(index, run, repository_id, artifact, arch)
     print('Selected current-main validation completed all required gates and retains both native indexes.')
 
 
@@ -534,10 +544,17 @@ def provenance(arch, index, artifact):
             'artifact': {key: artifact[key] for key in ('id', 'name', 'size_in_bytes', 'digest', 'workflow_run', 'expired')}}
 
 
-def verify_provenance(proof, arch, config):
+def require_current_layout(index):
+    if not isinstance(index, dict) or index.get('schema') != SCHEMA:
+        raise ValueError('Current publication requires the v2 validation evidence layout')
+
+
+def verify_provenance(proof, arch, config, *, allow_legacy=False):
     if (not isinstance(proof, dict) or proof.get('schema') != PROVENANCE_SCHEMA or proof.get('architecture') != arch):
         raise ValueError('Require original main validation provenance')
     index = proof.get('index', {})
+    if not allow_legacy:
+        require_current_layout(index)
     selected = positive(os.environ.get('KEEP_VALIDATION_RUN_ID'), 'selected validation run ID')
     if index.get('build', {}).get('run_id') != selected or index.get('config_digest') != config:
         raise ValueError('Main validation provenance differs from selected run or tested image config')
@@ -565,7 +582,9 @@ def restore(arch):
     run, repository_id = origin(os.environ.get('KEEP_VALIDATION_RUN_ID'))
     rows = pages(f"/actions/runs/{run['id']}/artifacts", 'artifacts')
     _, artifact = select_artifact(rows, run, repository_id, arch)
-    index = validate_index(read_index(artifact), run, repository_id, artifact, arch)
+    original = read_index(artifact)
+    require_current_layout(original)
+    index = validate_index(original, run, repository_id, artifact, arch)
     with tempfile.TemporaryDirectory(prefix='keep-restore-validation-') as directory:
         stage = Path(directory)
         for row in index['assets']:
@@ -586,7 +605,6 @@ def restore(arch):
         materials.bundle(arch, verify_files=True)
         materials.portable_evidence(Path(f'portable-recovery-{arch}.json'), arch, index)
         materials.installer_evidence(Path(f'installer-trial-{arch}.json'), arch, index)
-        materials.maintenance_evidence(Path(f'maintenance-native-{arch}.json'), arch, index)
         subprocess.run(['docker', 'image', 'load', '--input', str(stage / f'keep-tested-{arch}.tar')], check=True)
         inspect_image(arch, index['config_digest'])
         verify_files(index, arch)

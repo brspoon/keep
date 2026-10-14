@@ -138,7 +138,7 @@ def expected_paths(version, arch, *, legacy=False, maintenance=None):
              *builds.materials.evidence_names(arch), f'portable-recovery-{arch}.json',
              f'installer-trial-{arch}.json', f'distribution/source-bundle-{arch}.json'}
     if maintenance is None:
-        maintenance = not legacy
+        maintenance = False
     if maintenance:
         paths.add(f'maintenance-native-{arch}.json')
     if legacy:
@@ -155,7 +155,9 @@ def asset_snapshot(assets, run_id, attempt):
         if not match or int(match[1]) > attempt:
             raise ValueError('Candidate contains an unknown asset namespace')
         arch, basename = match[2], match[3]
-        fixed = {PurePosixPath(path).name for path in expected_paths('0.0.0', arch)
+        # Historical helper evidence remains an authenticated asset namespace;
+        # accepting its name does not make an incomplete index usable.
+        fixed = {PurePosixPath(path).name for path in expected_paths('0.0.0', arch, maintenance=True)
                  if 'keep-0.0.0-source-materials-' not in path}
         source = re.fullmatch(rf'keep-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))-source-materials-{arch}\.tar\.gz(?:\.sha256)?', basename)
         if (basename not in fixed and source is None) or asset.get('state') != 'uploaded':
@@ -237,7 +239,7 @@ def native_profile(job):
                          if name not in MAINTENANCE_STEPS | {LOADER_STEP, CURRENT_ACCEPTANCE_STEP}) + (LEGACY_ACCEPTANCE_STEP,)
     elif LOADER_STEP in by_name and CURRENT_ACCEPTANCE_STEP in by_name and LEGACY_ACCEPTANCE_STEP not in by_name:
         profile = 'current' if maintenance else 'pre-maintenance'
-        required = tuple(name for name in builds.NATIVE_STEPS if maintenance or name not in MAINTENANCE_STEPS)
+        required = builds.LEGACY_NATIVE_STEPS if maintenance else builds.NATIVE_STEPS
     else:
         raise ValueError('Unknown or incomplete native validation profile')
     for name in (*required, builds.RETAIN_STEP, builds.INDEX_STEP):
@@ -264,6 +266,7 @@ def usable(run, release, artifacts, assets):
     maintenance = profiles == {'current'}
     available = True
     versions = set()
+    schemas = set()
     for arch in builds.ARCHES:
         matches = [row for row in artifacts if row['name'].endswith('-' + arch)]
         job = selected[builds.job_name(arch)]
@@ -276,7 +279,8 @@ def usable(run, release, artifacts, assets):
         if not isinstance(index, dict):
             raise ValueError('Usable validation index is malformed')
         version = index.get('version', '')
-        if (not isinstance(version, str) or not VERSION.fullmatch(version) or index.get('schema') != builds.SCHEMA or
+        schema = index.get('schema')
+        if (not isinstance(version, str) or not VERSION.fullmatch(version) or schema not in (builds.SCHEMA, builds.LEGACY_SCHEMA) or
                 index.get('repository') != REPOSITORY or index.get('revision') != run['head_sha'] or
                 index.get('architecture') != arch or
                 index.get('build') != {'run_id': run['id'], 'run_attempt': job['run_attempt'],
@@ -284,6 +288,9 @@ def usable(run, release, artifacts, assets):
                                        'workflow_id': run['workflow_id']} or
                 index.get('candidate') != {'id': release['id'], 'tag_name': release['tag_name']}):
             raise ValueError('Usable validation index source or producer binding differs')
+        if schema == builds.SCHEMA and profiles != {'pre-maintenance'}:
+            raise ValueError('The v2 evidence layout requires the current native validation profile')
+        schemas.add(schema)
         builds.checked_digest(index.get('config_digest'))
         records = index.get('assets')
         expected = expected_paths(version, arch, legacy=legacy, maintenance=maintenance)
@@ -312,9 +319,11 @@ def usable(run, release, artifacts, assets):
         versions.add(version)
     if available and len(versions) != 1:
         raise ValueError('Native indexes disagree on the version')
-    # Authenticate historical storage without allowing it to satisfy the
-    # current maintenance qualification or promotion contract.
-    return available and maintenance
+    if len(schemas) > 1:
+        raise ValueError('Native indexes disagree on the evidence layout')
+    # V1 storage remains protected as historical fallback. Only complete v2
+    # indexes are usable for the current publication contract.
+    return available and schemas == {builds.SCHEMA}
 
 
 def snapshot(release, run, artifacts, assets):

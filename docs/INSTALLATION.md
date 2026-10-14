@@ -30,7 +30,7 @@ is missing or unusable. It does not install prerequisites or change Docker's
 permissions automatically. See [missing prerequisite help](#missing-prerequisites).
 
 Keep starts on your trusted local network. Git, a domain, and a reverse proxy
-are not required. The installation uses the prebuilt `brspoon/keep:2.26.2` image
+are not required. The installation uses the prebuilt `brspoon/keep:2.27.0` image
 for both the web app and worker, with a shared `keep-data` volume. Docker selects
 the amd64 or arm64 image for your server.
 
@@ -43,13 +43,13 @@ are optional alternatives; they are not additional steps for a default install.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.ps1 | iex
 ```
 
 The installer checks prerequisites, downloads the release files into your home
@@ -125,13 +125,13 @@ server. You can also choose another available port or installation directory:
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.sh | sh -s -- --bind-address 192.168.1.100 --port 5001 --directory "$HOME/keep"
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.ps1'))) --bind-address 192.168.1.100 --port 5001 --directory "$HOME\keep"
 ```
 
 Replace the example address with your server's address. If automatic detection
@@ -150,7 +150,7 @@ The commands above execute a versioned installation script. To review the Linux/
 macOS launcher first, download the same file, read it, then run it:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.sh -o install.sh
 less install.sh
 sh install.sh
 ```
@@ -159,7 +159,7 @@ On Windows, fetch the PowerShell launcher into a variable, inspect it, then
 execute that exact text:
 
 ```powershell
-$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1'
+$installer = irm 'https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.ps1'
 $installer
 & ([scriptblock]::Create($installer))
 ```
@@ -200,13 +200,13 @@ HTTP. Replace the example hostname with the hostname configured in your proxy.
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.sh | sh -s -- --url https://keep.example.com
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.sh | sh -s -- --url https://keep.example.com
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.26.2/install.ps1'))) --url https://keep.example.com
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/brspoon/keep/2.27.0/install.ps1'))) --url https://keep.example.com
 ```
 
 HTTPS mode binds the app to `127.0.0.1:5000` by default and uses secure session
@@ -237,9 +237,15 @@ and configure HSTS at the proxy.
 
 ## Upgrades and source builds
 
-Owners can install updates or restart Keep from **Admin → About** after enrolling
-the [optional Linux maintenance helper](MAINTENANCE.md). It requires Python 3.12
-or newer on the host; the regular installer continues to support Python 3.9.
+**Admin → About** checks for releases and links to the
+[manual Docker upgrade guide](MIGRATION.md#upgrade-an-installation). Updates and
+restarts run through Docker on the host. The installer supports Python 3.9 or
+newer on Linux, macOS, and Windows; it does not install a host service or
+automatically upgrade an existing installation.
+
+If you previously enrolled a maintenance helper, follow the
+[retirement guide](MAINTENANCE.md) before upgrading. Finish or recover pending
+operations and preserve their state and backups.
 
 Before upgrading, restoring, or moving an existing installation, read the
 [backup and restore guide](PORTABLE_BACKUP.md) and the

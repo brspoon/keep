@@ -1,5 +1,6 @@
 """Owner controls, recorded state and safe support information for About."""
-from contextlib import closing
+from contextlib import closing, ExitStack
+from contextvars import copy_context
 import json
 from pathlib import Path
 import re
@@ -7,7 +8,7 @@ import sqlite3
 import time
 from tempfile import TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 import test_keep
 
@@ -53,6 +54,28 @@ class AboutRoutesTests(TestCase):
         navigation = re.search(r'<nav class="admin-nav".*?</nav>', page.data.decode(), re.S).group()
         self.assertEqual(re.findall(r'href="([^"]+)"', navigation)[-1], '/settings/about')
 
+    def test_about_keeps_release_checks_and_update_guide_without_execution_controls(self):
+        page=self.client.get('/settings/about').get_data(as_text=True)
+        self.assertIn('Check for updates',page)
+        self.assertIn('https://github.com/brspoon/keep/blob/main/docs/MIGRATION.md#upgrade-an-installation',page)
+        self.assertIn('Recent releases',page)
+        self.assertIn('Copy diagnostics',page)
+        for removed in ('maintenance-install','maintenance-restart','keep-maintenance.js',
+                        'keep-maintenance.css','maintenance-snapshot','Install update'):
+            self.assertNotIn(removed,page)
+
+    def test_retired_execution_endpoints_cannot_queue_or_modify_an_installation(self):
+        with closing(keep.attribution_db()) as db:
+            before='\n'.join(db.iterdump())
+        with patch.object(keep.requests,'get') as get,patch.object(keep.requests,'post') as post:
+            status=self.client.get('/settings/about/maintenance/status',headers=self.headers)
+            start=self.client.post('/settings/about/maintenance/start',json={'operation':'install'},headers=self.headers)
+        self.assertEqual(status.status_code,404)
+        self.assertEqual(start.status_code,404)
+        get.assert_not_called();post.assert_not_called()
+        with closing(keep.attribution_db()) as db:
+            self.assertEqual('\n'.join(db.iterdump()),before)
+
     def test_manual_check_is_durable_and_deduplicated_without_running_in_http(self):
         with patch.object(keep.release_updates.Store, 'check') as check:
             first = self.check()
@@ -65,6 +88,30 @@ class AboutRoutesTests(TestCase):
         self.assertEqual(first.json['snapshot']['check_state'], 'queued')
         self.assertFalse(first.json['snapshot']['can_check'])
         self.assertEqual(self.check('wrong').status_code, 403)
+
+    def test_manual_release_check_still_runs_with_the_ordinary_background_jobs(self):
+        self.assertEqual(self.check().status_code,202)
+        callbacks={'sync_plex_user_access':0,'expire_due_keeps':{'released':0,'missing':0,'failed':0},
+                   'queue_due_reminders':0,'reconcile_reminder_queue':None,'prune_notification_queue':0,
+                   'observe_notification_status':None,'process_digest':'disabled'}
+        with ExitStack() as stack:
+            check=stack.enter_context(patch.object(keep.release_updates.Store,'check',return_value={'status':'success'}))
+            mocked={name:stack.enter_context(patch.object(keep,name,return_value=result))
+                    for name,result in callbacks.items()}
+            stack.enter_context(patch.object(keep.time,'monotonic',return_value=1000))
+            copy_context().run(keep.background_maintenance_once,{'plex_sync':0,'reminder_scan':None})
+        check.assert_called_once_with(force=True)
+        self.assertNotIn('release-check',keep.job_store().pending())
+        self.assertEqual(keep.job_store().records()['release-check']['status'],'success')
+        for name in ('expire_due_keeps','queue_due_reminders','reconcile_reminder_queue','prune_notification_queue','process_digest'):
+            mocked[name].assert_called_once()
+
+    def test_worker_startup_recovers_notifications_and_interrupted_jobs(self):
+        runtime,jobs=Mock(),Mock()
+        sequence=Mock();sequence.attach_mock(runtime.recover_after_lock,'recover');sequence.attach_mock(jobs.interrupt_running,'interrupt')
+        with patch.object(keep,'notification_runtime',return_value=runtime),patch.object(keep,'job_store',return_value=jobs):
+            self.assertIsNone(keep.worker_startup_recovery())
+        self.assertEqual(sequence.mock_calls,[call.recover(),call.interrupt()])
 
     def test_claimed_manual_check_reports_running_while_its_request_remains_durable(self):
         self.assertEqual(self.check().status_code, 202)

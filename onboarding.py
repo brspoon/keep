@@ -10,9 +10,9 @@ import re
 import secrets
 import sqlite3
 import time
-from contextlib import contextmanager,nullcontext
+from contextlib import contextmanager
 from pathlib import Path
-import maintenance_app
+import helper_retirement
 
 TTL = 600
 
@@ -22,17 +22,16 @@ def digest(value):
 
 
 class Onboarding:
-    def __init__(self,path,legacy_owner='',*,initialize=True,maintenance_store=None):
+    def __init__(self,path,legacy_owner='',*,initialize=True):
         self.path=path
-        self.maintenance=maintenance_store or maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
         if initialize:
-            with self.maintenance.startup_schema(Path(__file__).with_name('VERSION').read_text().strip()):
-                self._initialize_schema(legacy_owner)
+            self._initialize_schema(legacy_owner)
 
     def _initialize_schema(self,legacy_owner):
+        helper_retirement.check_retired_helper_state(root=helper_retirement.FIXED_ROOT)
         if legacy_owner and not re.fullmatch(r'[1-9][0-9]*', legacy_owner):
             raise ValueError('PLEX_OWNER_ID must be a positive numeric Plex account ID')
-        with self.db(_schema=True) as db:
+        with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, complete INTEGER NOT NULL DEFAULT 0)')
             db.execute('CREATE TABLE IF NOT EXISTS installation_metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
             db.execute("INSERT OR IGNORE INTO installation_metadata VALUES ('plex_client_id', ?)", (secrets.token_urlsafe(24),))
@@ -46,19 +45,19 @@ class Onboarding:
                 db.execute('DELETE FROM bootstrap')
 
     @contextmanager
-    def db(self,write=True,*,authority=False,_schema=False):
-        lease=self.maintenance.work(authority=authority) if write and not _schema else nullcontext()
-        with lease:
-            uri=Path(self.path).absolute().as_uri()+'?mode=ro'
-            db=sqlite3.connect(self.path,timeout=10) if write else sqlite3.connect(uri,uri=True,timeout=10)
-            try:
-                with db:
-                    if write:
-                        db.execute('PRAGMA secure_delete=ON')
-                        db.execute('BEGIN IMMEDIATE')
-                    yield db
-            finally:
-                db.close()
+    def db(self,write=True,*,authority=False):
+        if write and authority:
+            helper_retirement.check_retired_helper_state(root=helper_retirement.FIXED_ROOT)
+        uri=Path(self.path).absolute().as_uri()+'?mode=ro'
+        db=sqlite3.connect(self.path,timeout=10) if write else sqlite3.connect(uri,uri=True,timeout=10)
+        try:
+            with db:
+                if write:
+                    db.execute('PRAGMA secure_delete=ON')
+                    db.execute('BEGIN IMMEDIATE')
+                yield db
+        finally:
+            db.close()
 
     def owner(self):
         with self.db(write=False) as db:
@@ -139,11 +138,10 @@ if __name__ == '__main__':
     os.umask(0o077)
     path = os.environ.get('KEEP_DB_PATH', '/app/data/keep.sqlite3')
     try:
-        store=maintenance_app.Store(root=maintenance_app.FIXED_ROOT)
-        with store.work(authority=True):
-            os.makedirs(os.path.dirname(os.path.abspath(path)),exist_ok=True)
-            print(Onboarding(path,os.environ.get('PLEX_OWNER_ID',''),maintenance_store=store).issue())
-    except maintenance_app.MaintenanceError:
-        parser.exit(1,'Keep maintenance is in progress. Try again after it finishes.\n')
+        helper_retirement.check_retired_helper_state(root=helper_retirement.FIXED_ROOT)
+        os.makedirs(os.path.dirname(os.path.abspath(path)),exist_ok=True)
+        print(Onboarding(path,os.environ.get('PLEX_OWNER_ID','')).issue())
+    except helper_retirement.HelperRetirementError:
+        parser.exit(1,'The retired maintenance helper has unresolved state. Stop it and finish or recover its operation before continuing.\n')
     except ValueError as error:
         parser.exit(1, str(error) + '\n')

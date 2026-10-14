@@ -1,124 +1,44 @@
-# In-app updates and restarts
+# Maintenance helper retirement
 
-An enrolled installation lets the owner use **Admin → About → Install update**
-or **Restart**. Updates select the latest verified stable Keep release. Keep
-finishes active work, saves its database and settings, and restarts both services
-together. If activation fails, it restores the matching previous image,
-database, and settings before opening the app again.
+Keep 2.27.0 removes the host maintenance helper and the in-app **Install update**
+and **Restart** controls. **Admin → About**
+still checks for releases and links to the [manual Docker upgrade guide](MIGRATION.md#upgrade-an-installation).
+New installations do not need helper enrollment or a host service.
 
-The optional helper runs on the Docker host. The app containers do not receive
-the Docker socket. Installing Keep alone does not enroll or start this helper.
+Before upgrading an earlier enrolled installation, finish or recover its current
+operation using the installed release and its original recovery procedures.
+A queued, claimed, running, or held request, a closed maintenance barrier, or an
+unresolved host operation is a reason to hold the upgrade. Do not manually restart
+both containers in the middle of an operation or stop its helper before its
+recovery is resolved. If its state is corrupt or cannot be reconciled, preserve
+that evidence and the matching recovery point for investigation.
 
-## Requirements
-
-The supported host layout is Linux with a local Docker Engine, Compose v2,
-Python 3.12 or newer, and the standard Keep Compose project. Both Keep services
-must share one local named data volume and use the same published image.
-The operator running the helper must own the installation and private state
-and have access to that local Docker engine.
-
-Custom Compose layouts need a separately reviewed local adapter. Remote Docker
-engines, extra containers writing to the data volume, and unverified image
-sources cannot be enrolled. macOS and Windows Docker Desktop maintenance is
-not yet supported; their normal installation and manual upgrades remain available.
-
-## Stage the helper
-
-For a new installation, add `--maintenance-helper` to the Python installer:
+Once the helper is idle and the completed operation has reopened normal app
+access, stop and disable its configured worker before changing the app image.
+For the user service from the earlier Linux guide, inspect the unit first and
+then run as its enrolled user:
 
 ```sh
-python3 scripts/install_keep.py --start --maintenance-helper --directory /srv/keep
-```
-
-For an existing installation, first upgrade using the
-[manual upgrade guide](MIGRATION.md#upgrade-an-installation). Then run the same
-installer with the optional flag. It preserves the existing owner, database,
-version, and configuration and stages the helper source from the installed
-release's immutable GitHub assets. It does not enroll the installation.
-
-The installer prints the exact helper revision directory under
-`.maintenance-host/releases/`. Keep that path for the commands below. A release
-without the helper asset cannot stage it.
-
-## Enroll the installation
-
-Finish Plex owner setup in Keep first. Resolve Python and Docker to their actual
-absolute executable paths; a symlink launcher is not accepted. Installation
-configuration files must belong to the operator and be readable only by that
-operator. Set the paths, context, project, and volume to the values from the
-actual installation.
-
-For the standard `/srv/keep` installation, an enrollment command has this form:
-
-```sh
-/usr/bin/python3.12 /srv/keep/.maintenance-host/releases/<revision>/host_cli.py enroll \
-  --state /srv/keep/.maintenance-host --installation /srv/keep \
-  --docker-executable /usr/bin/docker --docker-config /home/keep-operator/.docker \
-  --context default --project keep --volume keep_keep-data
-```
-
-The helper verifies the local context, services, volume, released image, and
-active owner before creating an installation key. The key is stored privately;
-it is not printed or added to `.env` or service arguments. A changed context,
-owner, image, or configuration requires attention instead of automatic adoption.
-
-Check enrollment and one foreground poll:
-
-```sh
-/usr/bin/python3.12 /srv/keep/.maintenance-host/releases/<revision>/host_cli.py status --state /srv/keep/.maintenance-host
-/usr/bin/python3.12 /srv/keep/.maintenance-host/releases/<revision>/host_cli.py worker --state /srv/keep/.maintenance-host --once
-```
-
-## Run the helper
-
-The foreground worker uses the same command without `--once`. It polls every
-15 seconds and checks for newer stable releases at most hourly. Use one worker
-per installation.
-
-To run it with the enrolled operator's systemd user service, save this as
-`~/.config/systemd/user/keep-maintenance.service`, mode `0600`. Replace the
-Python executable and revision path with the verified values:
-
-```ini
-[Unit]
-Description=Keep maintenance helper
-
-[Service]
-Type=simple
-WorkingDirectory=/srv/keep
-ExecStart=/usr/bin/python3.12 /srv/keep/.maintenance-host/releases/<revision>/host_cli.py worker --state /srv/keep/.maintenance-host
-Restart=on-failure
-RestartSec=15
-UMask=0077
-
-[Install]
-WantedBy=default.target
-```
-
-Then run as that operator:
-
-```sh
-systemctl --user daemon-reload
-systemctl --user enable --now keep-maintenance.service
 systemctl --user status keep-maintenance.service
+systemctl --user cat keep-maintenance.service
+systemctl --user disable --now keep-maintenance.service
+systemctl --user is-active keep-maintenance.service
 ```
 
-A user service follows the user's service manager. Running continuously without
-a login needs an operator decision about systemd lingering or a system service.
-The installer does not change either setting.
+Use the actual service name or supervisor configuration if yours differs.
+Confirm the worker has stopped and cannot restart during the upgrade. Keep does
+not stop or remove an existing host service for you.
 
-## Interrupted maintenance
+Preserve the data volume's `/app/data/.maintenance` directory, the installation's
+`.maintenance-host` directory, enrollment keys, request journals, deployment
+configuration, database backups, and recovery image records. Keep the prior image
+and the complete matched recovery point until the upgrade is verified. The new
+app checks legacy maintenance state before changing database schemas and refuses
+startup when an operation remains unresolved or its records are unsafe or
+inconsistent. It does not delete those records or run the old helper.
 
-About shows the recorded operation and reconnects after a restart. If the
-connection drops after a request, refresh its status before trying again.
-The helper retains the same request and recovery journal across restarts.
-After a completed update begins admitting new work, recovery preserves those
-new writes and never restores the older database.
-
-If an operation needs attention, preserve its journal, keys, database backups,
-configuration, and image archives. Stop the helper service before changing its
-source or service definition. Do not delete its state to clear an operation.
-
-Manual upgrades remain available when the helper is not configured. Existing
-external update tools must use a reviewed adapter for the same maintenance
-barrier; an independent restart during an in-app operation is unsafe.
+Do not erase maintenance state, replace a corrupt record, or remove a pending
+request to bypass the startup hold. A stopped host worker alone does not establish
+that the app's recovery state is safe. Finish recovery with the previous release,
+then retry the manual upgrade with the original owner, configuration, and data.
+Use the [backup and restore guide](PORTABLE_BACKUP.md) to protect the recovery point.

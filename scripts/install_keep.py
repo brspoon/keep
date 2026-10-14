@@ -2,10 +2,6 @@
 """Install Keep's Docker services, or prepare their private configuration."""
 
 import argparse
-import gzip
-import hashlib
-import io
-import tarfile
 import ipaddress
 import json
 import os
@@ -35,7 +31,7 @@ IMAGE_RE = re.compile(
     r"^(?:[A-Za-z0-9._-]+(?::[0-9]+)?/)?[A-Za-z0-9._/-]+"
     r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}|@sha256:[a-fA-F0-9]{64})$"
 )
-RELEASE_VERSION = "2.26.2"
+RELEASE_VERSION = "2.27.0"
 RELEASE_BASE = f"https://raw.githubusercontent.com/brspoon/keep/{RELEASE_VERSION}/"
 MANAGED_KEYS = ("KEEP_URL", "FLASK_SECRET_KEY", "KEEP_WEBHOOK_SECRET", "KEEP_IMAGE",
                 "KEEP_TRANSPORT_MODE", "KEEP_BIND_ADDRESS", "KEEP_PORT")
@@ -848,138 +844,6 @@ def start_installation(directory, *, requested_url=None, requested_image=None, b
         os.close(lock_fd)
 
 
-
-HELPER_FILES = ('docker_adapter.py', 'helper_bundle.py', 'host_cli.py', 'host_engine.py',
-    'host_mailbox.py', 'maintenance_protocol.py', 'private_store.py', 'recovery_set.py',
-    'release_resolver.py', 'volume_worker.py', 'windows_native.py')
-HELPER_LIMIT = 4 * 1024 * 1024
-
-
-def _helper_json(body):
-    def fields(pairs):
-        result = {}
-        for name, value in pairs:
-            if name in result:
-                raise InstallError('helper source contains duplicate metadata')
-            result[name] = value
-        return result
-    return json.loads(body, object_pairs_hook=fields,
-        parse_constant=lambda value: (_ for _ in ()).throw(InstallError('invalid helper source metadata')))
-
-
-def _helper_fetch(url, limit):
-    from urllib.parse import urlsplit
-    hosts = {'api.github.com', 'github.com', 'release-assets.githubusercontent.com'}
-    def allowed(target):
-        parsed = urlsplit(target)
-        if (parsed.scheme != 'https' or parsed.hostname not in hosts or parsed.port not in (None, 443)
-                or parsed.username is not None or parsed.password is not None or parsed.fragment):
-            raise InstallError('helper source transport destination is invalid')
-    class Redirects(HTTPRedirectHandler):
-        def redirect_request(self, request, fp, code, message, headers, new_url):
-            allowed(new_url)
-            return super().redirect_request(request, fp, code, message, headers, new_url)
-    from urllib.request import ProxyHandler
-    allowed(url)
-    opener = build_opener(ProxyHandler({}), Redirects())
-    deadline, body = time.monotonic() + 120, bytearray()
-    with opener.open(Request(url, headers={'User-Agent': 'Keep-installer', 'Accept-Encoding': 'identity'}), timeout=15) as response:
-        if response.status != 200 or response.headers.get('Content-Encoding', 'identity') != 'identity':
-            raise InstallError('helper source download is unavailable')
-        declared = response.headers.get('Content-Length')
-        if declared is not None and (not declared.isdecimal() or int(declared) > limit):
-            raise InstallError('helper source download exceeded its bound')
-        while True:
-            block = response.read(65536)
-            if not block:
-                break
-            body.extend(block)
-            if len(body) > limit or time.monotonic() > deadline:
-                raise InstallError('helper source download exceeded its bound')
-    return bytes(body)
-
-
-def stage_maintenance_helper(directory, version, fetch=None):
-    """Verified optional staging. Existing owner/data/config/enrollment stay intact."""
-    if sys.version_info < (3, 12):
-        raise InstallError('the optional maintenance helper requires Python 3.12 or newer')
-    fetch = fetch or _helper_fetch
-    base = 'https://github.com/brspoon/keep/releases/'
-    release = _helper_json(fetch('https://api.github.com/repos/brspoon/keep/releases/tags/' + version, 512 * 1024))
-    if (not isinstance(release, dict) or release.get('draft') is not False or release.get('prerelease') is not False
-            or release.get('immutable') is not True or release.get('tag_name') != version
-            or release.get('html_url') != base + 'tag/' + version or not release.get('published_at')):
-        raise InstallError('optional helper requires a finalized immutable Keep release')
-    assets = release.get('assets')
-    if not isinstance(assets, list) or len(assets) > 64:
-        raise InstallError('helper release asset inventory is invalid')
-    def asset(name, limit):
-        matches = [row for row in assets if isinstance(row, dict) and row.get('name') == name]
-        if len(matches) != 1:
-            raise InstallError('the installed release does not provide a maintenance helper')
-        row = matches[0]
-        if (type(row.get('size')) is not int or not 1 <= row['size'] <= limit
-                or not isinstance(row.get('digest'), str) or not re.fullmatch(r'sha256:[a-f0-9]{64}', row['digest'])):
-            raise InstallError('helper release source proof is unavailable')
-        body = fetch(base + 'download/' + version + '/' + name, limit)
-        if len(body) != row['size'] or 'sha256:' + hashlib.sha256(body).hexdigest() != row['digest']:
-            raise InstallError('helper release source bytes differ from their published proof')
-        return body, row['digest'][7:]
-    materials, _ = asset('keep-' + version + '-release-materials.json', 512 * 1024)
-    materials = _helper_json(materials)
-    revision = materials.get('revision') if isinstance(materials, dict) and materials.get('version') == version else None
-    if not isinstance(revision, str) or not re.fullmatch(r'[a-f0-9]{40}', revision):
-        raise InstallError('helper release revision proof is invalid')
-    name = 'keep-' + version + '-maintenance-helper.tar.gz'
-    body, digest = asset(name, HELPER_LIMIT)
-    checksum, _ = asset(name + '.sha256', 4096)
-    if checksum != (digest + '  ' + name + '\n').encode('ascii'):
-        raise InstallError('helper release checksum sidecar differs')
-    with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
-        expanded = stream.read(HELPER_LIMIT + 1024 * 1024 + 1)
-    if len(expanded) > HELPER_LIMIT + 1024 * 1024:
-        raise InstallError('expanded helper source exceeded its bound')
-    contents, prefix = {}, 'keep-maintenance-helper/'
-    allowed = {prefix + name for name in (*HELPER_FILES, 'MANIFEST.json')}
-    with tarfile.open(fileobj=io.BytesIO(expanded), mode='r:') as archive:
-        for member in archive:
-            if (not member.isfile() or member.name not in allowed or member.name in contents
-                    or not 0 < member.size <= 512 * 1024 or len(contents) >= len(allowed)):
-                raise InstallError('helper source archive contains an unexpected file')
-            with archive.extractfile(member) as stream:
-                data = stream.read(512 * 1024 + 1)
-            if len(data) != member.size:
-                raise InstallError('helper source archive is incomplete')
-            contents[member.name] = data
-    if set(contents) != allowed:
-        raise InstallError('helper source archive is incomplete')
-    manifest = _helper_json(contents.pop(prefix + 'MANIFEST.json'))
-    if (not isinstance(manifest, dict) or set(manifest) != {'format', 'version', 'revision', 'minimum_python', 'files'}
-            or manifest['format'] != 'keep.maintenance-helper-bundle.v1' or manifest['version'] != version
-            or manifest['revision'] != revision or manifest['minimum_python'] != '3.12'
-            or not isinstance(manifest['files'], dict) or set(manifest['files']) != set(HELPER_FILES)):
-        raise InstallError('helper source manifest differs from its release')
-    data_files = {filename: contents[prefix + filename] for filename in HELPER_FILES}
-    for filename, data in data_files.items():
-        declared = manifest['files'][filename]
-        if (not isinstance(declared, dict) or type(declared.get('bytes')) is not int
-                or declared != {'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}):
-            raise InstallError('helper source file differs from its proof')
-    state = _private_directory(Path(directory) / '.maintenance-host')
-    releases = _private_directory(state / 'releases')
-    staged = _private_directory(releases / revision)
-    proof = json.dumps({'format': manifest['format'], 'version': version, 'revision': revision,
-        'archive_sha256': digest, 'manifest': manifest}, sort_keys=True, separators=(',', ':')).encode('ascii')
-    for filename, data in {**data_files, 'bundle-proof.json': proof}.items():
-        path = staged / filename
-        if _check_regular(path, missing_ok=True) is not None:
-            if _read_regular(path) != data:
-                raise InstallError('existing helper source differs and was retained')
-        else:
-            _write_new(path, data)
-    return staged
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     if sys.version_info < (3, 9):
@@ -993,12 +857,7 @@ def main(argv=None):
     parser.add_argument("--env", type=Path, default=Path(".env"), help="configuration-only env file (default: .env)")
     parser.add_argument("--source-directory", type=Path, help="use VERSION and compose.yml from an authorized local release checkout")
     parser.add_argument("--skip-pull", action="store_true", help="use an already-present image for an offline installation or local candidate trial")
-    parser.add_argument("--maintenance-helper", action="store_true", help="stage the optional verified host helper; enrollment remains a separate local step (Python 3.12+)")
     args = parser.parse_args(argv)
-    if args.maintenance_helper and not args.start:
-        parser.error("--maintenance-helper requires --start")
-    if args.maintenance_helper and sys.version_info < (3, 12):
-        parser.exit(2, "The optional Keep maintenance helper requires Python 3.12 or newer. The normal installer still supports Python 3.9+.\n")
     if not args.start and not args.url:
         parser.error("--url is required unless --start is used")
     if not args.start and (args.bind_address or args.port is not None or args.source_directory or args.skip_pull):
@@ -1010,10 +869,6 @@ def main(argv=None):
             result = start_installation(args.directory, requested_url=args.url, requested_image=args.image,
                                         bind_address=args.bind_address, port=args.port,
                                         source_directory=args.source_directory, skip_pull=args.skip_pull)
-            if args.maintenance_helper:
-                staged = stage_maintenance_helper(result["directory"], result["version"])
-                print("Optional host helper source is verified and staged. Complete owner setup before local enrollment.")
-                print(f"Helper entry point: {staged / 'host_cli.py'}")
             print(f"Keep is healthy. Installation directory: {result['directory']}")
             if result["owner_exists"]:
                 print(f"Open {result['url']}{'/setup' if result.get('pending') else ''}")
@@ -1026,7 +881,7 @@ def main(argv=None):
         else:
             install(args.env, args.url, args.image)
             print(f"Keep configuration is ready at {args.env}; secrets were not displayed.")
-    except (InstallError, OSError, UnicodeError, ValueError, tarfile.TarError, EOFError) as error:
+    except (InstallError, OSError, UnicodeError, ValueError, EOFError) as error:
         parser.exit(2, f"Keep installation failed: {error}\n")
 
 
