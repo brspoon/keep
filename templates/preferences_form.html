@@ -1,12 +1,16 @@
 {% set prefix = preference_id_prefix|default('') %}
 {% set chosen_email_events = email_events|default(['MEDIA_ADDED_TO_COLLECTION', 'MEDIA_ABOUT_TO_BE_HANDLED']) %}
 {% set labels = event_labels|default({'MEDIA_ADDED_TO_COLLECTION': 'Leaving summaries', 'MEDIA_ABOUT_TO_BE_HANDLED': 'Seven-day reminders'}) %}
+{% macro selection_summary(count, total) -%}
+  {% if not total %}None available{% elif not count %}None selected{% elif count == total %}All {{ total }} selected{% else %}{{ count }} selected{% endif %}
+{%- endmacro %}
 {% if saved %}<div class="notice" role="status">Your preferences were saved.</div>{% endif %}
 {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
 <form class="notification-preferences" method="post" action="/preferences" data-save-key="preferences-email" data-notification-channel="email">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="action" value="email">
   {% if owner|default(false) %}<input type="hidden" name="email_event_present" value="1">{% endif %}
+  <div class="preferences-fields">
   <fieldset class="appearance-options" aria-describedby="{{ prefix }}appearance-help">
     <legend>Appearance</legend>
     <div class="appearance-choices">
@@ -19,17 +23,24 @@
   <h3>Email</h3>
   <div class="email">Account email<br><strong>{{ email or 'No email address available' }}</strong></div>
   <label class="choice"><input id="{{ prefix }}receive-email" type="checkbox" name="receive_email" value="1" data-channel-toggle {% if enabled %}checked{% endif %}>Receive email notifications</label>
-  {% if owner|default(false) %}<fieldset class="topics notification-events" data-channel-options {% if not enabled %}disabled{% endif %}>
+  {% if owner|default(false) %}<details class="preference-section" data-preference-section>
+    <summary><span>Events</span><span class="preference-selection" data-selection-summary>{{ selection_summary(labels|select('in', chosen_email_events)|list|length, labels|length) }}</span><svg class="row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <fieldset class="topics notification-events" data-channel-options {% if not enabled %}disabled{% endif %}>
     <legend>Events</legend>
     {% for event, label in labels.items() %}
     <label class="choice"><input type="checkbox" name="email_event" value="{{ event }}" {% if event in chosen_email_events %}checked{% endif %}>{{ label }}</label>
     {% endfor %}
-  </fieldset>{% endif %}
+    </fieldset>
+  </details>{% endif %}
+  <details class="preference-section" data-preference-section>
+    <summary><span>Collections</span><span class="preference-selection" data-selection-summary>{{ selection_summary(collections|select('in', selected)|list|length, collections|length) }}</span><svg class="row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
   <fieldset class="topics" id="{{ prefix }}email-topics" data-channel-options {% if not enabled %}disabled{% endif %}>
     <legend>Collections</legend>
     {% for collection_id, collection_name in collections.items() %}
     <label class="choice"><input type="checkbox" name="collection_id" value="{{ collection_id }}" {% if collection_id in selected %}checked{% endif %}>{{ collection_name.replace(' Leaving Plex Soon', '') }}</label>
     {% else %}<p class="help">No collections available.</p>{% endfor %}
   </fieldset>
-  <button class="save-button" type="submit">Save preferences</button>
+  </details>
+  </div>
+  <div class="preferences-actions"><button class="save-button" type="submit">Save preferences</button></div>
 </form>

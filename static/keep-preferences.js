@@ -2,7 +2,22 @@
 (() => {
   const channels = new WeakMap();
   const secrets = new WeakMap();
+  const sections = new WeakMap();
   function bind(container) {
+    container.querySelectorAll('[data-preference-section]').forEach(section => {
+      if (sections.has(section)) { sections.get(section)(); return; }
+      const summary = section.querySelector('[data-selection-summary]');
+      if (!summary) return;
+      const sync = () => {
+        const inputs = [...section.querySelectorAll('input[type="checkbox"]')];
+        const selected = inputs.filter(input => input.checked).length;
+        summary.textContent = !inputs.length ? 'None available' : !selected ? 'None selected' :
+          selected === inputs.length ? `All ${selected} selected` : `${selected} selected`;
+      };
+      sections.set(section, sync);
+      section.addEventListener('change', sync);
+      sync();
+    });
     container.querySelectorAll('[data-notification-channel]').forEach(form => {
       if (channels.has(form)) { channels.get(form)(); return; }
       const toggle = form.querySelector('[data-channel-toggle]');
@@ -48,7 +63,10 @@
   let generation = 0;
   let saving = false;
   let savedTheme = document.documentElement.dataset.theme || 'system';
-  const controls = () => [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)')].filter(item => !item.closest('[hidden]'));
+  const controls = () => [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary')].filter(item => {
+    const closed = item.closest('details:not([open])');
+    return !item.closest('[hidden]') && (!closed || closed.querySelector('summary') === item);
+  });
   const failure = message => {
     let error = content.querySelector('.request-error');
     if (!error) {

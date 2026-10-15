@@ -7,19 +7,30 @@ function fixture(fetcher, options={}) {
   let document;
   const el = (props={}) => ({listeners:{},hidden:false,disabled:false,...props,
     addEventListener(name, callback){(this.listeners[name] ||= []).push(callback);},
-    emit(name,event={}){for(const callback of this.listeners[name]||[]) callback(event);},
+    emit(name,event={}){for(const callback of this.listeners[name]||[]) callback(event);if(this.parent)this.parent.emit(name,event);},
     async fire(name,event={}){for(const callback of this.listeners[name]||[]) await callback(event);},
     focus(settings){document.activeElement=this;this.focusSettings=settings;},
-    closest(){return null;},setAttribute(){},append(child){this.child=child;}});
+    closest(selector){this.closestQueries ||= [];this.closestQueries.push(selector);return selector==='[hidden]'&&this.hidden?this:null;},
+    matches(selector){return selector===this.tagName?.toLowerCase();},setAttribute(){},append(child){this.child=child;}});
   const makeForm = (channel, enabled) => {
     const toggle=el({name:`receive_${channel}`,value:'1',type:'checkbox',checked:enabled});
-    const collection=el({name:channel==='email'?'collection_id':'pushover_collection_id',value:'1',type:'checkbox',checked:true});
-    const topic=el({name:channel==='email'?'email_event':'pushover_event',value:'MEDIA_ADDED_TO_COLLECTION',type:'checkbox',checked:true});
-    const groups=[collection,topic].map(input=>el({disabled:!enabled,inputs:[input],querySelectorAll(){return this.inputs.filter(i=>i.checked);}}));
+    const collectionInputs=(options.collectionChoices??[true]).map((checked,index)=>el({name:channel==='email'?'collection_id':'pushover_collection_id',value:String(index+1),type:'checkbox',checked}));
+    const topicInputs=(options.topicChoices??[true]).map((checked,index)=>el({name:channel==='email'?'email_event':'pushover_event',value:index===0?'MEDIA_ADDED_TO_COLLECTION':'MEDIA_ABOUT_TO_BE_HANDLED',type:'checkbox',checked}));
+    const groups=[collectionInputs,topicInputs].map(inputs=>el({disabled:!enabled,inputs,querySelectorAll(){return this.inputs.filter(i=>i.checked);}}));
+    const sections=groups.map(group=>{
+      const selection=el({textContent:''}),summary=el({tagName:'SUMMARY'});
+      const section=el({tagName:'DETAILS',open:false,group,selection,summary,
+        querySelector:s=>s==='[data-selection-summary]'?selection:s==='summary'?summary:null,
+        querySelectorAll:s=>s==='input[type="checkbox"]'?group.inputs:s==='input[type="checkbox"]:checked'?group.inputs.filter(input=>input.checked):[]});
+      summary.closest=selector=>selector==='details:not([open])'&&!section.open?section:null;
+      section.contains=item=>item===summary||group.inputs.includes(item);
+      for(const input of group.inputs){input.parent=section;input.closest=selector=>selector==='details:not([open])'&&!section.open?section:null;}
+      return section;
+    });
     const button=el({textContent:channel==='email'?'Save preferences':'Save Pushover'});
     const fields=[{name:'csrf_token',value:'synthetic-csrf'},{name:'action',value:channel},toggle];
     if(channel==='email') fields.push({name:'theme_mode',value:'system'});
-    const form=el({action:'http://localhost/preferences',getAttribute(name){return name==='action'?(this.actionAttribute??'http://localhost/preferences'):null;},channel,groups,toggle,button,fields,
+    const form=el({action:'http://localhost/preferences',getAttribute(name){return name==='action'?(this.actionAttribute??'http://localhost/preferences'):null;},channel,groups,sections,toggle,button,fields,
       querySelector(selector){return selector==='[data-channel-toggle]'?toggle:selector==='.save-button'?button:null;},
       querySelectorAll(selector){return selector==='[data-channel-options]'?groups:[];}});
     return form;
@@ -43,11 +54,11 @@ function fixture(fetcher, options={}) {
   const trigger=el(),close=el(),cancel=el(),title=el({id:'preferences-title'});
   const content=el({prepend(e){error=e;},
     querySelector(s){return s==='.request-error'?error:s==='form[data-notification-channel]'||s==='form'?forms.email:s==='.notice'&&html==='saved'?{}:null;},
-    querySelectorAll(s){return s==='[data-notification-channel]'?[forms.email,forms.push]:s==='[data-secret-control]'?[forms.key.control]:[];}});
+    querySelectorAll(s){return s==='[data-notification-channel]'?[forms.email,forms.push]:s==='[data-secret-control]'?[forms.key.control]:s==='[data-preference-section]'?forms.email.sections:[];}});
   Object.defineProperty(content,'innerHTML',{get:()=>html,set:value=>{html=value;forms=build();}});
   const dialog=el({open:false,showModal(){this.open=true;},close(){this.open=false;this.emit('close');},
     querySelector:s=>s==='.welcome-close'?close:cancel,
-    querySelectorAll:()=>[close,forms.email.toggle,forms.key.mode,cancel]});
+    querySelectorAll:selector=>[close,forms.email.toggle,forms.key.mode,...forms.email.sections.flatMap(section=>[...(selector.includes('summary')?[section.summary]:[]),...section.group.inputs]),forms.email.button,cancel].filter(control=>!control.disabled)});
   const window=el({location:{href:'http://localhost/',origin:'http://localhost'},keepApplyTheme(choice){themeCalls.push(choice);document.documentElement.dataset.theme=choice;}});
   const account={querySelector:s=>s==='.user-links'?{hidden:true}:trigger};
   document={activeElement:{},documentElement:{dataset:{theme:'system'},classList:{add(){},remove(){}}},
@@ -98,6 +109,38 @@ test('rebinding does not duplicate listeners or retained choices',()=>{
 test('page restoration reapplies both channel and secret mode state',()=>{
   const f=fixture(success,{fullPage:true});f.forms.push.toggle.checked=true;f.forms.push.groups[0].disabled=true;f.forms.key.mode.value='replace';f.window.emit('pageshow');assert.equal(f.forms.push.groups[0].disabled,false);assert.equal(f.forms.key.input.disabled,false);assert.equal(f.forms.key.replacement.hidden,false);
 });
+test('collapsed preference sections summarize available checkbox selections independently',()=>{
+  const f=fixture(success,{fullPage:true,collectionChoices:[true,true],topicChoices:[true,false]}),[collections,events]=f.forms.email.sections;
+  assert.equal(collections.open,false);assert.equal(events.open,false);
+  assert.equal(collections.selection.textContent,'All 2 selected');assert.equal(events.selection.textContent,'1 selected');
+  events.group.inputs[1].checked=true;events.group.inputs[1].emit('change');
+  assert.equal(events.selection.textContent,'All 2 selected');assert.equal(collections.selection.textContent,'All 2 selected');
+  collections.group.inputs.forEach(input=>{input.checked=false;input.emit('change');});
+  assert.equal(collections.selection.textContent,'None selected');assert.equal(events.selection.textContent,'All 2 selected');
+});
+test('an empty preference section reports that no choices are available',()=>{
+  const f=fixture(success,{fullPage:true,collectionChoices:[]});
+  assert.equal(f.forms.email.sections[0].selection.textContent,'None available');
+});
+test('section summaries rebind once and refresh restored selections without reopening sections',()=>{
+  const f=fixture(success,{fullPage:true,collectionChoices:[true,false]}),section=f.forms.email.sections[0];
+  f.window.keepBindNotificationPreferences(f.document);f.window.keepBindNotificationPreferences(f.document);
+  assert.equal(section.listeners.change.length,1);
+  section.group.inputs[1].checked=true;f.window.emit('pageshow');
+  assert.equal(section.selection.textContent,'All 2 selected');assert.equal(section.open,false);
+  section.group.inputs[0].checked=false;f.window.keepBindNotificationPreferences(f.document);
+  assert.equal(section.selection.textContent,'1 selected');assert.equal(section.listeners.change.length,1);
+});
+test('closed sections preserve their selected form values with email on or off',()=>{
+  const f=fixture(success,{fullPage:true,collectionChoices:[true,false,true],topicChoices:[false,true]}),{email}=f.forms;
+  for(const enabled of [true,false]){
+    email.toggle.checked=enabled;email.toggle.emit('change');
+    assert.ok(email.sections.every(section=>!section.open));
+    const data=f.data(email);
+    assert.deepEqual(data.getAll('collection_id'),['1','3']);
+    assert.deepEqual(data.getAll('email_event'),['MEDIA_ABOUT_TO_BE_HANDLED']);
+  }
+});
 test('saved keys stay hidden until replace is selected and switching away clears a typed key',()=>{
   const f=fixture(success,{fullPage:true}),key=f.forms.key;assert.equal(key.replacement.hidden,true);assert.equal(key.input.disabled,true);
   key.mode.value='replace';key.mode.emit('change');key.input.value='synthetic-new-key';assert.equal(key.input.disabled,false);
@@ -135,6 +178,15 @@ test('foreign form actions are refused before fetch or credential serialization'
 test('keyboard focus includes the secret mode select and wraps within the dialog',async()=>{
   const f=fixture(success);await f.click();f.document.activeElement=f.cancel;let prevented=false;f.dialog.emit('keydown',{key:'Tab',preventDefault(){prevented=true;}});assert.equal(prevented,true);assert.equal(f.document.activeElement,f.close);
   f.document.activeElement=f.forms.key.mode;prevented=false;f.dialog.emit('keydown',{key:'Tab',preventDefault(){prevented=true;}});assert.equal(prevented,false);
+});
+test('keyboard focus wraps to closed section summaries and includes their controls only while expanded',async()=>{
+  const f=fixture(success);await f.click();
+  const section=f.forms.email.sections[1];
+  f.cancel.hidden=true;f.forms.email.button.hidden=true;
+  const previous=()=>{f.document.activeElement=f.close;let prevented=false;f.dialog.emit('keydown',{key:'Tab',shiftKey:true,preventDefault(){prevented=true;}});assert.equal(prevented,true);};
+  previous();assert.equal(f.document.activeElement,section.summary);
+  section.open=true;previous();assert.equal(f.document.activeElement,section.group.inputs[0]);
+  section.open=false;previous();assert.equal(f.document.activeElement,section.summary);
 });
 
 test('the hidden action control cannot shadow the Preferences submission URL',async()=>{
