@@ -38,6 +38,42 @@ class Forms(HTMLParser):
             self.current = None
 
 
+class PreferenceSections(HTMLParser):
+    def __init__(self, html):
+        super().__init__()
+        self.sections, self.current = [], None
+        self.in_summary = False
+        self.in_selection = False
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == 'details' and 'data-preference-section' in values:
+            self.current = {'attrs': values, 'fields': [], 'summary': [], 'selection': []}
+            self.sections.append(self.current)
+        elif self.current:
+            if tag == 'summary':
+                self.in_summary = True
+            elif tag == 'span' and 'data-selection-summary' in values:
+                self.in_selection = True
+            elif tag == 'input':
+                self.current['fields'].append(values)
+
+    def handle_endtag(self, tag):
+        if tag == 'details':
+            self.current = None
+        elif tag == 'summary':
+            self.in_summary = False
+        elif tag == 'span':
+            self.in_selection = False
+
+    def handle_data(self, value):
+        if self.current and self.in_summary:
+            self.current['summary'].append(value)
+            if self.in_selection:
+                self.current['selection'].append(value)
+
+
 class NotificationAppRoutesTests(TestCase):
     def setUp(self):
         # Keep's shared test fixture already points at a temporary test database.
@@ -172,6 +208,39 @@ class NotificationAppRoutesTests(TestCase):
         self.login('8')
         self.assertEqual(self.client.get('/settings/notifications').status_code, 403)
         self.assertEqual(self.client.get('/settings/email').status_code, 403)
+
+    def test_preferences_sections_start_collapsed_with_summaries_for_the_displayed_choices(self):
+        for user_id in ('7', '8'):
+            self.login(user_id)
+            for path in ('/preferences', '/preferences?fragment=1'):
+                with self.subTest(user=user_id, path=path):
+                    response = self.client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    sections = PreferenceSections(response.text).sections
+                    self.assertEqual(len(sections), 2 if user_id == '7' else 1)
+                    names = []
+                    for section in sections:
+                        self.assertNotIn('open', section['attrs'])
+                        fields = section['fields']
+                        self.assertTrue(fields)
+                        name = fields[0]['name']
+                        names.append(name)
+                        self.assertTrue(all(field['name'] == name for field in fields))
+                        count = sum('checked' in field for field in fields)
+                        expected = 'None selected' if not count else f'All {count} selected' if count == len(fields) else f'{count} selected'
+                        self.assertEqual(''.join(section['selection']).strip(), expected)
+                        self.assertIn('Events' if name == 'email_event' else 'Collections', ''.join(section['summary']))
+                    self.assertEqual(names, ['email_event', 'collection_id'] if user_id == '7' else ['collection_id'])
+
+    def test_empty_collection_section_has_a_useful_initial_summary(self):
+        with patch.object(keep, 'get_collections', return_value={}):
+            response = self.client.get('/preferences?fragment=1')
+        self.assertEqual(response.status_code, 200)
+        collections = PreferenceSections(response.text).sections[-1]
+        self.assertNotIn('open', collections['attrs'])
+        self.assertEqual(collections['fields'], [])
+        self.assertEqual(''.join(collections['selection']).strip(), 'None available')
+        self.assertIn('No collections available.', response.text)
 
     def test_email_theme_and_events_save_atomically_without_changing_push(self):
         self.install()

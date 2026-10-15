@@ -84,6 +84,25 @@
 :is(.preferences-ui,.preferences-dialog) .notification-preferences .choice input { margin:0; }
 :is(.preferences-ui,.preferences-dialog) .notification-preferences .notification-secret { margin:0; }
 :is(.preferences-ui,.preferences-dialog) .notification-preferences .help { margin:0; color:var(--muted); font-size:13px; }
+.preferences-fields { display:grid; gap:12px; min-width:0; }
+.preference-section { min-width:0; border:1px solid var(--border); border-radius:10px; }
+.preference-section > summary { display:flex; align-items:center; gap:12px; min-height:48px; padding:10px 12px; box-sizing:border-box; list-style:none; cursor:pointer; border-radius:10px; font-size:13px; font-weight:650; }
+.preference-section > summary::-webkit-details-marker { display:none; }
+.preference-section > summary:hover { background:var(--surface-hover); }
+.preference-section > summary:focus-visible { outline-offset:-3px; }
+.preference-selection { margin-left:auto; color:var(--muted); font-size:12px; font-weight:400; text-align:right; }
+.preference-section .row-chevron { flex:none; color:var(--muted); }
+.preference-section[open] > summary .row-chevron { transform:rotate(180deg); }
+:is(.preferences-ui,.preferences-dialog) .preference-section .topics { padding:4px 12px 12px; }
+.preference-section .topics legend { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.preferences-actions { flex:none; padding-top:16px; border-top:1px solid var(--border); }
+.preferences-actions .save-button { width:100%; }
+.preferences-dialog[open] { display:flex; flex-direction:column; overflow:hidden; }
+.preferences-dialog > h2, .preferences-dialog > .preferences-cancel { flex:none; }
+.preferences-dialog #preferences-content { display:flex; flex-direction:column; min-height:0; }
+.preferences-dialog #preferences-content > :is(.notice,.error) { flex:none; }
+.preferences-dialog #preferences-content .notification-preferences { display:flex; flex-direction:column; min-height:0; }
+.preferences-dialog .preferences-fields { min-height:0; overflow-y:auto; overscroll-behavior-y:contain; padding:4px; margin:-4px; }
 .preferences-dialog #preferences-content { margin-top:20px; }
 .preferences-dialog .notification-preferences:first-child { margin-top:0; }
 :is(.preferences-ui,.preferences-dialog) .notification-personal-test { display:grid; gap:8px; margin-top:12px; }
@@ -107,6 +126,9 @@
 @media(max-width:440px) {
   .notifications-ui .notification-topics { grid-template-columns:1fr; }
   :is(.preferences-ui,.preferences-dialog) .notification-preferences .topics { grid-template-columns:1fr; }
+}
+@media(max-width:700px) {
+  .preferences-dialog { width:min(540px,calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding:20px 20px max(12px,env(safe-area-inset-bottom)); }
 }
 @media(prefers-reduced-motion:reduce) {
   :is(.preferences-ui,.preferences-dialog) .notification-preferences .topics { transition:none; }

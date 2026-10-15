@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.27.2 — 2026-10-14
+
+- Collapse Events and Collections in Preferences and show selection counts. Keep Save and Cancel visible while scrolling the settings.
+
 ## 2.27.1 — 2026-10-14
 
 - Move the Notifications summary to the top and keep Email and Pushover settings collapsed until opened. Show provider setup status and delivery review notices above email recipients.
