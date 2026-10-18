@@ -1,6 +1,6 @@
 {
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
-  "approval": "The October 7 verified-fixed review permits only the three exact Python 3.14.8-r0 Grype scopes below through October 20, 2026 UTC inclusive. Scout must report zero findings; complete raw Grype findings remain visible and every other finding blocks. Historical Python 3.14.7-r2 and zlib 1.3.2-r0 approvals are retired, preserved in Git and original release evidence, and authorize nothing in this policy. Fresh successful native qualification, verified source/license records and original-byte promotion revalidation are required. Stable promotion also requires a fresh recorded review of completed Docker Hub analysis showing zero findings for both exact native digests.",
+  "approval": "The October 18 verified-fixed review permits only the two exact Python 3.14.8-r0 Grype scopes below through November 1, 2026 UTC inclusive. Fresh complete native qualification at source revision 521c3376c058d0e2392e5b7ac2299666f82e5e3f passed in https://github.com/brspoon/keep/actions/runs/39150602670 (attempt 1) on amd64 and arm64. Scout must report zero findings; complete raw Grype findings remain visible and every other finding blocks. The unused tarfile scope and historical Python 3.14.7-r2 and zlib 1.3.2-r0 approvals are retired, preserved in Git and original release evidence, and authorize nothing in this policy. Verified source/license records, all runtime checks and original-byte promotion revalidation remain required. Stable promotion also requires a fresh recorded review of completed Docker Hub analysis showing zero findings for both exact native digests.",
   "reviewed_sources": {
     "Dockerfile": "adca63fb17a7345bbd97b2473b1e57f37157a2dd3c507f41459988d3845f2a79",
     "scripts/inspect_candidate.py": "b891ac18d88d613b790902c904c9d5fbe4ce5c4c71a7c578079b250392ecd397",
@@ -31,32 +31,18 @@
     "scripts/validated_build.py": "1f8baee9545f5157a7fbbd5ef23ad281f47d697551ffc70649428c87917e989f"
   },
   "exceptions": {
-    "CVE-2026-87910": {
-      "severity": "Medium",
-      "type": "apk",
-      "package": "python-3.14",
-      "version": "3.14.8-r0",
-      "status": "fixed",
-      "evidence": "The signed DHI Python 3.14.8-r0 APKs already supply the tarfile filter/link-fallback fix; exact fixed hunks from fb2f0bbc3b35264f09cc2cb2934b7987527a6bc2 are verified by scripts/python_security_patches.json. The corresponding loaded-runtime filter regression passes on native amd64 and arm64. Complete original Scout and unsuppressed Grype reports, all nine runtime probes, all three dependency families and complete matching-source/license gates were inspected for both architectures in https://github.com/brspoon/keep/actions/runs/37657188329 at source revision 6cf7c2ca4b5ae86d46bdf21cee41b27069702e6d. That run failed the then-required zero-Grype acceptance gate and cannot supply publication images. Fresh complete successful exact-commit main validation remains mandatory.",
-      "review": {
-        "approval": "Verified-fixed review on October 7, 2026 is limited to CVE-2026-87910 at Medium severity, APK package python-3.14 version 3.14.8-r0, with the pinned base, reviewed source hashes and complete successful native evidence. This replaces the historical package scope and retains the inclusive October 20 UTC deadline. No unremediated finding, broader match, additional security risk or later deadline is accepted.",
-        "deadline": "2026-10-20",
-        "remove_when": "Remove only after verified replacement Python sources include fb2f0bbc3b35264f09cc2cb2934b7987527a6bc2 or a proven equivalent, the corresponding runtime regression passes on native amd64 and arm64, and both unsuppressed scanners no longer report this finding. Update patch inputs, source materials and evidence together.",
-        "reviewed_on": "2026-10-07"
-      }
-    },
     "CVE-2025-15367": {
       "severity": "Medium",
       "type": "apk",
       "package": "python-3.14",
       "version": "3.14.8-r0",
       "status": "fixed",
-      "evidence": "The signed DHI Python 3.14.8-r0 APKs already supply the POP3 fix from b234a2b67539f787e191d2ef19a7cbdce32874e7. Exact fixed-source assertions and the loaded-runtime control-character regression pass on native amd64 and arm64. Complete original Scout and unsuppressed Grype reports, all nine runtime probes, all three dependency families and complete matching-source/license gates were inspected for both architectures in https://github.com/brspoon/keep/actions/runs/37657188329 at source revision 6cf7c2ca4b5ae86d46bdf21cee41b27069702e6d. That run failed the then-required zero-Grype acceptance gate and cannot supply publication images. Fresh complete successful exact-commit main validation remains mandatory.",
+      "evidence": "Fresh readback of both signed DHI Python 3.14.8-r0 APKs verifies identical poplib.py bytes (SHA256 a6ffff188814b56d95b043c31d9e0dfee51ac6d6e92afe74ab070cb6136b076f) containing the complete control-character rejection from upstream b234a2b67539f787e191d2ef19a7cbdce32874e7. The loaded-runtime POP3 regression passes on both native architectures. This source inspection is separate from the cleanup patch manifest. Fresh complete native qualification in https://github.com/brspoon/keep/actions/runs/39150602670 (attempt 1), at source revision 521c3376c058d0e2392e5b7ac2299666f82e5e3f, passed on amd64 and arm64: Scout reported zero, complete unsuppressed Grype reports contained only the two exact approved scopes, all nine runtime probes and all three dependency families passed, and signed provenance, source acquisition, source archive member integrity and complete matching-source/license gates passed. Original reports and prior release evidence remain unchanged. Every new main candidate still requires successful exact-commit validation.",
       "review": {
-        "approval": "Verified-fixed review on October 7, 2026 is limited to CVE-2025-15367 at Medium severity, APK package python-3.14 version 3.14.8-r0, with the pinned base, reviewed source hashes and complete successful native evidence. This replaces the historical package scope and retains the inclusive October 20 UTC deadline. No unremediated finding, broader match, additional security risk or later deadline is accepted.",
-        "deadline": "2026-10-20",
+        "approval": "Verified-fixed review on October 18, 2026 is limited to CVE-2025-15367 at Medium severity, APK package python-3.14 version 3.14.8-r0, with the unchanged pinned base, reviewed source hashes, required Keep guards and complete successful native qualification 39150602670 attempt 1 on both architectures. This fresh review replaces the October 20 deadline only for this exact scope and permits use through November 1, 2026 UTC inclusive. No unremediated finding, broader match, additional security risk or automatic later renewal is accepted.",
+        "deadline": "2026-11-01",
         "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2025-15367, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together.",
-        "reviewed_on": "2026-10-07"
+        "reviewed_on": "2026-10-18"
       }
     },
     "CVE-2026-12345": {
@@ -65,12 +51,12 @@
       "package": "python-3.14",
       "version": "3.14.8-r0",
       "status": "fixed",
-      "evidence": "The raw DHI Python 3.14.8-r0 APKs do not supply the cleanup fix. Keep applies the exact Python 3.14 backport 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 plus separately identified Keep guard keep-tempfile-bound-permission-reset-v1. Exact patched-source assertions and the ninth loaded-runtime probe verify descriptor-bound cleanup, safe permission recovery and ordinary cleanup on native amd64 and arm64. Approval covers this corrected Keep runtime only, not the unpatched vendor package. Complete original Scout and unsuppressed Grype reports, all nine runtime probes, all three dependency families and complete matching-source/license gates were inspected for both architectures in https://github.com/brspoon/keep/actions/runs/37657188329 at source revision 6cf7c2ca4b5ae86d46bdf21cee41b27069702e6d. That run failed the then-required zero-Grype acceptance gate and cannot supply publication images. Fresh complete successful exact-commit main validation remains mandatory.",
+      "evidence": "The raw signed DHI Python 3.14.8-r0 APKs still require the seven cleanup correction hunks from 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 plus the separate Keep guard keep-tempfile-bound-permission-reset-v1. Fresh source comparison verifies that the seven production hunks produce byte-identical shutil.py and pre-guard tempfile.py to the merged upstream 3.14 backport 58ed0259cae509a19138795df302fe60b544dc74. The Keep guard remains necessary because upstream still permits pathname permission fallback. Exact patched-source assertions and the ninth loaded-runtime probe verify descriptor-bound cleanup, permission recovery and ordinary cleanup. This approval covers only the corrected Keep Linux runtime with the checked descriptor capabilities and no chflags; unreadable or unbound entries fail closed and may remain unremoved. It does not cover the unpatched vendor package. Fresh complete native qualification in https://github.com/brspoon/keep/actions/runs/39150602670 (attempt 1), at source revision 521c3376c058d0e2392e5b7ac2299666f82e5e3f, passed on amd64 and arm64: Scout reported zero, complete unsuppressed Grype reports contained only the two exact approved scopes, all nine runtime probes and all three dependency families passed, and signed provenance, source acquisition, source archive member integrity and complete matching-source/license gates passed. Original reports and prior release evidence remain unchanged. Every new main candidate still requires successful exact-commit validation.",
       "review": {
-        "approval": "Verified-fixed review on October 7, 2026 is limited to CVE-2026-12345 at Medium severity, APK package python-3.14 version 3.14.8-r0, with the pinned base, reviewed source hashes and complete successful native evidence. This replaces the historical package scope and retains the inclusive October 20 UTC deadline. No unremediated finding, broader match, additional security risk or later deadline is accepted.",
-        "deadline": "2026-10-20",
+        "approval": "Verified-fixed review on October 18, 2026 is limited to CVE-2026-12345 at Medium severity, APK package python-3.14 version 3.14.8-r0, with the unchanged pinned base, reviewed source hashes, required Keep guards and complete successful native qualification 39150602670 attempt 1 on both architectures. This fresh review replaces the October 20 deadline only for this exact scope and permits use through November 1, 2026 UTC inclusive. No unremediated finding, broader match, additional security risk or automatic later renewal is accepted.",
+        "deadline": "2026-11-01",
         "remove_when": "Remove only after verified replacement Python sources include 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 or a proven equivalent and preserve the descriptor-bound permission-reset protections of keep-tempfile-bound-permission-reset-v1. The cleanup regression must pass on native amd64 and arm64 and both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together.",
-        "reviewed_on": "2026-10-07"
+        "reviewed_on": "2026-10-18"
       }
     }
   },
