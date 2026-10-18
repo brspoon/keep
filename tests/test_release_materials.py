@@ -22,6 +22,7 @@ import release_materials as materials
 import registry_transfer
 import review_image
 from tests.native_dependency_fixture import dependency_report
+from tests.image_review_policy_fixture import historical_review_policy, renewed_review_policy, RENEWED_FINDINGS
 
 
 def tar_bytes(entries):
@@ -304,9 +305,11 @@ class ReleaseMaterialsTests(unittest.TestCase):
     def verify_fixture(self, *, sidecar_error=None, identity_error=None, evidence_error=False,
                        inventory_error=None, review_changes=None, matches=None,
                        empty_exceptions=False, native_digests=None, config_digests=None,
-                       validation=False, require_zero_findings=False, legacy=False):
+                       validation=False, require_zero_findings=False, legacy=False,
+                       review_policy=None):
         policy = self.write_reviewed_policy(empty_exceptions=empty_exceptions,
-                                            require_zero_findings=require_zero_findings)
+                                            require_zero_findings=require_zero_findings,
+                                            policy=review_policy)
         rows, bodies = [], {}
         native_digests = native_digests or {'amd64': self.DIGEST, 'arm64': 'sha256:' + 'c' * 64}
         for arch, native_digest in native_digests.items():
@@ -380,9 +383,10 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 bodies[sidecar_name] = sidecar_body
         return rows, bodies
 
-    def write_reviewed_policy(self, *, empty_exceptions=False, require_zero_findings=False):
+    def write_reviewed_policy(self, *, empty_exceptions=False, require_zero_findings=False,
+                              policy=None):
         repository = Path(materials.__file__).resolve().parents[1]
-        policy = json.loads((repository / 'docs/image-exceptions.json').read_text())
+        policy = copy.deepcopy(policy) if policy is not None else historical_review_policy()
         policy['require_zero_findings'] = require_zero_findings
         if empty_exceptions:
             policy['exceptions'] = {}
@@ -1248,6 +1252,61 @@ class ReleaseMaterialsTests(unittest.TestCase):
         self.assert_readback_security_review(day=datetime.date(2026, 10, 21), matches=matches,
                                             expected_error='exception_expired')
 
+    def test_readback_renewed_scopes_pass_after_old_deadline_until_new_inclusive_deadline(self):
+        matches = [{'vulnerability': {'id': finding, 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
+                   for finding in RENEWED_FINDINGS]
+        for day, error in ((datetime.date(2026, 10, 21), None),
+                           (datetime.date(2026, 11, 1), None),
+                           (datetime.date(2026, 11, 2), 'exception_expired')):
+            with self.subTest(day=day):
+                # Both native evidence archives are verified and their original
+                # scanner/review bytes are checked unchanged by this helper.
+                self.assert_readback_security_review(day=day, matches=matches,
+                    review_policy=renewed_review_policy(), expected_error=error)
+
+    def test_readback_renewal_does_not_reactivate_retired_tarfile_or_broaden_matching(self):
+        for finding, version, severity, reason in (
+            ('CVE-2026-87910', '3.14.8-r0', 'Medium', 'unmatched_finding'),
+            ('CVE-unknown', '3.14.8-r0', 'Low', 'unmatched_finding'),
+            ('CVE-2025-15367', '3.14.8-r1', 'Medium', 'exception_mismatch'),
+            ('CVE-2026-12345', '3.14.8-r0', 'High', 'exception_mismatch'),
+        ):
+            matches = [{'vulnerability': {'id': finding, 'severity': severity},
+                        'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': version}}]
+            with self.subTest(finding=finding, version=version, severity=severity):
+                self.assert_readback_security_review(day=datetime.date(2026, 10, 21),
+                    matches=matches, review_policy=renewed_review_policy(), expected_error=reason)
+
+    def test_final_promotion_revalidation_requires_fresh_approval_and_keeps_original_bytes(self):
+        matches = [{'vulnerability': {'id': finding, 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
+                   for finding in RENEWED_FINDINGS]
+        rows, bodies = self.verify_fixture(matches=matches)
+        original_bytes = dict(bodies)
+        held = {}
+        with chdir(self.root), patch.object(materials, 'api', return_value=rows), \
+             patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
+             patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 20)):
+            materials.verify_identities(self.VERSION, {'id': 88}, security_reviews=held)
+        original_reports = copy.deepcopy(held)
+        with chdir(self.root), \
+             patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 21)):
+            with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                materials.revalidate_security(held)
+            self.write_reviewed_policy(policy=renewed_review_policy())
+            materials.revalidate_security(held)
+        with chdir(self.root), \
+             patch.object(review_image, 'current_day', return_value=datetime.date(2026, 11, 1)):
+            materials.revalidate_security(held)
+        with chdir(self.root), \
+             patch.object(review_image, 'current_day', return_value=datetime.date(2026, 11, 2)):
+            with self.assertRaisesRegex(ValueError, 'exception_expired'):
+                materials.revalidate_security(held)
+        self.assertEqual(set(held), set(materials.ARCHES))
+        self.assertEqual(held, original_reports)
+        self.assertEqual(bodies, original_bytes)
+
     def test_readback_unknown_or_mismatched_findings_cannot_use_original_approval(self):
         match = {'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
                  'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
@@ -1419,10 +1478,11 @@ class ReleaseMaterialsTests(unittest.TestCase):
         return index, proof
 
     def current_review_fixture(self, *, matches=None, empty_exceptions=False,
-                               require_zero_findings=False):
+                               require_zero_findings=False, review_policy=None):
         self.prepare_archive_inputs()
         policy = self.write_reviewed_policy(empty_exceptions=empty_exceptions,
-                                            require_zero_findings=require_zero_findings)
+                                            require_zero_findings=require_zero_findings,
+                                            policy=review_policy)
         reports = self.security_reports('amd64', policy, matches)
         for name, body in reports.items():
             (self.root / name).write_text(json.dumps(body, indent=3) + '\n')
@@ -1457,10 +1517,12 @@ class ReleaseMaterialsTests(unittest.TestCase):
         return run
 
     def assert_current_review_promotion(self, *, day, matches=None, empty_exceptions=False,
-                                       blocked=False, require_zero_findings=False):
+                                       blocked=False, require_zero_findings=False,
+                                       review_policy=None):
         import validated_build
         index, original = self.current_review_fixture(matches=matches,
-            empty_exceptions=empty_exceptions, require_zero_findings=require_zero_findings)
+            empty_exceptions=empty_exceptions, require_zero_findings=require_zero_findings,
+            review_policy=review_policy)
         with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
              patch.object(validated_build, 'verify_provenance', return_value=index), \
              patch.object(materials.subprocess, 'run', side_effect=self.current_review_runner(day)) as review, \
@@ -1514,6 +1576,19 @@ class ReleaseMaterialsTests(unittest.TestCase):
         matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},
                     'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]
         self.assert_current_review_promotion(day=datetime.date(2026, 10, 21), matches=matches, blocked=True)
+
+    def test_archive_renewed_scopes_use_new_deadline_and_preserve_original_evidence(self):
+        matches = [{'vulnerability': {'id': finding, 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
+                   for finding in RENEWED_FINDINGS]
+        for day, blocked in ((datetime.date(2026, 10, 21), False),
+                             (datetime.date(2026, 11, 1), False),
+                             (datetime.date(2026, 11, 2), True)):
+            with self.subTest(day=day):
+                security = self.distribution / f'keep-{self.VERSION}-security-evidence-amd64.tar.gz'
+                security.unlink(missing_ok=True)
+                self.assert_current_review_promotion(day=day, matches=matches, blocked=blocked,
+                                                    review_policy=renewed_review_policy())
 
     def test_archive_old_python_revision_blocks_without_changing_original_evidence(self):
         matches = [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'},

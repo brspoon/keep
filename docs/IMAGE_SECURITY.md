@@ -11,8 +11,8 @@ the build never relabels an older package or suppresses a finding.
 Every architecture job verifies signed vendor provenance, runs Docker Scout and
 an unsuppressed Grype scan, and executes all nine runtime regression probes.
 Scout must report zero findings. Grype's complete raw findings remain visible;
-only the three exact verified-fixed Python `3.14.8-r0` scopes in
-docs/image-exceptions.json may pass through October 20, 2026 UTC inclusive.
+only the two exact verified-fixed Python `3.14.8-r0` scopes in
+docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
 `1.3.2-r0` scopes are retired and cannot authorize this runtime.
 Source hashes, base identity, complete scans, successful probes and the deadline
@@ -215,10 +215,58 @@ functional, installation, recovery and runtime probes on both architectures.
 The current candidate, scanner configuration, original evidence and historical
 approval deadlines remain unchanged.
 
+## October 18 verified-fixed review
+
+Fresh [complete native qualification](https://github.com/brspoon/keep/actions/runs/39150602670)
+at source revision `521c3376c058d0e2392e5b7ac2299666f82e5e3f`, attempt 1,
+passed on amd64 and arm64. Scout reported zero findings. Complete unsuppressed
+Grype reports contained only `CVE-2025-15367` and `CVE-2026-12345`, both Medium
+severity against APK package `python-3.14` version `3.14.8-r0`. Application,
+installation, recovery, all nine runtime probes, all three dependency families,
+signed provenance, source acquisition, full source archive member integrity and
+matching-source/license checks passed on both architectures.
+
+Fresh inspection of the signed native APKs verifies the complete vendor POP3
+control-character fix. This is signed-source inspection plus loaded-runtime
+verification; the cleanup patch manifest does not supply POP3 patch hunks.
+The seven cleanup correction hunks produce byte-identical production sources to
+the merged [upstream 3.14 backport](https://github.com/python/cpython/commit/58ed0259cae509a19138795df302fe60b544dc74).
+Keep's separately identified permission guard remains required: upstream still
+allows pathname permission fallback. Approval is limited to the checked Linux
+descriptor capabilities with no `chflags`. Unreadable or unbound entries fail
+closed and can remain unremoved; ordinary cleanup must continue to pass.
+
+The unused `CVE-2026-87910` tarfile exception is removed. Both fresh scanners omit
+it and its vendor source checks and runtime regression remain required. If that
+finding reappears, it blocks as unmatched until separately reviewed.
+Only the two findings still reported receive a fresh verified-fixed review,
+through **November 1, 2026 UTC inclusive**. Package, version, type, severity,
+base, source integrity, scan completeness and runtime checks remain unchanged.
+No unfixed finding or additional risk is accepted. Historical reviews and
+published release evidence retain their original bytes; promotion rereads the
+current policy and deadlines against those original reports.
+
+The [DHI Python `3.14.8-r1` recipe](https://github.com/docker-hardened-images/catalog/commit/63431ba13a121bcaa4aa09975b91715103a3be9c)
+patches pip's bundled urllib3. Its Python patch inputs are unchanged and both
+signed native packages still need the cleanup correction and Keep guard.
+Keep already pins urllib3 `2.8.0` and removes pip from the final runtime.
+The revised package is not a qualified replacement for these protections.
+
+Wolfi's [October 14 Python recipe change](https://github.com/wolfi-dev/os/commit/b284ec5596d7290b37ef0bcb6ea6d30cb3db6834)
+contains the upstream cleanup correction. Its inspected source still lacks the
+POP3 control-character fix and Keep's stricter permission guard, and its recipe
+also changes to OpenSSL 4.0 with additional patches. It is an alternate-source
+candidate requiring complete image, provenance, source/license and native
+qualification; it is not a verified replacement for the current runtime.
+
+No runtime package, patch or source/license input changes in this review.
+Existing published images and releases retain their identities. New main
+candidates still require complete exact-commit native validation before publication.
+
 ## Exception review deadlines
 
-The current policy permits only the three reviewed Python `3.14.8-r0` Grype
-scopes. Earlier package approvals are preserved in Git history and original
+The current policy permits only the two reviewed Python `3.14.8-r0` Grype
+scopes renewed on October 18. Earlier package approvals are preserved in Git history and original
 release evidence; they are absent from the active exception dictionary.
 
 Each exception records its reviewed scope and evidence in
@@ -252,13 +300,13 @@ daily and on manual dispatch with read-only repository access, no dependency
 installation, registry credentials, image build or publication. These notices
 allow reviews to begin ahead of a deadline without blocking a clean candidate.
 
-The October 7 review covers three Python `3.14.8-r0` findings through
-October 20, 2026 UTC, inclusive. Each entry records its review date; the
-October 6 deadline was not extended. Earlier Python and zlib approvals do not
-carry forward to other package versions. A finding that still needs one of
-the current exceptions on October 21 blocks
-validation and promotion; it requires a proven replacement or a new explicit
-security review. Correcting deadline handling alone never renews an approval.
+The October 18 review covers only the two remaining Python `3.14.8-r0`
+findings through November 1, 2026 UTC, inclusive. Each entry records its fresh
+review date and evidence. Earlier Python, zlib and tarfile approvals do not
+carry forward or authorize other package versions. A finding that still needs
+one of the current exceptions on November 2 blocks validation and promotion;
+it requires a proven replacement or another explicit security review.
+Correcting deadline handling alone never renews an approval.
 
 ## zlib delivery correction
 
