@@ -259,9 +259,9 @@ also changes to OpenSSL 4.0 with additional patches. It is an alternate-source
 candidate requiring complete image, provenance, source/license and native
 qualification; it is not a verified replacement for the current runtime.
 
-No runtime package, patch, source/license input, image identity or published
-release is changed by this policy review. New main candidates still require
-complete exact-commit native validation before publication.
+No runtime package, patch or source/license input changes in this review.
+Existing published images and releases retain their identities. New main
+candidates still require complete exact-commit native validation before publication.
 
 ## Exception review deadlines
 
