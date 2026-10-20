@@ -102,6 +102,46 @@ class ForecastTests(unittest.TestCase):
 class MembershipTests(unittest.TestCase):
     setUp = test_keep.KeepTests.setUp
 
+    def test_library_forecast_matches_provider_ids_despite_different_titles(self):
+        examples = (
+            ('movie', 'Sample & Example', 'Sample and Example'),
+            ('movie', 'Sample: The First Chapter', 'Sample: The Opening Chapter'),
+            ('movie', 'Sample\u00b2', 'Sample 2'),
+            ('movie', 'Sample 4: A Chapter', 'Sample Four: A Chapter'),
+            ('tv', 'Sample Series (2025)', 'Sample Series'),
+        )
+        settings = lambda key: {
+            'TAUTULLI_URL': 'http://tautulli', 'TAUTULLI_API_KEY': 'key',
+            'MAINTAINERR_URL': 'http://maintainerr',
+            'PLEX_SERVER_URL': 'http://plex', 'PLEX_ADMIN_TOKEN': 'token',
+        }.get(key)
+        for kind, arr_title, plex_title in examples:
+            with self.subTest(arr_title=arr_title):
+                cid = 1 if kind == 'movie' else 3
+                provider = 'tmdb' if kind == 'movie' else 'tvdb'
+                inventory = {
+                    'items': [{'id': '42', 'type': 'movie' if kind == 'movie' else 'show',
+                               'title': plex_title, 'providerIds': {provider: ['31']}}],
+                    'totalSize': 1, 'offset': 0, 'limit': 100,
+                }
+                episodes = Mock(content=b'<MediaContainer><Video addedAt="1735689600"/></MediaContainer>')
+                with patch.object(keep, 'connection_value', side_effect=settings), \
+                     patch.object(keep, 'get_collections', return_value={cid: 'Sample Library'}), \
+                     patch.object(keep, 'leaving_membership', return_value={}), \
+                     patch.object(forecast, 'read_rules', return_value={cid: ForecastTests().group(kind)}), \
+                     patch.object(forecast, '_get_json', return_value=inventory) as fetch, \
+                     patch.object(forecast, 'tautulli_thresholds', return_value={'movie': 85, 'tv': 85}), \
+                     patch.object(forecast, 'watched_history', return_value=[]) as watched, \
+                     patch.object(keep.requests, 'get', return_value=episodes):
+                    status = keep.title_forecast(
+                        {'kind': kind, 'external_id': 31, 'title': arr_title},
+                        'radarr' if kind == 'movie' else 'sonarr', 9,
+                        arr_data={'added': '2025-01-01T00:00:00Z'})
+                self.assertIsNotNone(status['forecast'])
+                self.assertEqual(status['reason'], '')
+                self.assertEqual(fetch.call_count, 1)
+                self.assertEqual(watched.call_args.args[1:], ('42', kind, 85))
+
     def test_kept_provider_ids_and_media_type_drive_badges(self):
         movie = {'mediaServerId': '1', 'mediaData': {'type': 'movie',
                  'providerIds': {'tmdb': ['12'], 'tvdb': ['99']}}}
