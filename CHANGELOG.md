@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.27.3 — 2026-10-19
+
+- Match titles to Plex by TMDB or TVDB ID so different title spellings no longer prevent Leaving estimates. Keep estimates unavailable when the match is ambiguous or library data is incomplete.
+
 ## 2.27.2 — 2026-10-14
 
 - Collapse Events and Collections in Preferences and show selection counts. Keep Save and Cancel visible while scrolling the settings.

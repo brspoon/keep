@@ -5,10 +5,15 @@ shapes and missing inputs never become a reassuring countdown.
 """
 import json
 import math
+import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode
 
 import requests
+
+PLEX_LOOKUP_PAGE_SIZE = 100
+PLEX_LOOKUP_MAX_PAGES = 100
+PLEX_LOOKUP_SECONDS = 10
 
 
 class ForecastUnavailable(ValueError):
@@ -108,26 +113,74 @@ def read_rules(settings, collection_ids):
     return groups
 
 
-def find_plex_media(settings, groups, kind, external_id, title):
-    """Find an Arr title in one selected Plex library by provider ID."""
-    if not external_id or not title or '/' in title or len(title) > 200:
+def _positive_identifier(value):
+    if type(value) not in (int, str):
+        return None
+    value = str(value)
+    return str(int(value)) if value.isascii() and value.isdigit() and int(value) > 0 else None
+
+
+def find_plex_media(settings, groups, kind, external_id):
+    """Require one provider-ID match across complete selected library inventories."""
+    external_id = _positive_identifier(external_id)
+    if kind not in ('movie', 'tv') or external_id is None:
         return None
     field = 'tmdb' if kind == 'movie' else 'tvdb'
+    media_type = 'movie' if kind == 'movie' else 'show'
+    deadline = time.monotonic() + PLEX_LOOKUP_SECONDS
+    pages = 0
+    libraries = {}
     matches = []
     for cid, group in groups.items():
-        if group['kind'] != kind or not group['library_id'].isdigit():
+        if group['kind'] != kind:
             continue
-        path = f"/api/media-server/library/{group['library_id']}/content/search/{quote(title, safe='')}"
-        rows = _get_json(settings('MAINTAINERR_URL') + path)
-        if not isinstance(rows, list) or len(rows) > 500:
-            raise ForecastUnavailable('Plex search is incomplete')
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            providers = row.get('providerIds') or {}
-            ids = (providers.get(field) or []) if isinstance(providers, dict) else []
-            if str(external_id) in [str(value) for value in ids] and str(row.get('id') or '').isdigit():
-                matches.append((cid, row['id']))
+        library_id = _positive_identifier(group['library_id'])
+        if library_id is None:
+            raise ForecastUnavailable('Invalid selected Plex library')
+        if library_id not in libraries:
+            page, offset, total = 1, 0, None
+            seen = set()
+            library_matches = []
+            while total is None or offset < total:
+                if pages >= PLEX_LOOKUP_MAX_PAGES or time.monotonic() >= deadline:
+                    raise ForecastUnavailable('Plex lookup exceeds its limit')
+                query = urlencode({'page': page, 'limit': PLEX_LOOKUP_PAGE_SIZE, 'type': media_type})
+                path = f'/api/media-server/library/{library_id}/content?{query}'
+                payload = _get_json(settings('MAINTAINERR_URL') + path)
+                pages += 1
+                if time.monotonic() >= deadline:
+                    raise ForecastUnavailable('Plex lookup exceeds its limit')
+                if not isinstance(payload, dict) or not isinstance(payload.get('items'), list):
+                    raise ForecastUnavailable('Plex library inventory is incomplete')
+                count = payload.get('totalSize')
+                if (type(count) is not int or count < offset or
+                        type(payload.get('offset')) is not int or payload['offset'] != offset or
+                        type(payload.get('limit')) is not int or payload['limit'] != PLEX_LOOKUP_PAGE_SIZE or
+                        total is not None and count != total):
+                    raise ForecastUnavailable('Invalid Plex library pagination')
+                total = count
+                rows = payload['items']
+                if len(rows) != min(PLEX_LOOKUP_PAGE_SIZE, total - offset):
+                    raise ForecastUnavailable('Plex library inventory is incomplete')
+                for row in rows:
+                    if not isinstance(row, dict) or row.get('type') != media_type:
+                        raise ForecastUnavailable('Invalid Plex library item')
+                    plex_id = _positive_identifier(row.get('id'))
+                    if plex_id is None or plex_id in seen:
+                        raise ForecastUnavailable('Invalid or repeated Plex library item')
+                    seen.add(plex_id)
+                    providers = row.get('providerIds', {})
+                    if not isinstance(providers, dict):
+                        raise ForecastUnavailable('Invalid Plex provider IDs')
+                    ids = providers.get(field, [])
+                    if not isinstance(ids, list) or any(_positive_identifier(value) is None for value in ids):
+                        raise ForecastUnavailable('Invalid Plex provider IDs')
+                    if external_id in {_positive_identifier(value) for value in ids}:
+                        library_matches.append(plex_id)
+                offset += len(rows)
+                page += 1
+            libraries[library_id] = library_matches
+        matches.extend((cid, plex_id) for plex_id in libraries[library_id])
     return matches[0] if len(matches) == 1 else None
 
 

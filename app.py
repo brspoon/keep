@@ -3084,7 +3084,7 @@ def title_forecast(details, source, item_id, collection_id=None, arr_data=None, 
         rules = forecast.read_rules(connection_value, get_collections())
         plex_match = None
         if collection_id is None and arr_data is not None:
-            plex_match = forecast.find_plex_media(connection_value, rules, kind, external_id, details['title'])
+            plex_match = forecast.find_plex_media(connection_value, rules, kind, external_id)
             if plex_match:
                 collection_id = plex_match[0]
         if collection_id is None:
