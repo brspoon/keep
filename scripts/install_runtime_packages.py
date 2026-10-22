@@ -17,13 +17,16 @@ if __package__:
     from . import alpine_expat_sources as expat
     from . import alpine_zlib_sources as zlib
     from . import dhi_python_packages as python
+    from . import dhi_certificate_packages as certificates
 else:
     import alpine_expat_sources as expat
     import alpine_zlib_sources as zlib
     import dhi_python_packages as python
+    import dhi_certificate_packages as certificates
 
 ROOT = Path('/opt/runtime-packages')
-COHORT = (('expat', expat, 'EXPAT_SECURITY.json'),
+COHORT = (('certificates', certificates, 'CA_CERTIFICATES_SECURITY.json'),
+          ('expat', expat, 'EXPAT_SECURITY.json'),
           ('zlib', zlib, 'ZLIB_SECURITY.json'),
           ('python', python, 'PYTHON_SECURITY.json'))
 
@@ -102,9 +105,31 @@ def install(root=ROOT):
     subprocess.run(['/usr/bin/python3.14', '-B', str(helper), '--verify-installed',
                     '--architecture', architecture, '--manifest',
                     str(root / 'python/PYTHON_SECURITY.json')], check=True)
+    verify_certificates(root, architecture)
     subprocess.run(['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('patch_python_runtime.py'))], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)), '--clean-stdlib'], check=True)
+
+
+def verify_certificates(root, architecture):
+    subprocess.run(['/usr/bin/python3.14', '-B',
+                    str(Path(__file__).with_name('dhi_certificate_packages.py')),
+                    '--architecture', architecture, '--manifest',
+                    str(root / 'certificates/CA_CERTIFICATES_SECURITY.json')], check=True)
+
+
+def install_certificates(root=ROOT):
+    """Refresh build trust without changing its Python development cohort."""
+    architecture = arch()
+    packages = installation_inputs(root, architecture)
+    filename = certificates.PACKAGE + '-' + certificates.VERSION + '.apk'
+    selected = [path for path in packages if path.name == filename]
+    if len(selected) != 1:
+        raise ValueError('Require the exact reviewed build certificate bundle')
+    subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                    '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
+                    str(selected[0])], check=True)
+    verify_certificates(root, architecture)
 
 
 def main():
@@ -112,12 +137,15 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--prepare', action='store_true')
     mode.add_argument('--install', action='store_true')
+    mode.add_argument('--install-certificates', action='store_true')
     mode.add_argument('--clean-stdlib', action='store_true')
     args = parser.parse_args()
     if args.prepare:
         prepare()
     elif args.install:
         install()
+    elif args.install_certificates:
+        install_certificates()
     else:
         clean_stdlib()
 

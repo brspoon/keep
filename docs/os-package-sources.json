@@ -10,7 +10,7 @@
     "arm64": "sha256:233127fc1adc0748f183e2341864e6c3caa2c9855819657c26b4a49c50fd7f06"
   },
   "source_predicate_type": "https://docker.com/dhi/source/v0.1",
-  "description": "Reviewed package-image discovery references and immutable recipes for the pinned DHI runtime and installed replacement packages. Verify native subjects and signatures and match exact APK SHA256 values before accepting corresponding sources. Original base Expat is retained separately in original_base_origins.",
+  "description": "Reviewed package-image discovery references and immutable recipes for the pinned DHI runtime and installed replacement packages. Verify native subjects and signatures and match exact APK SHA256 values before accepting corresponding sources. Overwritten base packages are retained separately in original_base_origins.",
   "origins": [
     {
       "origin": "alpine-baselayout",
@@ -106,37 +106,49 @@
     },
     {
       "origin": "ca-certificates",
-      "version": "20260909-r0",
+      "version": "20261020-r0",
       "image": "dhi.io/pkg-ca-certificates",
-      "tag": "20260909-r0-alpine3.24",
-      "reference": "dhi.io/pkg-ca-certificates:20260909-r0-alpine3.24",
+      "tag": "20261020-r0-alpine3.24",
+      "reference": "dhi.io/pkg-ca-certificates:20261020-r0-alpine3.24",
       "predicate_image_name": "dhi/pkg-ca-certificates",
       "recipe": {
         "path": "package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
-        "revision": "5d3e23f77ef27db33e9a47f9aa4c7a0505e7c4db",
-        "sha256": "66256602cabc01815f39d45dabd0f5b2ad7ff294d6e0b4febb21c3091fc8f13c",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/5d3e23f77ef27db33e9a47f9aa4c7a0505e7c4db/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
-        "upstream_commit": "eb7078df3a16d666e8f7723f94bb92e00d4b9236"
+        "revision": "6428625d5032aaa4bc4c05dfde7f49c1268424ce",
+        "sha256": "ed3f1946ad81f4a1db00c4f43ec35ef946f404cc127ccc596c2dd2783c544ce3",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/6428625d5032aaa4bc4c05dfde7f49c1268424ce/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
+        "upstream_commit": "e78f5987166c6ffbe23f6472e2e8f040298fe2da"
       },
       "declared_tags": [
-        "20260909-alpine3.24",
-        "20260909-r0-alpine3.24"
+        "20261020-alpine3.24",
+        "20261020-r0-alpine3.24"
       ],
       "mutable_tag_reused_across_upstream_versions": false,
+      "signing_keys": {
+        "amd64": {
+          "name": "dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+          "sha256": "0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd",
+          "url": "https://dhi.io/keyring/dhi-apk@docker-0F81AD7700D99184.rsa.pub"
+        },
+        "arm64": {
+          "name": "dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+          "sha256": "0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd",
+          "url": "https://dhi.io/keyring/dhi-apk@docker-0F81AD7700D99184.rsa.pub"
+        }
+      },
       "packages": [
         {
           "name": "ca-certificates-bundle",
-          "version": "20260909-r0",
+          "version": "20261020-r0",
           "license": "MPL-2.0 AND MIT",
-          "build_commit": "25117bb82813f731be8ea998cd8b6eb676a8b27d",
+          "build_commit": "68cdc7eb180fe3a0843d7489185b3ca10ea806d1",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-bundle-20260909-r0.apk",
-              "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-bundle-20261020-r0.apk",
+              "sha256": "49cc005952a3d525bdc5ef16aea944443d07676e5bc1ea0431c2364a37d6dc09"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20260909-r0.apk",
-              "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20261020-r0.apk",
+              "sha256": "49cc005952a3d525bdc5ef16aea944443d07676e5bc1ea0431c2364a37d6dc09"
             }
           }
         }
@@ -1110,6 +1122,44 @@
             "arm64": {
               "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/python-3.14-pycache-pyc0-3.14.7-r2.apk",
               "sha256": "bbc45b775c3ae8e364c9104854f7dba9d5b2bffbb78a6436f5745a0c8b47e230"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "ca-certificates",
+      "version": "20260909-r0",
+      "image": "dhi.io/pkg-ca-certificates",
+      "tag": "20260909-r0-alpine3.24",
+      "reference": "dhi.io/pkg-ca-certificates:20260909-r0-alpine3.24",
+      "predicate_image_name": "dhi/pkg-ca-certificates",
+      "recipe": {
+        "path": "package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
+        "revision": "5d3e23f77ef27db33e9a47f9aa4c7a0505e7c4db",
+        "sha256": "66256602cabc01815f39d45dabd0f5b2ad7ff294d6e0b4febb21c3091fc8f13c",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/5d3e23f77ef27db33e9a47f9aa4c7a0505e7c4db/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml",
+        "upstream_commit": "eb7078df3a16d666e8f7723f94bb92e00d4b9236"
+      },
+      "declared_tags": [
+        "20260909-alpine3.24",
+        "20260909-r0-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "ca-certificates-bundle",
+          "version": "20260909-r0",
+          "license": "MPL-2.0 AND MIT",
+          "build_commit": "25117bb82813f731be8ea998cd8b6eb676a8b27d",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-bundle-20260909-r0.apk",
+              "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20260909-r0.apk",
+              "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
             }
           }
         }

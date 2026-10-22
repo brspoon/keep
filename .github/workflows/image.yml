@@ -108,7 +108,9 @@ jobs:
       - name: Warn about upcoming image-exception review deadlines
         run: python -B scripts/review_image.py --check-deadlines
       - name: Install pinned application dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements.txt
+        run: |
+          python -B scripts/bootstrap_build_pip.py
+          python -m pip install --disable-pip-version-check -r requirements.txt
       - name: Test contribution without registry or publishing credentials
         run: |
           python -B -m unittest discover -s tests

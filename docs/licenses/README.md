@@ -44,8 +44,8 @@ from CFFI release commit `fd33e7700f0ebafe6f30bd5053f13327221b77a2`.
 Keep's source bundle retains these materials alongside the exact Python source
 archives and per-architecture wheel identities.
 
-The certifi 2026.7.22 source archive retains its exact `cacert.pem`, MPL notice
+The certifi 2026.10.19 source archive retains its exact `cacert.pem`, MPL notice
 and build files. Its SHA-256 is
-`741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55`.
+`035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae`.
 Providing the complete MPL text does not itself provide the matching source;
 the versioned source archive remains part of the distribution materials.

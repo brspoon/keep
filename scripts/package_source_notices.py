@@ -42,6 +42,9 @@ CA_CERTDATA_NOTICE = ('sources/ca-certificates-20260909.tar.bz2!'
                      'ca-certificates-20260909/certdata.txt#leading-comment')
 CA_CERTDATA_NOTICE_SHA256 = '6f3d0ca739e01730cb2314a8302be79cb23a5956d7770dc3de37bc4b4db79df1'
 CA_SOURCE_SHA256 = 'dc460c535f3833432be4e561d214a5fe816b05ede5a2ade64787e501671cd082'
+CA_REFRESH_CERTDATA_NOTICE = ('sources/ca-certificates-20261020.tar.bz2!'
+                             'ca-certificates-20261020/certdata.txt#leading-comment')
+CA_REFRESH_SOURCE_SHA256 = '1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400'
 POSIXTZ_ARCHIVE_PATH = 'sources/posixtz-0.5.tar.xz'
 POSIXTZ_ARCHIVE_SHA256 = 'e0a79e0922be2da686a1888d79cd253baaf81c2f30b4378fbbcf9ff9d632aab5'
 POSIXTZ_ARCHIVE_BYTES = 3976
@@ -488,12 +491,16 @@ def _inspect_records(root, output_dir, *, origin, version, architecture,
             'discovery': 'reviewed-baselayout-full-license-supplement',
             'license_source_url': GPL2_SOURCE_URL,
             'recipe_license_evidence': baselayout_recipes})
-    certdata_notices = [row for row in notices if row['path'] == CA_CERTDATA_NOTICE
+    ca_release = {
+        '20260909-r0': (CA_CERTDATA_NOTICE, CA_SOURCE_SHA256),
+        '20261020-r0': (CA_REFRESH_CERTDATA_NOTICE, CA_REFRESH_SOURCE_SHA256),
+    }.get(version) if origin == 'ca-certificates' else None
+    certdata_path, ca_source_sha256 = ca_release or (None, None)
+    certdata_notices = [row for row in notices if row['path'] == certdata_path
                         and row['sha256'] == CA_CERTDATA_NOTICE_SHA256]
-    if (origin == 'ca-certificates' and version == '20260909-r0'
-            and any(row['sha256'] == CA_SOURCE_SHA256 for row in retained)
-            and certdata_notices and any(row['path'].endswith(
-                '!ca-certificates-20260909/certdata.txt') for row in sources)):
+    if (ca_release and any(row['sha256'] == ca_source_sha256 for row in retained)
+            and certdata_notices and any(row['path'] == certdata_path.rsplit('#', 1)[0]
+                                         for row in sources)):
         # The matching certificate source carries MPL2's exhibit notice, not
         # the full terms. Reuse Mozilla's complete checked primary text only
         # after that exact release's readable source and notice are present.

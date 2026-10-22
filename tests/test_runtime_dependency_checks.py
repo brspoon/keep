@@ -14,7 +14,13 @@ from unittest.mock import patch
 
 from scripts import alpine_expat_sources
 from scripts import dhi_python_packages
+from scripts import dhi_certificate_packages
 from scripts import runtime_dependency_checks as checks
+from tests.certificate_trust_fixture import trust_report
+from tests.native_dependency_fixture import certificate_failure_reports
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class ExpatInstallManifestTests(unittest.TestCase):
@@ -227,8 +233,12 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         maps.write_text(self.mapping(ssl_library) + self.mapping(crypto_library))
         with patch.object(checks, 'SSL_LIBRARY', ssl_library), \
              patch.object(checks, 'CRYPTO_LIBRARY', crypto_library), \
-             patch.object(checks, 'exercise_openssl', return_value='3.5.9'):
+             patch.object(checks, 'exercise_openssl', return_value='3.5.9'), \
+             patch.object(checks.certificate_trust, 'qualify_trust', return_value=trust_report('amd64')) as trust:
             result = checks.check_openssl('amd64', maps)
+            trust.assert_called_once_with('amd64', checks.TLS_CERTIFICATE,
+                                          checks.TLS_PRIVATE_KEY, checks.memory_tls_handshake)
+            self.assertEqual(result['certificate_trust'], trust_report('amd64'))
             self.assertEqual(set(result['libraries']), {'ssl', 'crypto'})
             self.assertEqual(result['libraries']['crypto']['sha256'],
                              hashlib.sha256(crypto_library.read_bytes()).hexdigest())
@@ -465,7 +475,8 @@ class RuntimeReportTests(unittest.TestCase):
         return (
             {'version': '2.9.0', 'libraries': {'expat': library('libexpat.so.1.13.0')},
              'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64},
-            {'version': '3.5.9', 'libraries': {'ssl': library('libssl.so.3'),
+            {'version': '3.5.9', 'certificate_trust': trust_report('arm64'),
+             'libraries': {'ssl': library('libssl.so.3'),
                                             'crypto': library('libcrypto.so.3')}},
             {'version': '3.14.8',
              'libraries': {'python': library('libpython3.14.so.1.0'),
@@ -484,7 +495,7 @@ class RuntimeReportTests(unittest.TestCase):
              patch.object(checks, 'check_python', return_value=python):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 2, 'arch': 'arm64', 'success': True, 'tests': 3, 'failures': 0,
+            'schema': 3, 'arch': 'arm64', 'success': True, 'tests': 3, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries']},
             'expat_source_manifest_sha256': 'c' * 64,
@@ -493,6 +504,7 @@ class RuntimeReportTests(unittest.TestCase):
             'python_install_manifest_sha256': 'f' * 64,
             'python_files': python['files'], 'python_aliases': python['aliases'],
             'python_tls_probes': python['tls_probes'],
+            'certificate_trust': openssl['certificate_trust'],
         })
 
     def test_dependency_failure_is_reported_and_the_other_check_still_runs(self):
@@ -542,7 +554,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
         install_hash = hashlib.sha256(
             (json.dumps(self.manifest, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
         self.report = {
-            'schema': 2, 'arch': 'amd64', 'success': True, 'tests': 3, 'failures': 0,
+            'schema': 3, 'arch': 'amd64', 'success': True, 'tests': 3, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8'},
             'loaded_libraries': {
                 name: {'path': str(path), 'sha256': digest, 'device': '0:1', 'inode': inode}
@@ -566,15 +578,16 @@ class RetainedDependencyReportTests(unittest.TestCase):
             },
             'python_aliases': self.python['aliases'],
             'python_tls_probes': dict(checks.PYTHON_TLS_PROBES),
+            'certificate_trust': trust_report('amd64'),
         }
 
     def validate(self, report):
         with patch.object(checks, 'expected_expat_manifest', return_value=self.manifest) as source, \
              patch.object(checks, 'expected_python_manifest', return_value=self.python) as python_source:
-            result = checks.validate_report(report, 'amd64', root=Path('/source-fixture'))
-        source.assert_any_call('amd64', Path('/source-fixture'))
+            result = checks.validate_report(report, 'amd64', root=ROOT)
+        source.assert_any_call('amd64', ROOT)
         source.assert_any_call('amd64', None)
-        python_source.assert_any_call('amd64', Path('/source-fixture'))
+        python_source.assert_any_call('amd64', ROOT)
         python_source.assert_any_call('amd64', None)
         return result
 
@@ -591,10 +604,12 @@ class RetainedDependencyReportTests(unittest.TestCase):
             lock = root / 'docs/os-package-sources.json'
             lock.parent.mkdir()
             spec = alpine_expat_sources.reviewed_spec()
-            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec()]}))
+            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec(),
+                                                   dhi_certificate_packages.reviewed_spec()]}))
             self.assertEqual(checks.validate_report(self.report, 'amd64', root), self.report)
             spec['recipe']['sha256'] = 'a' * 64
-            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec()]}))
+            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec(),
+                                                   dhi_certificate_packages.reviewed_spec()]}))
             with self.assertRaisesRegex(ValueError, 'exact reviewed Alpine origin'):
                 checks.validate_report(self.report, 'amd64', root)
 
@@ -615,6 +630,17 @@ class RetainedDependencyReportTests(unittest.TestCase):
         for report in invalid:
             with self.subTest(report=report), self.assertRaises(ValueError):
                 self.validate(report)
+
+    def test_missing_or_invalid_certificate_proof_blocks_retained_native_reports(self):
+        missing = copy.deepcopy(self.report)
+        del missing['certificate_trust']
+        with self.assertRaisesRegex(ValueError, 'report schema'):
+            self.validate(missing)
+        for failure, report, message in certificate_failure_reports('amd64'):
+            original = copy.deepcopy(report)
+            with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, message):
+                self.validate(report)
+            self.assertEqual(report, original)
 
     def test_vendor_substitution_missing_libraries_and_invalid_identities_are_rejected(self):
         invalid = []
@@ -653,7 +679,8 @@ class RetainedDependencyReportTests(unittest.TestCase):
             lock.parent.mkdir()
             spec = dhi_python_packages.reviewed_spec()
             spec['recipe']['sha256'] = 'a' * 64
-            lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(), spec]}))
+            lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(), spec,
+                                                   dhi_certificate_packages.reviewed_spec()]}))
             with self.assertRaisesRegex(ValueError, 'exact reviewed DHI origin'):
                 checks.validate_report(self.report, 'amd64', root)
 

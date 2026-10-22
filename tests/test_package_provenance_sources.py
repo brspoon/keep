@@ -255,6 +255,41 @@ class PreferredSourceTests(unittest.TestCase):
             replayed = self.collect(fetch=cache.__getitem__, output='replayed')
         self.assertEqual(replayed, result)
 
+    def ca_source_request(self, *, origin='ca-certificates', version='20261020-r0', digest=None):
+        declared = ('https://gitlab.alpinelinux.org/alpine/ca-certificates/-/archive/'
+                    '20261020/ca-certificates-20261020.tar.bz2')
+        recipe = self.recipe.replace(self.source_url, declared).replace('"1.0"', '"20261020"')
+        recipe = recipe.replace('REL: "0"', 'REL: "' + version.rsplit('-r', 1)[1] + '"')
+        self.spec['origin'], self.spec['version'] = origin, version
+        self.spec['recipe']['sha256'] = hashlib.sha256(recipe.encode()).hexdigest()
+        self.scout['predicate']['source_map']['dockerfile'] = base64.b64encode(recipe.encode()).decode()
+        self.slsa['predicate']['materials'][0] = {'uri': declared, 'digest': {'sha256': digest or
+            '1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400'}}
+        return recipe.encode(), declared
+
+    def test_refreshed_ca_cache_uses_exact_reviewed_mapping_and_checks_downloaded_bytes(self):
+        recipe, declared = self.ca_source_request()
+        mirror = sources.SOURCE_MIRRORS[declared]
+        self.assertEqual(mirror, {
+            'origin': 'ca-certificates', 'version': '20261020-r0',
+            'sha256': '1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400',
+            'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/ca-certificates-20261020.tar.bz2',
+            'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE})
+        fetch = Mock(side_effect=[recipe, b'changed CA source archive'])
+        with self.assertRaisesRegex(ValueError, 'Signed preferred source sha256 mismatch'):
+            self.collect(fetch=fetch)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [self.public_url, mirror['url']])
+        self.assertEqual(self.slsa['predicate']['materials'][0]['uri'], declared)
+        self.assertFalse((self.root / 'output/sources').exists())
+
+    def test_refreshed_ca_cache_rejects_another_origin_revision_or_signed_digest(self):
+        for changes in ({'origin': 'other'}, {'version': '20261020-r1'}, {'digest': '0' * 64}):
+            recipe, _ = self.ca_source_request(**changes)
+            fetch = Mock(return_value=recipe)
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'mirror differs'):
+                self.collect(fetch=fetch, output='rejected-' + next(iter(changes)))
+            fetch.assert_called_once_with(self.public_url)
+
     def test_wrong_mirrored_bytes_are_rejected_against_signed_digest(self):
         mirror_url = 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz'
         row = {'origin': 'example', 'version': '1.0-r0', 'url': mirror_url,

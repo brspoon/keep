@@ -4,8 +4,8 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-installs the exact signed Alpine zlib `1.3.2-r1` and DHI Python `3.14.8-r0`
-packages. Package versions change through verified offline APK installation;
+installs the exact signed Alpine zlib `1.3.2-r1`, DHI Python `3.14.8-r0` and
+DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
 Every architecture job verifies signed vendor provenance, runs Docker Scout and
@@ -51,7 +51,7 @@ No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
 evidence, verify the actual runtime package identities, and package versioned
 source/notice archives with SHA-256 manifests before transferring an image.
-The original Expat, Python and zlib layers, runtime security patches and statically embedded wheel
+The original Expat, Python, zlib and CA certificate layers, runtime security patches and statically embedded wheel
 libraries are included. Full OS and supplemental notices are also copied into
 the image. See [source distribution](SOURCE_DISTRIBUTION.md) for matching
 source downloads, verification, and retention requirements.
@@ -85,6 +85,54 @@ For a release, review the successful native workflow for its exact source revisi
 and image digests. The exception policy, patch inputs and regression checks are
 tracked in this repository; results for an older image do not validate a newer
 candidate.
+
+## Certificate trust and build-tool candidate (October 21)
+
+The [certifi advisory](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2)
+requires removing the compromised emSign trust path. This candidate pins certifi
+`2026.10.19`, following the [Python Security announcement](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576)
+that recommends this release over `2026.10.18` to preserve unaffected roots and
+requires pip `26.2.2` or newer. Updating the system CA store alone does not fix
+older pip's vendored trust store.
+
+Package inspection verifies the DHI-signed `ca-certificates-bundle 20261020-r0`
+APK, its pinned key, metadata and payload hash for amd64 and arm64. The same
+noarch APK bytes serve both platforms. The [pinned DHI recipe](https://github.com/docker-hardened-images/catalog/blob/6428625d5032aaa4bc4c05dfde7f49c1268424ce/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml)
+records the matching Alpine source. The overlay installs only the prebuilt
+bundle in the pinned development and runtime images, without CA management
+tools or maintainer scripts. The base image digests, Python package cohort,
+cleanup backport and Keep permission guard remain unchanged.
+
+Keep's default HTTPS Requests connections use certifi's bundle; SMTP SSL and
+STARTTLS use `ssl.create_default_context()` and the system CA store. Certifi's
+120-root bundle removes emSign ECC Root CA - G3 while retaining G1, C1 and C3.
+The vendor system bundle has 118 roots: it also follows Mozilla NSS's separate
+[C1/C3 removal](https://github.com/mozilla/nss/commit/15734105a44679969114534ac5ceaf08e9630dd3),
+alongside the [G3 removal](https://github.com/mozilla/nss/commit/0a2b0c75fa036930d98331b721c0780693a3e17a),
+and retains G1. Those extra vendor policy removals can affect certificates
+chaining through C1/C3; they are distinct from certifi's compatibility choice.
+
+The build refreshes its system bundle before bootstrapping pip. It creates the
+application environment with `--without-pip`, downloads the fixed pip `26.2.2`
+wheel with normal HTTPS verification, checks its pinned SHA-256, and runs that
+wheel to install itself offline. Only the fixed pip then downloads application
+dependencies. Pip is removed before the environment enters the final runtime;
+the bootstrap wheel is a build input. Older ensurepip bytes in immutable base
+layers retain their existing source and notice coverage.
+
+The native dependency report now requires retained certificate trust evidence:
+exact certifi and system bundle hashes and root inventories, the signed CA
+installation/source manifest binding, the active Requests and SMTP trust stores,
+the OpenSSL certificate directory, and successful local handshakes with hostname
+and untrusted-certificate rejection. Missing or modified proof blocks acceptance.
+Archive readback and final promotion revalidate this evidence against the current
+source map without changing the original report bytes.
+
+This candidate still requires complete native amd64 and arm64 image,
+provenance, source/license, security and recovery qualification. Public package
+inspection and local tests do not establish release readiness. No new exception
+or deadline extension is introduced: the existing two exact Python scopes and
+November 1, 2026 UTC inclusive deadline remain unchanged.
 
 ## Vendor package replacement candidate (October 7)
 

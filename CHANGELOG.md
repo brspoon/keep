@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.27.4 — 2026-10-21
+
+- Update trusted certificate authorities for HTTPS connections and email delivery after the emSign security incident.
+
 ## 2.27.3 — 2026-10-19
 
 - Match titles to Plex by TMDB or TVDB ID so different title spellings no longer prevent Leaving estimates. Keep estimates unavailable when the match is ambiguous or library data is incomplete.

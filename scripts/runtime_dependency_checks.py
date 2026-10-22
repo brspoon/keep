@@ -16,6 +16,11 @@ import sys
 import tempfile
 import weakref
 
+if __package__:
+    from . import certificate_trust_checks as certificate_trust
+else:
+    import certificate_trust_checks as certificate_trust
+
 
 EXPAT_VERSION = '2.9.0'
 EXPAT_PACKAGE_VERSION = '2.9.0-r0'
@@ -451,7 +456,9 @@ def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
 def check_openssl(arch, maps_path=MAPS_PATH):
     version = exercise_openssl()
     maps_text = Path(maps_path).read_text()
-    return {'version': version, 'libraries': {
+    trust = certificate_trust.qualify_trust(
+        arch, TLS_CERTIFICATE, TLS_PRIVATE_KEY, memory_tls_handshake)
+    return {'version': version, 'certificate_trust': trust, 'libraries': {
         'ssl': verify_loaded_library(SSL_LIBRARY, 'libssl.so', maps_text),
         'crypto': verify_loaded_library(CRYPTO_LIBRARY, 'libcrypto.so', maps_text),
     }}
@@ -459,11 +466,12 @@ def check_openssl(arch, maps_path=MAPS_PATH):
 
 def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     python_manifest_path=PYTHON_MANIFEST_PATH):
-    report = {'schema': 2, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+    report = {'schema': 3, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
               'python_source_manifest_sha256': None, 'python_install_manifest_sha256': None,
-              'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {}}
+              'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {},
+              'certificate_trust': None}
     try:
         report['arch'] = architecture()
         require(not any(name in os.environ for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD')),
@@ -484,6 +492,8 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                 if name == 'expat':
                     report['expat_source_manifest_sha256'] = result['source_manifest_sha256']
                     report['expat_install_manifest_sha256'] = result['install_manifest_sha256']
+                elif name == 'openssl':
+                    report['certificate_trust'] = result['certificate_trust']
                 elif name == 'python':
                     report['python_source_manifest_sha256'] = result['source_manifest_sha256']
                     report['python_install_manifest_sha256'] = result['install_manifest_sha256']
@@ -512,10 +522,10 @@ def validate_report(report, arch, root=ROOT):
     keys = {'schema', 'arch', 'success', 'tests', 'failures', 'errors', 'versions',
             'loaded_libraries', 'expat_source_manifest_sha256', 'expat_install_manifest_sha256',
             'python_source_manifest_sha256', 'python_install_manifest_sha256',
-            'python_files', 'python_aliases', 'python_tls_probes'}
+            'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 2
+    require(type(report['schema']) is int and report['schema'] == 3
             and report['arch'] == arch and report['success'] is True
             and type(report['tests']) is int and report['tests'] == 3
             and type(report['failures']) is int and report['failures'] == 0
@@ -523,6 +533,7 @@ def validate_report(report, arch, root=ROOT):
     require(report['versions'] == {'expat': EXPAT_VERSION, 'openssl': OPENSSL_VERSION,
                                    'python': PYTHON_VERSION},
             'Dependency report versions differ from the reviewed runtime')
+    certificate_trust.validate_trust_report(report['certificate_trust'], arch, root=root)
     expected = validate_expat_manifest(expected_expat_manifest(arch, root), arch)
     expected_install_hash = hashlib.sha256(
         (json.dumps(expected, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
