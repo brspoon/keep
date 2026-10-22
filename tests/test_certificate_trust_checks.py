@@ -179,6 +179,25 @@ class TrustQualificationTests(unittest.TestCase):
                  self.assertRaisesRegex(ValueError, 'CA environment overrides'):
                 self.qualify()
 
+    def test_exact_inherited_default_ca_file_is_recorded_and_revalidated(self):
+        expected = {'SSL_CERT_FILE': str(self.system_path)}
+        with patch.dict(os.environ, expected):
+            report = self.qualify()
+        self.assertEqual(report['ca_environment'], expected)
+        self.assertEqual(checks.validate_trust_report(report, 'amd64'), report)
+        for variable, value in (
+            ('SSL_CERT_FILE', str(self.system_path.with_name('old.pem'))),
+            ('SSL_CERT_DIR', str(self.system_path.parent)),
+            ('REQUESTS_CA_BUNDLE', str(self.certifi_path)),
+            ('CURL_CA_BUNDLE', str(self.certifi_path)),
+        ):
+            bad = {**expected, variable: value}
+            with self.subTest(environment=bad):
+                with patch.dict(os.environ, bad), self.assertRaisesRegex(ValueError, 'CA environment overrides'):
+                    self.qualify()
+                with self.assertRaisesRegex(ValueError, 'CA environment overrides'):
+                    checks.validate_trust_report({**report, 'ca_environment': bad}, 'amd64')
+
     def test_wrong_certifi_version_requests_path_and_adapter_verification_fail(self):
         self.certifi.__version__ = '2026.7.22'
         with self.assertRaisesRegex(ValueError, 'certifi version'):
@@ -270,6 +289,7 @@ class TrustQualificationTests(unittest.TestCase):
         for field, value in (('schema', True), ('arch', 'arm64'), ('success', False),
                              ('tests', 7), ('failures', 1), ('errors', ['failed']),
                              ('certifi_version', '2026.7.22'), ('tls_probes', {}),
+                             ('ca_environment', None),
                              ('default_root_inventories', {}),
                              ('source_manifest_sha256', 'a' * 64),
                              ('install_manifest_sha256', 'a' * 64)):

@@ -190,6 +190,39 @@ class PreferredSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Alpine build source archive sha256 mismatch'):
             self.collect()
 
+    def test_missing_or_duplicate_context_pin_blocks_before_context_download(self):
+        path = self.root / 'docs/aports-source-lock.json'
+        original = json.loads(path.read_text())
+        for rows in ([], original['aports'] * 2):
+            path.write_text(json.dumps({'aports': rows}))
+            fetch = Mock(side_effect=self.downloads.__getitem__)
+            with self.subTest(rows=len(rows)), self.assertRaisesRegex(ValueError, 'not reviewed and pinned'):
+                self.collect(fetch=fetch, output='context-' + str(len(rows)))
+            self.assertNotIn(self.aports_url, [call.args[0] for call in fetch.call_args_list])
+
+    def test_ca_overlay_and_original_source_records_have_distinct_immutable_context_pins(self):
+        root = Path(__file__).resolve().parents[1]
+        contexts = json.loads((root / 'docs/aports-source-lock.json').read_bytes())['aports']
+        packages = json.loads((root / 'docs/os-package-sources.json').read_bytes())
+        for origin in [*packages['origins'], *packages['original_base_origins']]:
+            if origin['origin'] != 'ca-certificates':
+                continue
+            commit = origin['recipe']['upstream_commit']
+            matches = [row for row in contexts if row['origin'] == 'ca-certificates'
+                       and row['commit'] == commit]
+            with self.subTest(version=origin['version']):
+                self.assertEqual(len(matches), 1)
+                self.assertEqual(matches[0]['url'],
+                                 'https://github.com/alpinelinux/aports/archive/' + commit + '.tar.gz')
+                self.assertRegex(matches[0]['sha256'], r'^[a-f0-9]{64}$')
+                self.assertRegex(matches[0]['apkbuild_sha256'], r'^[a-f0-9]{64}$')
+        original = next(row for row in contexts if row['origin'] == 'ca-certificates'
+                        and row['commit'] == 'eb7078df3a16d666e8f7723f94bb92e00d4b9236')
+        self.assertEqual(original['sha256'],
+                         '453d208de61e884b4cda291795cad9ac918e98ea8f827fd11226b792ec9ef14a')
+        self.assertEqual(original['apkbuild_sha256'],
+                         '0c14312c1d5c4a8b7ef74433be9db58517b17eb091bccdf2c8325bc4c9c26480')
+
     def test_source_archive_paths_are_never_extracted(self):
         bad = archive({'../escape': b'bad'})
         with self.assertRaisesRegex(ValueError, 'Unsafe source path'):

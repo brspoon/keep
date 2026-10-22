@@ -130,6 +130,10 @@ exact certifi and system bundle hashes and root inventories, the signed CA
 installation/source manifest binding, the active Requests and SMTP trust stores,
 the OpenSSL certificate directory, and successful local handshakes with hostname
 and untrusted-certificate rejection. Missing or modified proof blocks acceptance.
+The pinned DHI base's exact `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
+setting is recorded and accepted because it names the verified default bundle.
+Other CA file values, directory overrides and Requests/Curl overrides block
+qualification and retained-evidence revalidation.
 Archive readback and final promotion revalidate this evidence against the current
 source map without changing the original report bytes.
 

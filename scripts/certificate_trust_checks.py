@@ -253,8 +253,8 @@ def qualify_trust(arch, certificate_pem, private_key_pem, handshake):
 
     packages = certificate_packages()
     expected_manifest = packages.build_security_manifest(arch, root=None)
-    require(not any(name in os.environ for name in OVERRIDE_VARIABLES),
-            'Certificate qualification requires default trust without CA environment overrides')
+    ca_environment = {name: os.environ[name] for name in OVERRIDE_VARIABLES if name in os.environ}
+    validate_ca_environment(ca_environment, packages.SYSTEM_BUNDLE_PATH)
     require(certifi.__version__ == CERTIFI_VERSION, 'Unexpected certifi version')
     actual_certifi = Path(certifi.where()).resolve(strict=True)
     require(actual_certifi == CERTIFI_PATH
@@ -292,10 +292,19 @@ def qualify_trust(arch, certificate_pem, private_key_pem, handshake):
             factory, certificate_pem, private_key_pem, handshake, expected['fingerprints']).items()})
     report = {'schema': 1, 'arch': arch, 'success': True, 'tests': 8, 'failures': 0,
               'errors': [], 'certifi_version': CERTIFI_VERSION, 'certifi': certifi_bundle,
+              'ca_environment': ca_environment,
               'system': system_bundle, 'capath': capath, 'default_root_inventories': default_inventory,
               'tls_probes': probes, 'install_manifest_sha256': hashlib.sha256(install_bytes).hexdigest(),
               'source_manifest_sha256': expected_manifest['source_manifest_sha256']}
     return validate_trust_report(report, arch)
+
+
+def validate_ca_environment(environment, system_bundle_path):
+    # The pinned DHI base declares this exact default. A different file, a
+    # directory override, or a Requests override changes the trust boundary.
+    require(isinstance(environment, dict) and environment in (
+        {}, {'SSL_CERT_FILE': str(system_bundle_path)}),
+        'Certificate qualification rejects unreviewed CA environment overrides')
 
 
 def validate_trust_report(report, arch, root=None):
@@ -304,6 +313,7 @@ def validate_trust_report(report, arch, root=None):
     manifest = packages.build_security_manifest(arch, root=root)
     require(isinstance(report, dict) and set(report) == {
         'schema', 'arch', 'success', 'tests', 'failures', 'errors', 'certifi_version',
+        'ca_environment',
         'certifi', 'system', 'capath', 'default_root_inventories', 'tls_probes',
         'install_manifest_sha256', 'source_manifest_sha256'}, 'Invalid certificate trust report schema')
     require(type(report['schema']) is int and report['schema'] == 1
@@ -312,6 +322,7 @@ def validate_trust_report(report, arch, root=None):
             and type(report['failures']) is int and report['failures'] == 0
             and report['errors'] == [] and report['certifi_version'] == CERTIFI_VERSION,
             'Missing or failed certificate trust qualification')
+    validate_ca_environment(report['ca_environment'], packages.SYSTEM_BUNDLE_PATH)
     validate_bundle(report['certifi'], CERTIFI_PATH, CERTIFI_SHA256, CERTIFI_CERTIFICATES,
                     CERTIFI_FINGERPRINTS_SHA256, CERTIFI_RETAINED_ROOTS)
     validate_bundle(report['system'], packages.SYSTEM_BUNDLE_PATH, packages.BUNDLE_SHA256,

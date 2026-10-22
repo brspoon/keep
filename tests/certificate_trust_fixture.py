@@ -256,6 +256,7 @@ def trust_report(arch='amd64'):
     return {
         'schema': 1, 'arch': arch, 'success': True, 'tests': 8, 'failures': 0, 'errors': [],
         'certifi_version': '2026.10.19',
+        'ca_environment': {'SSL_CERT_FILE': '/etc/ssl/certs/ca-certificates.crt'},
         'certifi': {
             'path': '/venv/lib/python3.14/site-packages/certifi/cacert.pem',
             'sha256': '50f79f98dac192b20dbf73f35c56f0b0c557ab267ff5199d1117cc1180b70785',

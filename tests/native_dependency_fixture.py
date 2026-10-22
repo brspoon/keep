@@ -47,7 +47,7 @@ def dependency_report(arch):
 def certificate_failure_reports(arch):
     """Keep other native evidence valid while changing one trust obligation."""
     excluded_root = '86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b'
-    for failure in ('missing_proof', 'certifi_hash', 'system_hash', 'failed_tls', 'excluded_capath_root'):
+    for failure in ('missing_proof', 'certifi_hash', 'system_hash', 'failed_tls', 'ca_environment', 'excluded_capath_root'):
         report = dependency_report(arch)
         if failure == 'missing_proof':
             report['certificate_trust'] = None
@@ -58,6 +58,9 @@ def certificate_failure_reports(arch):
         elif failure == 'failed_tls':
             report['certificate_trust']['tls_probes']['smtp_hostname_rejection'] = False
             message = 'Missing or failed certificate TLS probes'
+        elif failure == 'ca_environment':
+            report['certificate_trust']['ca_environment']['SSL_CERT_FILE'] = '/tmp/unreviewed.pem'
+            message = 'CA environment overrides'
         else:
             report['certificate_trust']['capath'].update(
                 entries=1, certificates=1, fingerprints=[excluded_root],
