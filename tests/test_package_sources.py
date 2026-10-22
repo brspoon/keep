@@ -1,6 +1,7 @@
 """Package names/tags never replace exact APK-byte and source-subject binding."""
 import hashlib
 import gzip
+import copy
 from contextlib import redirect_stdout
 import importlib.util
 import io
@@ -192,6 +193,147 @@ class PackageSourceTests(unittest.TestCase):
         row['packages'].append(row['packages'][0])
         with self.assertRaisesRegex(ValueError, 'reviewed APK identity'):
             collection.expected_packages(row, 'amd64')
+
+    def certificate_origin(self):
+        self.management_apk = b'exact reviewed build-only CA management package bytes'
+        version = '20261020-r0'
+        return {'origin': 'ca-certificates', 'version': version,
+                'image': 'dhi.io/pkg-ca-certificates',
+                'reference': 'dhi.io/pkg-ca-certificates:' + version + '-alpine3.24',
+                'predicate_image_name': 'dhi/pkg-ca-certificates',
+                'packages': [{'name': 'ca-certificates-bundle', 'version': version,
+                    'binaries': {arch: {'sha256': hashlib.sha256(self.apk).hexdigest()}
+                                 for arch in ('amd64', 'arm64')}}],
+                'build_only_packages': [{'name': 'ca-certificates', 'version': version,
+                    'binaries': {arch: {'sha256': hashlib.sha256(self.management_apk).hexdigest()}
+                                 for arch in ('amd64', 'arm64')}}]}
+
+    def test_build_only_apk_is_required_alongside_runtime_bytes_for_both_architectures(self):
+        origin = self.certificate_origin()
+        original_runtime = copy.deepcopy(origin['packages'])
+        for arch in ('amd64', 'arm64'):
+            with self.subTest(architecture=arch):
+                native, _ = self.image(layer([
+                    ('out/ca-certificates-bundle-20261020-r0.apk', self.apk),
+                    ('out/ca-certificates-20261020-r0.apk', self.management_apk),
+                ]), architecture=arch)
+                groups = collection.reviewed_output_groups(origin, arch)
+                self.assertEqual(len(groups), 1)
+                self.assertEqual(groups[0]['architecture'], arch)
+                self.assertFalse(groups[0]['allow_noarch'])
+                result = collection.match_package_output(self.layout, native, arch, groups[0]['packages'])
+                self.assertEqual([row['name'] for row in result['apk_matches']],
+                                 ['ca-certificates-bundle', 'ca-certificates'])
+        self.assertEqual(origin['packages'], original_runtime)
+        self.assertEqual(len(origin['packages']), 1)
+
+    def test_missing_or_different_build_only_bytes_fail_before_source_acquisition(self):
+        origin = self.certificate_origin()
+        for management in (None, b'different CA package rebuild'):
+            with self.subTest(management=management):
+                entries = [('out/ca-certificates-bundle-20261020-r0.apk', self.apk)]
+                if management is not None:
+                    entries.append(('out/ca-certificates-20261020-r0.apk', management))
+                self.native, self.layer = self.image(layer(entries))
+                with patch.object(collection, 'acquire_signed_sources') as sources, \
+                        patch.object(collection, 'retain_recipe') as recipe:
+                    result = collection.acquire_origin(origin, 'amd64',
+                        self.root / ('missing-build-apk' if management is None else 'wrong-build-apk'),
+                        self.fallback_registry())
+                self.assertFalse(result['success'])
+                self.assertEqual(result['candidate_failures'][0]['failure_kind'], 'apk-binary-mismatch')
+                self.assertIn('ca-certificates', result['candidate_failures'][0]['error'])
+                sources.assert_not_called()
+                recipe.assert_not_called()
+
+    def test_build_only_and_runtime_apks_share_the_verified_native_source_record(self):
+        origin = self.certificate_origin()
+        self.native, self.layer = self.image(layer([
+            ('out/bundle.apk', self.apk), ('out/management.apk', self.management_apk)]))
+        descriptor = {'digest': collection.digest(b'signed CA source attestation'),
+                      'annotations': {'in-toto.io/predicate-type': collection.PREDICATE}}
+        key = self.root / 'ca-fixture-key.pem'
+        key.write_bytes(b'fixture verification key')
+        test = self
+
+        class SignedRegistry(type(self.fallback_registry())):
+            def copy(self, reference, destination, **kwargs):
+                if reference != origin['image'] + '@' + descriptor['digest']:
+                    shutil.copytree(test.layout, destination)
+
+            def referrers(self, reference):
+                test.assertEqual(reference, origin['image'] + '@' + test.native)
+                return {'manifests': [descriptor]}
+
+            def verify(self, reference):
+                return json.dumps([{'critical': {'image': {
+                    'docker-manifest-digest': descriptor['digest']}}}]).encode()
+
+            def statement(self, reference):
+                return json.dumps({'predicateType': collection.PREDICATE,
+                    'subject': [{'digest': {'sha256': test.native.split(':')[1]}}],
+                    'predicate': {'source': {'name': origin['predicate_image_name'],
+                                              'digest': test.native}}}).encode()
+
+        registry = SignedRegistry()
+        registry.key = key
+        proof = {'source_image_digest': self.native, 'attestation_digest': descriptor['digest']}
+        with patch.object(collection, 'verify_source_proof', return_value=proof) as verify, \
+                patch.object(collection, 'retain_recipe', return_value={'sha256': 'a' * 64}):
+            result = collection.acquire_origin(origin, 'amd64', self.root / 'build-only-source', registry)
+        self.assertTrue(result['success'])
+        self.assertEqual(len(result['source_results']), 1)
+        source = result['source_results'][0]
+        self.assertEqual(source['for_packages'], ['ca-certificates-bundle', 'ca-certificates'])
+        self.assertEqual(source['native_image_digest'], self.native)
+        self.assertTrue(source['signature_verified'])
+        self.assertEqual(verify.call_args.kwargs['expected_native_digest'], self.native)
+
+    def test_build_only_declarations_reject_duplicates_revisions_and_malformed_identity(self):
+        origin = self.certificate_origin()
+        for change in ('runtime-duplicate', 'build-duplicate', 'revision', 'name', 'hash',
+                       'hash-type', 'binaries', 'binary', 'record'):
+            with self.subTest(change=change):
+                row = copy.deepcopy(origin)
+                package = row['build_only_packages'][0]
+                if change == 'runtime-duplicate':
+                    package['name'] = row['packages'][0]['name']
+                elif change == 'build-duplicate':
+                    row['build_only_packages'].append(copy.deepcopy(package))
+                elif change == 'revision':
+                    package['version'] = '20261020-r1'
+                elif change == 'name':
+                    package['name'] = '../ca-certificates'
+                elif change == 'hash':
+                    package['binaries']['amd64']['sha256'] = 'not-a-digest'
+                elif change == 'hash-type':
+                    package['binaries']['amd64']['sha256'] = 1
+                elif change == 'binaries':
+                    package['binaries'] = []
+                elif change == 'binary':
+                    package['binaries']['amd64'] = []
+                else:
+                    row['build_only_packages'][0] = 'ca-certificates'
+                with self.assertRaisesRegex(ValueError, 'reviewed APK identity'):
+                    collection.expected_packages(row, 'amd64')
+
+    def test_build_only_list_cannot_replace_nonempty_runtime_packages(self):
+        origin = self.certificate_origin()
+        for value in (None, {}, 'ca-certificates', 1, False, ()):
+            row = copy.deepcopy(origin)
+            row['build_only_packages'] = value
+            with self.subTest(build_only=value), self.assertRaisesRegex(ValueError, 'build-only APK list'):
+                collection.expected_packages(row, 'amd64')
+        for value in (None, [], {}, 'ca-certificates-bundle', 1, False, ()):
+            row = copy.deepcopy(origin)
+            row['packages'] = value
+            with self.subTest(runtime=value), self.assertRaisesRegex(ValueError, 'installed APKs'):
+                collection.expected_packages(row, 'amd64')
+        row = copy.deepcopy(origin)
+        del row['build_only_packages']
+        self.assertEqual(len(collection.expected_packages(row, 'amd64')), 1)
+        row['build_only_packages'] = []
+        self.assertEqual(len(collection.expected_packages(row, 'amd64')), 1)
 
     def ncurses_origin(self):
         packages = []

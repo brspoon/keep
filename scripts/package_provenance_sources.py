@@ -38,6 +38,12 @@ SOURCE_MIRRORS = {
         'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/ca-certificates-20260909.tar.bz2',
         'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
     },
+    'https://gitlab.alpinelinux.org/alpine/ca-certificates/-/archive/20261020/ca-certificates-20261020.tar.bz2': {
+        'origin': 'ca-certificates', 'version': '20261020-r0',
+        'sha256': '1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400',
+        'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/ca-certificates-20261020.tar.bz2',
+        'retrieval_method': OFFICIAL_ALPINE_SOURCE_CACHE,
+    },
     'https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz': {
         'origin': 'gdbm', 'version': '1.26-r0',
         'sha256': '6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e',

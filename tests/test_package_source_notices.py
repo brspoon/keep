@@ -436,17 +436,20 @@ class PackageNoticeTests(unittest.TestCase):
         self.assertFalse(report['success'])
         self.assertTrue(all(row['sha256'] != GPL2_SHA256 for row in report['notices']))
 
-    def ca_certificates(self, *, version='20260909-r0', matching_source=True):
+    def ca_certificates(self, *, version='20260909-r0', source_version='20260909',
+                        matching_source=True, matching_header=True):
         comment = b'# This source is subject to Mozilla Public License v2.0.\n# Copyright Authors.\n\n'
-        name = 'sources/ca-certificates-20260909.tar.bz2'
-        data = archive({'ca-certificates-20260909/certdata.txt': comment + b'BEGINDATA\n',
-                        'ca-certificates-20260909/Makefile': b'all: certdata.txt\n'})
+        name = 'sources/ca-certificates-' + source_version + '.tar.bz2'
+        prefix = 'ca-certificates-' + source_version
+        data = archive({prefix + '/certdata.txt': comment + b'BEGINDATA\n',
+                        prefix + '/Makefile': b'all: certdata.txt\n'})
         record = self.add(name, data)
         old = self.materials / record['path']; dest = self.materials / name
         dest.parent.mkdir(parents=True, exist_ok=True); old.rename(dest);record['path']=name
         self.write_manifest()
         constants = {'CA_SOURCE_SHA256': hashlib.sha256(data).hexdigest() if matching_source else '0' * 64,
-                     'CA_CERTDATA_NOTICE_SHA256': hashlib.sha256(comment).hexdigest()}
+                     'CA_REFRESH_SOURCE_SHA256': hashlib.sha256(data).hexdigest() if matching_source else '0' * 64,
+                     'CA_CERTDATA_NOTICE_SHA256': hashlib.sha256(comment).hexdigest() if matching_header else '0' * 64}
         with patch.multiple('package_source_notices', **constants):
             return inspect_package_materials(self.materials, self.root / 'ca-notices',
                 origin='ca-certificates', version=version, architecture='amd64', expected_digest=SOURCE_DIGEST)
@@ -466,6 +469,29 @@ class PackageNoticeTests(unittest.TestCase):
 
     def test_ca_mpl_supplement_cannot_apply_to_another_source_archive(self):
         report = self.ca_certificates(matching_source=False)
+        self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
+
+    def test_refreshed_ca_full_mpl_terms_require_its_matching_source_and_header(self):
+        report = self.ca_certificates(version='20261020-r0', source_version='20261020')
+        self.assertTrue(report['success'])
+        full = next(row for row in report['notices'] if row['sha256'] == MPL2_SHA256)
+        self.assertEqual(full['recipe_license_evidence'][0]['path'],
+            'sources/ca-certificates-20261020.tar.bz2!ca-certificates-20261020/certdata.txt#leading-comment')
+
+    def test_refreshed_ca_mpl_terms_reject_wrong_source_bytes(self):
+        report = self.ca_certificates(version='20261020-r0', source_version='20261020', matching_source=False)
+        self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
+
+    def test_refreshed_ca_mpl_terms_reject_an_earlier_source_release(self):
+        report = self.ca_certificates(version='20261020-r0')
+        self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
+
+    def test_refreshed_ca_mpl_terms_reject_a_changed_legal_header(self):
+        report = self.ca_certificates(version='20261020-r0', source_version='20261020', matching_header=False)
+        self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
+
+    def test_refreshed_ca_mpl_terms_cannot_apply_to_an_unreviewed_revision(self):
+        report = self.ca_certificates(version='20261020-r1', source_version='20261020')
         self.assertTrue(all(row['sha256'] != MPL2_SHA256 for row in report['notices']))
 
 

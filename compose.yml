@@ -1,6 +1,6 @@
 name: keep
 x-keep: &keep
-  image: ${KEEP_IMAGE:-brspoon/keep:2.27.3}
+  image: ${KEEP_IMAGE:-brspoon/keep:2.27.4}
   restart: unless-stopped
   env_file: .env
   volumes:

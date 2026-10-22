@@ -26,6 +26,14 @@
       "apkbuild_sha256": "0c14312c1d5c4a8b7ef74433be9db58517b17eb091bccdf2c8325bc4c9c26480"
     },
     {
+      "origin": "ca-certificates",
+      "commit": "e78f5987166c6ffbe23f6472e2e8f040298fe2da",
+      "url": "https://github.com/alpinelinux/aports/archive/e78f5987166c6ffbe23f6472e2e8f040298fe2da.tar.gz",
+      "sha256": "3bdee142c62e7659d013372b830936e76147f38b67c080515ce08e608ba60364",
+      "bytes": 14040024,
+      "apkbuild_sha256": "7b35fb8e11790105578f47d57a3b22831227b0d8ad7d064e575bad146023f3da"
+    },
+    {
       "origin": "expat",
       "commit": "41a9605db84bb52cd65c6349e5e087c2c7fe9efb",
       "url": "https://github.com/alpinelinux/aports/archive/41a9605db84bb52cd65c6349e5e087c2c7fe9efb.tar.gz",

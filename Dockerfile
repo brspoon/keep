@@ -4,12 +4,19 @@ FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cab
 FROM dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d AS dependencies
 USER 0
 WORKDIR /app
-COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/dhi_python_packages.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json /opt/runtime-build-tools/
+COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json /opt/runtime-build-tools/
 RUN ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--prepare"]
-# Keep the original cp314 build environment; final native gates verify its
-# installed wheels against the upgraded runtime, including CFFI and Argon2.
+RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
+    --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
+    ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-build-musl"]
+RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
+    --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
+    ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-certificates"]
+# Keep the original cp314 compiler environment with matching updated libc headers;
+# final native gates verify its wheels, including CFFI and Argon2.
 COPY requirements.txt .
-RUN python -m venv /venv \
+RUN python -m venv --without-pip /venv \
+    && python -B /opt/runtime-build-tools/bootstrap_build_pip.py --python /venv/bin/python \
     && /venv/bin/python -m pip install --no-cache-dir -r requirements.txt \
     && /venv/bin/python -m pip check \
     && /venv/bin/python -m pip uninstall --yes pip \
@@ -30,6 +37,8 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
 COPY --from=dependencies /opt/runtime-packages/expat/EXPAT_SECURITY.json /app/EXPAT_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/zlib/ZLIB_SECURITY.json /app/ZLIB_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/python/PYTHON_SECURITY.json /app/PYTHON_SECURITY.json
+COPY --from=dependencies /opt/runtime-packages/certificates/CA_CERTIFICATES_SECURITY.json /app/CA_CERTIFICATES_SECURITY.json
+COPY --from=dependencies /opt/runtime-packages/musl/MUSL_SECURITY.json /app/MUSL_SECURITY.json
 COPY --from=dependencies /venv /venv
 COPY --from=dependencies --chown=10001:10001 /app/data /app/data
 RUN ["python", "-c", "import os; os.chmod('/app/data', 0o700)"]

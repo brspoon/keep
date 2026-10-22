@@ -101,7 +101,7 @@
       "runtime_notice_count": 1
     },
     {
-      "origin": "ca-certificates",
+      "origin": "ca-certificates-original-base",
       "version": "20260909-r0",
       "architecture": "arm64",
       "source_image_digest": null,
@@ -176,7 +176,7 @@
       "runtime_notice_count": 2
     },
     {
-      "origin": "musl",
+      "origin": "musl-original-base",
       "version": "1.2.6-r2",
       "architecture": "arm64",
       "source_image_digest": null,
@@ -421,7 +421,7 @@
       "runtime_notice_count": 1
     },
     {
-      "origin": "ca-certificates",
+      "origin": "ca-certificates-original-base",
       "version": "20260909-r0",
       "architecture": "amd64",
       "source_image_digest": null,
@@ -496,7 +496,7 @@
       "runtime_notice_count": 2
     },
     {
-      "origin": "musl",
+      "origin": "musl-original-base",
       "version": "1.2.6-r2",
       "architecture": "amd64",
       "source_image_digest": null,
@@ -655,6 +655,56 @@
       "binding_method": "signed-alpine-packages",
       "source_manifest_sha256": "6e3669dfedf5c2833df3cb20e2d6768f11e79402958a651430fcaa0f8f935897",
       "runtime_notice_count": 1
+    },
+    {
+      "origin": "ca-certificates",
+      "version": "20261020-r0",
+      "architecture": "amd64",
+      "source_image_digest": null,
+      "provider_oci_binding": true,
+      "binding_method": "signed-build-provenance",
+      "source_manifest_sha256": "b75431188efb586801a6a4c96e7b6f847c31b1d0a033eb79bc98c89816781192",
+      "native_image_digest": "sha256:8164cd640c5342d01956fbfd68ed4c19fed6c1496b17b31b11332ad9b24972e3",
+      "signed_statement_sha256": {
+        "scout": "f7697d7a95c75c80c3e8e276ae8b38c2a6b557a9509ac578648bbaab238d7c19",
+        "slsa": "ff0266fc14b5a8edadbaa63a214dcae044cb96138de96edd55bcd947af1108f9"
+      },
+      "runtime_notice_count": 2
+    },
+    {
+      "origin": "ca-certificates",
+      "version": "20261020-r0",
+      "architecture": "arm64",
+      "source_image_digest": null,
+      "provider_oci_binding": true,
+      "binding_method": "signed-build-provenance",
+      "source_manifest_sha256": "ffaa925b503f3c016be63fb520169c3fcfff59c72a52a209687b6537d54f9791",
+      "native_image_digest": "sha256:d188dee76c8fc68781dcd50118b03980f10aff8cb880b3784bf3a03041fd57e6",
+      "signed_statement_sha256": {
+        "scout": "88d2854130c786c9d4cfe322dee3cb1304c303e85aa0a8245ecf74a6f6d7496b",
+        "slsa": "bcf0a3bb5713731627fe512011f421c9807d6d6ab3af6cf1cdc71c019c780930"
+      },
+      "runtime_notice_count": 2
+    },
+    {
+      "origin": "musl",
+      "version": "1.2.6-r3",
+      "architecture": "arm64",
+      "source_image_digest": null,
+      "provider_oci_binding": false,
+      "binding_method": "signed-alpine-packages",
+      "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+      "runtime_notice_count": 12
+    },
+    {
+      "origin": "musl",
+      "version": "1.2.6-r3",
+      "architecture": "amd64",
+      "source_image_digest": null,
+      "provider_oci_binding": false,
+      "binding_method": "signed-alpine-packages",
+      "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+      "runtime_notice_count": 12
     }
   ],
   "notices": [
@@ -7099,7 +7149,7 @@
             "ca-certificates-bundle"
           ],
           "native_image_digest": "sha256:a1b44fd2ed54e89df8fc89bd1e66ddb7a2a7527a5499d2085e1dd51e636754bc",
-          "origin": "ca-certificates",
+          "origin": "ca-certificates-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -7120,7 +7170,7 @@
             "ca-certificates-bundle"
           ],
           "native_image_digest": "sha256:a42bcaa59e2f2a159adb6d0ce7436907618665e01383468c12aa117f8a9720e0",
-          "origin": "ca-certificates",
+          "origin": "ca-certificates-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -7132,6 +7182,50 @@
           "source_manifest_sha256": "beedd389f1ce234cf622baee8a8434bdc7365d57a6e7ad52f4ad30061c7c1382",
           "version": "20260909-r0",
           "source_path": "sources/ca-certificates-20260909.tar.bz2!ca-certificates-20260909/certdata.txt#leading-comment",
+          "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "ca-certificates-bundle",
+            "ca-certificates"
+          ],
+          "native_image_digest": "sha256:8164cd640c5342d01956fbfd68ed4c19fed6c1496b17b31b11332ad9b24972e3",
+          "origin": "ca-certificates",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "f7697d7a95c75c80c3e8e276ae8b38c2a6b557a9509ac578648bbaab238d7c19",
+            "slsa": "ff0266fc14b5a8edadbaa63a214dcae044cb96138de96edd55bcd947af1108f9"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "b75431188efb586801a6a4c96e7b6f847c31b1d0a033eb79bc98c89816781192",
+          "version": "20261020-r0",
+          "source_path": "sources/ca-certificates-20261020.tar.bz2!ca-certificates-20261020/certdata.txt#leading-comment",
+          "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "ca-certificates-bundle",
+            "ca-certificates"
+          ],
+          "native_image_digest": "sha256:d188dee76c8fc68781dcd50118b03980f10aff8cb880b3784bf3a03041fd57e6",
+          "origin": "ca-certificates",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "88d2854130c786c9d4cfe322dee3cb1304c303e85aa0a8245ecf74a6f6d7496b",
+            "slsa": "bcf0a3bb5713731627fe512011f421c9807d6d6ab3af6cf1cdc71c019c780930"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "ffaa925b503f3c016be63fb520169c3fcfff59c72a52a209687b6537d54f9791",
+          "version": "20261020-r0",
+          "source_path": "sources/ca-certificates-20261020.tar.bz2!ca-certificates-20261020/certdata.txt#leading-comment",
           "discovery": "complete-leading-legal-comment"
         }
       ]
@@ -7148,7 +7242,7 @@
             "ca-certificates-bundle"
           ],
           "native_image_digest": "sha256:a1b44fd2ed54e89df8fc89bd1e66ddb7a2a7527a5499d2085e1dd51e636754bc",
-          "origin": "ca-certificates",
+          "origin": "ca-certificates-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -7176,7 +7270,7 @@
             "ca-certificates-bundle"
           ],
           "native_image_digest": "sha256:a42bcaa59e2f2a159adb6d0ce7436907618665e01383468c12aa117f8a9720e0",
-          "origin": "ca-certificates",
+          "origin": "ca-certificates-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -7193,6 +7287,64 @@
           "recipe_license_evidence": [
             {
               "path": "sources/ca-certificates-20260909.tar.bz2!ca-certificates-20260909/certdata.txt#leading-comment",
+              "sha256": "6f3d0ca739e01730cb2314a8302be79cb23a5956d7770dc3de37bc4b4db79df1"
+            }
+          ]
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "ca-certificates-bundle",
+            "ca-certificates"
+          ],
+          "native_image_digest": "sha256:8164cd640c5342d01956fbfd68ed4c19fed6c1496b17b31b11332ad9b24972e3",
+          "origin": "ca-certificates",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "f7697d7a95c75c80c3e8e276ae8b38c2a6b557a9509ac578648bbaab238d7c19",
+            "slsa": "ff0266fc14b5a8edadbaa63a214dcae044cb96138de96edd55bcd947af1108f9"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "b75431188efb586801a6a4c96e7b6f847c31b1d0a033eb79bc98c89816781192",
+          "version": "20261020-r0",
+          "source_path": "supplemental/Mozilla-MPL-2.0",
+          "discovery": "reviewed-ca-certificates-full-license-supplement",
+          "license_source_url": "https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt",
+          "recipe_license_evidence": [
+            {
+              "path": "sources/ca-certificates-20261020.tar.bz2!ca-certificates-20261020/certdata.txt#leading-comment",
+              "sha256": "6f3d0ca739e01730cb2314a8302be79cb23a5956d7770dc3de37bc4b4db79df1"
+            }
+          ]
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "ca-certificates-bundle",
+            "ca-certificates"
+          ],
+          "native_image_digest": "sha256:d188dee76c8fc68781dcd50118b03980f10aff8cb880b3784bf3a03041fd57e6",
+          "origin": "ca-certificates",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "88d2854130c786c9d4cfe322dee3cb1304c303e85aa0a8245ecf74a6f6d7496b",
+            "slsa": "bcf0a3bb5713731627fe512011f421c9807d6d6ab3af6cf1cdc71c019c780930"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "ffaa925b503f3c016be63fb520169c3fcfff59c72a52a209687b6537d54f9791",
+          "version": "20261020-r0",
+          "source_path": "supplemental/Mozilla-MPL-2.0",
+          "discovery": "reviewed-ca-certificates-full-license-supplement",
+          "license_source_url": "https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt",
+          "recipe_license_evidence": [
+            {
+              "path": "sources/ca-certificates-20261020.tar.bz2!ca-certificates-20261020/certdata.txt#leading-comment",
               "sha256": "6f3d0ca739e01730cb2314a8302be79cb23a5956d7770dc3de37bc4b4db79df1"
             }
           ]
@@ -9934,7 +10086,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -9955,7 +10107,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -9968,6 +10120,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/COPYRIGHT",
           "discovery": "notice-file"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-notice",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b",
+          "source_path": "musl-1.2.6-COPYRIGHT",
+          "discovery": "checked-public-standalone-notice"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-notice",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b",
+          "source_path": "musl-1.2.6-COPYRIGHT",
+          "discovery": "checked-public-standalone-notice"
         }
       ]
     },
@@ -9983,7 +10163,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10004,7 +10184,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10017,6 +10197,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/complex/ccoshf.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "6ebf4355682268356685ba79621a47f2f955ca910bf13ca6ed32bb52e893574f",
+          "source_path": "attribution/musl-1.2.6/src/complex/ccoshf.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "6ebf4355682268356685ba79621a47f2f955ca910bf13ca6ed32bb52e893574f",
+          "source_path": "attribution/musl-1.2.6/src/complex/ccoshf.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10032,7 +10240,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10053,7 +10261,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10066,6 +10274,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/crypt/crypt_blowfish.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "0f9054739e295e3e981e7aa29c8f287a190aef065b84a82a4c6817120d5da05d",
+          "source_path": "attribution/musl-1.2.6/src/crypt/crypt_blowfish.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "0f9054739e295e3e981e7aa29c8f287a190aef065b84a82a4c6817120d5da05d",
+          "source_path": "attribution/musl-1.2.6/src/crypt/crypt_blowfish.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10081,7 +10317,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10102,7 +10338,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10115,6 +10351,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/crypt/crypt_des.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "546b4ee35446fb2a551d7414779395789f81d53aefbabd8914375686af5d228e",
+          "source_path": "attribution/musl-1.2.6/src/crypt/crypt_des.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "546b4ee35446fb2a551d7414779395789f81d53aefbabd8914375686af5d228e",
+          "source_path": "attribution/musl-1.2.6/src/crypt/crypt_des.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10130,7 +10394,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10151,7 +10415,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10164,6 +10428,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/math/__tanl.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "3788db7251d2e14b17e761bc2eccd0d8faa3c72c16eef7a56ca2ca75eca177df",
+          "source_path": "attribution/musl-1.2.6/src/math/__tanl.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "3788db7251d2e14b17e761bc2eccd0d8faa3c72c16eef7a56ca2ca75eca177df",
+          "source_path": "attribution/musl-1.2.6/src/math/__tanl.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10179,7 +10471,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10200,7 +10492,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10213,6 +10505,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/math/exp.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "7db56f21ca9b8915d36dd5099b707aafeb6a736eae798e19b76b074764e75f34",
+          "source_path": "attribution/musl-1.2.6/src/math/exp.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "7db56f21ca9b8915d36dd5099b707aafeb6a736eae798e19b76b074764e75f34",
+          "source_path": "attribution/musl-1.2.6/src/math/exp.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10228,7 +10548,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10249,7 +10569,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10262,6 +10582,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/math/expm1l.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "a8362abd18ef31f00a7dd74c8b618ef658a4e9c3919c456d03d65a12fe445c2f",
+          "source_path": "attribution/musl-1.2.6/src/math/expm1l.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "a8362abd18ef31f00a7dd74c8b618ef658a4e9c3919c456d03d65a12fe445c2f",
+          "source_path": "attribution/musl-1.2.6/src/math/expm1l.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10277,7 +10625,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10298,7 +10646,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10311,6 +10659,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/math/fmaf.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "e5baf54228b74b036da629902d811f9f57de26133a03ce290879b5ec6de04433",
+          "source_path": "attribution/musl-1.2.6/src/math/fmaf.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "e5baf54228b74b036da629902d811f9f57de26133a03ce290879b5ec6de04433",
+          "source_path": "attribution/musl-1.2.6/src/math/fmaf.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10326,7 +10702,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10347,7 +10723,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10360,6 +10736,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/math/sincos.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "2b88cfba380b8d5aa8f8f6b9f055aee91fe112de9f967a4484807afcb5405d9d",
+          "source_path": "attribution/musl-1.2.6/src/math/sincos.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "2b88cfba380b8d5aa8f8f6b9f055aee91fe112de9f967a4484807afcb5405d9d",
+          "source_path": "attribution/musl-1.2.6/src/math/sincos.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10375,7 +10779,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10396,7 +10800,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10409,6 +10813,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/regex/regcomp.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "56b0a765e084a5cd3ed7113a893b50d259265ba76b6bea98889c45d7aec302a0",
+          "source_path": "attribution/musl-1.2.6/src/regex/regcomp.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "56b0a765e084a5cd3ed7113a893b50d259265ba76b6bea98889c45d7aec302a0",
+          "source_path": "attribution/musl-1.2.6/src/regex/regcomp.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10424,7 +10856,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10445,7 +10877,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10458,6 +10890,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/stdlib/qsort.c#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "dc9a8fd43bd2c98c437c05c214a8715df22ed746a2912969eb154fa9090213f4",
+          "source_path": "attribution/musl-1.2.6/src/stdlib/qsort.c",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "dc9a8fd43bd2c98c437c05c214a8715df22ed746a2912969eb154fa9090213f4",
+          "source_path": "attribution/musl-1.2.6/src/stdlib/qsort.c",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -10473,7 +10933,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:5ca534cb6e3a279f2d4cb3236e915719bf0eacb4200287aba40b2b6b6d1d3323",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10494,7 +10954,7 @@
             "musl"
           ],
           "native_image_digest": "sha256:67c707229f7bbd11310920753e2312ecd8f4d9882f46486183ddf26ae37fd583",
-          "origin": "musl",
+          "origin": "musl-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -10507,6 +10967,34 @@
           "version": "1.2.6-r2",
           "source_path": "sources/musl-1.2.6.tar.gz!musl-1.2.6/src/string/aarch64/memcpy.S#leading-comment",
           "discovery": "complete-leading-legal-comment"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "37060ec09f884c75d399e4a03fa9360e68d1b2629ecbfc13208dd5e8658cb662",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "1ead3716276e8a58e2e015e89fd565d9f33c10b2bc482c303b68b90c9d0f7cef",
+          "source_path": "attribution/musl-1.2.6/src/string/aarch64/memcpy.S",
+          "discovery": "reviewed-public-source-copyright"
+        },
+        {
+          "origin": "musl",
+          "version": "1.2.6-r3",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0068efec4803fc8190327b0373db18168d315cc4346137401424cf0f9abd772e",
+          "source_role": "upstream-permissive-attribution-source",
+          "source_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+          "source_file_sha256": "1ead3716276e8a58e2e015e89fd565d9f33c10b2bc482c303b68b90c9d0f7cef",
+          "source_path": "attribution/musl-1.2.6/src/string/aarch64/memcpy.S",
+          "discovery": "reviewed-public-source-copyright"
         }
       ]
     },
@@ -13005,6 +13493,7 @@
   "origins_needing_explicit_attribution": [],
   "selected_source_comments": [
     "sources/ca-certificates-20260909.tar.bz2!ca-certificates-20260909/certdata.txt#leading-comment",
+    "sources/ca-certificates-20261020.tar.bz2!ca-certificates-20261020/certdata.txt#leading-comment",
     "sources/gcc-15.2.0.tar.xz!gcc-15.2.0/libgcc/libgcc2.c#leading-comment",
     "sources/gcc-15.2.0.tar.xz!gcc-15.2.0/libgcc/unwind-dw2.c#leading-comment",
     "sources/gcc-15.2.0.tar.xz!gcc-15.2.0/libstdc++-v3/libsupc++/eh_personality.cc#leading-comment",

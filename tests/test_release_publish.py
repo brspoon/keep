@@ -54,7 +54,8 @@ def inspected_image(arch, config=None):
 class ReleasePublishTests(unittest.TestCase):
     @contextmanager
     def original_release_evidence(self, *, matches=None, config_digests=None,
-                                  empty_exceptions=False, day=None, legacy=False):
+                                  empty_exceptions=False, day=None, legacy=False,
+                                  review_policy=None, review_changes=None):
         import tests.test_release_materials as fixtures
         fixture = fixtures.ReleaseMaterialsTests()
         fixture.VERSION = Path('VERSION').read_text().strip()
@@ -67,7 +68,7 @@ class ReleasePublishTests(unittest.TestCase):
                 matches=matches, native_digests=DIGESTS,
                 config_digests=config_digests or CONFIGS,
                 empty_exceptions=empty_exceptions, validation=True,
-                legacy=legacy,
+                legacy=legacy, review_policy=review_policy, review_changes=review_changes,
             )
             original = dict(bodies)
             downloads = []
@@ -347,6 +348,75 @@ class ReleasePublishTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'older than one hour'):
                 publisher.execute('example/keep', SHA, artifacts, release=True)
         self.assertNotIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+
+    def false_positive_evidence(self):
+        from tests.test_hub_analysis_review import HubFalsePositiveReviewTests
+        fixture = HubFalsePositiveReviewTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        policy = json.loads((fixture.root / 'docs/image-exceptions.json').read_text())
+        return fixture, {'review_policy': policy, 'review_changes': {
+            f'candidate-scout-{arch}.json': fixture.scout_report() for arch in DIGESTS}}
+
+    def test_exact_truthful_approved_hub_false_positive_reaches_stable_with_original_evidence(self):
+        fixture, options = self.false_positive_evidence()
+        calls = []
+        now = fixture.NOW
+        body = json.dumps(fixture.receipt(now), indent=3) + '\n'
+        with self.publication_fixture(calls, day=now.date(), **options) as (artifacts, _evidence), \
+             patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': body}), \
+             patch.object(hub_analysis_review, 'utc_now', return_value=now), \
+             patch.object(hub_analysis_review, 'retain_review') as retain, \
+             patch.object(hub_analysis_review, 'reviewed_findings', wraps=hub_analysis_review.reviewed_findings) as adjudicate:
+            publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+        self.assertEqual(retain.call_args.args[-1], body.encode())
+        # Initial receipt plus both native pushes and all three index pushes
+        # each repeat original evidence and exact exception adjudication.
+        self.assertEqual(adjudicate.call_count, 6)
+        for call in adjudicate.call_args_list:
+            self.assertEqual(set(call.args[1]), set(DIGESTS))
+            self.assertEqual(call.args[2], now.date())
+
+    def test_hub_false_positive_expiring_after_final_source_lookup_blocks_stable_push(self):
+        fixture, options = self.false_positive_evidence()
+        calls = []
+        now = datetime.datetime(2026, 10, 25, 23, 59, 59, tzinfo=datetime.timezone.utc)
+        current = now
+        crossings = []
+
+        def source_lookup(_revision, _release):
+            nonlocal current
+            if calls and calls[-1] == ['docker', 'manifest', 'create', 'example/keep:stable',
+                                     'example/keep@' + DIGESTS['amd64'],
+                                     'example/keep@' + DIGESTS['arm64']]:
+                crossings.append(current)
+                current = now + datetime.timedelta(seconds=2)
+
+        with self.publication_fixture(calls, day=now.date(), **options) as (artifacts, _evidence), \
+             patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': json.dumps(fixture.receipt(now))}), \
+             patch.object(hub_analysis_review, 'utc_now', side_effect=lambda: current), \
+             patch.object(review_image, 'current_day', side_effect=lambda: current.date()), \
+             patch.object(publisher, 'require_current_source', side_effect=source_lookup):
+            with self.assertRaisesRegex(ValueError, 'exception_expired|blocked Scout findings'):
+                publisher.execute('example/keep', SHA, artifacts, release=True)
+        self.assertEqual(crossings, [now])
+        self.assertNotIn(['docker', 'manifest', 'push', '--purge', 'example/keep:stable'], calls)
+        self.assertEqual(len([command for command in calls if command[1] == 'push' or
+                              command[1:3] == ['manifest', 'push']]), 4)
+
+    def test_unapproved_hosted_finding_blocks_patched_candidate_before_login_or_push(self):
+        fixture, options = self.false_positive_evidence()
+        for arch in DIGESTS:
+            calls = []
+            value = fixture.receipt()
+            value['architectures'][arch]['findings'][0]['purl'] = fixture.FINDING['purl'].replace('r3?', 'r2?')
+            with self.subTest(arch=arch), self.publication_fixture(calls, day=fixture.NOW.date(), **options) as (artifacts, _), \
+                 patch.dict(os.environ, {'KEEP_HUB_ANALYSIS_REVIEW': json.dumps(value)}), \
+                 patch.object(hub_analysis_review, 'utc_now', return_value=fixture.NOW):
+                with self.assertRaisesRegex(ValueError, 'exception_mismatch'):
+                    publisher.execute('example/keep', SHA, artifacts, release=True)
+            self.assertFalse(any(command[1] in ('login', 'tag', 'push', 'manifest') for command in calls))
 
     def test_final_source_lookup_crossing_hub_review_freshness_blocks_stable(self):
         calls = []

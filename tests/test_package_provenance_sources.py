@@ -190,6 +190,39 @@ class PreferredSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Alpine build source archive sha256 mismatch'):
             self.collect()
 
+    def test_missing_or_duplicate_context_pin_blocks_before_context_download(self):
+        path = self.root / 'docs/aports-source-lock.json'
+        original = json.loads(path.read_text())
+        for rows in ([], original['aports'] * 2):
+            path.write_text(json.dumps({'aports': rows}))
+            fetch = Mock(side_effect=self.downloads.__getitem__)
+            with self.subTest(rows=len(rows)), self.assertRaisesRegex(ValueError, 'not reviewed and pinned'):
+                self.collect(fetch=fetch, output='context-' + str(len(rows)))
+            self.assertNotIn(self.aports_url, [call.args[0] for call in fetch.call_args_list])
+
+    def test_ca_overlay_and_original_source_records_have_distinct_immutable_context_pins(self):
+        root = Path(__file__).resolve().parents[1]
+        contexts = json.loads((root / 'docs/aports-source-lock.json').read_bytes())['aports']
+        packages = json.loads((root / 'docs/os-package-sources.json').read_bytes())
+        for origin in [*packages['origins'], *packages['original_base_origins']]:
+            if origin['origin'] != 'ca-certificates':
+                continue
+            commit = origin['recipe']['upstream_commit']
+            matches = [row for row in contexts if row['origin'] == 'ca-certificates'
+                       and row['commit'] == commit]
+            with self.subTest(version=origin['version']):
+                self.assertEqual(len(matches), 1)
+                self.assertEqual(matches[0]['url'],
+                                 'https://github.com/alpinelinux/aports/archive/' + commit + '.tar.gz')
+                self.assertRegex(matches[0]['sha256'], r'^[a-f0-9]{64}$')
+                self.assertRegex(matches[0]['apkbuild_sha256'], r'^[a-f0-9]{64}$')
+        original = next(row for row in contexts if row['origin'] == 'ca-certificates'
+                        and row['commit'] == 'eb7078df3a16d666e8f7723f94bb92e00d4b9236')
+        self.assertEqual(original['sha256'],
+                         '453d208de61e884b4cda291795cad9ac918e98ea8f827fd11226b792ec9ef14a')
+        self.assertEqual(original['apkbuild_sha256'],
+                         '0c14312c1d5c4a8b7ef74433be9db58517b17eb091bccdf2c8325bc4c9c26480')
+
     def test_source_archive_paths_are_never_extracted(self):
         bad = archive({'../escape': b'bad'})
         with self.assertRaisesRegex(ValueError, 'Unsafe source path'):
@@ -254,6 +287,41 @@ class PreferredSourceTests(unittest.TestCase):
                          'complete-alpine-build-recipes'}}
             replayed = self.collect(fetch=cache.__getitem__, output='replayed')
         self.assertEqual(replayed, result)
+
+    def ca_source_request(self, *, origin='ca-certificates', version='20261020-r0', digest=None):
+        declared = ('https://gitlab.alpinelinux.org/alpine/ca-certificates/-/archive/'
+                    '20261020/ca-certificates-20261020.tar.bz2')
+        recipe = self.recipe.replace(self.source_url, declared).replace('"1.0"', '"20261020"')
+        recipe = recipe.replace('REL: "0"', 'REL: "' + version.rsplit('-r', 1)[1] + '"')
+        self.spec['origin'], self.spec['version'] = origin, version
+        self.spec['recipe']['sha256'] = hashlib.sha256(recipe.encode()).hexdigest()
+        self.scout['predicate']['source_map']['dockerfile'] = base64.b64encode(recipe.encode()).decode()
+        self.slsa['predicate']['materials'][0] = {'uri': declared, 'digest': {'sha256': digest or
+            '1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400'}}
+        return recipe.encode(), declared
+
+    def test_refreshed_ca_cache_uses_exact_reviewed_mapping_and_checks_downloaded_bytes(self):
+        recipe, declared = self.ca_source_request()
+        mirror = sources.SOURCE_MIRRORS[declared]
+        self.assertEqual(mirror, {
+            'origin': 'ca-certificates', 'version': '20261020-r0',
+            'sha256': '1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400',
+            'url': 'https://distfiles.alpinelinux.org/distfiles/v3.24/ca-certificates-20261020.tar.bz2',
+            'retrieval_method': sources.OFFICIAL_ALPINE_SOURCE_CACHE})
+        fetch = Mock(side_effect=[recipe, b'changed CA source archive'])
+        with self.assertRaisesRegex(ValueError, 'Signed preferred source sha256 mismatch'):
+            self.collect(fetch=fetch)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [self.public_url, mirror['url']])
+        self.assertEqual(self.slsa['predicate']['materials'][0]['uri'], declared)
+        self.assertFalse((self.root / 'output/sources').exists())
+
+    def test_refreshed_ca_cache_rejects_another_origin_revision_or_signed_digest(self):
+        for changes in ({'origin': 'other'}, {'version': '20261020-r1'}, {'digest': '0' * 64}):
+            recipe, _ = self.ca_source_request(**changes)
+            fetch = Mock(return_value=recipe)
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'mirror differs'):
+                self.collect(fetch=fetch, output='rejected-' + next(iter(changes)))
+            fetch.assert_called_once_with(self.public_url)
 
     def test_wrong_mirrored_bytes_are_rejected_against_signed_digest(self):
         mirror_url = 'https://distfiles.alpinelinux.org/distfiles/v3.24/example-1.0.tar.gz'

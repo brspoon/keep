@@ -12,8 +12,8 @@ import urllib.request
 
 BASE = 'dhi.io/python@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7'
 HASHES = {
-    'x86_64': ('amd64', 'f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b'),
-    'aarch64': ('arm64', '8b21594c72d4d9403a82a49e9dbdfc04c27c6a21933906f1eefbb0beabe22d58'),
+    'x86_64': ('amd64', '815207e27559fd3d7dddfe778e86f0aeb823eeb24b3cd79d00bc5cd8dfd0724d'),
+    'aarch64': ('arm64', '3da088c321f55ddf2c2d1c5c9d49c66673b7a978a8b2b65f6a1ca9a3944dc3cd'),
 }
 
 
@@ -46,7 +46,7 @@ def main():
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         archive = root / 'scout.tar.gz'
-        url = f'https://github.com/docker/scout-cli/releases/download/v1.24.0/docker-scout_1.24.0_linux_{arch}.tar.gz'
+        url = f'https://github.com/docker/scout-cli/releases/download/v1.27.0/docker-scout_1.27.0_linux_{arch}.tar.gz'
         with urllib.request.urlopen(url, timeout=60) as response:
             archive.write_bytes(response.read())
         if hashlib.sha256(archive.read_bytes()).hexdigest() != checksum:
@@ -60,8 +60,8 @@ def main():
         for registry in ('dhi.io', 'docker.io', 'registry.scout.docker.com'):
             subprocess.run(['docker', 'login', registry, '--username', username, '--password-stdin'], input=token, text=True, env=env, check=True)
         if not args.scan_only:
-            # Verify the original OCI attestation directly: Scout 1.24.0 crashes
-            # in VEXExportProcessor even after successful signature verification.
+            # Verify the original OCI attestation directly. This path avoids the
+            # VEXExportProcessor crash encountered with the earlier Scout 1.24.0.
             # Docker documents key verification without Rekor for private attestations:
             # https://docs.docker.com/dhi/how-to/verify/
             native, attestation, reg_hash, cosign_hash = DIRECT[arch]

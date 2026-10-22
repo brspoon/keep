@@ -30,7 +30,7 @@ original signed material hash and the Alpine recipe checksum must match the
 retained bytes; the manifest records the declared and retrieval URLs.
 The exact zlib 1.3.2 package archive also uses Alpine's retained distfile, with
 the same signed-source and recipe checksum requirements. Alpine's retained files
-also supply the exact signed CA 20260909, GDBM 1.26 and Readline 8.3 source
+also supply the exact signed CA 20260909 and 20261020, GDBM 1.26 and Readline 8.3 source
 archives and Readline's three patches. Each mapping requires its reviewed
 origin, package revision, declared URL and signed SHA-256. The manifest records
 both the declared and retrieval URLs; mirror bytes must also match the recipe
@@ -48,7 +48,7 @@ identifiers are not interchangeable. The image-level source collection contains
 assembly inputs, so package-level sources are collected separately.
 
 The source map covers 18 origins and 29 installed OS packages. The original
-DHI Expat 2.8.5, Python 3.14.7-r2 and zlib 1.3.2-r0 in earlier image layers retain their exact APK hashes,
+DHI Expat 2.8.5, Python 3.14.7-r2, zlib 1.3.2-r0, musl 1.2.6-r2 and CA bundle 20260909-r0 in earlier image layers retain their exact APK hashes,
 native-base material binding and signed package sources separately from the
 installed replacement packages. Alpine's zlib 1.3.2-r1 is verified separately
 against signed APKs, its complete pinned aports context, upstream source,
@@ -58,6 +58,25 @@ archive inspection alone cannot satisfy that gate. Keep's exact Python patches
 are also included. Both architectures' committed notice union is regenerated
 from their checked native inventories and verified in the rebuilt source-archive
 gate. Passing source and notice checks does not waive the separate security gate.
+
+Alpine's signed musl `1.2.6-r3` runtime replacement and its matching build-only
+`musl-dev` package have their own exact native APK, metadata and signing-key pins.
+The complete immutable aports context, every recipe input and patch, upstream
+source archive, full `COPYRIGHT` and the reviewed TRE/math/crypt/architecture
+attribution headers are replayed offline. Original DHI musl `1.2.6-r2` source and
+notice provenance remains separately bound to the original base. Signed Alpine
+packages do not acquire a Docker package-build or source-image attestation claim.
+The development package is used only to build dependencies; the final package
+inventory continues to contain the core musl package alone. Complete native
+compatibility, source-archive and installed-notice verification remains mandatory.
+The [native notice preparation](https://github.com/brspoon/keep/actions/runs/39726218264)
+verified both replacement-package source sets and original DHI sources. Their
+reviewed union contains 53 package/architecture groups, with all 124 full notice
+texts unchanged. New r3 source attributions accompany the separately labeled
+original-base r2 records; every other existing source attribution is unchanged.
+This preparation does not replace the rebuilt archive and installed-notice gates
+or successful complete scanner acceptance.
+
 The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
 against their embedded libffi 3.4.6 source and wheel build recipe; this is
@@ -67,6 +86,46 @@ pip 26.2.1 and wheel 0.48.0. Their Python modules are checked against matching
 source distributions; the six embedded distlib 0.4.2 Windows launchers are
 matched to its complete source distribution and C/build inputs. Their full
 notices and vendored attribution accompany these materials.
+
+The certificate candidate records the DHI-signed `ca-certificates-bundle 20261020-r0`
+overlay separately from the exact original `20260909-r0` CA origin
+in `original_base_origins`. Its [pinned provider recipe](https://github.com/docker-hardened-images/catalog/blob/6428625d5032aaa4bc4c05dfde7f49c1268424ce/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml)
+identifies Alpine commit `e78f5987166c6ffbe23f6472e2e8f040298fe2da`;
+the signed APK's provider build identifier is
+`68cdc7eb180fe3a0843d7489185b3ca10ea806d1`. Both native source collectors must
+bind the new APK bytes to their signed package provenance. The original CA
+source, signatures and base-layer binding remain required alongside the new
+overlay's source; replacing an installed package does not replace earlier-layer
+source obligations.
+
+The same origin's `build_only_packages` record pins the native `ca-certificates`
+management package used only in the development stage. Source acquisition and
+archive replay require its exact APK bytes in the signed package output alongside
+the bundle. It adds no package to the final runtime inventory. Both build CA
+packages must be updated together so the older vendor trigger cannot regenerate
+the old bundle.
+
+The matching `ca-certificates-20261020.tar.bz2` source has SHA-256
+`1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400`.
+Its complete leading `certdata.txt` legal notice is byte-identical to the
+reviewed 20260909 notice. The MPL supplement accepts each exact release's archive,
+readable source and notice before adding the checked full MPL 2.0 terms; another
+version or source hash cannot reuse that approval. Complete new and original CA
+attributions still require native notice preparation and review.
+
+The Python source lock now pins certifi `2026.10.19` and its matching MPL-covered
+source distribution. Its trust policy differs from the vendor system bundle:
+certifi preserves unaffected emSign C1/C3 roots, while the vendor follows
+Mozilla NSS's additional removals. See the [certificate candidate](IMAGE_SECURITY.md#certificate-trust-and-build-tool-candidate-october-21)
+for the advisory and policy references. Pip `26.2.2` is a checksum-verified build
+bootstrap input and is removed before the application environment enters the
+runtime. It does not replace the older pip/ensurepip source records required by
+immutable base layers. Keep's source archive explicitly includes the CA package
+verifier, pip bootstrap and certificate trust checks with the Docker build inputs.
+Native certificate checks, signed source acquisition and notice preparation
+passed in [the native review](https://github.com/brspoon/keep/actions/runs/39719304568).
+Rebuilt archive member and installed-notice verification remain required;
+the separate musl finding still blocks complete image security acceptance.
 
 Docker's timezone package tag is reused across IANA releases. If it no longer
 matches the recorded 2026d APK, a narrowly scoped fallback obtains IANA 2026d,
@@ -131,9 +190,9 @@ After unpacking, the manifest identifies each retained file's SHA-256, release
 version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
-container. The prepared runtime union contains 124 complete notice texts
-(814,844 bytes) and 556 complete native attributions, covering all 22 current and
-earlier-layer origins on both architectures. It retains 20 explicitly selected
+container. The reviewed runtime union contains 124 complete notice texts
+(814,844 bytes) and 560 complete native attributions, covering all 23 current and
+earlier-layer origins on both architectures. It retains 21 explicitly selected
 source copyright headers and four timezone headers from the checked public
 source fallback. The license text bytes are unchanged; the new Python and zlib
 packages have their own source attributions, and timezone attributions describe
@@ -142,6 +201,8 @@ The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated
 notice's complete native source attribution against the committed provenance.
 Sharing a license text does not transfer its source or signature evidence.
+The certificate overlay retains the earlier notice text bytes and separately
+attributes the current and original CA sources on both architectures.
 Asset and installed Python notices remain in their original paths.
 
 The collection and packaging scripts are under `scripts/`. Authenticated
@@ -173,6 +234,10 @@ tested candidate; no second source collection, image build, scanner or native te
 run is used. Only the small index travels through Actions artifacts. Candidate
 tests, security review, source/notice verification and native
 recovery must still pass before a native image becomes eligible for publication.
+The original native dependency report must also retain the certificate trust
+proof for the active Requests and SMTP stores. Archive readback and final
+promotion reject missing proof, changed bundle/source identities, unreviewed
+roots or failed TLS probes without rewriting the retained report bytes.
 
 Aggregation binds both architectures' original run, attempt, source revision,
 native manifest and image-configuration identities to their source-member and

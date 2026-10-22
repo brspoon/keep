@@ -4,13 +4,16 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-installs the exact signed Alpine zlib `1.3.2-r1` and DHI Python `3.14.8-r0`
-packages. Package versions change through verified offline APK installation;
+installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.8-r0` and
+DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
-Every architecture job verifies signed vendor provenance, runs Docker Scout and
-an unsuppressed Grype scan, and executes all nine runtime regression probes.
-Scout must report zero findings. Grype's complete raw findings remain visible;
+Every architecture job verifies signed vendor provenance, runs checksum-pinned
+Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runtime
+regression probes.
+Zero Scout and Docker Hub findings remain the default requirement. The only
+temporary Scout approval is the verified musl false positive described below,
+through October 25, 2026 UTC inclusive. Grype's complete raw findings remain visible;
 only the two exact verified-fixed Python `3.14.8-r0` scopes in
 docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
@@ -51,7 +54,7 @@ No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
 evidence, verify the actual runtime package identities, and package versioned
 source/notice archives with SHA-256 manifests before transferring an image.
-The original Expat, Python and zlib layers, runtime security patches and statically embedded wheel
+The original Expat, Python, zlib, musl and CA certificate layers, runtime security patches and statically embedded wheel
 libraries are included. Full OS and supplemental notices are also copied into
 the image. See [source distribution](SOURCE_DISTRIBUTION.md) for matching
 source downloads, verification, and retention requirements.
@@ -71,9 +74,10 @@ Approved images then pass through temporary run-and-attempt-specific registry ta
 the publication job receives immutable digests, validates source/runtime identity,
 and retains them for a separate stable-promotion run. Before publishing release
 tags, a maintainer must inspect Docker Hub's completed stored analysis for both
-exact native digests and record zero counts at every severity. A CLI scan is not
-proof that Hub's stored analysis has completed. Missing, pending, nonzero, stale
-or wrong-digest review records block stable promotion. After publication,
+exact native digests and record truthful counts and every approved false positive.
+Any unapproved finding blocks; the certifi Critical finding must be absent.
+A CLI scan is not proof that Hub's stored analysis has completed. Missing,
+pending, unapproved, stale or wrong-digest review records block stable promotion. After publication,
 CI attempts to remove only its temporary tags, not their shared image manifests. If the CI
 token lacks delete permission, it emits an explicit cleanup warning. A maintainer
 can remove those exact tags with a separate deletion-capable credential after
@@ -85,6 +89,143 @@ For a release, review the successful native workflow for its exact source revisi
 and image digests. The exception policy, patch inputs and regression checks are
 tracked in this repository; results for an older image do not validate a newer
 candidate.
+
+## Certificate trust and build-tool candidate (October 21)
+
+The [certifi advisory](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2)
+requires removing the compromised emSign trust path. This candidate pins certifi
+`2026.10.19`, following the [Python Security announcement](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576)
+that recommends this release over `2026.10.18` to preserve unaffected roots and
+requires pip `26.2.2` or newer. Updating the system CA store alone does not fix
+older pip's vendored trust store.
+
+Package inspection verifies the DHI-signed `ca-certificates-bundle 20261020-r0`
+APK, its pinned key, metadata and payload hash for amd64 and arm64. The same
+noarch APK bytes serve both platforms. The [pinned DHI recipe](https://github.com/docker-hardened-images/catalog/blob/6428625d5032aaa4bc4c05dfde7f49c1268424ce/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml)
+records the matching Alpine source. The development image upgrades the matching
+`ca-certificates` management package and bundle together, with normal vendor
+triggers enabled. Updating the bundle alone lets the older generator restore
+stale roots. The runtime receives only the prebuilt bundle, without adding CA
+management tools. The base image digests, Python package cohort,
+cleanup backport and Keep permission guard remain unchanged.
+
+Keep's default HTTPS Requests connections use certifi's bundle; SMTP SSL and
+STARTTLS use `ssl.create_default_context()` and the system CA store. Certifi's
+120-root bundle removes emSign ECC Root CA - G3 while retaining G1, C1 and C3.
+The vendor system bundle has 118 roots: it also follows Mozilla NSS's separate
+[C1/C3 removal](https://github.com/mozilla/nss/commit/15734105a44679969114534ac5ceaf08e9630dd3),
+alongside the [G3 removal](https://github.com/mozilla/nss/commit/0a2b0c75fa036930d98331b721c0780693a3e17a),
+and retains G1. Those extra vendor policy removals can affect certificates
+chaining through C1/C3; they are distinct from certifi's compatibility choice.
+
+The build verifies the installed CA generator, configuration, individual roots,
+hashed certificate directory and effective trust after the transaction; a
+trigger that hides its own failure cannot pass these checks. It refreshes its
+system bundle before bootstrapping pip. It creates the
+application environment with `--without-pip`, downloads the fixed pip `26.2.2`
+wheel with normal HTTPS verification, checks its pinned SHA-256, and runs that
+wheel to install itself offline. Only the fixed pip then downloads application
+dependencies. Pip is removed before the environment enters the final runtime;
+the bootstrap wheel is a build input. Older ensurepip bytes in immutable base
+layers retain their existing source and notice coverage.
+
+The native dependency report now requires retained certificate trust evidence:
+exact certifi and system bundle hashes and root inventories, the signed CA
+installation/source manifest binding, the active Requests and SMTP trust stores,
+the OpenSSL certificate directory, and successful local handshakes with hostname
+and untrusted-certificate rejection. Missing or modified proof blocks acceptance.
+The pinned DHI base's exact `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
+setting is recorded and accepted because it names the verified default bundle.
+Other CA file values, directory overrides and Requests/Curl overrides block
+qualification and retained-evidence revalidation.
+Archive readback and final promotion revalidate this evidence against the current
+source map without changing the original report bytes.
+
+The [native review](https://github.com/brspoon/keep/actions/runs/39719304568)
+passed application, installation, recovery, all nine security regressions,
+dependency/certificate trust checks, signed source acquisition and notice
+preparation on amd64 and arm64. Both reports contain the exact 120-root certifi
+and 118-root system inventories and successful TLS controls. The reviewed notice
+union retains all 124 original text files unchanged and adds the new CA source
+attributions. Rebuilt source archives must also pass their full member and
+installed-notice checks before release.
+
+Overall image security acceptance remains blocked by the separate musl finding
+below. No new exception or deadline extension is introduced: the existing two
+exact Python scopes and November 1, 2026 UTC inclusive deadline remain unchanged.
+
+### October 21 musl release hold
+
+The original complete Scout reports identify `CVE-2026-107891` against the pinned
+base's musl `1.2.6-r2`. The [maintainer advisory](https://www.openwall.com/lists/musl/2026/10/21/1)
+describes integer overflows in libc's regular-expression compiler; this finding
+does not come from the CA update. The bounded source assessment does not establish
+application-level exploitability, and that uncertainty does not waive the gate.
+
+[Alpine 3.24 security data](https://secdb.alpinelinux.org/v3.24/main.json) records
+the fix at `1.2.6-r3`; [edge data](https://secdb.alpinelinux.org/edge/main.json)
+records it at `1.2.6-r6`. Scout's reports name Alpine 3.24 but use the edge
+threshold. Correcting that threshold alone would still leave the installed r2
+package affected. The musl candidate installs Alpine's exact signed `1.2.6-r3`
+package in the runtime. Its build stage upgrades libc and the exactly coupled
+`musl-dev` package together before creating the application environment; neither
+the development package nor package-management tools enter the final runtime.
+The inspected DHI delivery still offers r2, so the source records identify Alpine
+signature/source binding explicitly and retain original DHI r2 provenance separately.
+
+The [pinned Alpine recipe](https://github.com/alpinelinux/aports/blob/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e/main/musl/APKBUILD)
+retains the matching upstream `1.2.6` source and complete build context, including
+the regex correction and every other checksum-listed patch. The loader's upstream
+version stays `1.2.6`; its package revision, signed payload bytes and source identity
+establish which correction is installed. Fresh interpreters must verify the loader
+actually mapped by normal consumers, its inode/device/hash, libc alias and successful
+bounded libc controls. The retained dependency report requires this evidence along
+with all existing Python, TLS and dependency proofs; older reports cannot qualify
+the changed candidate. All native application, installer/recovery and source gates
+remain required.
+
+The [musl notice-preparation run](https://github.com/brspoon/keep/actions/runs/39726218264)
+passed both native builds, application, installation, recovery, all nine security
+regressions, default loaded-libc checks and signed matching-source acquisition.
+The reviewed two-architecture notice union adds r3 attribution and separates the
+original DHI r2 provenance while retaining all 124 complete text files unchanged.
+It contains 53 package/architecture groups with no attribution gaps.
+Both original Scout `1.24.0` reports still matched the genuine r3 package against
+the r6 threshold. Grype contained only the two existing exact Python scopes.
+
+The [Scout 1.27.0 qualification](https://github.com/brspoon/keep/actions/runs/39728273258)
+rebuilt both architectures, verified every source-archive member and installed
+notice, and passed all functional, security, provenance and source/license checks.
+It remained failed solely at Scout acceptance: the original complete reports
+matched stable Alpine 3.24 musl `1.2.6-r3` against edge's `1.2.6-r6` threshold.
+That failed run cannot qualify publication.
+
+The October 22 review permits only `CVE-2026-107891`, `UNSPECIFIED`, exact PURL
+`pkg:apk/alpine/musl@1.2.6-r3?os_name=alpine&os_version=3.24`, affected range
+`<1.2.6-r6` and fixed version `1.2.6-r6`, through **October 25 UTC inclusive**.
+[Alpine's stable feed](https://secdb.alpinelinux.org/v3.24/main.json) identifies r3
+as fixed; edge uses r6. The signed APKs, immutable recipe and correction patch,
+actual default-loader bytes, native probes and complete matching sources establish
+the installed fix. This is a scoped false-positive approval, not approval to ship
+unfixed musl. Old r2, other packages/distributions/versions/severities/thresholds,
+and every unmatched finding still block.
+
+Fresh complete qualification on both architectures and exact-main validation
+remain required. The original Scout reports remain unchanged and visible. Docker
+Hub must be reviewed with completed, unfiltered analysis for both exact digests;
+its counts remain truthful, including this finding if still present. The v2
+receipt records each exact finding and binds acceptance to original native
+source/provenance/runtime evidence. The native and hosted gates reapply the same
+inclusive deadline before each publication push. A needed approval blocks on
+October 26; an unused expired entry does not block a clean image. The two Python
+approvals and their November 1 deadlines are unchanged.
+
+[Scout issue #248](https://github.com/docker/scout-cli/issues/248) tracks the
+correction. Remove the approval only after fresh complete native scans and actual
+hosted analysis no longer report it, with all existing qualification checks
+passing. Issue closure, a client announcement or suppressing the result does not
+prove correction. Zero findings remains the default release goal; further false
+positives need their own explicit, evidence-backed review and bounded approval.
 
 ## Vendor package replacement candidate (October 7)
 
@@ -307,6 +448,8 @@ carry forward or authorize other package versions. A finding that still needs
 one of the current exceptions on November 2 blocks validation and promotion;
 it requires a proven replacement or another explicit security review.
 Correcting deadline handling alone never renews an approval.
+The separate Scout false-positive entry uses the same advisory warning mechanism
+and expires October 25, 2026 UTC inclusive. It does not change the Python deadline.
 
 ## zlib delivery correction
 

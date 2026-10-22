@@ -13,8 +13,15 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from scripts import alpine_expat_sources
+from scripts import alpine_musl_sources
 from scripts import dhi_python_packages
+from scripts import dhi_certificate_packages
 from scripts import runtime_dependency_checks as checks
+from tests.certificate_trust_fixture import trust_report
+from tests.native_dependency_fixture import certificate_failure_reports, dependency_report, musl_failure_reports
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class ExpatInstallManifestTests(unittest.TestCase):
@@ -147,6 +154,50 @@ class PythonInstallManifestTests(unittest.TestCase):
                 checks.read_python_manifest(path, 'amd64')
 
 
+class MuslInstallManifestTests(unittest.TestCase):
+    def manifest(self, arch='amd64'):
+        return alpine_musl_sources.build_security_manifest(arch, root=None)
+
+    def test_both_exact_native_manifests_and_original_bytes_are_required(self):
+        for arch in ('amd64', 'arm64'):
+            manifest = self.manifest(arch)
+            self.assertEqual(checks.validate_musl_manifest(manifest, arch), manifest)
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'MUSL_SECURITY.json'
+                body = (json.dumps(manifest, sort_keys=True, indent=2) + '\n').encode()
+                path.write_bytes(body)
+                self.assertEqual(checks.read_musl_manifest(path, arch),
+                                 (manifest, hashlib.sha256(body).hexdigest()))
+                alias = path.with_name('alias.json')
+                alias.symlink_to(path.name)
+                with self.assertRaisesRegex(ValueError, 'regular file'):
+                    checks.read_musl_manifest(alias, arch)
+                path.write_bytes(b' ' * (128 * 1024 + 1))
+                with self.assertRaisesRegex(ValueError, 'too large'):
+                    checks.read_musl_manifest(path, arch)
+
+    def test_package_source_loader_alias_and_build_only_records_are_exact(self):
+        invalid = [None, {}, self.manifest('arm64')]
+        for field, value in (('schema', 'old'), ('package_version', '1.2.6-r2'),
+                             ('source_manifest_sha256', 'a' * 64),
+                             ('dev_payload_inventory_sha256', 'b' * 64),
+                             ('aliases', {}), ('build_only_packages', [])):
+            invalid.append({**self.manifest(), field: value})
+        for group in ('packages', 'build_only_packages'):
+            for field, value in (('signature_verified', False), ('signature_verified', 1),
+                                 ('apk_sha256', 'a' * 64), ('pkginfo_sha256', 'b' * 64),
+                                 ('signing_key_sha256', 'c' * 64)):
+                manifest = self.manifest()
+                manifest[group][0][field] = value
+                invalid.append(manifest)
+        manifest = self.manifest()
+        manifest['library']['sha256'] = 'd' * 64
+        invalid.append(manifest)
+        for manifest in invalid:
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                checks.validate_musl_manifest(manifest, 'amd64')
+
+
 class LoadedLibraryIdentityTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -227,8 +278,12 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         maps.write_text(self.mapping(ssl_library) + self.mapping(crypto_library))
         with patch.object(checks, 'SSL_LIBRARY', ssl_library), \
              patch.object(checks, 'CRYPTO_LIBRARY', crypto_library), \
-             patch.object(checks, 'exercise_openssl', return_value='3.5.9'):
+             patch.object(checks, 'exercise_openssl', return_value='3.5.9'), \
+             patch.object(checks.certificate_trust, 'qualify_trust', return_value=trust_report('amd64')) as trust:
             result = checks.check_openssl('amd64', maps)
+            trust.assert_called_once_with('amd64', checks.TLS_CERTIFICATE,
+                                          checks.TLS_PRIVATE_KEY, checks.memory_tls_handshake)
+            self.assertEqual(result['certificate_trust'], trust_report('amd64'))
             self.assertEqual(set(result['libraries']), {'ssl', 'crypto'})
             self.assertEqual(result['libraries']['crypto']['sha256'],
                              hashlib.sha256(crypto_library.read_bytes()).hexdigest())
@@ -245,6 +300,86 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         with patch.object(Path, 'stat', side_effect=(before, after)):
             with self.assertRaisesRegex(ValueError, 'changed while hashing'):
                 checks.file_identity(self.library)
+
+
+class LoadedMuslIdentityTests(unittest.TestCase):
+    mapping = LoadedLibraryIdentityTests.mapping
+
+    def setUp(self):
+        LoadedLibraryIdentityTests.setUp(self)
+        self.library = self.root / 'ld-musl-x86_64.so.1'
+        self.library.write_bytes(b'reviewed fixed musl loader fixture')
+        self.digest = hashlib.sha256(self.library.read_bytes()).hexdigest()
+        self.alias = self.root / 'libc.musl-x86_64.so.1'
+        self.alias.symlink_to(self.library.name)
+        self.manifest = {'library': {'path': str(self.library), 'sha256': self.digest},
+                         'aliases': {str(self.alias): self.library.name},
+                         'source_manifest_sha256': 'a' * 64}
+
+    def verify(self, text, digest=None):
+        manifest = copy.deepcopy(self.manifest)
+        if digest is not None:
+            manifest['library']['sha256'] = digest
+        return checks.verify_musl_files(manifest, text)
+
+    def test_default_loader_and_exact_libc_alias_share_one_signed_inode(self):
+        result = self.verify(self.mapping() + self.mapping(self.alias))
+        self.assertEqual(result['sha256'], self.digest)
+        self.assertEqual(result['inode'], self.library.stat().st_ino)
+        self.alias.unlink()
+        self.alias.symlink_to('./' + self.library.name)
+        with self.assertRaisesRegex(ValueError, 'libc alias'):
+            self.verify(self.mapping())
+
+    def test_other_arch_libc_deleted_and_matching_copies_are_rejected(self):
+        for name in ('ld-musl-aarch64.so.1', 'libc.musl-aarch64.so.1', 'libc.so.6'):
+            other = self.root / name
+            other.write_bytes(self.library.read_bytes())
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'unreviewed'):
+                self.verify(self.mapping() + self.mapping(other))
+        with self.assertRaisesRegex(ValueError, 'deleted'):
+            self.verify(self.mapping().rstrip() + ' (deleted)\n')
+        copy_path = self.root / 'other' / self.library.name
+        copy_path.parent.mkdir()
+        copy_path.write_bytes(self.library.read_bytes())
+        with self.assertRaisesRegex(ValueError, 'unexpected library'):
+            self.verify(self.mapping(copy_path))
+
+    def test_missing_mapping_wrong_hash_inode_or_device_fail(self):
+        for text in ('', self.mapping(inode=self.library.stat().st_ino + 1),
+                     self.mapping(device=(255, 255))):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                self.verify(text)
+        with self.assertRaisesRegex(ValueError, 'package hash'):
+            self.verify(self.mapping(), 'f' * 64)
+
+    def test_c_probes_follow_complete_installed_and_default_loader_verification(self):
+        maps = self.root / 'maps'
+        maps.write_text(self.mapping())
+        with patch.object(checks, 'read_musl_manifest', return_value=(self.manifest, 'b' * 64)), \
+             patch.object(checks, 'musl_packages') as packages, \
+             patch.object(checks, 'exercise_musl_regex') as regex, \
+             patch.object(checks, 'exercise_musl_compatibility') as compatibility:
+            result = checks.check_musl('amd64', self.root / 'install.json', maps)
+            packages.return_value.verify_installed.assert_called_once_with('amd64', self.manifest)
+            self.assertEqual(result['aliases'], self.manifest['aliases'])
+            self.assertEqual(result['probes'], checks.MUSL_PROBES)
+            self.assertEqual(result['install_manifest_sha256'], 'b' * 64)
+            regex.assert_called_once()
+            compatibility.assert_called_once()
+            regex.reset_mock()
+            compatibility.reset_mock()
+            maps.write_text(self.mapping(inode=self.library.stat().st_ino + 1))
+            with self.assertRaisesRegex(ValueError, 'inode'):
+                checks.check_musl('amd64', self.root / 'install.json', maps)
+            regex.assert_not_called()
+            compatibility.assert_not_called()
+            maps.write_text(self.mapping())
+            packages.return_value.verify_installed.side_effect = ValueError('bad installed package')
+            with self.assertRaisesRegex(ValueError, 'bad installed package'):
+                checks.check_musl('amd64', self.root / 'install.json', maps)
+            regex.assert_not_called()
+            compatibility.assert_not_called()
 
 
 class LoadedPythonIdentityTests(unittest.TestCase):
@@ -367,6 +502,26 @@ class LoadedPythonIdentityTests(unittest.TestCase):
 
 
 class BenignFunctionalChecksTests(unittest.TestCase):
+    def test_ordinary_libc_consumers_work_without_external_network(self):
+        checks.exercise_musl_compatibility()
+
+    def test_child_process_timeout_or_bad_result_does_not_pass(self):
+        with patch.object(checks.subprocess, 'run',
+                          side_effect=checks.subprocess.TimeoutExpired('python', 10)):
+            with self.assertRaises(checks.subprocess.TimeoutExpired):
+                checks.exercise_musl_compatibility()
+        child = checks.subprocess.CompletedProcess([], 0, 'wrong\n', '')
+        with patch.object(checks.subprocess, 'run', return_value=child):
+            with self.assertRaisesRegex(ValueError, 'process execution'):
+                checks.exercise_musl_compatibility()
+
+    @unittest.skipUnless(sys.platform == 'linux' and any(Path('/lib').glob('ld-musl-*.so.1')),
+                         'Real C regex probes require the fixed native musl image')
+    def test_fixed_native_libc_runs_benign_regex_and_compatibility_probes(self):
+        # check_musl proves signed package and mapped loader bytes first.
+        report = checks.check_musl(checks.architecture())
+        self.assertEqual(report['probes'], checks.MUSL_PROBES)
+
     def test_normal_and_malformed_xml_are_checked_with_the_real_parser(self):
         with patch.object(pyexpat, 'EXPAT_VERSION', 'expat_2.9.0'), \
              patch.object(pyexpat, 'version_info', (2, 9, 0)):
@@ -462,10 +617,12 @@ class RuntimeReportTests(unittest.TestCase):
             return {'path': '/usr/lib/' + name, 'sha256': 'b' * 64,
                     'device': '0:1', 'inode': 123}
         python = dhi_python_packages.build_security_manifest('arm64', root=None)
+        musl = alpine_musl_sources.build_security_manifest('arm64', root=None)
         return (
             {'version': '2.9.0', 'libraries': {'expat': library('libexpat.so.1.13.0')},
              'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64},
-            {'version': '3.5.9', 'libraries': {'ssl': library('libssl.so.3'),
+            {'version': '3.5.9', 'certificate_trust': trust_report('arm64'),
+             'libraries': {'ssl': library('libssl.so.3'),
                                             'crypto': library('libcrypto.so.3')}},
             {'version': '3.14.8',
              'libraries': {'python': library('libpython3.14.so.1.0'),
@@ -473,43 +630,55 @@ class RuntimeReportTests(unittest.TestCase):
              'files': {'executable': library('python3.14'), 'abi_library': library('libpython3.so')},
              'aliases': python['aliases'], 'tls_probes': dict(checks.PYTHON_TLS_PROBES),
              'source_manifest_sha256': 'e' * 64, 'install_manifest_sha256': 'f' * 64},
+            {'version': '1.2.6-r3', 'libraries': {'musl': library('ld-musl-aarch64.so.1')},
+             'aliases': musl['aliases'], 'probes': dict(checks.MUSL_PROBES),
+             'source_manifest_sha256': 'a' * 64, 'install_manifest_sha256': 'b' * 64},
         )
 
     def test_report_binds_both_versions_loaded_hashes_and_source_install_manifests(self):
-        expat, openssl, python = self.results()
+        expat, openssl, python, musl = self.results()
         with patch.object(checks, 'architecture', return_value='arm64'), \
              patch.dict(os.environ, {}, clear=True), \
              patch.object(checks, 'check_expat', return_value=expat), \
              patch.object(checks, 'check_openssl', return_value=openssl), \
-             patch.object(checks, 'check_python', return_value=python):
+             patch.object(checks, 'check_python', return_value=python), \
+             patch.object(checks, 'check_musl', return_value=musl):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 2, 'arch': 'arm64', 'success': True, 'tests': 3, 'failures': 0,
-            'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8'},
-            'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries']},
+            'schema': 4, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
+            'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8',
+                                      'musl': '1.2.6-r3'},
+            'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
+                                 **musl['libraries']},
             'expat_source_manifest_sha256': 'c' * 64,
             'expat_install_manifest_sha256': 'd' * 64,
             'python_source_manifest_sha256': 'e' * 64,
             'python_install_manifest_sha256': 'f' * 64,
             'python_files': python['files'], 'python_aliases': python['aliases'],
             'python_tls_probes': python['tls_probes'],
+            'musl_source_manifest_sha256': 'a' * 64,
+            'musl_install_manifest_sha256': 'b' * 64,
+            'musl_aliases': musl['aliases'], 'musl_probes': musl['probes'],
+            'certificate_trust': openssl['certificate_trust'],
         })
 
     def test_dependency_failure_is_reported_and_the_other_check_still_runs(self):
-        _, openssl, python = self.results()
+        _, openssl, python, musl = self.results()
         with patch.object(checks, 'architecture', return_value='amd64'), \
              patch.dict(os.environ, {}, clear=True), \
              patch.object(checks, 'check_expat', side_effect=ValueError('wrong binding')), \
              patch.object(checks, 'check_openssl', return_value=openssl) as ssl_check, \
-             patch.object(checks, 'check_python', return_value=python) as python_check:
+             patch.object(checks, 'check_python', return_value=python) as python_check, \
+             patch.object(checks, 'check_musl', return_value=musl) as musl_check:
             report = checks.qualify_runtime()
         self.assertFalse(report['success'])
-        self.assertEqual(report['tests'], 3)
+        self.assertEqual(report['tests'], 4)
         self.assertEqual(report['failures'], 1)
         self.assertEqual(report['errors'], [{'check': 'expat', 'message': 'wrong binding'}])
-        self.assertEqual(report['versions'], {'openssl': '3.5.9', 'python': '3.14.8'})
+        self.assertEqual(report['versions'], {'openssl': '3.5.9', 'python': '3.14.8', 'musl': '1.2.6-r3'})
         ssl_check.assert_called_once()
         python_check.assert_called_once()
+        musl_check.assert_called_once()
 
     def test_loader_overrides_block_qualification_before_importing_dependencies(self):
         for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD'):
@@ -518,7 +687,8 @@ class RuntimeReportTests(unittest.TestCase):
                  patch.dict(os.environ, {name: '/unexpected'}, clear=True), \
                  patch.object(checks, 'check_expat') as expat, \
                  patch.object(checks, 'check_openssl') as openssl, \
-                 patch.object(checks, 'check_python') as python:
+                 patch.object(checks, 'check_python') as python, \
+                 patch.object(checks, 'check_musl') as musl:
                 report = checks.qualify_runtime()
                 self.assertFalse(report['success'])
                 self.assertEqual(report['tests'], 0)
@@ -526,6 +696,7 @@ class RuntimeReportTests(unittest.TestCase):
                 expat.assert_not_called()
                 openssl.assert_not_called()
                 python.assert_not_called()
+                musl.assert_not_called()
 
     def test_report_cli_emits_failure_json_and_returns_nonzero(self):
         report = {'success': False, 'errors': [{'check': 'expat', 'message': 'wrong binding'}]}
@@ -539,50 +710,28 @@ class RetainedDependencyReportTests(unittest.TestCase):
     def setUp(self):
         self.manifest = ExpatInstallManifestTests().manifest()
         self.python = PythonInstallManifestTests().manifest()
-        install_hash = hashlib.sha256(
-            (json.dumps(self.manifest, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
-        self.report = {
-            'schema': 2, 'arch': 'amd64', 'success': True, 'tests': 3, 'failures': 0,
-            'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8'},
-            'loaded_libraries': {
-                name: {'path': str(path), 'sha256': digest, 'device': '0:1', 'inode': inode}
-                for name, path, digest, inode in (
-                    ('expat', checks.EXPAT_LIBRARY, checks.EXPAT_LIBRARY_SHA256['amd64'], 101),
-                    ('ssl', checks.SSL_LIBRARY, 'e' * 64, 102),
-                    ('crypto', checks.CRYPTO_LIBRARY, 'f' * 64, 103),
-                    ('python', self.python['library']['path'], self.python['library']['sha256'], 104),
-                    ('python_ssl', self.python['ssl_extension']['path'], self.python['ssl_extension']['sha256'], 105),
-                )
-            },
-            'expat_source_manifest_sha256': self.manifest['source_manifest_sha256'],
-            'expat_install_manifest_sha256': install_hash,
-            'python_source_manifest_sha256': self.python['source_manifest_sha256'],
-            'python_install_manifest_sha256': hashlib.sha256(
-                (json.dumps(self.python, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
-            'python_files': {
-                name: {'path': self.python[name]['path'], 'sha256': self.python[name]['sha256'],
-                       'device': '0:1', 'inode': inode}
-                for name, inode in (('executable', 106), ('abi_library', 107))
-            },
-            'python_aliases': self.python['aliases'],
-            'python_tls_probes': dict(checks.PYTHON_TLS_PROBES),
-        }
+        self.musl = alpine_musl_sources.build_security_manifest('amd64', root=None)
+        self.report = dependency_report('amd64')
 
     def validate(self, report):
         with patch.object(checks, 'expected_expat_manifest', return_value=self.manifest) as source, \
-             patch.object(checks, 'expected_python_manifest', return_value=self.python) as python_source:
-            result = checks.validate_report(report, 'amd64', root=Path('/source-fixture'))
-        source.assert_any_call('amd64', Path('/source-fixture'))
+             patch.object(checks, 'expected_python_manifest', return_value=self.python) as python_source, \
+             patch.object(checks, 'expected_musl_manifest', return_value=self.musl) as musl_source:
+            result = checks.validate_report(report, 'amd64', root=ROOT)
+        source.assert_any_call('amd64', ROOT)
         source.assert_any_call('amd64', None)
-        python_source.assert_any_call('amd64', Path('/source-fixture'))
+        python_source.assert_any_call('amd64', ROOT)
         python_source.assert_any_call('amd64', None)
+        musl_source.assert_any_call('amd64', ROOT)
+        musl_source.assert_any_call('amd64', None)
         return result
 
     def test_original_native_report_replays_without_runtime_filesystem(self):
         with patch.object(checks, 'file_identity', side_effect=AssertionError('runtime access')), \
              patch.object(checks, 'check_expat', side_effect=AssertionError('runtime import')), \
              patch.object(checks, 'check_openssl', side_effect=AssertionError('runtime import')), \
-             patch.object(checks, 'check_python', side_effect=AssertionError('runtime import')):
+             patch.object(checks, 'check_python', side_effect=AssertionError('runtime import')), \
+             patch.object(checks, 'check_musl', side_effect=AssertionError('runtime import')):
             self.assertEqual(self.validate(self.report), self.report)
 
     def test_replay_derives_both_manifest_hashes_from_the_real_reviewed_source_map(self):
@@ -591,22 +740,31 @@ class RetainedDependencyReportTests(unittest.TestCase):
             lock = root / 'docs/os-package-sources.json'
             lock.parent.mkdir()
             spec = alpine_expat_sources.reviewed_spec()
-            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec()]}))
+            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec(),
+                                                   dhi_certificate_packages.reviewed_spec(),
+                                                   alpine_musl_sources.reviewed_spec()]}))
             self.assertEqual(checks.validate_report(self.report, 'amd64', root), self.report)
             spec['recipe']['sha256'] = 'a' * 64
-            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec()]}))
+            lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec(),
+                                                   dhi_certificate_packages.reviewed_spec(),
+                                                   alpine_musl_sources.reviewed_spec()]}))
             with self.assertRaisesRegex(ValueError, 'exact reviewed Alpine origin'):
                 checks.validate_report(self.report, 'amd64', root)
 
     def test_failed_wrong_arch_incomplete_and_invalid_report_fields_are_rejected(self):
         invalid = [None, {}, {**self.report, 'unexpected': True}]
-        for key, value in (('schema', True), ('schema', 1), ('arch', 'arm64'), ('success', 1),
-                           ('tests', True), ('tests', 2), ('failures', False), ('failures', 1),
+        for key, value in (('schema', True), ('schema', 1), ('schema', 3), ('arch', 'arm64'), ('success', 1),
+                           ('tests', True), ('tests', 2), ('tests', 3), ('failures', False), ('failures', 1),
                            ('errors', [{}]), ('versions', {'expat': '2.9.0', 'openssl': '3.5.8'}),
                            ('expat_source_manifest_sha256', 'b' * 64),
                            ('expat_install_manifest_sha256', 'b' * 64),
                            ('python_source_manifest_sha256', 'b' * 64),
                            ('python_install_manifest_sha256', 'b' * 64),
+                           ('musl_source_manifest_sha256', 'b' * 64),
+                           ('musl_install_manifest_sha256', 'b' * 64),
+                           ('musl_aliases', {}), ('musl_probes', {}),
+                           ('musl_probes', {**checks.MUSL_PROBES, 'regex_length_limit': 1}),
+                           ('musl_probes', {**checks.MUSL_PROBES, 'process_exec': False}),
                            ('python_tls_probes', {}),
                            ('python_tls_probes', {**checks.PYTHON_TLS_PROBES,
                                                   'wrap_bio_requires_hostname': 1}),
@@ -616,9 +774,47 @@ class RetainedDependencyReportTests(unittest.TestCase):
             with self.subTest(report=report), self.assertRaises(ValueError):
                 self.validate(report)
 
+    def test_musl_loaded_hash_and_original_source_lock_must_match(self):
+        for failure, report, message in musl_failure_reports('amd64'):
+            original = copy.deepcopy(report)
+            with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, message):
+                self.validate(report)
+            self.assertEqual(report, original)
+        report = copy.deepcopy(self.report)
+        report['loaded_libraries']['musl']['sha256'] = 'a' * 64
+        with self.assertRaisesRegex(ValueError, 'musl loaded-library hash'):
+            self.validate(report)
+        for field in ('musl_probes', 'musl_aliases', 'musl_source_manifest_sha256',
+                      'musl_install_manifest_sha256'):
+            report = copy.deepcopy(self.report)
+            del report[field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'report schema'):
+                self.validate(report)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lock = root / 'docs/os-package-sources.json'
+            lock.parent.mkdir()
+            spec = alpine_musl_sources.reviewed_spec()
+            spec['recipe']['sha256'] = 'a' * 64
+            lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(),
+                dhi_python_packages.reviewed_spec(), dhi_certificate_packages.reviewed_spec(), spec]}))
+            with self.assertRaisesRegex(ValueError, 'exact reviewed Alpine origin'):
+                checks.validate_report(self.report, 'amd64', root)
+
+    def test_missing_or_invalid_certificate_proof_blocks_retained_native_reports(self):
+        missing = copy.deepcopy(self.report)
+        del missing['certificate_trust']
+        with self.assertRaisesRegex(ValueError, 'report schema'):
+            self.validate(missing)
+        for failure, report, message in certificate_failure_reports('amd64'):
+            original = copy.deepcopy(report)
+            with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, message):
+                self.validate(report)
+            self.assertEqual(report, original)
+
     def test_vendor_substitution_missing_libraries_and_invalid_identities_are_rejected(self):
         invalid = []
-        for name in ('expat', 'ssl', 'crypto', 'python', 'python_ssl'):
+        for name in ('expat', 'ssl', 'crypto', 'python', 'python_ssl', 'musl'):
             report = copy.deepcopy(self.report)
             del report['loaded_libraries'][name]
             invalid.append(report)
@@ -653,7 +849,9 @@ class RetainedDependencyReportTests(unittest.TestCase):
             lock.parent.mkdir()
             spec = dhi_python_packages.reviewed_spec()
             spec['recipe']['sha256'] = 'a' * 64
-            lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(), spec]}))
+            lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(), spec,
+                                                   dhi_certificate_packages.reviewed_spec(),
+                                                   alpine_musl_sources.reviewed_spec()]}))
             with self.assertRaisesRegex(ValueError, 'exact reviewed DHI origin'):
                 checks.validate_report(self.report, 'amd64', root)
 

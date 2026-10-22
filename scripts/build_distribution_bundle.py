@@ -543,6 +543,9 @@ def retain_signed_alpine(source, destination, origin, result, arch, runtime_inve
     elif origin.get('source_method') == 'alpine-signed-zlib-v1':
         from alpine_zlib_sources import collect_sources
         directory = 'alpine-zlib-sources'
+    elif origin.get('source_method') == 'alpine-signed-musl-v1':
+        from alpine_musl_sources import collect_sources
+        directory = 'alpine-musl-sources'
     else:
         raise ValueError('Unreviewed signed Alpine source method')
     if (result.get('binding_method') != 'signed-alpine-packages'
@@ -585,7 +588,8 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
         target = destination / name
         copy_file(package_root, 'acquisition.json', target / 'acquisition.json')
         if result.get('provider_oci_binding') is False:
-            if origin.get('source_method') in {'alpine-signed-expat-v1', 'alpine-signed-zlib-v1'}:
+            if origin.get('source_method') in {
+                    'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1'}:
                 coverage.append(retain_signed_alpine(package_root, target / 'public-sources',
                     origin, result, arch, runtime_inventory))
             elif name == 'openssl' and base_source is not None and runtime_inventory is not None:
@@ -685,6 +689,25 @@ def bind_original_packages(origins, inventory, provenance, arch):
                 raise ValueError('Overwritten base APK differs from signed provenance')
 
 
+def reviewed_original_base_origins(os_lock):
+    """Require sources for all reviewed replacements, including earlier layers."""
+    original_origins = os_lock.get('original_base_origins')
+    expected_originals = {'expat'}
+    for origin in os_lock.get('origins', []):
+        if origin.get('source_method') == 'alpine-signed-zlib-v1':
+            expected_originals.add('zlib')
+        if origin.get('source_method') == 'alpine-signed-musl-v1':
+            expected_originals.add('musl')
+        if origin.get('origin') == 'python-3.14' and origin.get('version') == '3.14.8-r0':
+            expected_originals.add('python-3.14')
+        if origin.get('origin') == 'ca-certificates' and origin.get('version') == '20261020-r0':
+            expected_originals.add('ca-certificates')
+    if (not isinstance(original_origins, list) or len(original_origins) != len(expected_originals)
+            or {row.get('origin') for row in original_origins} != expected_originals):
+        raise ValueError('Require every reviewed overwritten base source identity')
+    return original_origins
+
+
 def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch=fetch_source):
     """Keep pinned image proof and sources for every overwritten base package."""
     proof = verify_source_proof(source, arch, expected_native_digest=os_lock['base_native_digests'][arch])
@@ -701,16 +724,7 @@ def retain_original_base(source, destination, os_lock, arch, *, root=ROOT, fetch
     copy_attestation_proof(Path(source) / 'base-build-provenance', destination / 'build-provenance', base_proof)
     copy_file(source, 'base-runtime-inventory.json', destination / 'base-runtime-inventory.json')
     original_inventory = read_json(source, 'base-runtime-inventory.json')
-    original_origins = os_lock.get('original_base_origins')
-    expected_originals = {'expat'}
-    for origin in os_lock.get('origins', []):
-        if origin.get('source_method') == 'alpine-signed-zlib-v1':
-            expected_originals.add('zlib')
-        if origin.get('origin') == 'python-3.14' and origin.get('version') == '3.14.8-r0':
-            expected_originals.add('python-3.14')
-    if (not isinstance(original_origins, list) or len(original_origins) != len(expected_originals)
-            or {row.get('origin') for row in original_origins} != expected_originals):
-        raise ValueError('Require every reviewed overwritten base source identity')
+    original_origins = reviewed_original_base_origins(os_lock)
     bind_original_packages(original_origins, original_inventory, provenance, arch)
     original_coverage = retain_packages(Path(source) / 'original-base-packages',
         destination / 'packages', {**os_lock, 'origins': original_origins}, arch,
@@ -833,6 +847,11 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
         origins = [row for row in os_lock['origins'] if row['origin'] == 'zlib']
         import_public_notices(zlib, public / 'zlib', origin='zlib', architecture=arch,
             package_spec=origins[0], runtime_inventory=runtime_inventory)
+    musl = stage / 'os-packages/musl/public-sources'
+    if musl.exists():
+        origins = [row for row in os_lock['origins'] if row['origin'] == 'musl']
+        import_public_notices(musl, public / 'musl', origin='musl', architecture=arch,
+            package_spec=origins[0], runtime_inventory=runtime_inventory)
     bundles = sorted({path.parent for path in stage.rglob('package-material-inventory.json')})
     if retain_inputs:
         retain_notice_inputs(bundles, stage / 'notice-inputs', arch)
@@ -920,8 +939,11 @@ def keep_source(root, destination):
     with (destination / 'keep-source.tar').open('wb') as stream:
         subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=root, stdout=stream, check=True)
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-                     'scripts/alpine_zlib_sources.py', 'scripts/patch_python_runtime.py',
+                     'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
+                     'scripts/patch_python_runtime.py',
                      'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
+                     'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
+                     'scripts/certificate_trust_checks.py',
                      'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
                      'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
                      'docs/distribution-sources.json', 'docs/os-package-sources.json',

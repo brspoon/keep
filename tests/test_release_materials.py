@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import release_materials as materials
 import registry_transfer
 import review_image
-from tests.native_dependency_fixture import dependency_report
+from tests.native_dependency_fixture import dependency_report, certificate_failure_reports, musl_failure_reports
 from tests.image_review_policy_fixture import historical_review_policy, renewed_review_policy, RENEWED_FINDINGS
 
 
@@ -1355,6 +1355,32 @@ class ReleaseMaterialsTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.assert_readback_security_review(day=datetime.date(2026, 10, 8),
                     review_changes=changes, expected_error=message)
+
+    def test_readback_rechecks_trust_and_libc_qualification_before_promotion(self):
+        for arch in materials.ARCHES:
+            for failure, report, message in (*certificate_failure_reports(arch), *musl_failure_reports(arch)):
+                with self.subTest(arch=arch, failure=failure):
+                    self.assert_readback_security_review(day=datetime.date(2026, 10, 21),
+                        review_changes={f'candidate-dependencies-{arch}.json': report},
+                        expected_error=message)
+
+    def test_final_promotion_revalidation_rejects_modified_trust_or_libc_proof_without_rewriting_evidence(self):
+        rows, bodies = self.verify_fixture()
+        original_bytes = dict(bodies)
+        held = {}
+        with chdir(self.root), patch.object(materials, 'api', return_value=rows), \
+             patch.object(materials, 'asset_body', side_effect=lambda asset: bodies[asset['name']]), \
+             patch.object(review_image, 'current_day', return_value=datetime.date(2026, 10, 21)):
+            materials.verify_identities(self.VERSION, {'id': 88}, security_reviews=held)
+            for arch in materials.ARCHES:
+                for failure, report, message in (*certificate_failure_reports(arch), *musl_failure_reports(arch)):
+                    changed = copy.deepcopy(held)
+                    changed[arch]['dependencies'] = report
+                    retained = copy.deepcopy(changed)
+                    with self.subTest(arch=arch, failure=failure), self.assertRaisesRegex(ValueError, message):
+                        materials.revalidate_security(changed)
+                    self.assertEqual(changed, retained)
+        self.assertEqual(bodies, original_bytes)
 
     def test_aggregate_emits_both_digests_only_after_asset_and_tag_checks(self):
         rows, bodies = self.verify_fixture()

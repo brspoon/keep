@@ -56,7 +56,7 @@ package. Python's license is retained in docs/PYTHON_LICENSE.txt; zlib's complet
 license is retained with its verified upstream sources and OS notices.
 
 The source map in `docs/os-package-sources.json` covers the final OS packages;
-the original Expat, Python and zlib in earlier image layers are covered separately. Full notices,
+the original Expat, Python, zlib and CA bundle in earlier image layers are covered separately. Full notices,
 source patches and recipes accompany the sources. Keep's source archive also
 includes the Dockerfile and exact runtime patch/build scripts. Docker's signed
 native build/source records are verified against actual APK hashes, with

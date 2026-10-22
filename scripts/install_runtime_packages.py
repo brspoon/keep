@@ -16,14 +16,20 @@ import sysconfig
 if __package__:
     from . import alpine_expat_sources as expat
     from . import alpine_zlib_sources as zlib
+    from . import alpine_musl_sources as musl
     from . import dhi_python_packages as python
+    from . import dhi_certificate_packages as certificates
 else:
     import alpine_expat_sources as expat
     import alpine_zlib_sources as zlib
+    import alpine_musl_sources as musl
     import dhi_python_packages as python
+    import dhi_certificate_packages as certificates
 
 ROOT = Path('/opt/runtime-packages')
-COHORT = (('expat', expat, 'EXPAT_SECURITY.json'),
+COHORT = (('musl', musl, 'MUSL_SECURITY.json'),
+          ('certificates', certificates, 'CA_CERTIFICATES_SECURITY.json'),
+          ('expat', expat, 'EXPAT_SECURITY.json'),
           ('zlib', zlib, 'ZLIB_SECURITY.json'),
           ('python', python, 'PYTHON_SECURITY.json'))
 
@@ -102,9 +108,66 @@ def install(root=ROOT):
     subprocess.run(['/usr/bin/python3.14', '-B', str(helper), '--verify-installed',
                     '--architecture', architecture, '--manifest',
                     str(root / 'python/PYTHON_SECURITY.json')], check=True)
+    verify_musl(root, architecture)
+    verify_certificates(root, architecture)
     subprocess.run(['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('patch_python_runtime.py'))], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)), '--clean-stdlib'], check=True)
+
+
+def verify_certificates(root, architecture, *, build=False):
+    command = ['/usr/bin/python3.14', '-B',
+                    str(Path(__file__).with_name('dhi_certificate_packages.py')),
+                    '--architecture', architecture, '--manifest',
+                    str(root / 'certificates/CA_CERTIFICATES_SECURITY.json')]
+    if build:
+        command.extend(['--verify-build', '--prepared-root', str(root / 'certificates')])
+    subprocess.run(command, check=True)
+
+
+def verify_musl(root, architecture, *, build=False):
+    # apk may replace the loader while this installer still maps its old inode.
+    # Always execute a new interpreter to check the installed package.
+    command = ['/usr/bin/python3.14', '-B',
+               str(Path(__file__).with_name('alpine_musl_sources.py')),
+               '--architecture', architecture, '--manifest',
+               str(root / 'musl/MUSL_SECURITY.json')]
+    if build:
+        command.extend(['--verify-build', '--prepared-root', str(root / 'musl')])
+    else:
+        command.append('--verify-installed')
+    subprocess.run(command, check=True)
+
+
+def install_build_musl(root=ROOT):
+    """Upgrade build libc and its exactly coupled development package offline."""
+    architecture = arch()
+    packages = installation_inputs(root, architecture)
+    spec = musl.reviewed_spec()
+    filename = 'musl-' + spec['version'] + '.apk'
+    selected = [path for path in packages if path.name == filename]
+    if len(selected) != 1:
+        raise ValueError('Require the exact reviewed build musl package')
+    development = musl.build_installation_inputs(root / 'musl', architecture)
+    subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                    '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
+                    str(selected[0]), *(str(path) for path in development)], check=True)
+    verify_musl(root, architecture, build=True)
+
+
+def install_certificates(root=ROOT):
+    """Upgrade build CA files and their generator in one offline transaction."""
+    architecture = arch()
+    packages = installation_inputs(root, architecture)
+    filename = certificates.PACKAGE + '-' + certificates.VERSION + '.apk'
+    selected = [path for path in packages if path.name == filename]
+    if len(selected) != 1:
+        raise ValueError('Require the exact reviewed build certificate bundle')
+    management = certificates.build_installation_inputs(root / 'certificates', architecture)
+    subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                    '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
+                    str(selected[0]), *(str(path) for path in management)], check=True)
+    verify_certificates(root, architecture, build=True)
 
 
 def main():
@@ -112,12 +175,18 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--prepare', action='store_true')
     mode.add_argument('--install', action='store_true')
+    mode.add_argument('--install-certificates', action='store_true')
+    mode.add_argument('--install-build-musl', action='store_true')
     mode.add_argument('--clean-stdlib', action='store_true')
     args = parser.parse_args()
     if args.prepare:
         prepare()
     elif args.install:
         install()
+    elif args.install_certificates:
+        install_certificates()
+    elif args.install_build_musl:
+        install_build_musl()
     else:
         clean_stdlib()
 
