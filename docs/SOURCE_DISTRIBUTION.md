@@ -103,7 +103,10 @@ bootstrap input and is removed before the application environment enters the
 runtime. It does not replace the older pip/ensurepip source records required by
 immutable base layers. Keep's source archive explicitly includes the CA package
 verifier, pip bootstrap and certificate trust checks with the Docker build inputs.
-Native image and source/license qualification for this candidate remains pending.
+Native certificate checks, signed source acquisition and notice preparation
+passed in [the native review](https://github.com/brspoon/keep/actions/runs/39719304568).
+Rebuilt archive member and installed-notice verification remain required;
+the separate musl finding still blocks complete image security acceptance.
 
 Docker's timezone package tag is reused across IANA releases. If it no longer
 matches the recorded 2026d APK, a narrowly scoped fallback obtains IANA 2026d,
@@ -168,9 +171,9 @@ After unpacking, the manifest identifies each retained file's SHA-256, release
 version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
-container. The previously qualified runtime union contains 124 complete notice texts
-(814,844 bytes) and 556 complete native attributions, covering all 22 current and
-earlier-layer origins on both architectures. It retains 20 explicitly selected
+container. The reviewed runtime union contains 124 complete notice texts
+(814,844 bytes) and 560 complete native attributions, covering all 23 current and
+earlier-layer origins on both architectures. It retains 21 explicitly selected
 source copyright headers and four timezone headers from the checked public
 source fallback. The license text bytes are unchanged; the new Python and zlib
 packages have their own source attributions, and timezone attributions describe
@@ -179,8 +182,8 @@ The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated
 notice's complete native source attribution against the committed provenance.
 Sharing a license text does not transfer its source or signature evidence.
-The certificate overlay requires a newly verified union with separate current
-and original CA attributions; the earlier counts do not qualify this candidate.
+The certificate overlay retains the earlier notice text bytes and separately
+attributes the current and original CA sources on both architectures.
 Asset and installed Python notices remain in their original paths.
 
 The collection and packaging scripts are under `scripts/`. Authenticated

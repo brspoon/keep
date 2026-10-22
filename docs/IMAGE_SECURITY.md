@@ -137,11 +137,40 @@ qualification and retained-evidence revalidation.
 Archive readback and final promotion revalidate this evidence against the current
 source map without changing the original report bytes.
 
-This candidate still requires complete native amd64 and arm64 image,
-provenance, source/license, security and recovery qualification. Public package
-inspection and local tests do not establish release readiness. No new exception
-or deadline extension is introduced: the existing two exact Python scopes and
-November 1, 2026 UTC inclusive deadline remain unchanged.
+The [native review](https://github.com/brspoon/keep/actions/runs/39719304568)
+passed application, installation, recovery, all nine security regressions,
+dependency/certificate trust checks, signed source acquisition and notice
+preparation on amd64 and arm64. Both reports contain the exact 120-root certifi
+and 118-root system inventories and successful TLS controls. The reviewed notice
+union retains all 124 original text files unchanged and adds the new CA source
+attributions. Rebuilt source archives must also pass their full member and
+installed-notice checks before release.
+
+Overall image security acceptance remains blocked by the separate musl finding
+below. No new exception or deadline extension is introduced: the existing two
+exact Python scopes and November 1, 2026 UTC inclusive deadline remain unchanged.
+
+### October 21 musl release hold
+
+Both complete Scout reports identify `CVE-2026-107891` against the unchanged
+base's musl `1.2.6-r2`. The [maintainer advisory](https://www.openwall.com/lists/musl/2026/10/21/1)
+describes integer overflows in libc's regular-expression compiler; this finding
+does not come from the CA update. The bounded source assessment does not establish
+application-level exploitability, and that uncertainty does not waive the gate.
+
+[Alpine 3.24 security data](https://secdb.alpinelinux.org/v3.24/main.json) records
+the fix at `1.2.6-r3`; [edge data](https://secdb.alpinelinux.org/edge/main.json)
+records it at `1.2.6-r6`. Scout's reports name Alpine 3.24 but use the edge
+threshold. Correcting that threshold alone would still leave the installed r2
+package affected. Signed Alpine r3 packages are replacement candidates, not
+qualified Keep replacements; the inspected DHI delivery still offers r2.
+
+This release needs a supported libc fix with matching sources, retained original
+base coverage and complete native verification. The scanner data must also
+recognize the correct fixed package. Scout must report zero at every severity;
+neither an unspecified severity nor source inspection permits this finding.
+No musl exception is added, and no image is eligible for promotion while the
+finding remains.
 
 ## Vendor package replacement candidate (October 7)
 
