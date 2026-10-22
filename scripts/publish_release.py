@@ -173,7 +173,8 @@ def execute(image, revision, artifacts, release=False):
         )
         if any(identities[arch]['config_digest'] != expected_configs[arch] for arch in ARCHES):
             raise ValueError('Original release evidence config differs from the tested image')
-        hub_review = hub_analysis_review.review_body(image, revision, expected_digests)
+        hub_review = hub_analysis_review.review_body(image, revision, expected_digests,
+                                                     security_reviews=security_reviews)
         hub_analysis_review.retain_review(release_materials, release_draft, version, hub_review)
         docker('login', '--username', username, '--password-stdin', input=secret)
         digests = {}
@@ -181,7 +182,8 @@ def execute(image, revision, artifacts, release=False):
             docker('tag', ids[arch], reference)
             require_current_source(revision, release)
             release_materials.revalidate_security(security_reviews)
-            hub_analysis_review.validate_review(hub_review, image, revision, expected_digests)
+            hub_analysis_review.validate_review(hub_review, image, revision, expected_digests,
+                                                security_reviews=security_reviews)
             docker('push', reference)
             descriptor = json.loads(docker('manifest', 'inspect', '--verbose', reference, capture=True))['Descriptor']
             digest = descriptor['digest']
@@ -197,7 +199,8 @@ def execute(image, revision, artifacts, release=False):
             docker('manifest', 'create', reference, *refs)
             require_current_source(revision, release)
             release_materials.revalidate_security(security_reviews)
-            hub_analysis_review.validate_review(hub_review, image, revision, expected_digests)
+            hub_analysis_review.validate_review(hub_review, image, revision, expected_digests,
+                                                security_reviews=security_reviews)
             docker('manifest', 'push', '--purge', reference)
             verify_manifest(json.loads(docker('manifest', 'inspect', reference, capture=True)), digests)
         print(json.dumps({'published': plan['manifests'], 'platform_digests': digests}))

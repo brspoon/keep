@@ -30,8 +30,37 @@ def unique_object(pairs):
     return result
 
 
-def validate_review(body, image, revision, digests, *, now=None):
-    """Require explicit complete, zero-count results for both exact native images."""
+def reviewed_findings(results, security_reviews, today):
+    """Bind truthful hosted findings to the original, fully verified native proof."""
+    import review_image
+    from scout_exception_policy import canonical_scout_finding, finding_decision
+
+    if not isinstance(security_reviews, dict) or set(security_reviews) != set(ARCHES):
+        raise ValueError('Docker Hub nonzero findings require both original native security reviews')
+    for arch in ARCHES:
+        context = security_reviews[arch]
+        required = {'report', 'scout', 'evidence', 'provenance', 'dependencies'}
+        if (not isinstance(context, dict) or not required <= set(context)
+                or set(context) - required - {'root'}):
+            raise ValueError('Docker Hub findings require original native security evidence for ' + arch)
+        # Always use the current UTC day, including immediately before a push.
+        # Neither the receipt timestamp nor an earlier caller review extends approval.
+        checked = review_image.review_reports(arch, **{**context, 'today': today})
+        if checked['blocked'] or checked['scout_blocked']:
+            raise ValueError('Docker Hub findings require successful native security review for ' + arch)
+        policy = review_image.reviewed_policy(context.get('root', Path('.')))
+        original = [canonical_scout_finding(run, finding)
+                    for run in context['scout']['runs'] for finding in run['results']]
+        for finding in results[arch]['findings']:
+            reason = finding_decision(finding, policy, today)
+            if reason:
+                raise ValueError('Docker Hub finding blocks ' + arch + ': ' + finding['id'] + ': ' + reason)
+            if original and finding not in original:
+                raise ValueError('Docker Hub finding differs from original native Scout evidence for ' + arch)
+
+
+def validate_review(body, image, revision, digests, *, now=None, security_reviews=None):
+    """Require complete exact-image counts; v2 permits only reviewed false positives."""
     if not isinstance(body, bytes) or not body or len(body) > MAX_BYTES:
         raise ValueError('A bounded Docker Hub hosted-analysis review receipt is required')
     try:
@@ -40,7 +69,8 @@ def validate_review(body, image, revision, digests, *, now=None):
         raise ValueError('Docker Hub review must be valid UTF-8 JSON') from error
     fields = {'format', 'review_source', 'image', 'revision', 'reviewed_at', 'reviewed_by', 'architectures'}
     if (not isinstance(review, dict) or set(review) != fields or
-            review.get('format') != 'keep-hub-analysis-review-v1' or
+            not isinstance(review.get('format'), str) or
+            review['format'] not in {'keep-hub-analysis-review-v1', 'keep-hub-analysis-review-v2'} or
             review.get('review_source') != 'docker-hub-ui' or
             review.get('image') != image or review.get('revision') != revision or
             not isinstance(review.get('reviewed_by'), str) or
@@ -63,27 +93,56 @@ def validate_review(body, image, revision, digests, *, now=None):
     if (not isinstance(digests, dict) or set(digests) != set(ARCHES) or
             not isinstance(results, dict) or set(results) != set(ARCHES)):
         raise ValueError('Docker Hub review requires both native architecture identities')
+    v2 = review['format'] == 'keep-hub-analysis-review-v2'
+    nonzero = False
     for arch in ARCHES:
         result = results[arch]
+        result_fields = {'platform', 'digest', 'status', 'unfiltered', 'counts'}
+        if v2:
+            result_fields.add('findings')
         if (not isinstance(digests[arch], str) or
                 not re.fullmatch(r'sha256:[0-9a-f]{64}', digests[arch]) or
-                not isinstance(result, dict) or set(result) != {'platform', 'digest', 'status', 'unfiltered', 'counts'} or
+                not isinstance(result, dict) or set(result) != result_fields or
                 result.get('platform') != 'linux/' + arch or result.get('digest') != digests[arch] or
                 result.get('status') != 'complete' or result.get('unfiltered') is not True):
             raise ValueError('Docker Hub hosted analysis is incomplete or differs for ' + arch)
         counts = result.get('counts')
         if (not isinstance(counts, dict) or set(counts) != SEVERITIES or
-                any(type(value) is not int or value != 0 for value in counts.values())):
-            raise ValueError('Docker Hub review must explicitly report zero vulnerabilities at every severity for ' + arch)
+                any(type(value) is not int or value < 0 or (not v2 and value != 0)
+                    for value in counts.values())):
+            requirement = 'nonnegative integer counts' if v2 else 'zero vulnerabilities at every severity'
+            raise ValueError('Docker Hub review must explicitly report ' + requirement + ' for ' + arch)
+        if v2:
+            from scout_exception_policy import FINDING_FIELDS
+            findings = result['findings']
+            if not isinstance(findings, list):
+                raise ValueError('Docker Hub v2 review requires explicit findings for ' + arch)
+            derived = {severity: 0 for severity in SEVERITIES}
+            identities = set()
+            for finding in findings:
+                if (not isinstance(finding, dict) or set(finding) != FINDING_FIELDS
+                        or any(not isinstance(value, str) or not value for value in finding.values())
+                        or finding['severity'] not in {severity.upper() for severity in SEVERITIES}):
+                    raise ValueError('Docker Hub finding identity or severity is incomplete for ' + arch)
+                identity = tuple(finding[key] for key in sorted(FINDING_FIELDS))
+                if identity in identities:
+                    raise ValueError('Duplicate Docker Hub finding for ' + arch)
+                identities.add(identity)
+                derived[finding['severity'].lower()] += 1
+            if counts != derived:
+                raise ValueError('Docker Hub counts differ from the explicit findings for ' + arch)
+            nonzero = nonzero or bool(findings)
+    if nonzero:
+        reviewed_findings(results, security_reviews, current.date())
     return review
 
 
-def review_body(image, revision, digests):
+def review_body(image, revision, digests, *, security_reviews=None):
     value = os.environ.get('KEEP_HUB_ANALYSIS_REVIEW')
     if not isinstance(value, str):
         raise ValueError('A Docker Hub hosted-analysis review receipt is required before release publication')
     body = value.encode('utf-8')
-    review = validate_review(body, image, revision, digests)
+    review = validate_review(body, image, revision, digests, security_reviews=security_reviews)
     if review['reviewed_by'] != os.environ.get('GITHUB_ACTOR'):
         raise ValueError('Docker Hub review maintainer must match the dispatching GitHub actor')
     return body

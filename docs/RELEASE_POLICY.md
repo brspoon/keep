@@ -103,9 +103,14 @@ and promotion workflow.
 Before promotion, a maintainer must review the actual Docker Hub hosted-analysis
 view for each native digest. The completed view must identify the full expected
 digest and Linux architecture, have no active filters or suppressed findings,
-and explicitly show zero Critical, High, Medium, Low and Unspecified
-vulnerabilities. Pending, unavailable, incomplete or nonzero analysis blocks
-promotion. A local scan or `docker scout cves registry://...` result does not
+and explicitly show truthful Critical, High, Medium, Low and Unspecified counts.
+Zero remains the default. Only an exact, unexpired verified-fixed false-positive
+scope in `scout_exceptions` may pass with nonzero counts; all other findings block.
+The sole current scope is Alpine 3.24 musl `1.2.6-r3`, `CVE-2026-107891`,
+`UNSPECIFIED`, with the erroneous r6 threshold, through October 25, 2026 UTC
+inclusive. No old r2 or certifi finding is approved. Pending, unavailable,
+incomplete or unapproved analysis blocks promotion.
+A local scan or `docker scout cves registry://...` result does not
 establish that Docker Hub's stored analysis completed.
 Docker documents [hosted analysis](https://docs.docker.com/scout/explore/analysis/)
 and its [image details view](https://docs.docker.com/scout/explore/image-details-view/),
@@ -121,6 +126,16 @@ and a UTC `reviewed_at` timestamp in `YYYY-MM-DDTHH:MM:SSZ` form. Its
 contain the matching `platform` (`linux/<architecture>`) and full native `digest`,
 `status: complete`, `unfiltered: true`, and a `counts` object with explicit
 integer zeros for `critical`, `high`, `medium`, `low`, and `unspecified`.
+This v1 format remains zero-only. A reviewed false positive requires
+`format: keep-hub-analysis-review-v2`, adding a `findings` list to each
+architecture entry. Every finding has exactly `id`, `severity`, `purl`,
+`affected_version` and `fixed_version`; all five must match the current approved
+scope. Counts must equal the complete findings list by severity, including any
+approved finding. Nonzero reviews require the verified original native reports,
+signed provenance, reviewed source hashes and successful dependency/runtime
+evidence for both architectures. Suppression, relabeling and fabricated zero
+counts are not permitted. Both gates reapply current UTC deadlines, including
+before every permanent push. Unused expired approvals do not block clean images.
 Missing or unknown counts are never interpreted as zero. The review must be no
 more than one hour old and cannot be future-dated. It is rechecked immediately
 before every permanent image or index push, together with current-main identity
@@ -179,7 +194,8 @@ status. CI log expiry is not a source-retention policy. See
    stage; candidate-only mode cannot promote stable. Leave candidate-run and Hub
    review inputs empty. Wait for the complete candidate dispatch to succeed.
 4. Review both exact native digests in Docker Hub and record the complete,
-   unfiltered zero-count result. Start another dispatch on the same current main
+   unfiltered result with truthful counts and exact reviewed false positives,
+   if any. Every other finding must be absent. Start another dispatch on the same current main
    commit with the same `validation_run_id`, `publish_release=true`,
    `candidate_only=false`, the successful candidate run and attempt, the fresh
    JSON receipt in `hub_analysis_review`, and confirmation `release-stable`.

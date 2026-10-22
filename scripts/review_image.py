@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 from inspect_candidate import BASE, DIRECT
+from scout_exception_policy import canonical_scout_finding, finding_decision, scout_deadlines
 
 
 def current_day():
@@ -31,6 +32,7 @@ def exception_deadlines(policy):
     rules = policy.get('exceptions')
     if not isinstance(rules, dict):
         raise ValueError('Missing exception policy')
+    scout_deadlines(policy)
     deadlines = {}
     for finding, rule in rules.items():
         if not isinstance(rule, dict) or rule.get('status') != 'fixed':
@@ -60,10 +62,13 @@ def deadline_warnings(policy, today=None, warning_days=14):
         raise ValueError('Warning days must be nonnegative')
     today = today or current_day()
     warnings = []
-    for finding, deadline in sorted(exception_deadlines(policy).items()):
+    exception_deadlines(policy)
+    reviews = [(finding, rule, datetime.date.fromisoformat(rule['review']['deadline']))
+               for section in ('exceptions', 'scout_exceptions')
+               for finding, rule in policy.get(section, {}).items()]
+    for finding, rule, deadline in sorted(reviews, key=lambda item: item[0]):
         remaining = (deadline - today).days
         if remaining <= warning_days:
-            rule = policy['exceptions'][finding]
             warnings.append({'id': finding, 'package': rule['package'],
                              'version': rule['version'], 'deadline': deadline.isoformat(),
                              'days_remaining': remaining})
@@ -120,8 +125,21 @@ def assess(report, scout, evidence, policy, arch, today=None):
                 blocked.append(entry)
             else:
                 accepted.append(entry)
+    scout_accepted, scout_blocked, seen = [], [], set()
+    for run in scout['runs']:
+        for result in run['results']:
+            finding = canonical_scout_finding(run, result)
+            identity = tuple(sorted(finding.items())) if finding else None
+            reason = finding_decision(finding, policy, today)
+            if reason or identity in seen:
+                scout_blocked.append(result)
+            else:
+                seen.add(identity)
+                scout_accepted.append({**finding,
+                                       'deadline': policy['scout_exceptions'][finding['id']]['review']['deadline']})
     return {'accepted_fixed': accepted, 'blocked': blocked,
-            'scout_blocked': [r for run in scout['runs'] for r in run['results']],
+            'scout_accepted_false_positive': scout_accepted,
+            'scout_blocked': scout_blocked,
             'raw_matches': len(report['matches']), 'review_date': today.isoformat()}
 
 
@@ -196,7 +214,7 @@ def main(argv=None):
         result = review_candidate(args.arch)
         if not args.check_only:
             Path(f'candidate-review-{args.arch}.json').write_text(json.dumps(result, indent=2) + '\n')
-        print(f"Accepted {len(result['accepted_fixed'])} verified-fixed matches; blocked {len(result['blocked'])} Grype and {len(result['scout_blocked'])} Scout findings. Raw reports retained.")
+        print(f"Accepted {len(result['accepted_fixed'])} verified-fixed Grype matches and {len(result['scout_accepted_false_positive'])} reviewed Scout false positives; blocked {len(result['blocked'])} Grype and {len(result['scout_blocked'])} Scout findings. Raw reports retained.")
         for entry in result['blocked']:
             print(f"{entry['id']} ({entry['package']} {entry['version']}): {entry['reason']}" +
                   (f"; review deadline {entry['deadline']}" if 'deadline' in entry else ''))

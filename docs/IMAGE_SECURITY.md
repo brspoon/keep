@@ -11,7 +11,9 @@ the build never relabels an older package or suppresses a finding.
 Every architecture job verifies signed vendor provenance, runs checksum-pinned
 Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runtime
 regression probes.
-Scout must report zero findings. Grype's complete raw findings remain visible;
+Zero Scout and Docker Hub findings remain the default requirement. The only
+temporary Scout approval is the verified musl false positive described below,
+through October 25, 2026 UTC inclusive. Grype's complete raw findings remain visible;
 only the two exact verified-fixed Python `3.14.8-r0` scopes in
 docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
@@ -72,9 +74,10 @@ Approved images then pass through temporary run-and-attempt-specific registry ta
 the publication job receives immutable digests, validates source/runtime identity,
 and retains them for a separate stable-promotion run. Before publishing release
 tags, a maintainer must inspect Docker Hub's completed stored analysis for both
-exact native digests and record zero counts at every severity. A CLI scan is not
-proof that Hub's stored analysis has completed. Missing, pending, nonzero, stale
-or wrong-digest review records block stable promotion. After publication,
+exact native digests and record truthful counts and every approved false positive.
+Any unapproved finding blocks; the certifi Critical finding must be absent.
+A CLI scan is not proof that Hub's stored analysis has completed. Missing,
+pending, unapproved, stale or wrong-digest review records block stable promotion. After publication,
 CI attempts to remove only its temporary tags, not their shared image manifests. If the CI
 token lacks delete permission, it emits an explicit cleanup warning. A maintainer
 can remove those exact tags with a separate deletion-capable credential after
@@ -190,14 +193,39 @@ It contains 53 package/architecture groups with no attribution gaps.
 Both original Scout `1.24.0` reports still matched the genuine r3 package against
 the r6 threshold. Grype contained only the two existing exact Python scopes.
 
-The next native qualification uses checksum-pinned Scout `1.27.0` and rebuilds
-both images to verify every source-archive member and installed notice. The newer
-client's release announcement does not establish a correction to advisory data.
-The scanner data must recognize the correct fixed package. Scout must report zero
-at every severity;
-neither an unspecified severity nor source inspection permits this finding.
-No musl exception is added, and no image is eligible for promotion while the
-finding remains.
+The [Scout 1.27.0 qualification](https://github.com/brspoon/keep/actions/runs/39728273258)
+rebuilt both architectures, verified every source-archive member and installed
+notice, and passed all functional, security, provenance and source/license checks.
+It remained failed solely at Scout acceptance: the original complete reports
+matched stable Alpine 3.24 musl `1.2.6-r3` against edge's `1.2.6-r6` threshold.
+That failed run cannot qualify publication.
+
+The October 22 review permits only `CVE-2026-107891`, `UNSPECIFIED`, exact PURL
+`pkg:apk/alpine/musl@1.2.6-r3?os_name=alpine&os_version=3.24`, affected range
+`<1.2.6-r6` and fixed version `1.2.6-r6`, through **October 25 UTC inclusive**.
+[Alpine's stable feed](https://secdb.alpinelinux.org/v3.24/main.json) identifies r3
+as fixed; edge uses r6. The signed APKs, immutable recipe and correction patch,
+actual default-loader bytes, native probes and complete matching sources establish
+the installed fix. This is a scoped false-positive approval, not approval to ship
+unfixed musl. Old r2, other packages/distributions/versions/severities/thresholds,
+and every unmatched finding still block.
+
+Fresh complete qualification on both architectures and exact-main validation
+remain required. The original Scout reports remain unchanged and visible. Docker
+Hub must be reviewed with completed, unfiltered analysis for both exact digests;
+its counts remain truthful, including this finding if still present. The v2
+receipt records each exact finding and binds acceptance to original native
+source/provenance/runtime evidence. The native and hosted gates reapply the same
+inclusive deadline before each publication push. A needed approval blocks on
+October 26; an unused expired entry does not block a clean image. The two Python
+approvals and their November 1 deadlines are unchanged.
+
+[Scout issue #248](https://github.com/docker/scout-cli/issues/248) tracks the
+correction. Remove the approval only after fresh complete native scans and actual
+hosted analysis no longer report it, with all existing qualification checks
+passing. Issue closure, a client announcement or suppressing the result does not
+prove correction. Zero findings remains the default release goal; further false
+positives need their own explicit, evidence-backed review and bounded approval.
 
 ## Vendor package replacement candidate (October 7)
 
@@ -420,6 +448,8 @@ carry forward or authorize other package versions. A finding that still needs
 one of the current exceptions on November 2 blocks validation and promotion;
 it requires a proven replacement or another explicit security review.
 Correcting deadline handling alone never renews an approval.
+The separate Scout false-positive entry uses the same advisory warning mechanism
+and expires October 25, 2026 UTC inclusive. It does not change the Python deadline.
 
 ## zlib delivery correction
 
