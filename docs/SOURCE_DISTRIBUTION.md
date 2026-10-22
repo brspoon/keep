@@ -48,7 +48,7 @@ identifiers are not interchangeable. The image-level source collection contains
 assembly inputs, so package-level sources are collected separately.
 
 The source map covers 18 origins and 29 installed OS packages. The original
-DHI Expat 2.8.5, Python 3.14.7-r2, zlib 1.3.2-r0 and CA bundle 20260909-r0 in earlier image layers retain their exact APK hashes,
+DHI Expat 2.8.5, Python 3.14.7-r2, zlib 1.3.2-r0, musl 1.2.6-r2 and CA bundle 20260909-r0 in earlier image layers retain their exact APK hashes,
 native-base material binding and signed package sources separately from the
 installed replacement packages. Alpine's zlib 1.3.2-r1 is verified separately
 against signed APKs, its complete pinned aports context, upstream source,
@@ -58,6 +58,18 @@ archive inspection alone cannot satisfy that gate. Keep's exact Python patches
 are also included. Both architectures' committed notice union is regenerated
 from their checked native inventories and verified in the rebuilt source-archive
 gate. Passing source and notice checks does not waive the separate security gate.
+
+Alpine's signed musl `1.2.6-r3` runtime replacement and its matching build-only
+`musl-dev` package have their own exact native APK, metadata and signing-key pins.
+The complete immutable aports context, every recipe input and patch, upstream
+source archive, full `COPYRIGHT` and the reviewed TRE/math/crypt/architecture
+attribution headers are replayed offline. Original DHI musl `1.2.6-r2` source and
+notice provenance remains separately bound to the original base. Signed Alpine
+packages do not acquire a Docker package-build or source-image attestation claim.
+The development package is used only to build dependencies; the final package
+inventory continues to contain the core musl package alone. Complete native
+compatibility, source-archive and installed-notice verification remains mandatory.
+
 The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked
 against their embedded libffi 3.4.6 source and wheel build recipe; this is

@@ -699,12 +699,16 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
         lock = bundle.read_json(ROOT, 'docs/os-package-sources.json')
         original = bundle.reviewed_original_base_origins(lock)
         self.assertEqual({row['origin'] for row in original},
-                         {'expat', 'zlib', 'python-3.14', 'ca-certificates'})
+                         {'expat', 'zlib', 'python-3.14', 'ca-certificates', 'musl'})
         old_ca = next(row for row in original if row['origin'] == 'ca-certificates')
         self.assertEqual(old_ca['version'], '20260909-r0')
         self.assertEqual(old_ca['packages'][0]['binaries']['amd64']['sha256'],
                          'c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac')
-        for origin in ('expat', 'zlib', 'python-3.14', 'ca-certificates'):
+        old_musl = next(row for row in original if row['origin'] == 'musl')
+        self.assertEqual(old_musl['version'], '1.2.6-r2')
+        self.assertEqual(old_musl['packages'][0]['binaries']['amd64']['sha256'],
+                         '52ec02804d0dfce7f7e5ecedae91f3d538e45ad5041d178bc22dc1666d3f237d')
+        for origin in ('expat', 'zlib', 'python-3.14', 'ca-certificates', 'musl'):
             changed = copy.deepcopy(lock)
             changed['original_base_origins'] = [row for row in original if row['origin'] != origin]
             with self.subTest(origin=origin), self.assertRaisesRegex(ValueError, 'every reviewed overwritten'):
@@ -823,7 +827,8 @@ class CommittedKeepSourceTests(unittest.TestCase):
         self.root.mkdir()
         self.output = Path(self.temp.name) / 'sources'
         self.files = ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-            'scripts/alpine_zlib_sources.py', 'scripts/patch_python_runtime.py',
+            'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
+            'scripts/patch_python_runtime.py',
             'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
             'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
             'scripts/certificate_trust_checks.py',

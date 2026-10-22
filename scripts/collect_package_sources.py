@@ -550,13 +550,17 @@ def discover_origin(origin, architecture, destination, registry):
 
 
 def acquire_origin(origin, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None):
-    if origin.get('source_method') in {'alpine-signed-expat-v1', 'alpine-signed-zlib-v1'}:
+    if origin.get('source_method') in {
+            'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1'}:
         if origin['source_method'] == 'alpine-signed-expat-v1':
             from alpine_expat_sources import collect_sources
             directory = 'alpine-expat-sources'
-        else:
+        elif origin['source_method'] == 'alpine-signed-zlib-v1':
             from alpine_zlib_sources import collect_sources
             directory = 'alpine-zlib-sources'
+        else:
+            from alpine_musl_sources import collect_sources
+            directory = 'alpine-musl-sources'
         if runtime_inventory is None:
             raise ValueError('Signed Alpine sources require the actual candidate inventory')
         root = Path(destination)

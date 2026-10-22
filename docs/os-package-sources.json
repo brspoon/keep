@@ -410,37 +410,143 @@
     },
     {
       "origin": "musl",
-      "version": "1.2.6-r2",
-      "image": "dhi.io/pkg-musl",
-      "tag": "1.2.6-r2-alpine3.24",
-      "reference": "dhi.io/pkg-musl:1.2.6-r2-alpine3.24",
-      "predicate_image_name": "dhi/pkg-musl",
+      "version": "1.2.6-r3",
+      "source_method": "alpine-signed-musl-v1",
       "recipe": {
-        "path": "package/apk/main/musl/alpine-3.24/1.yaml",
-        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
-        "sha256": "b6b997f7602ab1473d23539b63a0fab480b662549114cc0f1d17b55adbebc7c3",
-        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/musl/alpine-3.24/1.yaml",
-        "upstream_commit": "f5640d3a10f664c9119720c60515265d3d6f6d01"
+        "path": "main/musl/APKBUILD",
+        "revision": "8f79d39391b46d6dbf1800fb68b8212a21d5ee2e",
+        "url": "https://raw.githubusercontent.com/alpinelinux/aports/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e/main/musl/APKBUILD",
+        "sha256": "22c5adb3f3b68ab84e5ff7d20df68447063d1ecb5c7b39afd5a04a1dfd444a35",
+        "archive_url": "https://github.com/alpinelinux/aports/archive/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e.tar.gz",
+        "archive_sha256": "ea30c7a4e842d60d44f71796bbd5ab84a2f9cc5c47f4da1558043fca9a9b79d4",
+        "context_files": {
+          "0001-add-stub-for-pthread_mutexattr_setprioceiling.patch": {
+            "sha256": "b2067680c66af9eb9f4fdc1fa5d9337a9fd62bdab2c437b416aa97d79eb884ee",
+            "sha512": "83ec0f774dbb5d4f4d4b917d149ea0ef609d028d18ae7624e90fedda6e3174c91ade93751bfd376adfa2848155110fc4dd02b6790363b98e5395c4787e8731e8"
+          },
+          "CVE-2026-107891.patch": {
+            "sha256": "0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b",
+            "sha512": "df73a35b9da531021ad5b1a6aad12b9d8d69de2bed7fc91b1156d9727476ab25c0d3c2341d60488152ee8ccbddb83786e91fff950cdb177b9b04673da98fdc4e"
+          },
+          "CVE-2026-40200.patch": {
+            "sha256": "1ee29f64f9ca8e8ad7c349779d661ff6b52126a27575d3586981357a52c406fb",
+            "sha512": "a64ab7688d1a85e560b5687783df482d2467a79a74400da5a1601382847d6b4e6a79b7529a8dc80c46ddda8dc2a812f2261557fc8ee98dc3bdf7322761bd6d9c"
+          },
+          "CVE-2026-6042.patch": {
+            "sha256": "1d0be2e72b9d5bd16546b923aa8af861d271322f01644716a81823bec4065c99",
+            "sha512": "f7849abeab0e4eab992a80464afa07b9c8aae5cee76040523b9dbc0931435f28ea8f5792b8a4a0cd6d608ac2f37e3225e89afcb3171a0a6df44450ed57cee83b"
+          },
+          "__stack_chk_fail_local.c": {
+            "sha256": "299a7d75a09de3e2e11e7fb4acc3182e4a14e868093d2f30938fce9bfcff13da",
+            "sha512": "062bb49fa54839010acd4af113e20f7263dde1c8a2ca359b5fb2661ef9ed9d84a0f7c3bc10c25dcfa10bb3c5a4874588dff636ac43d5dbb3d748d75400756d0b"
+          },
+          "fix-loongarch64-zero-len-extcontext.patch": {
+            "sha256": "92c8e965798ed516c15cb2a4e7c4ac45ec1eb68b6abff16c73adff2a3bae1b14",
+            "sha512": "6eae45aa82db69bc96386aedf3d1bfe83dfa0a7b4b824326c1c7e1bab31100d635ed0e8930c26a1694697fad59167a42e2b5f3a2ac51b07e36d85f047e268cff"
+          },
+          "getconf.c": {
+            "sha256": "d87d0cbb3690ae2c5d8cc218349fd8278b93855dd625deaf7ae50e320aad247c",
+            "sha512": "0d80f37b34a35e3d14b012257c50862dfeb9d2c81139ea2dfa101d981d093b009b9fa450ba27a708ac59377a48626971dfc58e20a3799084a65777a0c32cbc7d"
+          },
+          "getent.c": {
+            "sha256": "a6171c2db641cdd99c164169d3c5c6ca323617483cedec4cbbe3eb39c5834df0",
+            "sha512": "246e029350d4295147fe311108dcfb991ef130271b856040c1fb6a9955414f263d2a51f978b8ae91f52ff49705e8e4572b8f0e6939801fa854e3f095a67d3d64"
+          },
+          "handle-aux-at_base.patch": {
+            "sha256": "2a65e03b94217063d72fe998e5fb2e25cd01716078a3ba1b0ab574ab205111e6",
+            "sha512": "a76f79b801497ad994746cf82bb6eaf86f9e1ae646e6819fbae8532a7f4eee53a96ac1d4e789ec8f66aea2a68027b0597f7a579b3369e01258da8accfce41370"
+          },
+          "iconv.c": {
+            "sha256": "f79a2930a2e5bb0624321589edf8b889d1e9b603e01e6b7ae214616605b3fdd7",
+            "sha512": "9d42d66fb1facce2b85dad919be5be819ee290bd26ca2db00982b2f8e055a0196290a008711cbe2b18ec9eee8d2270e3b3a4692c5a1b807013baa5c2b70a2bbf"
+          },
+          "ldconfig": {
+            "sha256": "7065021e04a5060957b5c6907af671a7028230d91927fb0c25892cadd9312b7c",
+            "sha512": "29da5e89358103846a42987c2a5ff26ec131e29a6a7a714cd0e2941baf1f1e5cd9b1ee66f488c8e222135031bf2de507d7d05b037ab65c30482147dba63d2e52"
+          }
+        }
       },
-      "declared_tags": [
-        "1.2.6-alpine3.24",
-        "1.2.6-r2-alpine3.24"
-      ],
-      "mutable_tag_reused_across_upstream_versions": false,
+      "source": {
+        "url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+        "sha256": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a",
+        "sha512": "1adad96eddb3a2eb0cacb3e363b0046568925fcdd75cf8b0503f2139df1f693d64730779ca0ce8131b7624ab2d37f4247bb1d3393c523de6e30d2b1d7732555c",
+        "signature_url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz.asc",
+        "signature_sha256": "8a696228404cd4bae6379cf7538fc5d18c133b0ada54a41c1c6cef31d3c22ab6",
+        "license_path": "musl-1.2.6/COPYRIGHT",
+        "license_sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b",
+        "attribution_sources": {
+          "musl-1.2.6/src/complex/ccoshf.c": "6ebf4355682268356685ba79621a47f2f955ca910bf13ca6ed32bb52e893574f",
+          "musl-1.2.6/src/crypt/crypt_blowfish.c": "0f9054739e295e3e981e7aa29c8f287a190aef065b84a82a4c6817120d5da05d",
+          "musl-1.2.6/src/crypt/crypt_des.c": "546b4ee35446fb2a551d7414779395789f81d53aefbabd8914375686af5d228e",
+          "musl-1.2.6/src/math/__tanl.c": "3788db7251d2e14b17e761bc2eccd0d8faa3c72c16eef7a56ca2ca75eca177df",
+          "musl-1.2.6/src/math/exp.c": "7db56f21ca9b8915d36dd5099b707aafeb6a736eae798e19b76b074764e75f34",
+          "musl-1.2.6/src/math/expm1l.c": "a8362abd18ef31f00a7dd74c8b618ef658a4e9c3919c456d03d65a12fe445c2f",
+          "musl-1.2.6/src/math/fmaf.c": "e5baf54228b74b036da629902d811f9f57de26133a03ce290879b5ec6de04433",
+          "musl-1.2.6/src/math/sincos.c": "2b88cfba380b8d5aa8f8f6b9f055aee91fe112de9f967a4484807afcb5405d9d",
+          "musl-1.2.6/src/regex/regcomp.c": "56b0a765e084a5cd3ed7113a893b50d259265ba76b6bea98889c45d7aec302a0",
+          "musl-1.2.6/src/stdlib/qsort.c": "dc9a8fd43bd2c98c437c05c214a8715df22ed746a2912969eb154fa9090213f4",
+          "musl-1.2.6/src/string/aarch64/memcpy.S": "1ead3716276e8a58e2e015e89fd565d9f33c10b2bc482c303b68b90c9d0f7cef"
+        }
+      },
+      "patch": {
+        "path": "main/musl/CVE-2026-107891.patch",
+        "url": "https://raw.githubusercontent.com/alpinelinux/aports/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e/main/musl/CVE-2026-107891.patch",
+        "sha256": "0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b",
+        "sha512": "df73a35b9da531021ad5b1a6aad12b9d8d69de2bed7fc91b1156d9727476ab25c0d3c2341d60488152ee8ccbddb83786e91fff950cdb177b9b04673da98fdc4e",
+        "upstream_commit": "7813e9119eb5fe681b6750b8a033a0490bca0941"
+      },
+      "signing_keys": {
+        "amd64": {
+          "name": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+          "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+        },
+        "arm64": {
+          "name": "alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+          "sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+        }
+      },
       "packages": [
         {
           "name": "musl",
-          "version": "1.2.6-r2",
+          "version": "1.2.6-r3",
           "license": "MIT",
-          "build_commit": "191007bf1387d7904b2b6b8dd077e28a02528d94",
+          "build_commit": "8f79d39391b46d6dbf1800fb68b8212a21d5ee2e",
           "binaries": {
             "amd64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/musl-1.2.6-r2.apk",
-              "sha256": "52ec02804d0dfce7f7e5ecedae91f3d538e45ad5041d178bc22dc1666d3f237d"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/musl-1.2.6-r3.apk",
+              "sha256": "e142255d0fa397f14318996bc10378093dcc069dc3dd1b6818c8f28a789c21da",
+              "pkginfo_sha256": "9ce97a54370f1059cbdd6b940a2b0fac4d5e2b370103b0329895310af948d8e0",
+              "library_sha256": "095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5"
             },
             "arm64": {
-              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/musl-1.2.6-r2.apk",
-              "sha256": "cc1d6175187a4c6a4f4a56ec525fc06465bb1482e0eeb5356bb8350ddbad72c4"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/musl-1.2.6-r3.apk",
+              "sha256": "2e17864102278d9049c3a56f1bceed9e8cf287065617e579325123443daed8a5",
+              "pkginfo_sha256": "f9cdee26ee21a62f00b1cd6bf92a01af98b7e72aac4e851a5708d9669acfc178",
+              "library_sha256": "53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793"
+            }
+          }
+        }
+      ],
+      "build_only_packages": [
+        {
+          "name": "musl-dev",
+          "version": "1.2.6-r3",
+          "license": "MIT",
+          "build_commit": "8f79d39391b46d6dbf1800fb68b8212a21d5ee2e",
+          "binaries": {
+            "amd64": {
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/musl-dev-1.2.6-r3.apk",
+              "sha256": "310b51cff12e1d5ce5f135c558a82e2550427da5465bbd16c9ff9b05e63ee3d9",
+              "pkginfo_sha256": "fcee1d1112be6ad0b3b23243e111dbc98cc11c508592361e5113d2774df490df",
+              "payload_inventory_sha256": "c7df0bc3f11bcc74540cf830af54e39e437133eb3a945529cbc9550100b87bd8"
+            },
+            "arm64": {
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/musl-dev-1.2.6-r3.apk",
+              "sha256": "45afe0a9f78de3402b6b5d11f5153ed955bf59d59b45344d9c3fed9f4bbf2f66",
+              "pkginfo_sha256": "7314b4c227776e953da2de01a66889836d088213e075de55938a8b2f8ada0087",
+              "payload_inventory_sha256": "b943e9901a06ee38128d0064ab20cbdf12d99979bc59b668ebd106c31f8d2313"
             }
           }
         }
@@ -1178,6 +1284,44 @@
             "arm64": {
               "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-bundle-20260909-r0.apk",
               "sha256": "c4e7fcdbd34946ef4ea6304fadef92b28cc2cde7f47f8532aabb762fb8ca02ac"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "origin": "musl",
+      "version": "1.2.6-r2",
+      "image": "dhi.io/pkg-musl",
+      "tag": "1.2.6-r2-alpine3.24",
+      "reference": "dhi.io/pkg-musl:1.2.6-r2-alpine3.24",
+      "predicate_image_name": "dhi/pkg-musl",
+      "recipe": {
+        "path": "package/apk/main/musl/alpine-3.24/1.yaml",
+        "revision": "36ae6690624a3f4d030f4084e3d90f40eb27a6f9",
+        "sha256": "b6b997f7602ab1473d23539b63a0fab480b662549114cc0f1d17b55adbebc7c3",
+        "url": "https://raw.githubusercontent.com/docker-hardened-images/catalog/36ae6690624a3f4d030f4084e3d90f40eb27a6f9/package/apk/main/musl/alpine-3.24/1.yaml",
+        "upstream_commit": "f5640d3a10f664c9119720c60515265d3d6f6d01"
+      },
+      "declared_tags": [
+        "1.2.6-alpine3.24",
+        "1.2.6-r2-alpine3.24"
+      ],
+      "mutable_tag_reused_across_upstream_versions": false,
+      "packages": [
+        {
+          "name": "musl",
+          "version": "1.2.6-r2",
+          "license": "MIT",
+          "build_commit": "191007bf1387d7904b2b6b8dd077e28a02528d94",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/musl-1.2.6-r2.apk",
+              "sha256": "52ec02804d0dfce7f7e5ecedae91f3d538e45ad5041d178bc22dc1666d3f237d"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/musl-1.2.6-r2.apk",
+              "sha256": "cc1d6175187a4c6a4f4a56ec525fc06465bb1482e0eeb5356bb8350ddbad72c4"
             }
           }
         }

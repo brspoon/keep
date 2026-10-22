@@ -4,7 +4,7 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-installs the exact signed Alpine zlib `1.3.2-r1`, DHI Python `3.14.8-r0` and
+installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.8-r0` and
 DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
@@ -51,7 +51,7 @@ No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
 evidence, verify the actual runtime package identities, and package versioned
 source/notice archives with SHA-256 manifests before transferring an image.
-The original Expat, Python, zlib and CA certificate layers, runtime security patches and statically embedded wheel
+The original Expat, Python, zlib, musl and CA certificate layers, runtime security patches and statically embedded wheel
 libraries are included. Full OS and supplemental notices are also copied into
 the image. See [source distribution](SOURCE_DISTRIBUTION.md) for matching
 source downloads, verification, and retention requirements.
@@ -152,7 +152,7 @@ exact Python scopes and November 1, 2026 UTC inclusive deadline remain unchanged
 
 ### October 21 musl release hold
 
-Both complete Scout reports identify `CVE-2026-107891` against the unchanged
+The original complete Scout reports identify `CVE-2026-107891` against the pinned
 base's musl `1.2.6-r2`. The [maintainer advisory](https://www.openwall.com/lists/musl/2026/10/21/1)
 describes integer overflows in libc's regular-expression compiler; this finding
 does not come from the CA update. The bounded source assessment does not establish
@@ -162,12 +162,27 @@ application-level exploitability, and that uncertainty does not waive the gate.
 the fix at `1.2.6-r3`; [edge data](https://secdb.alpinelinux.org/edge/main.json)
 records it at `1.2.6-r6`. Scout's reports name Alpine 3.24 but use the edge
 threshold. Correcting that threshold alone would still leave the installed r2
-package affected. Signed Alpine r3 packages are replacement candidates, not
-qualified Keep replacements; the inspected DHI delivery still offers r2.
+package affected. The musl candidate installs Alpine's exact signed `1.2.6-r3`
+package in the runtime. Its build stage upgrades libc and the exactly coupled
+`musl-dev` package together before creating the application environment; neither
+the development package nor package-management tools enter the final runtime.
+The inspected DHI delivery still offers r2, so the source records identify Alpine
+signature/source binding explicitly and retain original DHI r2 provenance separately.
 
-This release needs a supported libc fix with matching sources, retained original
-base coverage and complete native verification. The scanner data must also
-recognize the correct fixed package. Scout must report zero at every severity;
+The [pinned Alpine recipe](https://github.com/alpinelinux/aports/blob/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e/main/musl/APKBUILD)
+retains the matching upstream `1.2.6` source and complete build context, including
+the regex correction and every other checksum-listed patch. The loader's upstream
+version stays `1.2.6`; its package revision, signed payload bytes and source identity
+establish which correction is installed. Fresh interpreters must verify the loader
+actually mapped by normal consumers, its inode/device/hash, libc alias and successful
+bounded libc controls. The retained dependency report requires this evidence along
+with all existing Python, TLS and dependency proofs; older reports cannot qualify
+the changed candidate. All native application, installer/recovery and source gates
+remain required.
+
+This candidate still needs complete native qualification of the new libc and its
+matching sources and notices. The scanner data must also recognize the correct
+fixed package. Scout must report zero at every severity;
 neither an unspecified severity nor source inspection permits this finding.
 No musl exception is added, and no image is eligible for promotion while the
 finding remains.

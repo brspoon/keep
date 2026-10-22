@@ -4,17 +4,19 @@ import json
 
 from scripts.alpine_expat_sources import build_security_manifest
 from scripts.dhi_python_packages import build_security_manifest as python_security_manifest
-from scripts.runtime_dependency_checks import EXPAT_LIBRARY_SHA256
+from scripts.alpine_musl_sources import build_security_manifest as musl_security_manifest
+from scripts.runtime_dependency_checks import EXPAT_LIBRARY_SHA256, MUSL_PROBES
 from tests.certificate_trust_fixture import trust_report
 
 
 def dependency_report(arch):
     manifest = build_security_manifest(arch, root=None)
     python = python_security_manifest(arch, root=None)
+    musl = musl_security_manifest(arch, root=None)
     return {
-        'schema': 3, 'arch': arch, 'success': True, 'tests': 3,
+        'schema': 4, 'arch': arch, 'success': True, 'tests': 4,
         'failures': 0, 'errors': [],
-        'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8'},
+        'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8', 'musl': '1.2.6-r3'},
         'loaded_libraries': {
             name: {'path': path, 'sha256': digest, 'device': '0:1', 'inode': inode}
             for name, path, digest, inode in (
@@ -23,6 +25,7 @@ def dependency_report(arch):
                 ('crypto', '/usr/lib/libcrypto.so.3', 'f' * 64, 103),
                 ('python', python['library']['path'], python['library']['sha256'], 104),
                 ('python_ssl', python['ssl_extension']['path'], python['ssl_extension']['sha256'], 105),
+                ('musl', musl['library']['path'], musl['library']['sha256'], 108),
             )
         },
         'expat_source_manifest_sha256': manifest['source_manifest_sha256'],
@@ -40,6 +43,10 @@ def dependency_report(arch):
         'python_tls_probes': {'wrap_bio_requires_hostname': True,
                               'sni_context_switch_handshake': True,
                               'tls_memory_bio_handshake': True},
+        'musl_source_manifest_sha256': musl['source_manifest_sha256'],
+        'musl_install_manifest_sha256': hashlib.sha256(
+            (json.dumps(musl, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
+        'musl_aliases': musl['aliases'], 'musl_probes': dict(MUSL_PROBES),
         'certificate_trust': trust_report(arch),
     }
 
@@ -66,4 +73,31 @@ def certificate_failure_reports(arch):
                 entries=1, certificates=1, fingerprints=[excluded_root],
                 fingerprints_sha256=hashlib.sha256((excluded_root + '\n').encode()).hexdigest())
             message = 'Unreviewed or invalid OpenSSL hashed certificate inventory'
+        yield failure, report, message
+
+
+def musl_failure_reports(arch):
+    """Keep other evidence valid while breaking one fixed-libc obligation."""
+    for failure in ('source_proof', 'install_proof', 'loader_hash', 'libc_alias',
+                    'package_version', 'regex_probe', 'missing_libc'):
+        report = dependency_report(arch)
+        if failure in ('source_proof', 'install_proof'):
+            name = 'source' if failure == 'source_proof' else 'install'
+            report['musl_' + name + '_manifest_sha256'] = None
+            message = 'musl source or install manifest differs'
+        elif failure == 'loader_hash':
+            report['loaded_libraries']['musl']['sha256'] = '0' * 64
+            message = 'musl loaded-library hash differs'
+        elif failure == 'libc_alias':
+            report['musl_aliases'] = {}
+            message = 'musl aliases differ'
+        elif failure == 'package_version':
+            report['versions']['musl'] = '1.2.6-r2'
+            message = 'Dependency report versions differ'
+        elif failure == 'regex_probe':
+            report['musl_probes']['regex_length_limit'] = False
+            message = 'Missing or failed musl qualification probes'
+        else:
+            del report['loaded_libraries']['musl']
+            message = 'Incomplete dependency loaded-library evidence'
         yield failure, report, message

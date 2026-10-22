@@ -31,6 +31,7 @@
 !scripts/python_security_patches.json
 !scripts/alpine_expat_sources.py
 !scripts/alpine_zlib_sources.py
+!scripts/alpine_musl_sources.py
 !scripts/dhi_python_packages.py
 !scripts/dhi_certificate_packages.py
 !scripts/certificate_trust_checks.py

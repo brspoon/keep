@@ -1,9 +1,11 @@
-"""Qualify ordinary Expat, OpenSSL and Python loading in the final native image.
+"""Qualify ordinary Expat, OpenSSL, Python and musl loading in the native image.
 
 Run without network or loader overrides. These checks are separate from the
-nine security-patch probes and use only normal XML parsing and TLS setup.
+nine security-patch probes and exercise ordinary dependency behavior.
 """
 import argparse
+import ctypes
+from contextlib import closing
 import gc
 import hashlib
 import json
@@ -12,6 +14,7 @@ from pathlib import Path
 import platform
 import re
 import stat
+import subprocess
 import sys
 import tempfile
 import weakref
@@ -36,11 +39,17 @@ SSL_LIBRARY = Path('/usr/lib/libssl.so.3')
 CRYPTO_LIBRARY = Path('/usr/lib/libcrypto.so.3')
 MANIFEST_PATH = Path('/app/EXPAT_SECURITY.json')
 PYTHON_MANIFEST_PATH = Path('/app/PYTHON_SECURITY.json')
+MUSL_MANIFEST_PATH = Path('/app/MUSL_SECURITY.json')
 PROC_EXECUTABLE_PATH = Path('/proc/self/exe')
 PYTHON_VERSION = '3.14.8'
 PYTHON_TLS_PROBES = {'wrap_bio_requires_hostname': True,
                      'sni_context_switch_handshake': True,
                      'tls_memory_bio_handshake': True}
+MUSL_PACKAGE_VERSION = '1.2.6-r3'
+MUSL_PROBES = dict.fromkeys((
+    'regex_compile_match', 'regex_no_match', 'regex_invalid_rejected',
+    'regex_length_limit', 'sqlite_transaction', 'thread_local_storage',
+    'process_exec', 'numeric_name_resolution', 'native_stdlib'), True)
 MAPS_PATH = Path('/proc/self/maps')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 ROOT = Path(__file__).resolve().parents[1]
@@ -184,6 +193,37 @@ def read_python_manifest(path, arch):
     body = path.read_bytes()
     require(len(body) <= 128 * 1024, 'Python install manifest is too large')
     return validate_python_manifest(json.loads(body), arch), hashlib.sha256(body).hexdigest()
+
+
+def musl_packages():
+    if __package__:
+        from . import alpine_musl_sources
+    else:
+        import alpine_musl_sources
+    return alpine_musl_sources
+
+
+def expected_musl_manifest(arch, root):
+    return musl_packages().build_security_manifest(
+        arch, root=Path(root) if root is not None else None)
+
+
+def validate_musl_manifest(manifest, arch):
+    require(isinstance(manifest, dict) and manifest == expected_musl_manifest(arch, None)
+            and all(row.get('signature_verified') is True
+                    for row in manifest['packages'] + manifest['build_only_packages']),
+            'musl install manifest differs from the exact signed packages and source records')
+    return manifest
+
+
+def read_musl_manifest(path, arch):
+    path = Path(path)
+    require(not path.is_symlink() and path.is_file(),
+            'musl install manifest must be a regular file')
+    require(path.stat().st_size <= 128 * 1024, 'musl install manifest is too large')
+    body = path.read_bytes()
+    require(len(body) <= 128 * 1024, 'musl install manifest is too large')
+    return validate_musl_manifest(json.loads(body), arch), hashlib.sha256(body).hexdigest()
 
 
 def library_mappings(maps_text, prefix):
@@ -441,6 +481,131 @@ def check_python(arch, manifest_path=PYTHON_MANIFEST_PATH, maps_path=MAPS_PATH):
             'install_manifest_sha256': install_hash}
 
 
+def verify_musl_files(manifest, maps_text):
+    """Bind the default process loader and every libc mapping to signed bytes."""
+    canonical = Path(manifest['library']['path'])
+    for name, target in manifest['aliases'].items():
+        alias = Path(name)
+        require(alias.is_symlink() and os.readlink(alias) == target
+                and alias.resolve(strict=True) == canonical,
+                'musl libc alias differs from the signed package')
+    library = verify_loaded_library(canonical, canonical.name, maps_text,
+                                    manifest['library']['sha256'])
+    allowed = {str(canonical), *manifest['aliases']}
+    aliases = set()
+    for line in maps_text.splitlines():
+        fields = line.split(None, 5)
+        if len(fields) != 6:
+            continue
+        name = Path(fields[5].removesuffix(' (deleted)')).name
+        if not name.startswith(('ld-musl-', 'libc.musl-', 'libc.so')):
+            continue
+        require(fields[5] in allowed, 'Process mapped an unreviewed or deleted libc: ' + fields[5])
+        if name != canonical.name:
+            aliases.add(name)
+    for name in aliases:
+        verify_loaded_library(canonical, name, maps_text, manifest['library']['sha256'])
+    return library
+
+
+def exercise_musl_compatibility():
+    """Bounded ordinary libc consumers supplement the full application suite."""
+    import queue
+    import socket
+    import sqlite3
+    import threading
+    import zlib
+
+    with closing(sqlite3.connect(':memory:')) as database:
+        database.execute('CREATE TABLE keep_probe (value TEXT)')
+        database.execute('INSERT INTO keep_probe VALUES (?)', ('ready',))
+        database.commit()
+        require(database.execute('SELECT value FROM keep_probe').fetchall() == [('ready',)]
+                and database.execute('PRAGMA integrity_check').fetchone() == ('ok',),
+                'musl SQLite transaction failed')
+    local, results = threading.local(), queue.Queue()
+    local.value = 'main'
+
+    def worker():
+        local.value = 'worker'
+        results.put(local.value)
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+    require(not thread.is_alive() and results.get_nowait() == 'worker' and local.value == 'main',
+            'musl thread-local storage failed')
+    child = subprocess.run([sys.executable, '-I', '-c', 'print("keep-libc-exec")'],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=10, check=True)
+    require(child.stdout == 'keep-libc-exec\n' and child.stderr == '',
+            'musl process execution failed')
+    addresses = socket.getaddrinfo('127.0.0.1', 5000, socket.AF_INET,
+                                   socket.SOCK_STREAM, 0, socket.AI_NUMERICHOST)
+    require(addresses and all(row[4] == ('127.0.0.1', 5000) for row in addresses),
+            'musl numeric name resolution failed')
+    body = b'keep native extension compatibility'
+    require(zlib.decompress(zlib.compress(body)) == body
+            and hashlib.sha256(body).hexdigest()
+            == '699d7988743ecc7c524c177fce5d811ebc619debc7f717be7881352286647c01',
+            'musl native standard-library operations failed')
+
+
+def exercise_musl_regex():
+    """Call the proven fixed default libc with benign expressions only."""
+    # Exact signed musl-dev 1.2.6-r3 regex.h SHA256:
+    # 4acf94cf0e0f14b2eb50accac93fee886fcc4f821a9b7bb5347a5d035a027ad3.
+    # bits/alltypes.h defines regoff_t as _Addr, signed long on both LP64 arches.
+    class Regex(ctypes.Structure):
+        _fields_ = [('re_nsub', ctypes.c_size_t), ('opaque', ctypes.c_void_p),
+                    ('padding', ctypes.c_void_p * 4), ('nsub2', ctypes.c_size_t),
+                    ('padding2', ctypes.c_char)]
+
+    class Match(ctypes.Structure):
+        _fields_ = [('start', ctypes.c_long), ('end', ctypes.c_long)]
+
+    require(ctypes.sizeof(ctypes.c_void_p) == 8 and ctypes.sizeof(ctypes.c_long) == 8
+            and ctypes.sizeof(Regex) == 64 and ctypes.sizeof(Match) == 16,
+            'Unexpected reviewed musl regex ABI')
+    libc = ctypes.CDLL(None)
+    libc.regcomp.argtypes = [ctypes.POINTER(Regex), ctypes.c_char_p, ctypes.c_int]
+    libc.regcomp.restype = ctypes.c_int
+    libc.regexec.argtypes = [ctypes.POINTER(Regex), ctypes.c_char_p, ctypes.c_size_t,
+                            ctypes.POINTER(Match), ctypes.c_int]
+    libc.regexec.restype = ctypes.c_int
+    libc.regfree.argtypes = [ctypes.POINTER(Regex)]
+    libc.regfree.restype = None
+    regex, match = Regex(), Match()
+    require(libc.regcomp(ctypes.byref(regex), b'^keep[0-9]+$', 1) == 0,
+            'musl ordinary regex compilation failed')
+    try:
+        require(libc.regexec(ctypes.byref(regex), b'keep42', 1, ctypes.byref(match), 0) == 0
+                and (match.start, match.end) == (0, 6), 'musl ordinary regex match failed')
+        require(libc.regexec(ctypes.byref(regex), b'other', 1, ctypes.byref(match), 0) == 1,
+                'musl regex no-match result failed')
+    finally:
+        libc.regfree(ctypes.byref(regex))
+    require(libc.regcomp(ctypes.byref(Regex()), b'[', 1) == 7,
+            'musl invalid regex was not rejected')
+    # A plain literal reaches only the vendor's fixed upfront length check.
+    # It is not an overflowing repetition or crash-triggering expression.
+    require(libc.regcomp(ctypes.byref(Regex()), b'a' * 1024000, 1) == 12,
+            'musl fixed regex input-length limit was not enforced')
+
+
+def check_musl(arch, manifest_path=MUSL_MANIFEST_PATH, maps_path=MAPS_PATH):
+    manifest, install_hash = read_musl_manifest(manifest_path, arch)
+    musl_packages().verify_installed(arch, manifest)
+    library = verify_musl_files(manifest, Path(maps_path).read_text())
+    # Never invoke C regex probes before the default loader bytes are proven.
+    exercise_musl_regex()
+    exercise_musl_compatibility()
+    return {'version': MUSL_PACKAGE_VERSION, 'libraries': {'musl': library},
+            'aliases': dict(manifest['aliases']), 'probes': dict(MUSL_PROBES),
+            'source_manifest_sha256': manifest['source_manifest_sha256'],
+            'install_manifest_sha256': install_hash}
+
+
 def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
     version = exercise_expat()
     manifest, install_hash = read_expat_manifest(manifest_path, arch)
@@ -465,12 +630,15 @@ def check_openssl(arch, maps_path=MAPS_PATH):
 
 
 def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
-                    python_manifest_path=PYTHON_MANIFEST_PATH):
-    report = {'schema': 3, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+                    python_manifest_path=PYTHON_MANIFEST_PATH,
+                    musl_manifest_path=MUSL_MANIFEST_PATH):
+    report = {'schema': 4, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
               'python_source_manifest_sha256': None, 'python_install_manifest_sha256': None,
               'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {},
+              'musl_source_manifest_sha256': None, 'musl_install_manifest_sha256': None,
+              'musl_aliases': {}, 'musl_probes': {},
               'certificate_trust': None}
     try:
         report['arch'] = architecture()
@@ -483,6 +651,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
             ('expat', lambda: check_expat(report['arch'], manifest_path, maps_path)),
             ('openssl', lambda: check_openssl(report['arch'], maps_path)),
             ('python', lambda: check_python(report['arch'], python_manifest_path, maps_path)),
+            ('musl', lambda: check_musl(report['arch'], musl_manifest_path, maps_path)),
         ):
             report['tests'] += 1
             try:
@@ -500,10 +669,15 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     report['python_files'] = result['files']
                     report['python_aliases'] = result['aliases']
                     report['python_tls_probes'] = result['tls_probes']
+                elif name == 'musl':
+                    report['musl_source_manifest_sha256'] = result['source_manifest_sha256']
+                    report['musl_install_manifest_sha256'] = result['install_manifest_sha256']
+                    report['musl_aliases'] = result['aliases']
+                    report['musl_probes'] = result['probes']
             except Exception as error:
                 report['errors'].append({'check': name, 'message': str(error)})
     report['failures'] = len(report['errors'])
-    report['success'] = report['tests'] == 3 and report['failures'] == 0
+    report['success'] = report['tests'] == 4 and report['failures'] == 0
     return report
 
 
@@ -522,16 +696,18 @@ def validate_report(report, arch, root=ROOT):
     keys = {'schema', 'arch', 'success', 'tests', 'failures', 'errors', 'versions',
             'loaded_libraries', 'expat_source_manifest_sha256', 'expat_install_manifest_sha256',
             'python_source_manifest_sha256', 'python_install_manifest_sha256',
+            'musl_source_manifest_sha256', 'musl_install_manifest_sha256',
+            'musl_aliases', 'musl_probes',
             'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 3
+    require(type(report['schema']) is int and report['schema'] == 4
             and report['arch'] == arch and report['success'] is True
-            and type(report['tests']) is int and report['tests'] == 3
+            and type(report['tests']) is int and report['tests'] == 4
             and type(report['failures']) is int and report['failures'] == 0
             and report['errors'] == [], 'Missing or failed native dependency qualification')
     require(report['versions'] == {'expat': EXPAT_VERSION, 'openssl': OPENSSL_VERSION,
-                                   'python': PYTHON_VERSION},
+                                   'python': PYTHON_VERSION, 'musl': MUSL_PACKAGE_VERSION},
             'Dependency report versions differ from the reviewed runtime')
     certificate_trust.validate_trust_report(report['certificate_trust'], arch, root=root)
     expected = validate_expat_manifest(expected_expat_manifest(arch, root), arch)
@@ -552,20 +728,35 @@ def validate_report(report, arch, root=ROOT):
             'Missing or failed Python TLS qualification probes')
     require(report['python_aliases'] == python['aliases'],
             'Dependency report Python aliases differ from the signed package')
+    musl = validate_musl_manifest(expected_musl_manifest(arch, root), arch)
+    musl_install_hash = hashlib.sha256(
+        (json.dumps(musl, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
+    require(report['musl_source_manifest_sha256'] == musl['source_manifest_sha256']
+            and report['musl_install_manifest_sha256'] == musl_install_hash,
+            'Dependency report musl source or install manifest differs from the reviewed packages')
+    require(report['musl_aliases'] == musl['aliases'],
+            'Dependency report musl aliases differ from the signed package')
+    probes = report['musl_probes']
+    require(isinstance(probes, dict) and set(probes) == set(MUSL_PROBES)
+            and all(value is True for value in probes.values()),
+            'Missing or failed musl qualification probes')
     libraries = report['loaded_libraries']
     require(isinstance(libraries, dict)
-            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl'},
+            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'musl'},
             'Incomplete dependency loaded-library evidence')
     for name, canonical in (('expat', EXPAT_LIBRARY), ('ssl', SSL_LIBRARY),
                             ('crypto', CRYPTO_LIBRARY),
                             ('python', Path(python['library']['path'])),
-                            ('python_ssl', Path(python['ssl_extension']['path']))):
+                            ('python_ssl', Path(python['ssl_extension']['path'])),
+                            ('musl', Path(musl['library']['path']))):
         validate_file_identity(libraries[name], canonical)
     require(libraries['expat']['sha256'] == EXPAT_LIBRARY_SHA256[arch],
             'Dependency report Expat hash differs from the signed package')
     for name, record in (('python', python['library']), ('python_ssl', python['ssl_extension'])):
         require(libraries[name]['sha256'] == record['sha256'],
                 'Dependency report Python loaded-library hash differs from the signed package')
+    require(libraries['musl']['sha256'] == musl['library']['sha256'],
+            'Dependency report musl loaded-library hash differs from the signed package')
     files = report['python_files']
     require(isinstance(files, dict) and set(files) == {'executable', 'abi_library'},
             'Incomplete dependency Python file evidence')

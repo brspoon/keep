@@ -1,7 +1,8 @@
 # Changelog
 
-## 2.27.4 — 2026-10-21
+## 2.27.4 — 2026-10-22
 
+- Update the container's C library with the vendor's regular-expression security fix.
 - Update trusted certificate authorities for HTTPS connections and email delivery after the emSign security incident.
   Email servers whose certificates rely only on retired emSign roots need an updated certificate chain.
 

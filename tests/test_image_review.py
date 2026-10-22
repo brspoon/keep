@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import review_image
 from review_image import assess, deadline_warnings, review_candidate
 from inspect_candidate import DIRECT
-from tests.native_dependency_fixture import dependency_report, certificate_failure_reports
+from tests.native_dependency_fixture import dependency_report, certificate_failure_reports, musl_failure_reports
 from tests.image_review_policy_fixture import historical_review_policy, RENEWED_FINDINGS
 
 
@@ -519,11 +519,11 @@ class CandidateReviewTests(unittest.TestCase):
                         review_candidate(arch, self.root, datetime.date(2026, 10, 8))
             (self.root / name).write_bytes(original)
 
-    def test_clean_candidate_rejects_incomplete_or_modified_certificate_qualification(self):
+    def test_clean_candidate_rejects_incomplete_or_modified_trust_or_libc_qualification(self):
         for arch in DIRECT:
             path = self.root / f'candidate-dependencies-{arch}.json'
             original = path.read_bytes()
-            for failure, report, message in certificate_failure_reports(arch):
+            for failure, report, message in (*certificate_failure_reports(arch), *musl_failure_reports(arch)):
                 self.write(path.name, report)
                 retained = path.read_bytes()
                 with self.subTest(arch=arch, failure=failure), self.assertRaisesRegex(ValueError, message):

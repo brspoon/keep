@@ -27,6 +27,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
         self.root = Path(directory) / 'packages'
         self.helpers, cohort = {}, []
         definitions = (
+            ('musl', ('musl',), '1.2.6-r3', 'MUSL_SECURITY.json'),
             ('certificates', ('ca-certificates-bundle',), '20261020-r0', 'CA_CERTIFICATES_SECURITY.json'),
             ('expat', ('expat', 'libexpat'), '2.9.0-r0', 'EXPAT_SECURITY.json'),
             ('zlib', ('zlib',), '1.3.2-r1', 'ZLIB_SECURITY.json'),
@@ -96,7 +97,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
             installer.install(self.root)
         run.assert_not_called()
 
-    def test_preparation_merges_only_identical_reviewed_keys_and_exact_eight_packages(self):
+    def test_preparation_merges_only_identical_reviewed_keys_and_exact_nine_packages(self):
         for architecture in ('amd64', 'arm64'):
             with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / 'prepared'
@@ -104,7 +105,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
                 self.assertEqual({path.name for path in (root / 'keys').iterdir()},
                                  {'alpine-test.rsa.pub', 'dhi-test.rsa.pub'})
                 packages = installer.installation_inputs(root, architecture)
-                self.assertEqual(len(packages), 8)
+                self.assertEqual(len(packages), 9)
                 self.assertEqual({path.name for path in packages},
                                  {package['name'] + '-' + package['version'] + '.apk'
                                   for spec in self.specs.values() for package in spec['packages']})
@@ -246,6 +247,9 @@ class InstallRuntimePackageTests(unittest.TestCase):
             call(['/usr/bin/python3.14', '-B', str(tool / 'dhi_python_packages.py'),
                   '--verify-installed', '--architecture', 'amd64', '--manifest',
                   str(self.root / 'python/PYTHON_SECURITY.json')], check=True),
+            call(['/usr/bin/python3.14', '-B', str(tool / 'alpine_musl_sources.py'),
+                  '--architecture', 'amd64', '--manifest',
+                  str(self.root / 'musl/MUSL_SECURITY.json'), '--verify-installed'], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'dhi_certificate_packages.py'),
                   '--architecture', 'amd64', '--manifest',
                   str(self.root / 'certificates/CA_CERTIFICATES_SECURITY.json')], check=True),
@@ -257,7 +261,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
 
     def test_failure_at_each_native_step_prevents_all_later_steps(self):
         self.prepared()
-        for failing_step in range(5):
+        for failing_step in range(6):
             def fail(command, *, check):
                 if run.call_count == failing_step + 1:
                     raise subprocess.CalledProcessError(1, command)
@@ -274,14 +278,48 @@ class InstallRuntimePackageTests(unittest.TestCase):
                 patch.object(installer, 'installation_inputs', return_value=packages), \
                 patch.object(installer.subprocess, 'run') as run:
             installer.main()
-        self.assertEqual(run.call_count, 5)
+        self.assertEqual(run.call_count, 6)
         verification = run.call_args_list[1].args[0]
         self.assertEqual(verification[0:2], ['/usr/bin/python3.14', '-B'])
         self.assertIn('--verify-installed', verification)
         self.assertIn('arm64', verification)
-        self.assertEqual(Path(run.call_args_list[2].args[0][2]).name, 'dhi_certificate_packages.py')
-        self.assertEqual(Path(run.call_args_list[3].args[0][2]).name, 'patch_python_runtime.py')
-        self.assertEqual(run.call_args_list[4].args[0][-1], '--clean-stdlib')
+        self.assertEqual(Path(run.call_args_list[2].args[0][2]).name, 'alpine_musl_sources.py')
+        self.assertIn('--verify-installed', run.call_args_list[2].args[0])
+        self.assertEqual(Path(run.call_args_list[3].args[0][2]).name, 'dhi_certificate_packages.py')
+        self.assertEqual(Path(run.call_args_list[4].args[0][2]).name, 'patch_python_runtime.py')
+        self.assertEqual(run.call_args_list[5].args[0][-1], '--clean-stdlib')
+
+    def test_build_musl_requires_matching_development_package_and_fresh_verification(self):
+        self.prepared()
+        development = self.root / 'musl/build/musl-dev-1.2.6-r3.apk'
+        with patch.object(installer, 'arch', return_value='amd64'), \
+                patch.object(installer.musl, 'build_installation_inputs', return_value=[development]) as inputs, \
+                patch.object(installer.subprocess, 'run') as run:
+            installer.install_build_musl(self.root)
+        inputs.assert_called_once_with(self.root / 'musl', 'amd64')
+        self.assertEqual(run.call_args_list, [
+            call(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                  '--keys-dir', str(self.root / 'keys'), '--no-cache', '--upgrade',
+                  str(self.root / 'musl/musl-1.2.6-r3.apk'), str(development)], check=True),
+            call(['/usr/bin/python3.14', '-B', str(Path(installer.__file__).with_name('alpine_musl_sources.py')),
+                  '--architecture', 'amd64', '--manifest', str(self.root / 'musl/MUSL_SECURITY.json'),
+                  '--verify-build', '--prepared-root', str(self.root / 'musl')], check=True),
+        ])
+
+    def test_unverified_build_musl_or_headers_stop_before_package_installation(self):
+        self.prepared()
+        with patch.object(installer, 'arch', return_value='amd64'), \
+                patch.object(installer.musl, 'build_installation_inputs', side_effect=ValueError('bad headers')), \
+                patch.object(installer.subprocess, 'run') as run, self.assertRaisesRegex(ValueError, 'bad headers'):
+            installer.install_build_musl(self.root)
+        run.assert_not_called()
+        (self.root / 'musl/musl-1.2.6-r3.apk').write_bytes(b'changed loader')
+        with patch.object(installer, 'arch', return_value='amd64'), \
+                patch.object(installer.musl, 'build_installation_inputs') as inputs, \
+                patch.object(installer.subprocess, 'run') as run, self.assertRaises(ValueError):
+            installer.install_build_musl(self.root)
+        inputs.assert_not_called()
+        run.assert_not_called()
 
     def test_build_refresh_installs_checked_generator_and_bundle_in_one_transaction(self):
         self.prepared()
@@ -360,7 +398,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
 
 
 class RealInstallerContractTests(unittest.TestCase):
-    def test_actual_cohort_metadata_supports_all_eight_offline_inputs(self):
+    def test_actual_cohort_metadata_supports_all_nine_offline_inputs(self):
         # Keep genuine helper contracts here; substitute only file checks so this
         # test neither downloads vendor APKs nor invokes a native package manager.
         for architecture in ('amd64', 'arm64'):
@@ -381,8 +419,8 @@ class RealInstallerContractTests(unittest.TestCase):
                 with patch.object(installer, 'checked_file', side_effect=lambda path, digest: path) as checked:
                     actual = installer.installation_inputs(root, architecture)
                 self.assertEqual(actual, expected)
-                self.assertEqual(len(actual), 8)
-                self.assertEqual(sum(path.suffix == '.apk' for path, _ in (item.args for item in checked.call_args_list)), 8)
+                self.assertEqual(len(actual), 9)
+                self.assertEqual(sum(path.suffix == '.apk' for path, _ in (item.args for item in checked.call_args_list)), 9)
 
     def test_final_docker_layer_installs_verifies_patches_and_cleans_without_tool_copies(self):
         text = (ROOT / 'Dockerfile').read_text()
@@ -408,6 +446,8 @@ class RealInstallerContractTests(unittest.TestCase):
         dependency = next(stage for stage in re.split(r'(?m)^FROM ', text)[1:]
                           if re.search(r'\bAS dependencies\s*$', stage.splitlines()[0]))
         self.assertNotIn('"--install"', dependency)
+        self.assertLess(dependency.index('"--install-build-musl"'), dependency.index('COPY requirements.txt'))
+        self.assertIn('/opt/runtime-packages/musl/MUSL_SECURITY.json /app/MUSL_SECURITY.json', final)
         self.assertIn('RUN python -m venv', dependency)
         all_instructions = re.sub(r'\\\n\s*', ' ', text).splitlines()
         all_installs = [line for line in all_instructions if line.startswith('RUN ') and

@@ -543,6 +543,9 @@ def retain_signed_alpine(source, destination, origin, result, arch, runtime_inve
     elif origin.get('source_method') == 'alpine-signed-zlib-v1':
         from alpine_zlib_sources import collect_sources
         directory = 'alpine-zlib-sources'
+    elif origin.get('source_method') == 'alpine-signed-musl-v1':
+        from alpine_musl_sources import collect_sources
+        directory = 'alpine-musl-sources'
     else:
         raise ValueError('Unreviewed signed Alpine source method')
     if (result.get('binding_method') != 'signed-alpine-packages'
@@ -585,7 +588,8 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
         target = destination / name
         copy_file(package_root, 'acquisition.json', target / 'acquisition.json')
         if result.get('provider_oci_binding') is False:
-            if origin.get('source_method') in {'alpine-signed-expat-v1', 'alpine-signed-zlib-v1'}:
+            if origin.get('source_method') in {
+                    'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1'}:
                 coverage.append(retain_signed_alpine(package_root, target / 'public-sources',
                     origin, result, arch, runtime_inventory))
             elif name == 'openssl' and base_source is not None and runtime_inventory is not None:
@@ -692,6 +696,8 @@ def reviewed_original_base_origins(os_lock):
     for origin in os_lock.get('origins', []):
         if origin.get('source_method') == 'alpine-signed-zlib-v1':
             expected_originals.add('zlib')
+        if origin.get('source_method') == 'alpine-signed-musl-v1':
+            expected_originals.add('musl')
         if origin.get('origin') == 'python-3.14' and origin.get('version') == '3.14.8-r0':
             expected_originals.add('python-3.14')
         if origin.get('origin') == 'ca-certificates' and origin.get('version') == '20261020-r0':
@@ -841,6 +847,11 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
         origins = [row for row in os_lock['origins'] if row['origin'] == 'zlib']
         import_public_notices(zlib, public / 'zlib', origin='zlib', architecture=arch,
             package_spec=origins[0], runtime_inventory=runtime_inventory)
+    musl = stage / 'os-packages/musl/public-sources'
+    if musl.exists():
+        origins = [row for row in os_lock['origins'] if row['origin'] == 'musl']
+        import_public_notices(musl, public / 'musl', origin='musl', architecture=arch,
+            package_spec=origins[0], runtime_inventory=runtime_inventory)
     bundles = sorted({path.parent for path in stage.rglob('package-material-inventory.json')})
     if retain_inputs:
         retain_notice_inputs(bundles, stage / 'notice-inputs', arch)
@@ -928,7 +939,8 @@ def keep_source(root, destination):
     with (destination / 'keep-source.tar').open('wb') as stream:
         subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=root, stdout=stream, check=True)
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-                     'scripts/alpine_zlib_sources.py', 'scripts/patch_python_runtime.py',
+                     'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
+                     'scripts/patch_python_runtime.py',
                      'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
                      'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
                      'scripts/certificate_trust_checks.py',

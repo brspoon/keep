@@ -712,6 +712,17 @@ Only explicitly reviewed attribution headers are copied from source code.
             verified = collect_sources(package_spec, architecture, runtime_inventory, directory, fetch=fetch)
             selected_header_roles = set()
             binding_method = verified['binding_method']
+        elif origin == 'musl':
+            from alpine_musl_sources import collect_sources
+            if package_spec is None:
+                raise ValueError('Alpine musl notices require the reviewed package source map')
+            if runtime_inventory is None:
+                runtime_inventory = json.loads(checked_path(source, 'runtime-musl-identity.json').read_bytes())
+            verified = collect_sources(package_spec, architecture, runtime_inventory, directory, fetch=fetch)
+            # COPYRIGHT delegates TRE/math/crypt and architecture attributions to
+            # these exact, hash-checked full source files in the reviewed lock.
+            selected_header_roles = {'upstream-permissive-attribution-source'}
+            binding_method = verified['binding_method']
         elif origin == 'openssl':
             from openssl_distribution_sources import collect_sources
             if package_spec is None or base_provenance is None:
@@ -723,7 +734,7 @@ Only explicitly reviewed attribution headers are copied from source code.
             selected_header_roles = set()
             binding_method = verified['binding_method']
         else:
-            raise ValueError('Only reviewed timezone, OpenSSL, Expat and zlib notice imports are supported')
+            raise ValueError('Only reviewed timezone, OpenSSL, Expat, zlib and musl notice imports are supported')
         # Coverage wording is descriptive and may improve without changing an
         # input. Every file, checksum, role and source identity must still match.
         ignored = {'coverage'}
