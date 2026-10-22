@@ -69,6 +69,13 @@ packages do not acquire a Docker package-build or source-image attestation claim
 The development package is used only to build dependencies; the final package
 inventory continues to contain the core musl package alone. Complete native
 compatibility, source-archive and installed-notice verification remains mandatory.
+The [native notice preparation](https://github.com/brspoon/keep/actions/runs/39726218264)
+verified both replacement-package source sets and original DHI sources. Their
+reviewed union contains 53 package/architecture groups, with all 124 full notice
+texts unchanged. New r3 source attributions accompany the separately labeled
+original-base r2 records; every other existing source attribution is unchanged.
+This preparation does not replace the rebuilt archive and installed-notice gates
+or successful complete scanner acceptance.
 
 The Python source lock covers all 17 pinned distributions,
 including Certifi's MPL-covered material. Native CFFI wheel bytes are checked

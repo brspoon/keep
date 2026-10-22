@@ -8,8 +8,9 @@ installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3
 DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
-Every architecture job verifies signed vendor provenance, runs Docker Scout and
-an unsuppressed Grype scan, and executes all nine runtime regression probes.
+Every architecture job verifies signed vendor provenance, runs checksum-pinned
+Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runtime
+regression probes.
 Scout must report zero findings. Grype's complete raw findings remain visible;
 only the two exact verified-fixed Python `3.14.8-r0` scopes in
 docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
@@ -180,9 +181,20 @@ with all existing Python, TLS and dependency proofs; older reports cannot qualif
 the changed candidate. All native application, installer/recovery and source gates
 remain required.
 
-This candidate still needs complete native qualification of the new libc and its
-matching sources and notices. The scanner data must also recognize the correct
-fixed package. Scout must report zero at every severity;
+The [musl notice-preparation run](https://github.com/brspoon/keep/actions/runs/39726218264)
+passed both native builds, application, installation, recovery, all nine security
+regressions, default loaded-libc checks and signed matching-source acquisition.
+The reviewed two-architecture notice union adds r3 attribution and separates the
+original DHI r2 provenance while retaining all 124 complete text files unchanged.
+It contains 53 package/architecture groups with no attribution gaps.
+Both original Scout `1.24.0` reports still matched the genuine r3 package against
+the r6 threshold. Grype contained only the two existing exact Python scopes.
+
+The next native qualification uses checksum-pinned Scout `1.27.0` and rebuilds
+both images to verify every source-archive member and installed notice. The newer
+client's release announcement does not establish a correction to advisory data.
+The scanner data must recognize the correct fixed package. Scout must report zero
+at every severity;
 neither an unspecified severity nor source inspection permits this finding.
 No musl exception is added, and no image is eligible for promotion while the
 finding remains.
