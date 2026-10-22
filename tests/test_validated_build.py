@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import sys
 import tempfile
@@ -16,6 +17,37 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import validated_build as builds
+
+
+class NativeWorkflowContractTests(unittest.TestCase):
+    @staticmethod
+    def workflow_steps():
+        path = Path(__file__).resolve().parents[1] / '.github/workflows/native-image.yml'
+        workflow = path.read_text()
+        matches = list(re.finditer(r'^      - name: ([^\r\n]+)\r?\n', workflow, re.M))
+        return [(match.group(1), workflow[match.end():matches[index + 1].start()
+                 if index + 1 < len(matches) else len(workflow)])
+                for index, match in enumerate(matches)]
+
+    def test_real_native_workflow_supplies_each_required_evidence_gate_once(self):
+        names = [name for name, _ in self.workflow_steps()]
+        required = (*builds.NATIVE_STEPS, builds.RETAIN_STEP, builds.INDEX_STEP)
+        self.assertEqual(len(required), len(set(required)))
+        for name in required:
+            with self.subTest(name=name):
+                self.assertEqual(names.count(name), 1,
+                                 'The native workflow must emit this exact evidence gate once')
+
+    def test_dependency_evidence_gate_still_runs_the_complete_runtime_probe(self):
+        name = 'Verify default Expat and OpenSSL library loading'
+        blocks = [block for step, block in self.workflow_steps() if step == name]
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(re.findall(r'^        run: ([^\r\n]+)$', blocks[0], re.M), [
+            'docker run --rm --network none --read-only '
+            '--tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" '
+            'keep-ci python -B /checks/runtime_dependency_checks.py --report '
+            '> candidate-dependencies-${{ matrix.arch }}.json'])
+        self.assertNotRegex(blocks[0], r'(?m)^        (?:if|continue-on-error):')
 
 
 class ValidatedBuildTests(unittest.TestCase):
