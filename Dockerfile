@@ -4,7 +4,7 @@ FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cab
 FROM dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d AS dependencies
 USER 0
 WORKDIR /app
-COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json /opt/runtime-build-tools/
+COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json /opt/runtime-build-tools/
 RUN ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--prepare"]
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \

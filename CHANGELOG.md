@@ -3,6 +3,7 @@
 ## 2.27.4 — 2026-10-21
 
 - Update trusted certificate authorities for HTTPS connections and email delivery after the emSign security incident.
+  Email servers whose certificates rely only on retired emSign roots need an updated certificate chain.
 
 ## 2.27.3 — 2026-10-19
 

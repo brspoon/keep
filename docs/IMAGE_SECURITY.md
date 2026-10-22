@@ -98,9 +98,11 @@ older pip's vendored trust store.
 Package inspection verifies the DHI-signed `ca-certificates-bundle 20261020-r0`
 APK, its pinned key, metadata and payload hash for amd64 and arm64. The same
 noarch APK bytes serve both platforms. The [pinned DHI recipe](https://github.com/docker-hardened-images/catalog/blob/6428625d5032aaa4bc4c05dfde7f49c1268424ce/package/apk/main/ca-certificates/alpine-3.24/20251003.yaml)
-records the matching Alpine source. The overlay installs only the prebuilt
-bundle in the pinned development and runtime images, without CA management
-tools or maintainer scripts. The base image digests, Python package cohort,
+records the matching Alpine source. The development image upgrades the matching
+`ca-certificates` management package and bundle together, with normal vendor
+triggers enabled. Updating the bundle alone lets the older generator restore
+stale roots. The runtime receives only the prebuilt bundle, without adding CA
+management tools. The base image digests, Python package cohort,
 cleanup backport and Keep permission guard remain unchanged.
 
 Keep's default HTTPS Requests connections use certifi's bundle; SMTP SSL and
@@ -112,7 +114,10 @@ alongside the [G3 removal](https://github.com/mozilla/nss/commit/0a2b0c75fa03693
 and retains G1. Those extra vendor policy removals can affect certificates
 chaining through C1/C3; they are distinct from certifi's compatibility choice.
 
-The build refreshes its system bundle before bootstrapping pip. It creates the
+The build verifies the installed CA generator, configuration, individual roots,
+hashed certificate directory and effective trust after the transaction; a
+trigger that hides its own failure cannot pass these checks. It refreshes its
+system bundle before bootstrapping pip. It creates the
 application environment with `--without-pip`, downloads the fixed pip `26.2.2`
 wheel with normal HTTPS verification, checks its pinned SHA-256, and runs that
 wheel to install itself offline. Only the fixed pip then downloads application

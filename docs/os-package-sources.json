@@ -152,6 +152,24 @@
             }
           }
         }
+      ],
+      "build_only_packages": [
+        {
+          "name": "ca-certificates",
+          "version": "20261020-r0",
+          "license": "MPL-2.0 AND MIT",
+          "build_commit": "68cdc7eb180fe3a0843d7489185b3ca10ea806d1",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/ca-certificates-20261020-r0.apk",
+              "sha256": "53c780d6f58c29f0bc01b6ced53b1c503a541af55f6d415e40194b9949673a9e"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/ca-certificates-20261020-r0.apk",
+              "sha256": "80c705ab4ecc0703653f0c8a3e9533f68c2944ad4b894b5a6308ea1f60186f1c"
+            }
+          }
+        }
       ]
     },
     {

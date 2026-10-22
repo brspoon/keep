@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -51,6 +52,12 @@ class DhiCertificatePackageTests(unittest.TestCase):
                         'rsa_keygen_bits:2048', '-out', str(cls.private)], check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         cls.key = subprocess.check_output(['openssl', 'pkey', '-in', str(cls.private), '-pubout'])
+        config = Path(cls.keys.name) / 'root-ca.cnf'
+        config.write_text('[req]\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\n'
+                          '[ca]\nbasicConstraints=critical,CA:true\nkeyUsage=critical,keyCertSign,cRLSign\n')
+        cls.certificate = subprocess.check_output(['openssl', 'req', '-new', '-x509', '-key',
+            str(cls.private), '-subj', '/CN=synthetic root', '-days', '1', '-config', str(config)],
+            stderr=subprocess.PIPE)
 
     def setUp(self):
         self.stack = ExitStack()
@@ -61,8 +68,12 @@ class DhiCertificatePackageTests(unittest.TestCase):
         self.body, self.metadata = self.apk()
         self.stack.enter_context(patch.object(packages, 'APK_SHA256', digest(self.body)))
         self.stack.enter_context(patch.object(packages, 'PKGINFO_SHA256', digest(self.metadata)))
-        self.spec = packages.reviewed_spec()
+        self.stack.enter_context(patch.object(packages, 'BUILD_APK_SHA256', {}))
+        self.stack.enter_context(patch.object(packages, 'BUILD_PKGINFO_SHA256', {}))
+        self.stack.enter_context(patch.object(packages, 'BUILD_PAYLOAD_SHA256', {}))
         self.bodies = {'https://dhi.io/keyring/' + packages.KEY_NAME: self.key}
+        self.bind_build_packages()
+        self.spec = packages.reviewed_spec()
         for arch in packages.ARCHES:
             self.bodies[self.url(arch)] = self.body
 
@@ -104,6 +115,91 @@ class DhiCertificatePackageTests(unittest.TestCase):
         packages.APK_SHA256, packages.PKGINFO_SHA256 = digest(body), digest(metadata)
         return body
 
+    def management_apk(self, arch, *, changes=None, script_overrides=None, extra_fields=()):
+        scripts = {
+            '.trigger': b'#!/bin/sh\n/usr/sbin/update-ca-certificates > /dev/null 2>&1\nexit 0\n',
+            '.post-deinstall': (b'#!/bin/sh\n\n# clean up broken symlinks store\n'
+                b'find -L /etc/ssl/certs -maxdepth 1 -type l -delete\n'
+                b'rmdir /etc/ssl/certs 2>/dev/null || true\n\n'),
+        }
+        scripts.update(script_overrides or {})
+        entries = [('etc/ca-certificates.conf', b'mozilla/fixture.crt\n'),
+                   ('usr/share/ca-certificates/mozilla/fixture.crt', self.bundle[:-1]),
+                   ('usr/sbin/update-ca-certificates', b'synthetic vendor executable'),
+                   ('usr/bin/c_rehash', b'synthetic vendor executable')]
+        directories = ('etc', 'etc/ca-certificates', 'usr', 'usr/share',
+                       'usr/share/ca-certificates', 'usr/share/ca-certificates/mozilla',
+                       'usr/sbin', 'usr/bin')
+        attributes = {name: {'mode': 0o755} for name, _ in entries if name.startswith(('usr/sbin/', 'usr/bin/'))}
+        data = gzip.compress(archive(entries, directories=directories, attributes=attributes), mtime=0)
+        fields = {'pkgname': packages.BUILD_PACKAGE, 'pkgver': packages.VERSION,
+                  'origin': 'ca-certificates', 'arch': packages.ARCHES[arch],
+                  'commit': packages.BUILD_COMMIT, 'license': 'MPL-2.0 AND MIT',
+                  'url': 'https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/',
+                  'triggers': packages.BUILD_TRIGGERS, 'datahash': digest(data)}
+        fields.update(changes or {})
+        metadata = ''.join(key + ' = ' + value + '\n' for key, value in fields.items())
+        for name, values in [('depend', packages.build_dependencies(arch)),
+                             ('provides', packages.build_provides()), ('replaces', ['openssl'])]:
+            metadata += ''.join(name + ' = ' + value + '\n' for value in values)
+        metadata += ''.join(key + ' = ' + value + '\n' for key, value in extra_fields)
+        metadata = metadata.encode()
+        control = gzip.compress(archive([('.PKGINFO', metadata), *scripts.items()],
+            attributes={name: {'mode': 0o755} for name in scripts}), mtime=0)
+        signature = subprocess.run(['openssl', 'dgst', '-sha1', '-sign', str(self.private)],
+            input=control, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
+        signed = gzip.compress(archive([('.SIGN.RSA.' + packages.KEY_NAME, signature)]), mtime=0)
+        return signed + control + data, metadata, packages.tar_entries(packages.gzip_parts(signed + control + data)[2][1])
+
+    def bind_build_packages(self):
+        self.build_bodies, self.build_metadata, self.build_payload = {}, {}, {}
+        for arch in packages.ARCHES:
+            body, metadata, payload = self.management_apk(arch)
+            self.build_bodies[arch], self.build_metadata[arch], self.build_payload[arch] = body, metadata, payload
+            packages.BUILD_APK_SHA256[arch] = digest(body)
+            packages.BUILD_PKGINFO_SHA256[arch] = digest(metadata)
+            packages.BUILD_PAYLOAD_SHA256[arch] = digest(packages.manifest_bytes(packages.payload_manifest(payload)))
+            url = ('https://dhi.io/apk/alpine/v3.24/main/' + packages.ARCHES[arch]
+                   + '/' + packages.BUILD_PACKAGE + '-' + packages.VERSION + '.apk')
+            self.bodies[url] = body
+
+    def use_real_trust_bundle(self):
+        self.bundle = self.certificate.strip() + b'\n\n'
+        packages.BUNDLE_SHA256 = digest(self.bundle)
+        self.body, self.metadata = self.apk()
+        packages.APK_SHA256, packages.PKGINFO_SHA256 = digest(self.body), digest(self.metadata)
+        trust = packages.trust_checks()
+        roots = trust.pem_fingerprints(self.bundle)
+        self.stack.enter_context(patch.object(trust, 'G1_ROOT', roots[0]))
+        self.stack.enter_context(patch.object(packages, 'BUNDLE_CERTIFICATES', len(roots)))
+        self.stack.enter_context(patch.object(packages, 'BUNDLE_FINGERPRINTS_SHA256', trust.fingerprint_digest(roots)))
+        self.bind_build_packages()
+        self.spec = packages.reviewed_spec()
+        for arch in packages.ARCHES:
+            self.bodies[self.url(arch)] = self.body
+
+    def development_runtime(self, root, arch):
+        root = Path(root)
+        database = self.runtime(root)
+        for name, entry in self.build_payload[arch].items():
+            path = root / name
+            if entry['member'].isdir():
+                path.mkdir(parents=True, exist_ok=True)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(entry['body'])
+                path.chmod(entry['member'].mode)
+        fields = {'P': packages.BUILD_PACKAGE, 'V': packages.VERSION, 'A': packages.ARCHES[arch],
+                  'o': 'ca-certificates', 'c': packages.BUILD_COMMIT, 'L': 'MPL-2.0 AND MIT',
+                  'U': 'https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/',
+                  'D': ' '.join(packages.build_dependencies(arch)), 'p': ' '.join(packages.build_provides())}
+        database.write_text(database.read_text() + ''.join(key + ':' + value + '\n' for key, value in fields.items()) + '\n')
+        cert = root / 'usr/share/ca-certificates/mozilla/fixture.crt'
+        name = subprocess.check_output(['openssl', 'x509', '-hash', '-noout', '-in', str(cert)], text=True).strip()
+        link = root / 'etc/ssl/certs' / (name + '.0')
+        link.symlink_to(os.path.relpath(cert, link.parent))
+        return database
+
     def runtime(self, root):
         root = Path(root)
         bundle = root / packages.SYSTEM_BUNDLE_PATH.lstrip('/')
@@ -127,10 +223,13 @@ class DhiCertificatePackageTests(unittest.TestCase):
         self.assertEqual(self.spec['origin'], 'ca-certificates')
         self.assertEqual(self.spec['version'], packages.VERSION)
         self.assertEqual(len(self.spec['packages']), 1)
+        self.assertEqual([p['name'] for p in self.spec['build_only_packages']], ['ca-certificates'])
         for arch in packages.ARCHES:
             row = self.spec['packages'][0]['binaries'][arch]
             self.assertEqual(row, {'url': self.url(arch), 'sha256': digest(self.body)})
             self.assertEqual(self.spec['signing_keys'][arch]['sha256'], digest(self.key))
+            self.assertEqual(self.spec['build_only_packages'][0]['binaries'][arch]['sha256'],
+                             digest(self.build_bodies[arch]))
         self.assertEqual(json.loads(packages.source_lock_bytes(self.spec)), self.spec)
         with tempfile.TemporaryDirectory() as temporary:
             docs = Path(temporary) / 'docs'
@@ -143,7 +242,7 @@ class DhiCertificatePackageTests(unittest.TestCase):
                 packages.reviewed_spec(temporary)
 
     def test_source_map_edits_and_json_type_substitutions_are_rejected(self):
-        for change in ('version', 'url', 'key', 'boolean'):
+        for change in ('version', 'url', 'key', 'boolean', 'build-url', 'build-hash'):
             with self.subTest(change=change):
                 bad = copy.deepcopy(self.spec)
                 if change == 'version':
@@ -152,6 +251,10 @@ class DhiCertificatePackageTests(unittest.TestCase):
                     bad['packages'][0]['binaries']['arm64']['url'] = 'https://example.test/other.apk'
                 elif change == 'key':
                     bad['signing_keys']['amd64']['sha256'] = 'f' * 64
+                elif change == 'build-url':
+                    bad['build_only_packages'][0]['binaries']['arm64']['url'] = 'https://example.test/other.apk'
+                elif change == 'build-hash':
+                    bad['build_only_packages'][0]['binaries']['arm64']['sha256'] = 'f' * 64
                 else:
                     bad['mutable_tag_reused_across_upstream_versions'] = 0
                 with self.assertRaisesRegex(ValueError, 'source map'):
@@ -175,8 +278,12 @@ class DhiCertificatePackageTests(unittest.TestCase):
                 self.assertEqual((root / 'keys' / packages.KEY_NAME).read_bytes(), self.key)
                 self.assertEqual(json.loads((root / 'CA_CERTIFICATES_SECURITY.json').read_text()), manifest)
                 self.assertEqual(manifest, packages.build_security_manifest(arch, root=None))
+                management = root / 'build' / (packages.BUILD_PACKAGE + '-' + packages.VERSION + '.apk')
+                self.assertEqual(management.read_bytes(), self.build_bodies[arch])
+                self.assertEqual(packages.build_installation_inputs(root, arch), [management])
                 self.assertEqual([call.args[0] for call in fetch.call_args_list],
-                                 ['https://dhi.io/keyring/' + packages.KEY_NAME, self.url(arch)])
+                                 ['https://dhi.io/keyring/' + packages.KEY_NAME, self.url(arch),
+                                  self.spec['build_only_packages'][0]['binaries'][arch]['url']])
 
     def test_output_must_be_empty_without_symlinks(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -343,6 +450,128 @@ class DhiCertificatePackageTests(unittest.TestCase):
                         manifest['packages'][0]['signature_verified'] = 1
                     with self.assertRaisesRegex(ValueError, 'manifest'):
                         packages.verify_installed('amd64', manifest, temporary)
+
+    def test_complete_development_upgrade_verifies_signed_payload_and_active_trust_on_both_architectures(self):
+        self.use_real_trust_bundle()
+        for arch in packages.ARCHES:
+            with self.subTest(architecture=arch), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                prepared, runtime = root / 'prepared', root / 'runtime'
+                packages.prepare_packages(self.spec, arch, prepared, self.bodies.__getitem__)
+                self.development_runtime(runtime, arch)
+                report = packages.verify_build_installed(arch, runtime, prepared)
+                self.assertEqual(report['bundle']['sha256'], digest(self.bundle))
+                self.assertEqual(report['capath']['certificates'], 1)
+                self.assertEqual(report['architecture'], arch)
+                self.assertEqual(packages.verify_installed(arch,
+                    packages.build_security_manifest(arch, root=None), runtime)['package_version'], packages.VERSION)
+
+    def test_management_apk_rejects_wrong_architecture_scripts_and_dependencies_even_with_reviewed_outer_hash(self):
+        for changes in ({'changes': {'arch': 'aarch64'}},
+                        {'changes': {'pkgver': '20260909-r0'}},
+                        {'changes': {'triggers': '/unreviewed'}},
+                        {'changes': {'datahash': '0' * 64}},
+                        {'extra_fields': [('depend', 'unreviewed')]},
+                        {'script_overrides': {'.trigger': b'#!/bin/sh\nexit 0\n'}},
+                        {'script_overrides': {'.post-deinstall': b'#!/bin/sh\nexit 0\n'}},
+                        {'script_overrides': {'.post-install': b'#!/bin/sh\nexit 0\n'}}):
+            body, metadata, _ = self.management_apk('amd64', **changes)
+            packages.BUILD_APK_SHA256['amd64'] = digest(body)
+            packages.BUILD_PKGINFO_SHA256['amd64'] = digest(metadata)
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                packages.verify_build_apk(body, 'amd64', self.key)
+
+    def test_management_apk_key_payload_and_signature_cannot_be_substituted(self):
+        body = self.build_bodies['amd64']
+        for candidate, key in ((body + b'changed', self.key), (body, self.key + b'changed')):
+            with self.subTest(changed_key=key != self.key), self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                packages.verify_build_apk(candidate, 'amd64', key)
+        parts = packages.gzip_parts(body)
+        signature = gzip.compress(archive([('.SIGN.RSA.' + packages.KEY_NAME, b'bad signature')]), mtime=0)
+        candidate = signature + parts[1][0] + parts[2][0]
+        packages.BUILD_APK_SHA256['amd64'] = digest(candidate)
+        with self.assertRaisesRegex(ValueError, 'RSA signature'):
+            packages.verify_build_apk(candidate, 'amd64', self.key)
+
+    def test_prepared_management_inputs_reject_modified_files_manifest_and_wrong_architecture(self):
+        for mutation in ('apk', 'key', 'metadata', 'manifest', 'symlink', 'architecture'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                packages.prepare_packages(self.spec, 'amd64', root, self.bodies.__getitem__)
+                name = packages.BUILD_PACKAGE + '-' + packages.VERSION + '.apk'
+                relative = {'apk': 'build/' + name, 'key': 'keys/' + packages.KEY_NAME,
+                            'metadata': 'build/' + name + '.PKGINFO', 'manifest': 'build/' + packages.BUILD_MANIFEST,
+                            'symlink': 'build/' + name}.get(mutation)
+                if relative:
+                    path = root / relative
+                    if mutation == 'symlink':
+                        path.rename(path.with_name('replacement.apk'))
+                        path.symlink_to('replacement.apk')
+                    elif mutation == 'manifest':
+                        manifest = json.loads(path.read_bytes())
+                        manifest['package']['signature_verified'] = 1
+                        path.write_bytes(packages.manifest_bytes(manifest))
+                    else:
+                        path.write_bytes(path.read_bytes() + b'changed')
+                with self.assertRaises(ValueError):
+                    packages.build_installation_inputs(root, 'arm64' if mutation == 'architecture' else 'amd64')
+
+    def test_post_trigger_checks_reject_stale_config_roots_bundle_and_unreviewed_hashed_store(self):
+        self.use_real_trust_bundle()
+        foreign_cert = subprocess.check_output(['openssl', 'req', '-new', '-x509', '-key',
+            str(self.private), '-subj', '/CN=unreviewed.example', '-days', '1'], stderr=subprocess.PIPE)
+        for mutation in ('stale-config', 'stale-root', 'changed-root', 'old-bundle', 'apk-new',
+                         'unreviewed-hashed-root', 'payload-symlink'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                prepared, runtime = root / 'prepared', root / 'runtime'
+                packages.prepare_packages(self.spec, 'amd64', prepared, self.bodies.__getitem__)
+                self.development_runtime(runtime, 'amd64')
+                config = runtime / 'etc/ca-certificates.conf'
+                cert = runtime / 'usr/share/ca-certificates/mozilla/fixture.crt'
+                if mutation == 'stale-config':
+                    config.write_bytes(config.read_bytes() + b'mozilla/emSign_ECC_Root_CA_-_G3.crt\n')
+                elif mutation == 'stale-root':
+                    cert.with_name('emSign_ECC_Root_CA_-_G3.crt').write_bytes(foreign_cert)
+                elif mutation == 'changed-root':
+                    cert.write_bytes(foreign_cert)
+                elif mutation == 'old-bundle':
+                    # A vendor trigger can return success while suppressing its
+                    # updater's error; the transaction's exit status is insufficient.
+                    (runtime / packages.SYSTEM_BUNDLE_PATH.lstrip('/')).write_bytes(b'old CA bundle')
+                elif mutation == 'apk-new':
+                    config.with_name('ca-certificates.conf.apk-new').write_bytes(config.read_bytes())
+                elif mutation == 'unreviewed-hashed-root':
+                    (runtime / 'etc/ssl/certs/ffffffff.0').write_bytes(foreign_cert)
+                else:
+                    config.rename(config.with_name('replacement.conf'))
+                    config.symlink_to('replacement.conf')
+                with self.assertRaises(ValueError):
+                    packages.verify_build_installed('amd64', runtime, prepared)
+
+    def test_installed_management_metadata_requires_exact_new_architecture_dependencies_and_provides(self):
+        self.use_real_trust_bundle()
+        for mutation in ('old-version', 'wrong-arch', 'dependency', 'provides', 'duplicate'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                prepared, runtime = root / 'prepared', root / 'runtime'
+                packages.prepare_packages(self.spec, 'amd64', prepared, self.bodies.__getitem__)
+                database = self.development_runtime(runtime, 'amd64')
+                original = database.read_text()
+                first, management = original.split('\n\n', 1)
+                if mutation == 'old-version':
+                    management = management.replace('V:' + packages.VERSION, 'V:20260909-r0')
+                elif mutation == 'wrong-arch':
+                    management = management.replace('A:x86_64', 'A:aarch64')
+                elif mutation == 'dependency':
+                    management = management.replace('D:/bin/sh', 'D:unreviewed')
+                elif mutation == 'provides':
+                    management = management.replace('p:cmd:c_rehash=', 'p:other=')
+                else:
+                    management += management
+                database.write_text(first + '\n\n' + management)
+                with self.assertRaisesRegex(ValueError, 'Installed build certificate'):
+                    packages.verify_build_installed('amd64', runtime, prepared)
 
 
 if __name__ == '__main__':

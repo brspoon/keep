@@ -33,6 +33,7 @@
 !scripts/alpine_zlib_sources.py
 !scripts/dhi_python_packages.py
 !scripts/dhi_certificate_packages.py
+!scripts/certificate_trust_checks.py
 !scripts/bootstrap_build_pip.py
 !scripts/install_runtime_packages.py
 !docs/

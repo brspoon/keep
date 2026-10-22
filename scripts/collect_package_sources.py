@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Acquire signed OS package sources only after matching the reviewed APK bytes.
 
-Tags are discovery pointers, never matching-source evidence. Every installed
-APK checksum must occur as a regular file in the resolved native package image.
+Tags are discovery pointers, never matching-source evidence. Every reviewed
+runtime or build-only APK must occur as a regular file with the exact checksum
+in the resolved native package image.
 Full acquisition OCI layouts and original signatures are retained; the release
 bundle may separately retain source contexts without unrelated tool binaries.
 """
@@ -44,19 +45,32 @@ SCOUT_PROVENANCE = 'https://scout.docker.com/provenance/v0.1'
 
 
 def expected_packages(origin, architecture):
+    """Require exact signed-output binding for runtime and build-only APKs."""
+    runtime = origin.get('packages')
+    if not isinstance(runtime, list) or not runtime:
+        raise ValueError('Origin has no reviewed installed APKs')
+    build_only = origin.get('build_only_packages', [])
+    if not isinstance(build_only, list):
+        raise ValueError('Malformed reviewed build-only APK list')
+    version = origin.get('version')
+    if not isinstance(version, str) or not version:
+        raise ValueError('Missing or ambiguous reviewed APK identity')
     packages = []
     names = set()
-    for package in origin.get('packages', []):
+    for package in [*runtime, *build_only]:
+        if not isinstance(package, dict):
+            raise ValueError('Missing or ambiguous reviewed APK identity')
         name = package.get('name')
-        expected = package.get('binaries', {}).get(architecture, {}).get('sha256', '')
+        binaries = package.get('binaries')
+        binary = binaries.get(architecture) if isinstance(binaries, dict) else None
+        expected = binary.get('sha256') if isinstance(binary, dict) else None
         if (not isinstance(name, str) or not re.fullmatch(r'[a-z0-9][a-z0-9+_.-]*', name)
-                or name in names or package.get('version') != origin['version']
+                or name in names or package.get('version') != version
+                or not isinstance(expected, str)
                 or not re.fullmatch(r'[a-f0-9]{64}', expected)):
             raise ValueError('Missing or ambiguous reviewed APK identity')
         names.add(name)
         packages.append({'name': name, 'version': package['version'], 'sha256': expected})
-    if not packages:
-        raise ValueError('Origin has no reviewed installed APKs')
     return packages
 
 

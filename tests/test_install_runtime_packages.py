@@ -283,17 +283,33 @@ class InstallRuntimePackageTests(unittest.TestCase):
         self.assertEqual(Path(run.call_args_list[3].args[0][2]).name, 'patch_python_runtime.py')
         self.assertEqual(run.call_args_list[4].args[0][-1], '--clean-stdlib')
 
-    def test_build_refresh_installs_only_the_checked_certificate_bundle(self):
+    def test_build_refresh_installs_checked_generator_and_bundle_in_one_transaction(self):
         self.prepared()
+        management = self.root / 'certificates/build/ca-certificates-20261020-r0.apk'
         with patch.object(installer, 'arch', return_value='amd64'), \
+                patch.object(installer.certificates, 'build_installation_inputs', return_value=[management]) as inputs, \
                 patch.object(installer.subprocess, 'run') as run:
             installer.install_certificates(self.root)
+        inputs.assert_called_once_with(self.root / 'certificates', 'amd64')
         self.assertEqual(run.call_count, 2)
         command = run.call_args_list[0].args[0]
         self.assertIn('--no-network', command)
         self.assertEqual([p for p in command if p.endswith('.apk')],
-                         [str(self.root / 'certificates/ca-certificates-bundle-20261020-r0.apk')])
+                         [str(self.root / 'certificates/ca-certificates-bundle-20261020-r0.apk'),
+                          str(management)])
         self.assertEqual(Path(run.call_args_list[1].args[0][2]).name, 'dhi_certificate_packages.py')
+        self.assertEqual(run.call_args_list[1].args[0][-3:],
+                         ['--verify-build', '--prepared-root', str(self.root / 'certificates')])
+        self.assertNotIn('--no-scripts', run.call_args_list[0].args[0])
+
+    def test_build_refresh_rejects_unverified_generator_before_apk(self):
+        self.prepared()
+        with patch.object(installer, 'arch', return_value='amd64'), \
+                patch.object(installer.certificates, 'build_installation_inputs', side_effect=ValueError('bad generator')), \
+                patch.object(installer.subprocess, 'run') as run, \
+                self.assertRaisesRegex(ValueError, 'bad generator'):
+            installer.install_certificates(self.root)
+        run.assert_not_called()
 
     def test_build_refresh_rejects_missing_or_modified_certificate_inputs(self):
         self.prepared()

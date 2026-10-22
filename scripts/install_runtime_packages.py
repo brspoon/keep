@@ -111,25 +111,29 @@ def install(root=ROOT):
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)), '--clean-stdlib'], check=True)
 
 
-def verify_certificates(root, architecture):
-    subprocess.run(['/usr/bin/python3.14', '-B',
+def verify_certificates(root, architecture, *, build=False):
+    command = ['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('dhi_certificate_packages.py')),
                     '--architecture', architecture, '--manifest',
-                    str(root / 'certificates/CA_CERTIFICATES_SECURITY.json')], check=True)
+                    str(root / 'certificates/CA_CERTIFICATES_SECURITY.json')]
+    if build:
+        command.extend(['--verify-build', '--prepared-root', str(root / 'certificates')])
+    subprocess.run(command, check=True)
 
 
 def install_certificates(root=ROOT):
-    """Refresh build trust without changing its Python development cohort."""
+    """Upgrade build CA files and their generator in one offline transaction."""
     architecture = arch()
     packages = installation_inputs(root, architecture)
     filename = certificates.PACKAGE + '-' + certificates.VERSION + '.apk'
     selected = [path for path in packages if path.name == filename]
     if len(selected) != 1:
         raise ValueError('Require the exact reviewed build certificate bundle')
+    management = certificates.build_installation_inputs(root / 'certificates', architecture)
     subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
                     '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
-                    str(selected[0])], check=True)
-    verify_certificates(root, architecture)
+                    str(selected[0]), *(str(path) for path in management)], check=True)
+    verify_certificates(root, architecture, build=True)
 
 
 def main():

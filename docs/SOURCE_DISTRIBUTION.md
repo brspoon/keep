@@ -79,6 +79,13 @@ source, signatures and base-layer binding remain required alongside the new
 overlay's source; replacing an installed package does not replace earlier-layer
 source obligations.
 
+The same origin's `build_only_packages` record pins the native `ca-certificates`
+management package used only in the development stage. Source acquisition and
+archive replay require its exact APK bytes in the signed package output alongside
+the bundle. It adds no package to the final runtime inventory. Both build CA
+packages must be updated together so the older vendor trigger cannot regenerate
+the old bundle.
+
 The matching `ca-certificates-20261020.tar.bz2` source has SHA-256
 `1048bc7f50fa42a6621bc2f8816173f89a0c0098f26dff072bc8fe40af714400`.
 Its complete leading `certdata.txt` legal notice is byte-identical to the
