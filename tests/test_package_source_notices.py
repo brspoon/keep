@@ -666,5 +666,50 @@ class PosixTimezoneLicenseTests(unittest.TestCase):
         self.assertEqual(report['source_manifest_sha256'], hashlib.sha256(body).hexdigest())
 
 
+class PatchedExpatNoticeTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def test_original_full_notice_and_new_patched_source_attributions_are_retained(self):
+        import collect_package_sources as collection
+        from tests.expat_source_fixture import (checked_source_fixture, COPYING, HEADER,
+                                                FORTIFY_LICENSE, FORTIFY_HEADER)
+        with checked_source_fixture() as (origin, inventory, downloads):
+            source = self.root / 'sources'
+            collection.collect_patched_expat_sources(origin, 'amd64', inventory, source,
+                                                     fetch=downloads.__getitem__)
+            output = self.root / 'notices'
+            report = import_public_notices(source, output, origin='expat', architecture='amd64',
+                                           package_spec=origin)
+        self.assertTrue(report['success'])
+        self.assertEqual(report['binding_method'], collection.EXPAT_BUILD_BINDING)
+        self.assertFalse(report['provider_oci_binding'])
+        bodies = [(output / notice['notice_file']).read_bytes() for notice in report['notices']]
+        self.assertIn(COPYING, bodies)
+        self.assertIn(HEADER, bodies)
+        self.assertIn(FORTIFY_LICENSE, bodies)
+        self.assertIn(FORTIFY_HEADER, bodies)
+        headers = [notice for notice in report['notices']
+                   if notice['discovery'] == 'reviewed-public-source-copyright']
+        self.assertEqual(len(headers), 13)
+        self.assertEqual(sum(notice['path'].startswith('keep-build/expat-2.9.0/') for notice in headers), 3)
+        fortify = [notice for notice in headers if notice['path'].startswith('keep-build/fortify/include/')]
+        self.assertEqual(len(fortify), 10)
+
+    def test_notice_import_rejects_extra_source_outputs(self):
+        import collect_package_sources as collection
+        from tests.expat_source_fixture import checked_source_fixture
+        with checked_source_fixture() as (origin, inventory, downloads):
+            source = self.root / 'sources'
+            collection.collect_patched_expat_sources(origin, 'amd64', inventory, source,
+                                                     fetch=downloads.__getitem__)
+            (source / 'extra').write_text('unreviewed source')
+            with self.assertRaisesRegex(ValueError, 'missing or extra outputs'):
+                import_public_notices(source, self.root / 'notices', origin='expat',
+                                      architecture='amd64', package_spec=origin)
+
+
 if __name__ == '__main__':
     unittest.main()

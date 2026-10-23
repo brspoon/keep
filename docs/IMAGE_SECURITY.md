@@ -48,7 +48,8 @@ signatures without networking or repository updates. BuildKit mounts the APKs,
 keys and package manager read-only; those inputs do not enter a final image layer.
 A separate native dependency report verifies ordinary `pyexpat` and `ssl` imports,
 functional XML/TLS checks and the mapped libraries' canonical paths, file
-identities and hashes. Expat's loaded bytes must match its signed APK. This
+identities and hashes. The original signed Expat APK is retained as vendor input;
+the loaded library must match the separately reviewed Keep build described below. This
 report is retained with the original evidence and rechecked during promotion.
 No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
@@ -89,6 +90,52 @@ For a release, review the successful native workflow for its exact source revisi
 and image digests. The exception policy, patch inputs and regression checks are
 tracked in this repository; results for an older image do not validate a newer
 candidate.
+
+## Python, Expat and certificate maintenance (October 23)
+
+The candidate adds CPython's complete [tarfile destination-boundary correction](https://github.com/python/cpython/commit/0901ad4ffb22605f12b705d1c1197f0a01f0ba0b)
+for `CVE-2026-114583` to the existing exact source patch sequence. Both `tar`
+and `data` filters must reject destination aliases outside the extraction root;
+ordinary replacement of a safe link remains supported. The earlier hardlink,
+fallback-filter, cleanup and descriptor-bound permission-reset protections remain.
+These cases run within the existing nine loaded-runtime security probes.
+
+Expat's [entity accounting correction](https://github.com/libexpat/libexpat/commit/c30145b28632b31f805d57f9838ba36b8db99367)
+(`CVE-2026-115506`) and [parser-reset correction](https://github.com/libexpat/libexpat/commit/d8f31e647a4d1eda088e89354f4769b0dad303d3)
+(`CVE-2026-113351`) are merged upstream. The reviewed signed packages predate
+them. `docs/expat-build.json` therefore identifies a separate Keep build of the
+exact Expat 2.9.0 release, the complete corrections and their two required type
+prerequisites. The build runs the upstream regression suite, preserves the
+vendor ABI and compiler hardening, and checks architecture-specific compiler
+and resulting library hashes. It replaces the canonical library behind the
+existing SONAME; no loader override or package-version relabeling is used.
+Alpine's signature authenticates the original package, not this replacement.
+The compiler uses isolated, verified Alpine `fortify-headers 3.0.1-r2` headers;
+they are a build input, without an APK transaction or package-database change.
+Both signed header payloads must match the complete source plus Alpine patch.
+The source gate also requires the development image's own original signed
+SLSA proof for the pinned index and native child. Runtime-base provenance or a
+compiler-driver hash alone cannot establish the compiler image's origin.
+
+Preparatory builds only collect native output identities. Their manifests are
+explicitly unqualified and cannot pass installation, source delivery or release
+checks. Both native hashes must be reviewed and pinned before a normal build
+can qualify. A fresh build must reproduce them. The dependency report binds the
+actual mapped replacement to the lock and exact source replay, then runs bounded
+entity-accounting and reset probes alongside ordinary XML controls. Retained
+report revalidation requires the same proof without changing original bytes.
+
+Certifi `2026.10.23` removes emSign C1 and C3 as well as G3; G1 remains. Its
+118-root inventory now matches the reviewed system bundle. Certificate checks
+require the exact source/wheel, full notices, both bundle hashes, effective
+Requests and SMTP trust, and the hashed CA directory. Earlier 120-root certifi
+receipts below describe the October 22 image only.
+
+These source changes do not add scanner exceptions or renew existing approvals.
+New unmatched Python or Expat findings still block even when source-level fixes
+are present. Complete unsuppressed scans, source/license replay, all runtime and
+functional checks on native amd64 and arm64 remain required. This candidate is
+not a published or deployed security baseline.
 
 ## Certificate trust and build-tool candidate (October 21)
 

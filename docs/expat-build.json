@@ -30,6 +30,7 @@
       "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-expat-build=.",
       "CONFIG_SHELL": "/bin/sh",
       "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-expat-build/fortify/include",
+      "CXX": "/usr/bin/g++",
       "LC_ALL": "C",
       "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
       "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -40,7 +41,7 @@
     "image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d"
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "7e34b1abf47c0a68e599f13af7add56c5748907a2eb1c249ac64fd046fa693ec",
+  "build_script_sha256": "0a292ba2fa2146a7d880c1495a12f5cbbc44626f422a47c17180d080f153b1d4",
   "commits": [
     "d545081f6a90792208e0d274888a352e2e5d894d",
     "da504c0c111086072172431c76867800673fbc34",
@@ -50,6 +51,139 @@
   "compiler_sha256": {
     "amd64": null,
     "arm64": null
+  },
+  "cpp_helper": {
+    "path": "scripts/dhi_cpp_packages.py",
+    "sha256": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb"
+  },
+  "cpp_packages": {
+    "build_commit": "ddcf93c394b61ccf6be91b915a92a7454a14fcba",
+    "installation": "build-only-offline-apk",
+    "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+    "origin": "gcc",
+    "packages": {
+      "amd64": {
+        "g++": {
+          "data_sha256": "2b85abd29682fc5130ef8b378f9fee3f085180f29ce01aa9d5b90174ee0bf496",
+          "depend": [
+            "libstdc++-dev=15.2.0-r7",
+            "gcc=15.2.0-r7",
+            "musl-dev",
+            "libstdc++=15.2.0-r7",
+            "so:libc.musl-x86_64.so.1",
+            "so:libgmp.so.10",
+            "so:libisl.so.23",
+            "so:libmpc.so.3",
+            "so:libmpfr.so.6",
+            "so:libz.so.1"
+          ],
+          "payload_sha256": "067f1ce44b9e0ce261083619fee865a3ce4f08da3b38af8a92ac22263da079a3",
+          "pkginfo_sha256": "7b0bb38d3683b0f01402cc916c3c746591be89ce994aa885b435f91c19c983f4",
+          "provides": [
+            "++_provides",
+            "cmd:c++=15.2.0-r7",
+            "cmd:g++=15.2.0-r7",
+            "cmd:x86_64-alpine-linux-musl-c++=15.2.0-r7",
+            "cmd:x86_64-alpine-linux-musl-g++=15.2.0-r7"
+          ],
+          "replaces": [
+            "++_replaces"
+          ],
+          "sha256": "355ab6821be1969fad319ce774f8b0e1a51158e9f27065f75478fda5aa1f6a7e",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/g++-15.2.0-r7.apk"
+        },
+        "libstdc++-dev": {
+          "data_sha256": "56c2cabd61fb2112db708c0363482c81fe91365f8aaed2338ea3db7c504b0f29",
+          "depend": [
+            "libstdc++=15.2.0-r7"
+          ],
+          "payload_sha256": "d076ddec58e4386826f30a7b8d8684f495c5632f53e8daa53620f9477f462380",
+          "pkginfo_sha256": "10e9228c6f212f1c19125e6405222e6f99946e5ccc39b79e2d6f08d3f69eeb15",
+          "provides": [
+            "++_dev_provides"
+          ],
+          "replaces": [
+            "g++"
+          ],
+          "sha256": "d98e3f81bf5995356525cc908b60e2252d59c86b38a417bcdb4d4008ce1e42b3",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libstdc++-dev-15.2.0-r7.apk"
+        }
+      },
+      "arm64": {
+        "g++": {
+          "data_sha256": "aef88ed1fc1d6c5933cb37bf50ddb0fcb97accd91d0f262e6f602af93f41840b",
+          "depend": [
+            "libstdc++-dev=15.2.0-r7",
+            "gcc=15.2.0-r7",
+            "musl-dev",
+            "libstdc++=15.2.0-r7",
+            "so:libc.musl-aarch64.so.1",
+            "so:libgmp.so.10",
+            "so:libisl.so.23",
+            "so:libmpc.so.3",
+            "so:libmpfr.so.6",
+            "so:libz.so.1"
+          ],
+          "payload_sha256": "5ff632839094f8fac17fd279590db2b32a24460182792d1f38b72fcd3540b51f",
+          "pkginfo_sha256": "5525bdcbbe57bb58db231fa3afd60fa601e5f7d5b46cbbe6d41d15c9b30d0970",
+          "provides": [
+            "++_provides",
+            "cmd:c++=15.2.0-r7",
+            "cmd:g++=15.2.0-r7",
+            "cmd:aarch64-alpine-linux-musl-c++=15.2.0-r7",
+            "cmd:aarch64-alpine-linux-musl-g++=15.2.0-r7"
+          ],
+          "replaces": [
+            "++_replaces"
+          ],
+          "sha256": "ddeaf586e369190b045e0a47f27b607c367ee001a1c5f00b99450d0358d878f8",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/g++-15.2.0-r7.apk"
+        },
+        "libstdc++-dev": {
+          "data_sha256": "4e6e96a8e72199f9a58c06f98849cde1d131de9f36707f70d0f29df847dacbaf",
+          "depend": [
+            "libstdc++=15.2.0-r7"
+          ],
+          "payload_sha256": "cfbd8990e9b2f7edcc8809d1e6fa166cc291541351c3a6c12e36beebcbd3fcc3",
+          "pkginfo_sha256": "b8d9472c6fc7c27d7fbcaf67a3e9e2ef643d37b9d90a7d110b374f96083298c8",
+          "provides": [
+            "++_dev_provides"
+          ],
+          "replaces": [
+            "g++"
+          ],
+          "sha256": "35d53729002314bb547781917194fa756d65d083cc5691a4a52845dd7dff32e5",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libstdc++-dev-15.2.0-r7.apk"
+        }
+      }
+    },
+    "schema": "keep-dhi-cpp-build-inputs-v1",
+    "signing_key": {
+      "name": "dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+      "sha256": "0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd",
+      "url": "https://dhi.io/keyring/dhi-apk@docker-0F81AD7700D99184.rsa.pub"
+    },
+    "unchanged_cohort_apk_sha256": {
+      "amd64": {
+        "gcc": "498f20fa6658279a911f0358df6d5726a51ccc40f57a00dfd9871445126026db",
+        "libstdc++": "967d7c1f8c21daa1b1e3ae1feafcfacd0278e2cbf143693fae9c2f2690f67257"
+      },
+      "arm64": {
+        "gcc": "1939c626eaa94bf14d9d4c80c7078d8c2ccd68c4caf5e644aa60b83c6966c5cb",
+        "libstdc++": "d62d3b0f270635020079ba131f3cadf1bf8a8dc66324d6d6696c5abf88522f48"
+      }
+    },
+    "unchanged_cohort_files": {
+      "amd64": {
+        "usr/bin/gcc": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
+        "usr/lib/libstdc++.so.6.0.34": "cdcb4026e2372f703c5c9eb9b967a29ff9002b07d732d3060fb2102083fdf52e"
+      },
+      "arm64": {
+        "usr/bin/gcc": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db",
+        "usr/lib/libstdc++.so.6.0.34": "3e1212917fc686611dd17dd1df8e06a61eef9c08309d3e34c8516975d5a6e8f2"
+      }
+    },
+    "version": "15.2.0-r7"
   },
   "expected_library_sha256": {
     "amd64": null,

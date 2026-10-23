@@ -190,6 +190,32 @@ def notice(path):
             'text': body.decode('utf-8', errors='replace')}
 
 
+def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpat.so.1.13.0')):
+    """Capture actual bytes; acquisition separately replays the reviewed build."""
+    paths = [app / 'EXPAT_BUILD.json', app / 'EXPAT_PATCHED_SECURITY.json']
+    if not any(path.exists() or path.is_symlink() for path in paths):
+        return None  # The untouched base has no Keep replacement.
+    records = []
+    for path in paths:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 128 * 1024:
+            raise ValueError('Missing bounded regular Expat replacement proof')
+        body = path.read_bytes()
+        if len(body) > 128 * 1024:
+            raise ValueError('Expat replacement proof exceeds size limit')
+        value = json.loads(body)
+        if not isinstance(value, dict) or body != (json.dumps(value, indent=2, sort_keys=True) + '\n').encode():
+            raise ValueError('Expat replacement proof must use canonical JSON bytes')
+        records.append((value, digest(body)))
+    if library.is_symlink() or not library.is_file() or library.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError('Expat replacement must be a bounded canonical regular library')
+    body = library.read_bytes()
+    if len(body) > 16 * 1024 * 1024:
+        raise ValueError('Expat replacement library exceeds size limit')
+    return {'build_lock': records[0][0], 'build_lock_sha256': records[0][1],
+            'manifest': records[1][0], 'manifest_sha256': records[1][1],
+            'library': {'path': str(library), 'sha256': digest(body)}}
+
+
 def runtime_inventory():
     """Read actual installed metadata, without importing the application."""
     distributions = []
@@ -226,8 +252,12 @@ def runtime_inventory():
             for path in sorted(root.rglob('*')):
                 if path.is_file() and is_notice_path(path.as_posix()):
                     notices.append(notice(path))
-    return {'python': sorted(distributions, key=lambda row: row['name'].lower()),
-            'os_packages': sorted(os_packages, key=lambda row: row['name']), 'notices': notices}
+    result = {'python': sorted(distributions, key=lambda row: row['name'].lower()),
+              'os_packages': sorted(os_packages, key=lambda row: row['name']), 'notices': notices}
+    replacement = expat_replacement_inventory()
+    if replacement is not None:
+        result['expat_replacement'] = replacement
+    return result
 
 
 def main():

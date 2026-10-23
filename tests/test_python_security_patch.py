@@ -1,15 +1,18 @@
 import errno
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
 import tempfile
+import tarfile
 import py_compile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+from scripts import python_security_checks
 from scripts.patch_python_runtime import apply_hunks, apply_patches, patch_provenance
 from scripts.python_security_checks import verify_loaded_zlib
 
@@ -165,6 +168,71 @@ class RuntimePatchTests(unittest.TestCase):
         os_calls.open.assert_called_once_with('entry', namespace['_nofollow_mode'], dir_fd=31)
         os_calls.chmod.assert_called_once_with(41, 0o700)
         os_calls.close.assert_called_once_with(41)
+
+
+class TarfileDestinationPatchTests(unittest.TestCase):
+    def helpers(self):
+        manifest = Path(__file__).resolve().parents[1] / 'scripts/python_security_patches.json'
+        patches = json.loads(manifest.read_text())
+        normalization = next(p for p in patches
+                             if p.get('commit') == '16dea1e887ec7dfbed735beedd476b21dcc91a79')
+        boundary = next(p for p in patches
+                        if p.get('commit') == '0901ad4ffb22605f12b705d1c1197f0a01f0ba0b')
+        self.assertEqual(boundary['path'], 'tarfile.py')
+        self.assertEqual(len(boundary['hunks']), 2)
+        self.assertGreater(patches.index(boundary), patches.index(normalization))
+        source = apply_hunks(inspect.getsource(tarfile._get_filtered_attrs), normalization)
+        fixed = apply_hunks(source, boundary)
+        self.assertEqual(apply_hunks(fixed, boundary), fixed)
+        reverse = {**boundary, 'hunks': [
+            {'before': hunk['after'], 'after': hunk['before']}
+            for hunk in reversed(boundary['hunks'])
+        ]}
+        previous = apply_hunks(fixed, reverse)
+        self.assertEqual(apply_hunks(previous, boundary), fixed)
+
+        def load(text):
+            namespace = vars(tarfile).copy()
+            exec(compile(text, 'tarfile-destination-filter', 'exec'), namespace)
+            return namespace['_get_filtered_attrs']
+
+        return load(previous), load(fixed)
+
+    def test_exact_patch_rejects_both_link_types_and_normalized_root_names(self):
+        previous, fixed = self.helpers()
+        with tempfile.TemporaryDirectory() as directory:
+            for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE):
+                for name in ('', '.', './', '././', 'sub/..', 'sub/../.', '/', '/./', '/sub/..'):
+                    with self.subTest(kind=kind, name=name):
+                        member = tarfile.TarInfo(name)
+                        member.type = kind
+                        member.linkname = '.'
+                        # The earlier filter allowed these names in tar mode.
+                        previous(member, directory, False)
+                        for for_data in (False, True):
+                            with self.assertRaises(tarfile.OutsideDestinationError):
+                                fixed(member, directory, for_data)
+
+    def test_loaded_boundary_probe_passes_with_patched_standard_library_helper(self):
+        _, fixed = self.helpers()
+        case = python_security_checks.PythonSecurityChecks(
+            'test_CVE_2026_19672_114583_tarfile_destination_boundary')
+        result = unittest.TestResult()
+        with patch.object(tarfile, '_get_filtered_attrs', fixed):
+            case.run(result)
+        self.assertEqual(result.testsRun, 1)
+        self.assertEqual(result.failures, [])
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.skipped, [])
+
+    def test_loaded_runtime_keeps_nine_probes_and_existing_link_regressions(self):
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(
+            python_security_checks.PythonSecurityChecks)
+        self.assertEqual(suite.countTestCases(), 9)
+        methods = unittest.defaultTestLoader.getTestCaseNames(
+            python_security_checks.PythonSecurityChecks)
+        self.assertIn('test_CVE_2026_4360_hardlink_target_is_filtered', methods)
+        self.assertIn('test_CVE_2026_87910_link_fallback_honors_skipped_filter', methods)
 
 
 class LoadedZlibTests(unittest.TestCase):

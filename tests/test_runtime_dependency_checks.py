@@ -16,12 +16,25 @@ from scripts import alpine_expat_sources
 from scripts import alpine_musl_sources
 from scripts import dhi_python_packages
 from scripts import dhi_certificate_packages
+from scripts import build_patched_expat
 from scripts import runtime_dependency_checks as checks
 from tests.certificate_trust_fixture import trust_report
 from tests.native_dependency_fixture import certificate_failure_reports, dependency_report, musl_failure_reports
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def write_synthetic_dependency_locks(root):
+    """Use explicit temporary output identities without changing reviewed files."""
+    root = Path(root)
+    (root / 'docs').mkdir(parents=True, exist_ok=True)
+    (root / 'docs/os-package-sources.json').write_bytes((ROOT / 'docs/os-package-sources.json').read_bytes())
+    spec = copy.deepcopy(build_patched_expat.reviewed_spec(ROOT))
+    spec['expected_library_sha256'] = {'amd64': 'a' * 64, 'arm64': 'b' * 64}
+    spec['compiler_sha256'] = {'amd64': 'c' * 64, 'arm64': 'd' * 64}
+    (root / 'docs/expat-build.json').write_bytes(build_patched_expat.json_bytes(spec))
+    return root
 
 
 class ExpatInstallManifestTests(unittest.TestCase):
@@ -94,6 +107,73 @@ class ExpatInstallManifestTests(unittest.TestCase):
         manifest['source_manifest_sha256'] = 'a' * 64
         with self.assertRaisesRegex(ValueError, 'exact signed package'):
             checks.validate_expat_manifest(manifest, 'amd64')
+
+
+class ExpatReplacementManifestTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = write_synthetic_dependency_locks(self.temporary.name)
+        self.lock = self.root / 'docs/expat-build.json'
+        self.path = self.root / 'EXPAT_PATCHED_SECURITY.json'
+
+    def write_manifest(self, arch='amd64', **changes):
+        manifest = {**build_patched_expat.expected_manifest(arch, self.root), **changes}
+        self.path.write_bytes(build_patched_expat.json_bytes(manifest))
+        return manifest
+
+    def test_both_reviewed_replacement_manifests_bind_original_canonical_bytes(self):
+        for arch in ('amd64', 'arm64'):
+            manifest = self.write_manifest(arch)
+            with self.subTest(arch=arch):
+                self.assertEqual(checks.read_expat_replacement(arch, self.path, self.lock),
+                                 (manifest, hashlib.sha256(self.path.read_bytes()).hexdigest()))
+
+    def test_missing_linked_noncanonical_and_changed_replacement_manifests_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'bounded regular file'):
+            checks.read_expat_replacement('amd64', self.path, self.lock)
+        manifest = self.write_manifest()
+        alias = self.path.with_name('alias.json')
+        alias.symlink_to(self.path.name)
+        with self.assertRaisesRegex(ValueError, 'bounded regular file'):
+            checks.read_expat_replacement('amd64', alias, self.lock)
+        self.path.write_bytes(build_patched_expat.json_bytes(manifest) + b'\n')
+        with self.assertRaisesRegex(ValueError, 'canonical JSON bytes'):
+            checks.read_expat_replacement('amd64', self.path, self.lock)
+        manifest['library']['sha256'] = '0' * 64
+        self.path.write_bytes(build_patched_expat.json_bytes(manifest))
+        with self.assertRaisesRegex(ValueError, 'differs from reviewed build'):
+            checks.read_expat_replacement('amd64', self.path, self.lock)
+
+    def test_preparation_and_nullable_pins_for_either_architecture_cannot_qualify(self):
+        self.write_manifest(qualified=False, purpose='preparation-only')
+        with self.assertRaisesRegex(ValueError, 'preparation or unqualified'):
+            checks.read_expat_replacement('amd64', self.path, self.lock)
+        self.write_manifest()
+        original = self.lock.read_bytes()
+        for field in ('expected_library_sha256', 'compiler_sha256'):
+            for arch in ('amd64', 'arm64'):
+                spec = json.loads(original)
+                spec[field][arch] = None
+                self.lock.write_bytes(build_patched_expat.json_bytes(spec))
+                with self.subTest(field=field, arch=arch), self.assertRaisesRegex(ValueError, 'preparation is not qualified'):
+                    checks.read_expat_replacement('amd64', self.path, self.lock)
+        self.lock.write_bytes(original)
+
+    def test_default_fixture_uses_current_reviewed_pins_or_rejects_the_unqualified_lock(self):
+        spec = build_patched_expat.reviewed_spec(ROOT)
+        unqualified = any(value is None for field in ('expected_library_sha256', 'compiler_sha256')
+                          for value in spec[field].values())
+        for arch in ('amd64', 'arm64'):
+            with self.subTest(arch=arch):
+                if unqualified:
+                    with self.assertRaisesRegex(ValueError, 'preparation is not qualified'):
+                        dependency_report(arch)
+                else:
+                    report = dependency_report(arch)
+                    self.assertEqual(checks.validate_report(report, arch, ROOT), report)
+                    self.assertEqual(report['expat_build_manifest'],
+                                     build_patched_expat.expected_manifest(arch, ROOT))
 
 
 class PythonInstallManifestTests(unittest.TestCase):
@@ -251,22 +331,59 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'canonical path'):
             checks.verify_loaded_library(alias, 'libexpat.so', self.mapping(), self.digest)
 
-    def test_expat_check_requires_the_installed_soname_alias_and_mapped_package_bytes(self):
+    def test_expat_check_requires_the_installed_soname_alias_and_mapped_replacement_bytes(self):
         alias = self.library.with_name('libexpat.so.1')
         alias.symlink_to(self.library.name)
         maps = self.root / 'maps'
         maps.write_text(self.mapping())
         manifest = {'library': {'sha256': self.digest}, 'source_manifest_sha256': 'a' * 64}
+        replacement = {'library': {'sha256': self.digest}}
+        probes = checks.expat_security.expected_report()
         with patch.object(checks, 'EXPAT_LIBRARY', self.library), \
              patch.object(checks, 'EXPAT_ALIAS', alias), \
              patch.object(checks, 'exercise_expat', return_value='2.9.0'), \
-             patch.object(checks, 'read_expat_manifest', return_value=(manifest, 'b' * 64)):
+             patch.object(checks, 'read_expat_manifest', return_value=(manifest, 'b' * 64)), \
+             patch.object(checks, 'read_expat_replacement', return_value=(replacement, 'c' * 64)) as proof, \
+             patch.object(checks.expat_security, 'exercise_expat_security', return_value=probes) as security:
             result = checks.check_expat('amd64', self.root / 'install.json', maps)
             self.assertEqual(result['libraries']['expat']['sha256'], self.digest)
             self.assertEqual(result['install_manifest_sha256'], 'b' * 64)
+            self.assertEqual(result['build_manifest'], replacement)
+            self.assertEqual(result['build_manifest_sha256'], 'c' * 64)
+            self.assertEqual(result['security_probes'], probes)
+            security.assert_called_once()
+            security.reset_mock()
             alias.unlink()
             alias.write_bytes(self.library.read_bytes())
             with self.assertRaisesRegex(ValueError, 'SONAME alias'):
+                checks.check_expat('amd64', self.root / 'install.json', maps)
+            security.assert_not_called()
+            alias.unlink()
+            alias.symlink_to(self.library.name)
+            replacement['library']['sha256'] = 'f' * 64
+            with self.assertRaisesRegex(ValueError, 'package hash'):
+                checks.check_expat('amd64', self.root / 'install.json', maps)
+            security.assert_not_called()
+            proof.side_effect = ValueError('missing replacement manifest')
+            with self.assertRaisesRegex(ValueError, 'missing replacement manifest'):
+                checks.check_expat('amd64', self.root / 'install.json', maps)
+            security.assert_not_called()
+
+    def test_expat_security_probe_failure_blocks_the_runtime_check(self):
+        alias = self.library.with_name('libexpat.so.1')
+        alias.symlink_to(self.library.name)
+        maps = self.root / 'maps'
+        maps.write_text(self.mapping())
+        manifest = {'source_manifest_sha256': 'a' * 64}
+        replacement = {'library': {'sha256': self.digest}}
+        with patch.object(checks, 'EXPAT_LIBRARY', self.library), \
+             patch.object(checks, 'EXPAT_ALIAS', alias), \
+             patch.object(checks, 'exercise_expat', return_value='2.9.0'), \
+             patch.object(checks, 'read_expat_manifest', return_value=(manifest, 'b' * 64)), \
+             patch.object(checks, 'read_expat_replacement', return_value=(replacement, 'c' * 64)), \
+             patch.object(checks.expat_security, 'exercise_expat_security',
+                          side_effect=ValueError('Expat preflight probe failed')):
+            with self.assertRaisesRegex(ValueError, 'preflight probe failed'):
                 checks.check_expat('amd64', self.root / 'install.json', maps)
 
     def test_openssl_check_requires_both_canonical_mapped_libraries(self):
@@ -618,9 +735,14 @@ class RuntimeReportTests(unittest.TestCase):
                     'device': '0:1', 'inode': 123}
         python = dhi_python_packages.build_security_manifest('arm64', root=None)
         musl = alpine_musl_sources.build_security_manifest('arm64', root=None)
+        with tempfile.TemporaryDirectory() as directory:
+            replacement = build_patched_expat.expected_manifest('arm64', write_synthetic_dependency_locks(directory))
         return (
             {'version': '2.9.0', 'libraries': {'expat': library('libexpat.so.1.13.0')},
-             'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64},
+             'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64,
+             'build_manifest': replacement,
+             'build_manifest_sha256': hashlib.sha256(build_patched_expat.json_bytes(replacement)).hexdigest(),
+             'security_probes': checks.expat_security.expected_report()},
             {'version': '3.5.9', 'certificate_trust': trust_report('arm64'),
              'libraries': {'ssl': library('libssl.so.3'),
                                             'crypto': library('libcrypto.so.3')}},
@@ -645,13 +767,16 @@ class RuntimeReportTests(unittest.TestCase):
              patch.object(checks, 'check_musl', return_value=musl):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 4, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
+            'schema': 5, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8',
                                       'musl': '1.2.6-r3'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
                                  **musl['libraries']},
             'expat_source_manifest_sha256': 'c' * 64,
             'expat_install_manifest_sha256': 'd' * 64,
+            'expat_build_manifest': expat['build_manifest'],
+            'expat_build_manifest_sha256': expat['build_manifest_sha256'],
+            'expat_security_probes': expat['security_probes'],
             'python_source_manifest_sha256': 'e' * 64,
             'python_install_manifest_sha256': 'f' * 64,
             'python_files': python['files'], 'python_aliases': python['aliases'],
@@ -708,23 +833,21 @@ class RuntimeReportTests(unittest.TestCase):
 
 class RetainedDependencyReportTests(unittest.TestCase):
     def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = write_synthetic_dependency_locks(self.temporary.name)
         self.manifest = ExpatInstallManifestTests().manifest()
         self.python = PythonInstallManifestTests().manifest()
         self.musl = alpine_musl_sources.build_security_manifest('amd64', root=None)
-        self.report = dependency_report('amd64')
+        self.report = dependency_report('amd64', root=self.root)
 
     def validate(self, report):
-        with patch.object(checks, 'expected_expat_manifest', return_value=self.manifest) as source, \
-             patch.object(checks, 'expected_python_manifest', return_value=self.python) as python_source, \
-             patch.object(checks, 'expected_musl_manifest', return_value=self.musl) as musl_source:
-            result = checks.validate_report(report, 'amd64', root=ROOT)
-        source.assert_any_call('amd64', ROOT)
-        source.assert_any_call('amd64', None)
-        python_source.assert_any_call('amd64', ROOT)
-        python_source.assert_any_call('amd64', None)
-        musl_source.assert_any_call('amd64', ROOT)
-        musl_source.assert_any_call('amd64', None)
-        return result
+        return checks.validate_report(report, 'amd64', root=self.root)
+
+    def copy_build_lock(self, root):
+        destination = Path(root) / 'docs/expat-build.json'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes((self.root / 'docs/expat-build.json').read_bytes())
 
     def test_original_native_report_replays_without_runtime_filesystem(self):
         with patch.object(checks, 'file_identity', side_effect=AssertionError('runtime access')), \
@@ -732,13 +855,83 @@ class RetainedDependencyReportTests(unittest.TestCase):
              patch.object(checks, 'check_openssl', side_effect=AssertionError('runtime import')), \
              patch.object(checks, 'check_python', side_effect=AssertionError('runtime import')), \
              patch.object(checks, 'check_musl', side_effect=AssertionError('runtime import')):
-            self.assertEqual(self.validate(self.report), self.report)
+            for arch in ('amd64', 'arm64'):
+                report = dependency_report(arch, root=self.root)
+                with self.subTest(arch=arch):
+                    self.assertEqual(checks.validate_report(report, arch, root=self.root), report)
+
+    def test_replacement_manifest_hash_and_actual_loaded_hash_are_separate_obligations(self):
+        for field in ('expat_build_manifest', 'expat_build_manifest_sha256', 'expat_security_probes'):
+            report = copy.deepcopy(self.report)
+            del report[field]
+            with self.subTest(missing=field), self.assertRaisesRegex(ValueError, 'report schema'):
+                self.validate(report)
+        invalid = []
+        report = copy.deepcopy(self.report)
+        report['expat_build_manifest'] = None
+        invalid.append((report, 'preparation or unqualified'))
+        report = copy.deepcopy(self.report)
+        report['expat_build_manifest']['library']['sha256'] = '0' * 64
+        report['expat_build_manifest_sha256'] = hashlib.sha256(
+            build_patched_expat.json_bytes(report['expat_build_manifest'])).hexdigest()
+        report['loaded_libraries']['expat']['sha256'] = '0' * 64
+        invalid.append((report, 'differs from reviewed build'))
+        report = copy.deepcopy(self.report)
+        report['expat_build_manifest_sha256'] = '0' * 64
+        invalid.append((report, 'replacement manifest hash differs'))
+        report = copy.deepcopy(self.report)
+        report['loaded_libraries']['expat']['sha256'] = self.manifest['library']['sha256']
+        invalid.append((report, 'Expat hash differs from the reviewed replacement'))
+        for report, message in invalid:
+            original = copy.deepcopy(report)
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                self.validate(report)
+            self.assertEqual(report, original)
+
+    def test_preparation_receipt_cannot_pass_with_a_matching_self_recorded_hash(self):
+        report = copy.deepcopy(self.report)
+        report['expat_build_manifest'].update(qualified=False, purpose='preparation-only')
+        report['expat_build_manifest_sha256'] = hashlib.sha256(
+            build_patched_expat.json_bytes(report['expat_build_manifest'])).hexdigest()
+        with self.assertRaisesRegex(ValueError, 'preparation or unqualified'):
+            self.validate(report)
+
+    def test_missing_failed_or_mistyped_expat_probes_block_the_complete_retained_validator(self):
+        invalid = [None, {}, {**self.report['expat_security_probes'], 'unexpected': True}]
+        for field, value in (('passed', False), ('tests', True), ('ordinary_xml', False),
+                             ('bounded_entity_control', False), ('entity_preflight_rejection', False),
+                             ('amplification_reset', False), ('allocation_reset', False),
+                             ('preflight_emitted_characters', 1), ('reset_rejections', 0),
+                             ('allocation_reset_cycles', True), ('maximum_input_bytes', 1)):
+            invalid.append({**self.report['expat_security_probes'], field: value})
+        for probes in invalid:
+            report = {**self.report, 'expat_security_probes': probes}
+            with self.subTest(probes=probes), self.assertRaisesRegex(
+                    ValueError, 'Expat security-probe report'):
+                self.validate(report)
+
+    def test_replay_uses_the_build_lock_in_the_requested_root_and_rejects_null_pins(self):
+        original = (self.root / 'docs/expat-build.json').read_bytes()
+        for field, value, message in (
+                ('expected_library_sha256', '0' * 64, 'differs from reviewed build'),
+                ('compiler_sha256', '0' * 64, 'differs from reviewed build'),
+                ('expected_library_sha256', None, 'preparation is not qualified')):
+            spec = json.loads(original)
+            spec[field]['arm64'] = value
+            (self.root / 'docs/expat-build.json').write_bytes(build_patched_expat.json_bytes(spec))
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, message):
+                self.validate(self.report)
+        (self.root / 'docs/expat-build.json').write_bytes(original)
+        (self.root / 'docs/expat-build.json').unlink()
+        with self.assertRaisesRegex(ValueError, 'bounded regular file'):
+            self.validate(self.report)
 
     def test_replay_derives_both_manifest_hashes_from_the_real_reviewed_source_map(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             lock = root / 'docs/os-package-sources.json'
             lock.parent.mkdir()
+            self.copy_build_lock(root)
             spec = alpine_expat_sources.reviewed_spec()
             lock.write_text(json.dumps({'origins': [spec, dhi_python_packages.reviewed_spec(),
                                                    dhi_certificate_packages.reviewed_spec(),
@@ -775,7 +968,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
                 self.validate(report)
 
     def test_musl_loaded_hash_and_original_source_lock_must_match(self):
-        for failure, report, message in musl_failure_reports('amd64'):
+        for failure, report, message in musl_failure_reports('amd64', root=self.root):
             original = copy.deepcopy(report)
             with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, message):
                 self.validate(report)
@@ -794,6 +987,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
             root = Path(directory)
             lock = root / 'docs/os-package-sources.json'
             lock.parent.mkdir()
+            self.copy_build_lock(root)
             spec = alpine_musl_sources.reviewed_spec()
             spec['recipe']['sha256'] = 'a' * 64
             lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(),
@@ -806,7 +1000,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
         del missing['certificate_trust']
         with self.assertRaisesRegex(ValueError, 'report schema'):
             self.validate(missing)
-        for failure, report, message in certificate_failure_reports('amd64'):
+        for failure, report, message in certificate_failure_reports('amd64', root=self.root):
             original = copy.deepcopy(report)
             with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, message):
                 self.validate(report)
@@ -847,6 +1041,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
             root = Path(directory)
             lock = root / 'docs/os-package-sources.json'
             lock.parent.mkdir()
+            self.copy_build_lock(root)
             spec = dhi_python_packages.reviewed_spec()
             spec['recipe']['sha256'] = 'a' * 64
             lock.write_text(json.dumps({'origins': [alpine_expat_sources.reviewed_spec(), spec,

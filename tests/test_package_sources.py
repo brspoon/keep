@@ -989,5 +989,314 @@ class PackageSourceTests(unittest.TestCase):
         helper.assert_not_called()
 
 
+class ExpatCppSourceBindingTests(unittest.TestCase):
+    def fixture(self):
+        origin = next(row for row in json.loads((ROOT / 'docs/os-package-sources.json').read_bytes())['origins']
+                      if row['origin'] == 'gcc')
+        downloads = {'cpp/' + arch + '/' + row['name'] + '.apk': {
+            'path': 'cpp/' + arch + '/' + row['name'] + '.apk', **row['binaries'][arch]}
+            for arch in ('amd64', 'arm64') for row in origin['build_only_packages']}
+        return origin, downloads
+
+    def test_both_cpp_packages_have_exact_build_only_source_binding_without_runtime_additions(self):
+        origin, downloads = self.fixture()
+        self.assertEqual([row['name'] for row in origin['packages']], ['libgcc', 'libstdc++'])
+        self.assertEqual([row['name'] for row in origin['build_only_packages']], ['g++', 'libstdc++-dev'])
+        for arch in ('amd64', 'arm64'):
+            self.assertEqual({row['name'] for row in collection.expected_packages(origin, arch)},
+                             {'libgcc', 'libstdc++', 'g++', 'libstdc++-dev'})
+            self.assertTrue(all(len(row['binaries'][arch]['pkginfo_sha256']) == 64
+                                for row in origin['build_only_packages']))
+        binding = collection.expat_cpp_source_binding(downloads)
+        self.assertEqual(binding['origin'], 'gcc')
+        self.assertEqual(binding['packages'], ['g++', 'libstdc++-dev'])
+        self.assertEqual(binding['source_origin_sha256'], hashlib.sha256(
+            (json.dumps(origin, sort_keys=True, indent=2) + '\n').encode()).hexdigest())
+
+    def test_missing_or_changed_cpp_downloads_cannot_borrow_gcc_source_coverage(self):
+        _, downloads = self.fixture()
+        for mutation in ('missing', 'hash', 'url'):
+            changed = copy.deepcopy(downloads)
+            key = next(iter(changed))
+            if mutation == 'missing':
+                del changed[key]
+            else:
+                changed[key][mutation if mutation == 'url' else 'sha256'] = 'unreviewed'
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'matching-source binding'):
+                collection.expat_cpp_source_binding(changed)
+
+
+class ExpatCompilerProvenanceTests(unittest.TestCase):
+    def setUp(self):
+        import build_patched_expat as build
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.source = self.root / 'original'
+        self.source.mkdir()
+        self.native = 'sha256:' + 'a' * 64
+        self.index = json.dumps({'schemaVersion': 2, 'manifests': [
+            {'digest': self.native, 'platform': {'architecture': 'amd64', 'os': 'linux'}},
+            {'digest': 'sha256:' + 'b' * 64, 'platform': {'architecture': 'arm64', 'os': 'linux'}}]}).encode()
+        self.spec = {'build': {'image': 'dhi.io/python:reviewed-dev@' + collection.digest(self.index)}}
+        self.patch = patch.object(build, 'reviewed_spec', return_value=self.spec)
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+        self.statement = {'_type': 'https://in-toto.io/Statement/v0.1',
+            'predicateType': collection.EXPAT_COMPILER_PREDICATE,
+            'subject': [{'digest': {'sha256': self.native.split(':')[1]}}],
+            'predicate': {'buildDefinition': {'buildType': 'reviewed-fixture'},
+                          'runDetails': {'builder': {'id': 'reviewed-fixture'}}}}
+        (self.source / 'pinned-base-index.json').write_bytes(self.index)
+        (self.source / 'statement.json').write_text(json.dumps(self.statement))
+        (self.source / 'dhi-verification-key.pem').write_bytes(b'original pinned key fixture')
+        (self.source / 'attestation-reference.json').write_text(json.dumps({'original': 'reference'}))
+        layout = self.source / 'proof-oci'
+        (layout / 'blobs/sha256').mkdir(parents=True)
+        (layout / 'oci-layout').write_text('{"imageLayoutVersion":"1.0.0"}')
+
+        def blob(body, media):
+            value = collection.digest(body)
+            (layout / 'blobs/sha256' / value.split(':')[1]).write_bytes(body)
+            return {'digest': value, 'size': len(body), 'mediaType': media}
+        statement = blob((self.source / 'statement.json').read_bytes(), 'application/vnd.in-toto+json')
+        manifest = blob(json.dumps({'schemaVersion': 2, 'artifactType': 'application/vnd.in-toto+json',
+            'subject': {'digest': self.native}, 'layers': [statement]}).encode(),
+            'application/vnd.oci.image.manifest.v1+json')
+        (layout / 'index.json').write_text(json.dumps({'schemaVersion': 2, 'manifests': [manifest]}))
+        self.proof = {'signature_verified': True, 'native_image_digest': self.native,
+                      'attestation_digest': manifest['digest'], 'key_sha256': collection.KEY_SHA256}
+
+    def test_exact_development_index_native_subject_and_pinned_proof_are_reverified_offline(self):
+        (self.source / 'unverified-claims.json').write_text('{"success":true}')
+        with patch.object(collection, 'verify_attestation_proof', return_value=self.proof) as verifier:
+            result = collection.retain_expat_compiler_provenance(self.source, self.root / 'retained', 'amd64')
+            replayed = collection.retain_expat_compiler_provenance(self.root / 'retained',
+                                                                   self.root / 'replayed', 'amd64')
+        self.assertEqual(result, replayed)
+        self.assertEqual(result['native_image_digest'], self.native)
+        self.assertEqual(result['image_index_digest'], collection.digest(self.index))
+        self.assertEqual(verifier.call_args.kwargs, {
+            'expected_base_digest': collection.digest(self.index), 'expected_repository': 'dhi.io/python',
+            'expected_source_name': 'dhi/python', 'expected_native_digest': self.native,
+            'expected_predicate_type': 'https://slsa.dev/provenance/v1',
+            'index_is_native_manifest': False})
+        self.assertFalse((self.root / 'retained/unverified-claims.json').exists())
+        self.assertEqual((self.source / 'statement.json').read_bytes(),
+                         (self.root / 'retained/statement.json').read_bytes())
+
+    def test_missing_proof_wrong_index_ambiguous_native_and_missing_original_signature_fail_closed(self):
+        with self.assertRaisesRegex(ValueError, 'compiler-image provenance is required'):
+            collection.retain_expat_compiler_provenance(None, self.root / 'missing', 'amd64')
+        with patch.object(collection, 'verify_attestation_proof') as verifier:
+            (self.source / 'pinned-base-index.json').write_bytes(self.index + b'\n')
+            with self.assertRaisesRegex(ValueError, 'compiler index differs'):
+                collection.retain_expat_compiler_provenance(self.source, self.root / 'wrong-index', 'amd64')
+            verifier.assert_not_called()
+            altered = json.loads(self.index)
+            altered['manifests'].append(altered['manifests'][0])
+            raw = json.dumps(altered).encode()
+            self.spec['build']['image'] = 'dhi.io/python:reviewed-dev@' + collection.digest(raw)
+            (self.source / 'pinned-base-index.json').write_bytes(raw)
+            with self.assertRaisesRegex(ValueError, 'unique native platform'):
+                collection.retain_expat_compiler_provenance(self.source, self.root / 'ambiguous', 'amd64')
+            verifier.assert_not_called()
+        self.spec['build']['image'] = 'dhi.io/python:reviewed-dev@' + collection.digest(self.index)
+        (self.source / 'pinned-base-index.json').write_bytes(self.index)
+        with patch.object(collection, 'verify_attestation_proof',
+                          side_effect=ValueError('No valid original Docker signature')):
+            with self.assertRaisesRegex(ValueError, 'No valid original Docker signature'):
+                collection.retain_expat_compiler_provenance(self.source, self.root / 'unsigned', 'amd64')
+
+    def test_signed_slsa_still_requires_complete_build_definition_and_run_details(self):
+        for field in ('buildDefinition', 'runDetails'):
+            changed = copy.deepcopy(self.statement)
+            changed['predicate'][field] = {}
+            (self.source / 'statement.json').write_text(json.dumps(changed))
+            with self.subTest(field=field), patch.object(collection, 'verify_attestation_proof', return_value=self.proof):
+                with self.assertRaisesRegex(ValueError, 'compiler SLSA provenance is incomplete'):
+                    collection.retain_expat_compiler_provenance(self.source, self.root / field, 'amd64')
+
+    def test_acquisition_resolves_the_dev_native_and_requires_only_signed_slsa_v1(self):
+        native = self.native
+        raw_index = self.index
+
+        class CompilerRegistry:
+            def manifest(self, reference):
+                return raw_index
+
+            def referrers(self, reference):
+                self.reference = reference
+                return {'manifests': [{'annotations': {'predicate': collection.EXPAT_COMPILER_PREDICATE}}]}
+        registry = CompilerRegistry()
+
+        def acquire(origin, group, raw, directory, client, descriptors, predicates):
+            self.assertEqual(origin, {'image': 'dhi.io/python', 'predicate_image_name': 'dhi/python'})
+            self.assertEqual(group['native_image_digest'], native)
+            self.assertEqual(raw, self.index)
+            self.assertEqual(predicates, ('https://slsa.dev/provenance/v1',))
+            shutil.copytree(self.source, directory)
+            return self.statement, {}, []
+        with patch.object(collection, 'acquire_build_attestation', side_effect=acquire), \
+                patch.object(collection, 'verify_attestation_proof', return_value=self.proof):
+            result = collection.acquire_expat_compiler_provenance('amd64', self.root / 'acquired', registry)
+        self.assertEqual(registry.reference, 'dhi.io/python@' + self.native)
+        self.assertEqual(result['native_image_digest'], self.native)
+
+
+class PatchedExpatSourceTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def test_replacement_requires_independent_actual_library_hash_and_canonical_proofs(self):
+        import build_patched_expat as build
+        from tests.expat_source_fixture import qualified_inventory
+        spec, inventory = qualified_inventory()
+        with patch.object(build, 'reviewed_spec', return_value=spec):
+            collection.verify_expat_replacement(inventory, 'amd64')
+            for field, value in [('build_lock_sha256', 'f' * 64),
+                                 ('manifest_sha256', 'f' * 64),
+                                 ('library', {'path': '/usr/lib/libexpat.so.1.13.0', 'sha256': 'f' * 64}),
+                                 ('build_lock', {**spec, 'identity': 'unreviewed'})]:
+                changed = copy.deepcopy(inventory)
+                changed['expat_replacement'][field] = value
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'Candidate Expat'):
+                    collection.verify_expat_replacement(changed, 'amd64')
+            changed = copy.deepcopy(inventory)
+            changed['expat_replacement']['manifest']['qualified'] = False
+            with self.assertRaisesRegex(ValueError, 'preparation or unqualified'):
+                collection.verify_expat_replacement(changed, 'amd64')
+            with self.assertRaisesRegex(ValueError, 'manifest differs'):
+                collection.verify_expat_replacement(inventory, 'arm64')
+
+    def test_nullable_output_pins_and_missing_replacement_cannot_qualify_source_delivery(self):
+        import build_patched_expat as build
+        from tests.expat_source_fixture import qualified_inventory
+        spec, inventory = qualified_inventory()
+        spec['expected_library_sha256']['arm64'] = None
+        with patch.object(build, 'reviewed_spec', return_value=spec):
+            with self.assertRaisesRegex(ValueError, 'preparation is not qualified'):
+                collection.verify_expat_replacement(inventory, 'amd64')
+        with self.assertRaisesRegex(ValueError, 'actual candidate Expat'):
+            collection.verify_expat_replacement({'os_packages': []}, 'amd64')
+
+    def test_offline_replay_preserves_vendor_proof_and_exact_full_custom_sources(self):
+        from tests.expat_source_fixture import checked_source_fixture
+        with checked_source_fixture(collection_module=collection) as (origin, inventory, downloads):
+            output = self.root / 'acquired'
+            manifest = collection.collect_patched_expat_sources(origin, 'amd64', inventory,
+                output, fetch=downloads.__getitem__)
+            replayed = collection.replay_patched_expat_sources(output, self.root / 'replayed',
+                                                               origin, 'amd64', inventory)
+            self.assertEqual(manifest, replayed)
+            self.assertEqual(manifest['binding_method'], collection.EXPAT_BUILD_BINDING)
+            self.assertFalse(manifest['apk_binary_match_verified'])
+            self.assertTrue(manifest['runtime_build_verified'])
+            self.assertTrue(manifest['vendor_apk_signature_verified'])
+            self.assertTrue((output / 'vendor-inputs/EXPAT_SECURITY.json').is_file())
+            self.assertTrue((output / 'keep-build/expat-2.9.0/lib/xmlparse.c').is_file())
+            self.assertTrue((output / 'keep-build/SOURCE_REPLAY.json').is_file())
+            for arch in ('amd64', 'arm64'):
+                name = 'keep-build/fortify/packages/' + arch + '/fortify-headers.apk'
+                retained = next(row for row in manifest['files'] if row['path'] == name)
+                self.assertEqual(retained['url'], 'https://example.test/' + arch + '/fortify.apk')
+                self.assertEqual(retained['role'], 'reviewed-keep-build-source-input')
+            self.assertTrue((output / 'keep-build/fortify/fortify-headers.tar.gz').is_file())
+            self.assertTrue((output / 'keep-build/fortify/clang.patch').is_file())
+            self.assertEqual(len(list((output / 'keep-build/fortify/include').glob('*.h'))), 10)
+            for arch in ('amd64', 'arm64'):
+                for name in ('g++', 'libstdc++-dev'):
+                    path = 'keep-build/cpp/' + arch + '/' + name + '-15.2.0-r7.apk'
+                    row = next(row for row in manifest['files'] if row['path'] == path)
+                    self.assertEqual(row['role'], 'reviewed-keep-build-source-input')
+                    self.assertEqual(row['url'], 'https://example.test/cpp/' + arch + '/' + name + '.apk')
+                    self.assertTrue((output / (path + '.PKGINFO')).is_file())
+            self.assertEqual(manifest['cpp_source_binding']['origin'], 'gcc')
+            for record in manifest['files']:
+                relative = record['path']
+                self.assertEqual((output / relative).read_bytes(),
+                                 (self.root / 'replayed' / relative).read_bytes())
+
+    def test_changed_missing_extra_outputs_and_forged_record_hashes_are_rejected(self):
+        from tests.expat_source_fixture import checked_source_fixture
+        for mutation in ('changed', 'missing', 'extra-file', 'extra-directory', 'forged-hash', 'symlink'):
+            with self.subTest(mutation=mutation), checked_source_fixture(collection_module=collection) as (origin, inventory, downloads):
+                source = self.root / mutation
+                manifest = collection.collect_patched_expat_sources(origin, 'amd64', inventory,
+                    source, fetch=downloads.__getitem__)
+                target = source / 'keep-build/expat-2.9.0/lib/xmlparse.c'
+                if mutation in {'changed', 'forged-hash'}:
+                    target.write_bytes(b'changed preferred source')
+                elif mutation == 'missing':
+                    target.unlink()
+                elif mutation == 'extra-file':
+                    (source / 'unexpected').write_bytes(b'extra')
+                elif mutation == 'symlink':
+                    target.unlink()
+                    target.symlink_to(source / 'vendor-inputs/COPYING')
+                else:
+                    (source / 'unexpected').mkdir()
+                if mutation == 'forged-hash':
+                    row = next(row for row in manifest['files'] if row['path'].endswith('/xmlparse.c'))
+                    row.update(bytes=target.stat().st_size,
+                               sha256=hashlib.sha256(target.read_bytes()).hexdigest())
+                    (source / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+                with self.assertRaisesRegex(ValueError, 'Expat retained|Expat sources differ'):
+                    collection.replay_patched_expat_sources(source, self.root / ('reject-' + mutation),
+                                                           origin, 'amd64', inventory)
+
+    def test_shared_signing_key_urls_require_identical_bytes_and_missing_downloads_have_no_fallback(self):
+        import alpine_expat_sources as vendor
+        from tests.expat_source_fixture import checked_source_fixture
+        for mutation in ('conflicting-key', 'missing-source-url'):
+            with self.subTest(mutation=mutation), checked_source_fixture(collection_module=collection) as (origin, inventory, downloads):
+                source = self.root / mutation
+                manifest = collection.collect_patched_expat_sources(origin, 'amd64', inventory,
+                    source, fetch=downloads.__getitem__)
+                if mutation == 'conflicting-key':
+                    name = 'keep-build/fortify/keys/key.pub'
+                    body = b'conflicting shared Alpine signing key'
+                    (source / name).write_bytes(body)
+                    row = next(row for row in manifest['files'] if row['path'] == name)
+                    row.update(bytes=len(body), sha256=hashlib.sha256(body).hexdigest())
+                    message = 'Conflicting Expat retained download bytes'
+                else:
+                    row = next(row for row in manifest['files']
+                               if row['path'] == 'keep-build/fortify/fortify-headers.tar.gz')
+                    row['role'] = 'reviewed-keep-build-source'
+                    message = 'Required pinned Expat source input is missing'
+                (source / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+                with patch.object(vendor, 'download', side_effect=AssertionError('network fallback')):
+                    with self.assertRaisesRegex(ValueError, message):
+                        collection.replay_patched_expat_sources(source, self.root / ('reject-' + mutation),
+                                                               origin, 'amd64', inventory)
+
+    def test_acquisition_never_claims_vendor_apk_bytes_match_the_custom_library(self):
+        import alpine_expat_sources as vendor
+        manifest = {'binding_method': collection.EXPAT_BUILD_BINDING}
+        with patch.object(collection, 'collect_patched_expat_sources', return_value=manifest), \
+                patch.object(collection, 'acquire_expat_compiler_provenance'):
+            result = collection.acquire_origin(vendor.reviewed_spec(), 'amd64', self.root / 'origin',
+                                               None, runtime_inventory={'actual': True})
+        self.assertFalse(result['apk_binary_match_verified'])
+        self.assertTrue(result['runtime_build_verified'])
+        self.assertTrue(result['vendor_apk_signature_verified'])
+
+    def test_other_signed_alpine_origins_keep_their_exact_vendor_binary_binding(self):
+        import alpine_zlib_sources as zlib_source
+        import alpine_musl_sources as musl_source
+        for module in (zlib_source, musl_source):
+            origin = module.reviewed_spec()
+            with self.subTest(origin=origin['origin']), patch.object(module, 'collect_sources',
+                    return_value={'binding_method': 'signed-alpine-packages'}):
+                result = collection.acquire_origin(origin, 'amd64', self.root / origin['origin'],
+                                                   None, runtime_inventory={'actual': True})
+            self.assertTrue(result['apk_binary_match_verified'])
+            self.assertEqual(result['binding_method'], 'signed-alpine-packages')
+            self.assertNotIn('runtime_build_verified', result)
+
+
 if __name__ == '__main__':
     unittest.main()

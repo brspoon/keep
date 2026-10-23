@@ -203,6 +203,7 @@ class PatchedExpatBuildTests(unittest.TestCase):
     def test_native_build_environment_preserves_alpine_defaults_and_explicit_hardening(self):
         for arch in build.TARGETS:
             environment = build.build_environment(arch)
+            self.assertEqual(environment['CXX'], '/usr/bin/g++')
             for flag in ('-fstack-clash-protection', '-Wformat', '-Werror=format-security',
                          '-fstack-protector-strong'):
                 self.assertIn(flag, environment['CFLAGS'].split())
@@ -243,8 +244,12 @@ class PatchedExpatBuildTests(unittest.TestCase):
     def test_isolated_headers_are_replayed_and_verified_before_compiler_feature_check(self):
         events = []
         self.write_lock()
+        cpp_proof = build.cpp.installation_manifest('amd64')
+        (self.root / 'CPP_BUILD_SECURITY.json').write_bytes(build.cpp.json_bytes(cpp_proof))
         with patch.object(build, 'native_architecture', return_value='amd64'), \
                 patch.object(build, 'compiler_identity', return_value=('a' * 64, 'fixture GCC')), \
+                patch.object(build.cpp, 'PREPARED_ROOT', self.root), \
+                patch.object(build.cpp, 'verify_installed', return_value=cpp_proof) as cpp_inputs, \
                 patch.dict(build.os.environ, {'KEEP_EXPAT_BUILD_IMAGE': build.BUILD_IMAGE}), \
                 patch.object(build, 'replay_sources', side_effect=lambda *args, **kwargs: events.append('replay')), \
                 patch.object(build.fortify, 'verify_prepared_headers',
@@ -258,7 +263,20 @@ class PatchedExpatBuildTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'ordering check'):
                 build.build(self.root / 'prepared', preparation=True, root=self.root)
             compile_command.assert_not_called()
+            cpp_inputs.assert_called_once_with('amd64')
         self.assertEqual(events, ['replay', 'verify', 'compiler'])
+
+    def test_cpp_inputs_are_hardcoded_retained_and_do_not_disable_upstream_tests(self):
+        spec = build.reviewed_spec()
+        self.assertEqual(spec['cpp_packages'], build.cpp.reviewed_spec())
+        self.assertEqual(build.CONFIGURE_OPTIONS, ('--prefix=/usr', '--mandir=/usr/share/man', '--enable-static'))
+        self.assertEqual(spec['build']['commands'][-1], ['make', 'check'])
+        records = build.source_download_records()
+        cpp_records = [row for row in records if row['path'].startswith('cpp/')]
+        self.assertEqual(len(cpp_records), 5)
+        self.assertEqual(sum(row['path'].endswith('.apk') for row in cpp_records), 4)
+        self.assertEqual(build.source_replay_record()['cpp_packages'], build.cpp.reviewed_spec())
+        self.assertEqual(build.source_replay_record()['schema'], 'keep-expat-source-replay-v3')
 
     @staticmethod
     def elf_fixture(*, stack_flags=6, relro=True, now=True, stack_protector=True):

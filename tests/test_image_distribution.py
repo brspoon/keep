@@ -157,3 +157,40 @@ class ImageDistributionTests(unittest.TestCase):
     def test_token_split_across_chunks_is_detected(self):
         stream = io.BytesIO(b'x' * (1024 * 1024 - 2) + b'ghp_' + b'y' * 36)
         self.assertEqual(review.scan_stream(stream), ['github-token'])
+
+
+class ExpatReplacementInventoryTests(unittest.TestCase):
+    def test_base_has_no_replacement_and_candidate_binds_actual_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            library = root / 'libexpat.so.1.13.0'
+            self.assertIsNone(review.expat_replacement_inventory(root, library))
+            proofs = ({'lock': True}, {'qualified': True})
+            bodies = [(json.dumps(value, indent=2, sort_keys=True) + '\n').encode() for value in proofs]
+            for name, body in zip(('EXPAT_BUILD.json', 'EXPAT_PATCHED_SECURITY.json'), bodies):
+                (root / name).write_bytes(body)
+            library.write_bytes(b'actual replacement')
+            actual = review.expat_replacement_inventory(root, library)
+            self.assertEqual(actual['build_lock'], proofs[0])
+            self.assertEqual(actual['manifest_sha256'], review.digest(bodies[1]))
+            self.assertEqual(actual['library'], {'path': str(library), 'sha256': review.digest(library.read_bytes())})
+
+    def test_partial_noncanonical_symlink_and_missing_library_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first, second = root / 'EXPAT_BUILD.json', root / 'EXPAT_PATCHED_SECURITY.json'
+            library = root / 'libexpat.so.1.13.0'
+            first.write_text('{}\n')
+            with self.assertRaises(ValueError):
+                review.expat_replacement_inventory(root, library)
+            second.write_text('{}\n')
+            with self.assertRaises(ValueError):
+                review.expat_replacement_inventory(root, library)
+            library.write_bytes(b'library')
+            second.write_text('{ "qualified": true }')
+            with self.assertRaisesRegex(ValueError, 'canonical'):
+                review.expat_replacement_inventory(root, library)
+            second.unlink()
+            second.symlink_to(first)
+            with self.assertRaisesRegex(ValueError, 'regular'):
+                review.expat_replacement_inventory(root, library)

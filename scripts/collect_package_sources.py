@@ -728,6 +728,39 @@ def retained_expat_fetch(directory, manifest):
     return fetch
 
 
+def expat_cpp_source_binding(downloads, *, root=ROOT):
+    """Bind signed C++ build inputs to the existing complete GCC source origin."""
+    lock = json.loads(read_regular(Path(root) / 'docs/os-package-sources.json'))
+    origins = [row for row in lock.get('origins', []) if row.get('origin') == 'gcc']
+    if len(origins) != 1:
+        raise ValueError('Expat C++ inputs require one reviewed GCC source origin')
+    origin = origins[0]
+    packages = origin.get('build_only_packages', [])
+    if (origin.get('version') != '15.2.0-r7' or len(packages) != 2
+            or {row.get('name') for row in packages} != {'g++', 'libstdc++-dev'}
+            or any(row.get('version') != origin['version']
+                   or row.get('build_commit') != 'ddcf93c394b61ccf6be91b915a92a7454a14fcba'
+                   or row.get('license') != 'GPL-2.0-or-later AND LGPL-2.1-or-later'
+                   for row in packages)):
+        raise ValueError('Expat C++ inputs differ from the reviewed GCC build-only packages')
+    for architecture in ('amd64', 'arm64'):
+        expected_packages(origin, architecture)
+    expected = {row['binaries'][architecture]['url']: row['binaries'][architecture]['sha256']
+                for row in packages for architecture in ('amd64', 'arm64')}
+    actual = [row for row in downloads.values()
+              if row['path'].startswith('cpp/') and row['path'].endswith('.apk')]
+    if len(actual) != 4 or {row['url']: row['sha256'] for row in actual} != expected:
+        raise ValueError('Expat C++ input APKs lack the exact reviewed GCC matching-source binding')
+    return {'origin': 'gcc', 'version': origin['version'],
+            'build_commit': 'ddcf93c394b61ccf6be91b915a92a7454a14fcba',
+            'packages': sorted(row['name'] for row in packages),
+            'source_origin_sha256': hashlib.sha256(
+                (json.dumps(origin, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
+            'coverage': 'Matching sources and GPL/LGPL notices require the separately verified '
+                        'complete GCC origin, including exact native output matches for these '
+                        'build-only packages; compiler APK receipts alone do not provide them.'}
+
+
 def collect_patched_expat_sources(origin, architecture, runtime_inventory, output,
                                   *, compiler_proof=None, fetch=None, root=ROOT):
     """Retain signed vendor proof and full matching sources for Keep's overlay."""
@@ -778,15 +811,17 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         if name in source_downloads:
             raise ValueError('Duplicate reviewed Expat build download path')
         source_downloads[name] = row
-    fortify_records = {}
-    fortify_manifest = replay_root / 'fortify/manifest.json'
-    if fortify_manifest.is_symlink() or not fortify_manifest.is_file():
-        raise ValueError('Missing verified Fortify build-input manifest')
-    for row in json.loads(read_regular(fortify_manifest))['files']:
-        name = 'fortify/' + safe_name(row['path'])
-        if name in fortify_records:
-            raise ValueError('Duplicate verified Fortify build-input path')
-        fortify_records[name] = row
+    cpp_sources = expat_cpp_source_binding(source_downloads, root=root)
+    build_input_records = {}
+    for relative, label in (('fortify/manifest.json', 'Fortify'), ('cpp/CPP_BUILD_INPUTS.json', 'C++')):
+        manifest_path = replay_root / relative
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            raise ValueError('Missing verified ' + label + ' build-input manifest')
+        for row in json.loads(read_regular(manifest_path))['files']:
+            name = relative.split('/', 1)[0] + '/' + safe_name(row['path'])
+            if name in build_input_records:
+                raise ValueError('Duplicate verified ' + label + ' build-input path')
+            build_input_records[name] = row
     for path in sorted(replay_root.rglob('*')):
         if path.is_symlink() or not (path.is_dir() or path.is_file()):
             raise ValueError('Unsupported Expat build source output')
@@ -799,11 +834,11 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
                 and source_name in replacement_build.PATCHED_FILES
                 else 'reviewed-keep-build-source')
         url, source_path = 'reviewed-keep-expat-build:' + name, None
-        if name in fortify_records:
-            row = fortify_records[name]
+        if name in build_input_records:
+            row = build_input_records[name]
             if (hashlib.sha256(path.read_bytes()).hexdigest() != row['sha256']
                     or path.stat().st_size != row['bytes']):
-                raise ValueError('Fortify build-input manifest differs from replayed bytes')
+                raise ValueError('Verified build-input manifest differs from replayed bytes')
             role, url, source_path = row['role'], row['url'], row.get('source_path')
         if name in source_downloads:
             row = source_downloads[name]
@@ -812,8 +847,8 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
             role, url = 'reviewed-keep-build-source-input', row['url']
         record(path, role, url, source_path)
     replay_names = {path.relative_to(replay_root).as_posix() for path in replay_root.rglob('*') if path.is_file()}
-    if not set(source_downloads) <= replay_names or not set(fortify_records) <= replay_names:
-        raise ValueError('Missing reviewed Expat or Fortify build source input')
+    if not set(source_downloads) <= replay_names or not set(build_input_records) <= replay_names:
+        raise ValueError('Missing reviewed Expat, Fortify or C++ build source input')
     manifest = {
         'schema': 1, 'origin': 'expat', 'version': origin['version'],
         'architecture': architecture, 'provider_oci_binding': False,
@@ -826,6 +861,7 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         'replacement_manifest_sha256': replacement['manifest_sha256'],
         'replacement_library': replacement['library'], 'source_replay': replay,
         'compiler_provenance': compiler,
+        'cpp_source_binding': cpp_sources,
         'files': records,
         'coverage': 'Original Alpine-signed packages, signatures, complete recipes and sources '
                     'are retained as vendor input proof. Keep replaces the Expat library using '

@@ -253,6 +253,8 @@ class InstallRuntimePackageTests(unittest.TestCase):
             call(['/usr/bin/python3.14', '-B', str(tool / 'dhi_certificate_packages.py'),
                   '--architecture', 'amd64', '--manifest',
                   str(self.root / 'certificates/CA_CERTIFICATES_SECURITY.json')], check=True),
+            call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
+                  '--install-expat'], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'patch_python_runtime.py')], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
                   '--clean-stdlib'], check=True),
@@ -261,7 +263,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
 
     def test_failure_at_each_native_step_prevents_all_later_steps(self):
         self.prepared()
-        for failing_step in range(6):
+        for failing_step in range(7):
             def fail(command, *, check):
                 if run.call_count == failing_step + 1:
                     raise subprocess.CalledProcessError(1, command)
@@ -278,7 +280,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
                 patch.object(installer, 'installation_inputs', return_value=packages), \
                 patch.object(installer.subprocess, 'run') as run:
             installer.main()
-        self.assertEqual(run.call_count, 6)
+        self.assertEqual(run.call_count, 7)
         verification = run.call_args_list[1].args[0]
         self.assertEqual(verification[0:2], ['/usr/bin/python3.14', '-B'])
         self.assertIn('--verify-installed', verification)
@@ -286,8 +288,9 @@ class InstallRuntimePackageTests(unittest.TestCase):
         self.assertEqual(Path(run.call_args_list[2].args[0][2]).name, 'alpine_musl_sources.py')
         self.assertIn('--verify-installed', run.call_args_list[2].args[0])
         self.assertEqual(Path(run.call_args_list[3].args[0][2]).name, 'dhi_certificate_packages.py')
-        self.assertEqual(Path(run.call_args_list[4].args[0][2]).name, 'patch_python_runtime.py')
-        self.assertEqual(run.call_args_list[5].args[0][-1], '--clean-stdlib')
+        self.assertEqual(run.call_args_list[4].args[0][-1], '--install-expat')
+        self.assertEqual(Path(run.call_args_list[5].args[0][2]).name, 'patch_python_runtime.py')
+        self.assertEqual(run.call_args_list[6].args[0][-1], '--clean-stdlib')
 
     def test_build_musl_requires_matching_development_package_and_fresh_verification(self):
         self.prepared()
@@ -446,13 +449,88 @@ class RealInstallerContractTests(unittest.TestCase):
         dependency = next(stage for stage in re.split(r'(?m)^FROM ', text)[1:]
                           if re.search(r'\bAS dependencies\s*$', stage.splitlines()[0]))
         self.assertNotIn('"--install"', dependency)
-        self.assertLess(dependency.index('"--install-build-musl"'), dependency.index('COPY requirements.txt'))
+        inputs = next(stage for stage in re.split(r'(?m)^FROM ', text)[1:]
+                      if re.search(r'\bAS runtime-inputs\s*$', stage.splitlines()[0]))
+        self.assertIn('"--install-build-musl"', inputs)
+        self.assertIn('FROM runtime-inputs AS dependencies', text)
+        self.assertLess(dependency.index('build_patched_expat.py'), dependency.index('COPY requirements.txt'))
         self.assertIn('/opt/runtime-packages/musl/MUSL_SECURITY.json /app/MUSL_SECURITY.json', final)
         self.assertIn('RUN python -m venv', dependency)
         all_instructions = re.sub(r'\\\n\s*', ' ', text).splitlines()
         all_installs = [line for line in all_instructions if line.startswith('RUN ') and
                         'install_runtime_packages.py' in line and '"--install"' in line]
         self.assertEqual(all_installs, installs)
+
+
+class ExpatReplacementInstallationTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.output = self.root / 'expat-patched'
+        self.output.mkdir()
+        self.library = self.root / 'libexpat.so.1.13.0'
+        self.library.write_bytes(b'original signed library')
+        self.alias = self.root / 'libexpat.so.1'
+        self.alias.symlink_to(self.library.name)
+        self.replacement = b'reviewed replacement library'
+        self.manifest = {'qualified': True, 'purpose': 'reviewed-build',
+                         'library': {'path': str(self.library), 'soname': self.alias.name,
+                                     'sha256': hashlib.sha256(self.replacement).hexdigest()}}
+        self.write_manifest()
+        (self.output / installer.patched_expat.LIBRARY).write_bytes(self.replacement)
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.verify = self.stack.enter_context(patch.object(
+            installer.patched_expat, 'verify_build_manifest', return_value=self.manifest))
+        self.stack.enter_context(patch.object(installer.expat, 'build_security_manifest',
+            return_value={'library': {'sha256': hashlib.sha256(self.library.read_bytes()).hexdigest()}}))
+
+    def write_manifest(self):
+        (self.output / 'EXPAT_PATCHED_SECURITY.json').write_bytes(
+            installer.patched_expat.json_bytes(self.manifest))
+
+    def install(self):
+        installer.install_expat(self.root, 'amd64', self.library, self.alias)
+
+    def test_replaces_canonical_inode_without_changing_the_soname_alias(self):
+        inode = self.library.stat().st_ino
+        self.install()
+        self.assertEqual(self.library.read_bytes(), self.replacement)
+        self.assertNotEqual(self.library.stat().st_ino, inode)
+        self.assertEqual(self.alias.readlink(), Path(self.library.name))
+        self.verify.assert_called_once_with(self.manifest, 'amd64')
+        self.assertEqual(list(self.root.glob('.keep-expat-*')), [])
+
+    def test_modified_input_output_manifest_or_alias_holds_replacement(self):
+        for failure in ('vendor', 'replacement', 'alias', 'manifest'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as _:
+                original = self.library.read_bytes()
+                if failure == 'vendor':
+                    self.library.write_bytes(b'changed original')
+                elif failure == 'replacement':
+                    (self.output / installer.patched_expat.LIBRARY).write_bytes(b'changed replacement')
+                elif failure == 'alias':
+                    self.alias.unlink()
+                    self.alias.write_bytes(b'not a symlink')
+                else:
+                    (self.output / 'EXPAT_PATCHED_SECURITY.json').write_text(json.dumps(self.manifest))
+                with self.assertRaises(ValueError):
+                    self.install()
+                self.assertNotEqual(self.library.read_bytes(), self.replacement)
+                self.library.write_bytes(original)
+                (self.output / installer.patched_expat.LIBRARY).write_bytes(self.replacement)
+                self.alias.unlink()
+                self.alias.symlink_to(self.library.name)
+                self.write_manifest()
+
+    def test_preparation_receipt_is_rejected_by_the_real_gate(self):
+        # Stop mocking only this call; preparation must fail before output pins.
+        self.stack.close()
+        self.manifest.update(qualified=False, purpose='preparation-only')
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, 'preparation or unqualified'):
+            self.install()
 
 
 if __name__ == '__main__':

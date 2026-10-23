@@ -7,11 +7,13 @@ final install, patches and removal of bundled tools share one image layer.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import shutil
 import subprocess
 import sysconfig
+import tempfile
 
 if __package__:
     from . import alpine_expat_sources as expat
@@ -19,12 +21,14 @@ if __package__:
     from . import alpine_musl_sources as musl
     from . import dhi_python_packages as python
     from . import dhi_certificate_packages as certificates
+    from . import build_patched_expat as patched_expat
 else:
     import alpine_expat_sources as expat
     import alpine_zlib_sources as zlib
     import alpine_musl_sources as musl
     import dhi_python_packages as python
     import dhi_certificate_packages as certificates
+    import build_patched_expat as patched_expat
 
 ROOT = Path('/opt/runtime-packages')
 COHORT = (('musl', musl, 'MUSL_SECURITY.json'),
@@ -110,9 +114,54 @@ def install(root=ROOT):
                     str(root / 'python/PYTHON_SECURITY.json')], check=True)
     verify_musl(root, architecture)
     verify_certificates(root, architecture)
+    subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),
+                    '--install-expat'], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('patch_python_runtime.py'))], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)), '--clean-stdlib'], check=True)
+
+
+def install_expat(root=ROOT, architecture=None, library=None, alias=None):
+    """Replace the canonical vendor library with the separately reviewed build.
+
+    The signed APK manifest still describes the original installed input. It
+    never authenticates the replacement; that uses the independent build lock.
+    """
+    architecture = architecture or arch()
+    output = root / 'expat-patched'
+    body = patched_expat.regular_bytes(output / 'EXPAT_PATCHED_SECURITY.json',
+                                       'Expat replacement manifest')
+    manifest = json.loads(body)
+    if body != patched_expat.json_bytes(manifest):
+        raise ValueError('Expat replacement manifest must use canonical JSON bytes')
+    patched_expat.verify_build_manifest(manifest, architecture)
+    library = Path(library or manifest['library']['path'])
+    alias = Path(alias or library.with_name(manifest['library']['soname']))
+    if library.is_symlink() or not library.is_file() or not alias.is_symlink() \
+            or alias.resolve(strict=True) != library:
+        raise ValueError('Expat canonical vendor library or SONAME alias differs')
+    vendor = expat.build_security_manifest(architecture, root=None)
+    checked_file(library, vendor['library']['sha256'])
+    replacement = patched_expat.regular_bytes(output / patched_expat.LIBRARY,
+                                               'Expat replacement library')
+    patched_expat.checked(replacement, manifest['library']['sha256'],
+                          'Expat replacement library')
+    # Never truncate a library an existing interpreter may still map. A fresh
+    # interpreter in native qualification verifies the canonical new inode.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=library.parent, prefix='.keep-expat-',
+                                         delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(replacement)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o755)
+        os.replace(temporary, library)
+        checked_file(library, manifest['library']['sha256'])
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def verify_certificates(root, architecture, *, build=False):
@@ -177,6 +226,7 @@ def main():
     mode.add_argument('--install', action='store_true')
     mode.add_argument('--install-certificates', action='store_true')
     mode.add_argument('--install-build-musl', action='store_true')
+    mode.add_argument('--install-expat', action='store_true')
     mode.add_argument('--clean-stdlib', action='store_true')
     args = parser.parse_args()
     if args.prepare:
@@ -187,6 +237,8 @@ def main():
         install_certificates()
     elif args.install_build_musl:
         install_build_musl()
+    elif args.install_expat:
+        install_expat()
     else:
         clean_stdlib()
 

@@ -21,8 +21,12 @@ import weakref
 
 if __package__:
     from . import certificate_trust_checks as certificate_trust
+    from . import build_patched_expat as patched_expat
+    from . import expat_security_checks as expat_security
 else:
     import certificate_trust_checks as certificate_trust
+    import build_patched_expat as patched_expat
+    import expat_security_checks as expat_security
 
 
 EXPAT_VERSION = '2.9.0'
@@ -38,6 +42,8 @@ OPENSSL_VERSION = '3.5.9'
 SSL_LIBRARY = Path('/usr/lib/libssl.so.3')
 CRYPTO_LIBRARY = Path('/usr/lib/libcrypto.so.3')
 MANIFEST_PATH = Path('/app/EXPAT_SECURITY.json')
+EXPAT_PATCHED_MANIFEST_PATH = Path('/app/EXPAT_PATCHED_SECURITY.json')
+EXPAT_BUILD_PATH = Path('/app/EXPAT_BUILD.json')
 PYTHON_MANIFEST_PATH = Path('/app/PYTHON_SECURITY.json')
 MUSL_MANIFEST_PATH = Path('/app/MUSL_SECURITY.json')
 PROC_EXECUTABLE_PATH = Path('/proc/self/exe')
@@ -606,16 +612,30 @@ def check_musl(arch, manifest_path=MUSL_MANIFEST_PATH, maps_path=MAPS_PATH):
             'install_manifest_sha256': install_hash}
 
 
+def read_expat_replacement(arch, manifest_path=EXPAT_PATCHED_MANIFEST_PATH,
+                           lock_path=EXPAT_BUILD_PATH):
+    body = patched_expat.regular_bytes(manifest_path, 'Expat replacement manifest')
+    manifest = json.loads(body)
+    require(body == patched_expat.json_bytes(manifest),
+            'Expat replacement manifest must use canonical JSON bytes')
+    patched_expat.verify_build_manifest(manifest, arch, lock_path=lock_path)
+    return manifest, hashlib.sha256(body).hexdigest()
+
+
 def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
     version = exercise_expat()
     manifest, install_hash = read_expat_manifest(manifest_path, arch)
+    replacement, replacement_hash = read_expat_replacement(arch)
     require(EXPAT_ALIAS.is_symlink() and EXPAT_ALIAS.resolve(strict=True) == EXPAT_LIBRARY,
             'Expat SONAME alias does not resolve to libexpat.so.1.13.0')
     library = verify_loaded_library(EXPAT_LIBRARY, 'libexpat.so', Path(maps_path).read_text(),
-                                    manifest['library']['sha256'])
+                                    replacement['library']['sha256'])
+    probes = expat_security.exercise_expat_security()
     return {'version': version, 'libraries': {'expat': library},
             'source_manifest_sha256': manifest['source_manifest_sha256'],
-            'install_manifest_sha256': install_hash}
+            'install_manifest_sha256': install_hash,
+            'build_manifest': replacement, 'build_manifest_sha256': replacement_hash,
+            'security_probes': probes}
 
 
 def check_openssl(arch, maps_path=MAPS_PATH):
@@ -632,9 +652,11 @@ def check_openssl(arch, maps_path=MAPS_PATH):
 def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     python_manifest_path=PYTHON_MANIFEST_PATH,
                     musl_manifest_path=MUSL_MANIFEST_PATH):
-    report = {'schema': 4, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+    report = {'schema': 5, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
+              'expat_build_manifest': None, 'expat_build_manifest_sha256': None,
+              'expat_security_probes': {},
               'python_source_manifest_sha256': None, 'python_install_manifest_sha256': None,
               'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {},
               'musl_source_manifest_sha256': None, 'musl_install_manifest_sha256': None,
@@ -661,6 +683,9 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                 if name == 'expat':
                     report['expat_source_manifest_sha256'] = result['source_manifest_sha256']
                     report['expat_install_manifest_sha256'] = result['install_manifest_sha256']
+                    report['expat_build_manifest'] = result['build_manifest']
+                    report['expat_build_manifest_sha256'] = result['build_manifest_sha256']
+                    report['expat_security_probes'] = result['security_probes']
                 elif name == 'openssl':
                     report['certificate_trust'] = result['certificate_trust']
                 elif name == 'python':
@@ -695,13 +720,14 @@ def validate_report(report, arch, root=ROOT):
     require(arch in EXPAT_LIBRARY_SHA256, 'Unreviewed dependency report architecture')
     keys = {'schema', 'arch', 'success', 'tests', 'failures', 'errors', 'versions',
             'loaded_libraries', 'expat_source_manifest_sha256', 'expat_install_manifest_sha256',
+            'expat_build_manifest', 'expat_build_manifest_sha256', 'expat_security_probes',
             'python_source_manifest_sha256', 'python_install_manifest_sha256',
             'musl_source_manifest_sha256', 'musl_install_manifest_sha256',
             'musl_aliases', 'musl_probes',
             'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 4
+    require(type(report['schema']) is int and report['schema'] == 5
             and report['arch'] == arch and report['success'] is True
             and type(report['tests']) is int and report['tests'] == 4
             and type(report['failures']) is int and report['failures'] == 0
@@ -716,6 +742,14 @@ def validate_report(report, arch, root=ROOT):
     require(report['expat_source_manifest_sha256'] == expected['source_manifest_sha256']
             and report['expat_install_manifest_sha256'] == expected_install_hash,
             'Dependency report source or install manifest differs from the reviewed packages')
+    replacement = patched_expat.verify_build_manifest(report['expat_build_manifest'], arch, root)
+    require(report['expat_build_manifest_sha256'] == hashlib.sha256(
+        patched_expat.json_bytes(replacement)).hexdigest(),
+        'Dependency report Expat replacement manifest hash differs')
+    try:
+        expat_security.validate_report(report['expat_security_probes'])
+    except RuntimeError as error:
+        raise ValueError(str(error)) from error
     python = validate_python_manifest(expected_python_manifest(arch, root), arch)
     python_install_hash = hashlib.sha256(
         (json.dumps(python, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
@@ -750,8 +784,8 @@ def validate_report(report, arch, root=ROOT):
                             ('python_ssl', Path(python['ssl_extension']['path'])),
                             ('musl', Path(musl['library']['path']))):
         validate_file_identity(libraries[name], canonical)
-    require(libraries['expat']['sha256'] == EXPAT_LIBRARY_SHA256[arch],
-            'Dependency report Expat hash differs from the signed package')
+    require(libraries['expat']['sha256'] == replacement['library']['sha256'],
+            'Dependency report Expat hash differs from the reviewed replacement')
     for name, record in (('python', python['library']), ('python_ssl', python['ssl_extension'])):
         require(libraries[name]['sha256'] == record['sha256'],
                 'Dependency report Python loaded-library hash differs from the signed package')

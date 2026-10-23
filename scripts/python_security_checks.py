@@ -2,7 +2,7 @@
 
 Run inside that image, with no network. These do not suppress scanner findings.
 References: python/cpython commits 16dea1e, a0d023f, 31980e8, 1e54caa,
-5e0ef3f, b234a2b, fb2f0bb and 363aec1; zlib commit df84af2.
+5e0ef3f, b234a2b, fb2f0bb, 0901ad4 and 363aec1; zlib commit df84af2.
 Keep additionally refuses unbound permission resets and unsafe open fallbacks.
 """
 import binascii
@@ -273,7 +273,7 @@ class PythonSecurityChecks(unittest.TestCase):
                         self.assertEqual(b''.join(chunks), payload)
                         self.assertEqual(member.read(1), b'')
 
-    def test_CVE_2026_19672_no_directory_outside_destination(self):
+    def test_CVE_2026_19672_114583_tarfile_destination_boundary(self):
         for extraction_filter in ('tar', 'data'):
             with self.subTest(filter=extraction_filter), tempfile.TemporaryDirectory() as temporary:
                 root = pathlib.Path(temporary)
@@ -289,6 +289,77 @@ class PythonSecurityChecks(unittest.TestCase):
                     archive.extractall(destination, filter=extraction_filter)
                 self.assertFalse((root / 'escaped').exists())
                 self.assertEqual((destination / 'sub/file').read_bytes(), b'x')
+
+                filter_function = getattr(tarfile, extraction_filter + '_filter')
+                destination_stat = destination.stat()
+                for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE):
+                    for name in ('', '.', './', '././', 'sub/..', 'sub/../.', '/', '/./', '/sub/..'):
+                        with self.subTest(kind=kind, name=name):
+                            member = tarfile.TarInfo(name)
+                            member.type = kind
+                            member.linkname = '.'
+                            # Rejection belongs to the filter, before any link
+                            # operation, including on platforms without links.
+                            with self.assertRaises(tarfile.OutsideDestinationError):
+                                filter_function(member, destination)
+                            for method in ('extract', 'extractall'):
+                                with self.subTest(method=method):
+                                    buffer = io.BytesIO()
+                                    with tarfile.open(fileobj=buffer, mode='w') as archive:
+                                        archive.addfile(member)
+                                        following = tarfile.TarInfo('after-link')
+                                        following.size = 1
+                                        archive.addfile(following, io.BytesIO(b'y'))
+                                    buffer.seek(0)
+                                    with tarfile.open(fileobj=buffer) as archive:
+                                        with patch.object(archive, '_extract_member',
+                                                          wraps=archive._extract_member) as extract:
+                                            with self.assertRaises(tarfile.OutsideDestinationError):
+                                                if method == 'extract':
+                                                    archive.extract(archive.getmembers()[0], destination,
+                                                                    filter=extraction_filter)
+                                                else:
+                                                    archive.extractall(destination, filter=extraction_filter)
+                                            extract.assert_not_called()
+                            self.assertFalse(destination.is_symlink())
+                            self.assertTrue(os.path.samestat(destination.stat(), destination_stat))
+                            self.assertFalse((destination / 'after-link').exists())
+                            self.assertEqual((destination / 'sub/file').read_bytes(), b'x')
+
+                # Ordinary directories and files may still name the root in
+                # filters, and ordinary links inside the destination work.
+                for kind in (tarfile.DIRTYPE, tarfile.REGTYPE):
+                    member = tarfile.TarInfo('.')
+                    member.type = kind
+                    filter_function(member, destination)
+                # Replacing an ordinary symlink entry that points at the root
+                # does not replace the destination directory itself.
+                (destination / 'root-alias').symlink_to('.', target_is_directory=True)
+                buffer = io.BytesIO()
+                with tarfile.open(fileobj=buffer, mode='w') as archive:
+                    directory = tarfile.TarInfo('.')
+                    directory.type = tarfile.DIRTYPE
+                    directory.mode = 0o755
+                    archive.addfile(directory)
+                    member = tarfile.TarInfo('ordinary')
+                    member.size = 1
+                    archive.addfile(member, io.BytesIO(b'z'))
+                    for name, kind in (('root-alias', tarfile.SYMTYPE),
+                                       ('ordinary-symlink', tarfile.SYMTYPE),
+                                       ('ordinary-hardlink', tarfile.LNKTYPE)):
+                        member = tarfile.TarInfo(name)
+                        member.type = kind
+                        member.linkname = 'ordinary'
+                        archive.addfile(member)
+                buffer.seek(0)
+                with tarfile.open(fileobj=buffer) as archive:
+                    archive.extractall(destination, filter=extraction_filter)
+                self.assertEqual((destination / 'ordinary').read_bytes(), b'z')
+                self.assertTrue((destination / 'root-alias').is_symlink())
+                self.assertEqual((destination / 'root-alias').read_bytes(), b'z')
+                self.assertTrue((destination / 'ordinary-symlink').is_symlink())
+                self.assertEqual((destination / 'ordinary-symlink').read_bytes(), b'z')
+                self.assertTrue((destination / 'ordinary-hardlink').samefile(destination / 'ordinary'))
 
     def test_CVE_2026_4360_hardlink_target_is_filtered(self):
         buffer = io.BytesIO()

@@ -5,8 +5,8 @@ FROM dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9
 USER 0
 WORKDIR /app
 ENV KEEP_EXPAT_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
-COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py /opt/runtime-build-tools/
-COPY scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/alpine_expat_sources.py scripts/fortify_header_sources.py /opt/scripts/
+COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py /opt/runtime-build-tools/
+COPY scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/alpine_expat_sources.py scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/dhi_python_packages.py /opt/scripts/
 COPY docs/expat-build.json /opt/docs/expat-build.json
 RUN ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--prepare"]
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
@@ -15,6 +15,10 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
     ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-certificates"]
+RUN ["python", "-B", "/opt/scripts/dhi_cpp_packages.py", "--prepare", "--output", "/opt/build-cpp"]
+RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
+    --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
+    ["python", "-B", "/opt/scripts/dhi_cpp_packages.py", "--install", "--output", "/opt/build-cpp"]
 
 # Preparatory output cannot pass the final library-hash gate or publish an image.
 FROM runtime-inputs AS expat-preparation

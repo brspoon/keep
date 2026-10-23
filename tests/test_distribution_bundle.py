@@ -833,6 +833,10 @@ class CommittedKeepSourceTests(unittest.TestCase):
             'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
             'scripts/certificate_trust_checks.py',
             'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
+            'scripts/build_patched_expat.py', 'scripts/expat_security_patches.json',
+            'scripts/fortify_header_sources.py',
+            'scripts/dhi_cpp_packages.py',
+            'scripts/expat_security_checks.py', 'docs/expat-build.json',
             'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
             'docs/distribution-sources.json', 'docs/os-package-sources.json',
             'docs/aports-source-lock.json', 'docs/base-python-sources.json', 'app.py')
@@ -861,7 +865,11 @@ class CommittedKeepSourceTests(unittest.TestCase):
                 self.assertEqual(archive.extractfile(name).read(), (self.root / name).read_bytes())
         self.assertEqual((self.output / 'build/Dockerfile').read_bytes(), (self.root / 'Dockerfile').read_bytes())
         for name in ('scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
-                     'scripts/certificate_trust_checks.py'):
+                     'scripts/certificate_trust_checks.py', 'scripts/build_patched_expat.py',
+                     'scripts/expat_security_patches.json', 'scripts/expat_security_checks.py',
+                     'scripts/fortify_header_sources.py',
+                     'scripts/dhi_cpp_packages.py',
+                     'docs/expat-build.json'):
             self.assertEqual((self.output / 'build' / name).read_bytes(), (self.root / name).read_bytes())
 
     def test_modified_and_staged_source_cannot_produce_a_matching_source_archive(self):
@@ -877,6 +885,95 @@ class CommittedKeepSourceTests(unittest.TestCase):
                 (self.root / 'app.py').write_bytes(original)
                 if staged:
                     self.git('add', 'app.py')
+
+
+class PatchedExpatBundleTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def fixture(self):
+        import collect_package_sources as collection
+        from tests.expat_source_fixture import checked_source_fixture
+        context = checked_source_fixture()
+        origin, inventory, downloads = context.__enter__()
+        self.addCleanup(context.__exit__, None, None, None)
+        acquired = self.root / 'source/alpine-expat-sources'
+        collection.collect_patched_expat_sources(origin, 'amd64', inventory, acquired,
+                                                 fetch=downloads.__getitem__)
+        result = {'binding_method': collection.EXPAT_BUILD_BINDING,
+                  'provider_oci_binding': False, 'signature_verified': True,
+                  'vendor_apk_signature_verified': True,
+                  'apk_binary_match_verified': False, 'runtime_build_verified': True,
+                  'public_sources': {'directory': 'alpine-expat-sources', 'manifest': 'manifest.json'}}
+        return origin, inventory, result
+
+    def test_custom_runtime_coverage_distinguishes_vendor_proof_from_replacement(self):
+        origin, inventory, result = self.fixture()
+        coverage = bundle.retain_signed_alpine(self.root / 'source', self.root / 'retained',
+                                               origin, result, 'amd64', inventory)
+        self.assertFalse(coverage['apk_binary_match_verified'])
+        self.assertTrue(coverage['runtime_build_verified'])
+        self.assertTrue(coverage['vendor_apk_signature_verified'])
+        self.assertEqual(coverage['replacement_library'], inventory['expat_replacement']['library'])
+        self.assertTrue((self.root / 'retained/vendor-inputs/EXPAT_SECURITY.json').is_file())
+        self.assertTrue((self.root / 'retained/keep-build/expat-2.9.0/lib/xmlparse.c').is_file())
+
+    def test_alpine_binary_match_claim_and_missing_build_proof_are_rejected(self):
+        origin, inventory, result = self.fixture()
+        for field, value in [('apk_binary_match_verified', True), ('runtime_build_verified', False),
+                             ('vendor_apk_signature_verified', False),
+                             ('binding_method', 'signed-alpine-packages')]:
+            altered = {**result, field: value}
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'reviewed Keep Expat build'):
+                bundle.retain_signed_alpine(self.root / 'source', self.root / ('reject-' + field),
+                                           origin, altered, 'amd64', inventory)
+
+    def test_runtime_gate_requires_replacement_inventory_after_checking_original_apk_metadata(self):
+        origin, inventory, result = self.fixture()
+        inventory['python'] = [{'name': 'fixture', 'version': '1'}]
+        lock = {'python': [{'name': 'fixture', 'version': '1'}]}
+        with patch.object(bundle, 'check_native_wheels'):
+            bundle.check_runtime(inventory, lock, {'origins': [origin]}, 'amd64')
+            inventory.pop('expat_replacement')
+            with self.assertRaisesRegex(ValueError, 'actual candidate Expat'):
+                bundle.check_runtime(inventory, lock, {'origins': [origin]}, 'amd64')
+
+    def test_cpp_gpl_notices_require_existing_complete_signed_gcc_sources_and_exact_outputs(self):
+        import collect_package_sources as collection
+        origin = next(row for row in json.loads((ROOT / 'docs/os-package-sources.json').read_bytes())['origins']
+                      if row['origin'] == 'gcc')
+        downloads = {'cpp/' + arch + '/' + row['name'] + '.apk': {
+            'path': 'cpp/' + arch + '/' + row['name'] + '.apk', **row['binaries'][arch]}
+            for arch in ('amd64', 'arm64') for row in origin['build_only_packages']}
+        binding = collection.expat_cpp_source_binding(downloads)
+        coverage = [{'origin': 'expat', 'runtime_build_verified': True, 'cpp_source_binding': binding},
+                    {'origin': 'gcc', 'version': origin['version'], 'provider_oci_binding': True,
+                     'apk_binary_match_verified': True,
+                     'apk_matches': [{**row, 'matches': [{'path': 'native/' + row['name'] + '.apk'}]}
+                                     for row in collection.expected_packages(origin, 'amd64')],
+                     'sources': [{'signature_verified': True, 'preferred_source_verified': True,
+                                  'for_packages': ['libgcc', 'libstdc++', 'g++', 'libstdc++-dev'],
+                                  'notice_inventory': 'gcc/sources/notices/package-material-inventory.json'}]}]
+        bundle.bind_expat_cpp_matching_sources(coverage, {'origins': [origin]}, 'amd64')
+        self.assertTrue(coverage[0]['cpp_matching_sources_verified'])
+        for mutation in ('missing-gcc', 'missing-apk', 'unsigned', 'no-source', 'no-notices', 'origin-hash'):
+            changed = copy.deepcopy(coverage)
+            if mutation == 'missing-gcc':
+                changed.pop()
+            elif mutation == 'missing-apk':
+                changed[1]['apk_matches'] = [row for row in changed[1]['apk_matches'] if row['name'] != 'g++']
+            elif mutation == 'unsigned':
+                changed[1]['sources'][0]['signature_verified'] = False
+            elif mutation == 'no-source':
+                changed[1]['sources'][0]['preferred_source_verified'] = False
+            elif mutation == 'no-notices':
+                changed[1]['sources'][0].pop('notice_inventory')
+            else:
+                changed[0]['cpp_source_binding']['source_origin_sha256'] = '0' * 64
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, r'Expat C\+\+'):
+                bundle.bind_expat_cpp_matching_sources(changed, {'origins': [origin]}, 'amd64')
 
 
 class SignedBuildSourceBundleTests(unittest.TestCase):

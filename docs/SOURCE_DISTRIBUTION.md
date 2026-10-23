@@ -113,10 +113,10 @@ readable source and notice before adding the checked full MPL 2.0 terms; another
 version or source hash cannot reuse that approval. Complete new and original CA
 attributions still require native notice preparation and review.
 
-The Python source lock now pins certifi `2026.10.19` and its matching MPL-covered
-source distribution. Its trust policy differs from the vendor system bundle:
-certifi preserves unaffected emSign C1/C3 roots, while the vendor follows
-Mozilla NSS's additional removals. See the [certificate candidate](IMAGE_SECURITY.md#certificate-trust-and-build-tool-candidate-october-21)
+The Python source lock pins certifi `2026.10.23` and its matching MPL-covered
+source distribution. Its 118-root inventory removes emSign G3, C1 and C3,
+retains G1, and matches the reviewed vendor system bundle. See the
+[current maintenance candidate](IMAGE_SECURITY.md#python-expat-and-certificate-maintenance-october-23)
 for the advisory and policy references. Pip `26.2.2` is a checksum-verified build
 bootstrap input and is removed before the application environment enters the
 runtime. It does not replace the older pip/ensurepip source records required by
@@ -151,7 +151,7 @@ and checksum-verified OpenSSL source. Its report explicitly records the absence
 of a signed package build or source-image binding. This method does not rescue
 a signature failure or an unrelated missing package.
 
-The Expat replacement uses Alpine's signed `2.9.0-r0` APKs, independently
+The original Expat inputs use Alpine's signed `2.9.0-r0` APKs, independently
 pinned for amd64 and arm64. The installer checks each APK and official key hash,
 its RSA signature, signed metadata and payload hash, exact library bytes and
 SONAME alias. It installs only these files with networking disabled and the
@@ -161,6 +161,35 @@ APKs and key, complete immutable aports context, checksum-matching upstream
 source and full MIT notice. It records Alpine package verification without a
 Docker package-build or source-image attestation claim. The upstream detached
 signature is retained without claiming separate OpenPGP verification.
+
+The runtime then replaces the canonical library with the separately identified
+Keep build in `docs/expat-build.json`. Its source set contains the complete
+Expat 2.9.0 release, both merged security corrections and their prerequisites,
+the exact patch manifest and builder, native compiler/output hashes and full
+replayed sources. Original signed materials and manifests remain unchanged
+under `alpine-expat-sources/vendor-inputs/`; the additional source set is under
+`keep-build/`. The combined proof records
+`signed-vendor-inputs-and-reviewed-keep-build`,
+`apk_binary_match_verified: false` and `runtime_build_verified: true`.
+It verifies the independently inventoried loaded-library hash against the
+reviewed build rather than attributing modified bytes to Alpine's signature.
+Offline archive replay rejects missing, altered or extra source outputs.
+New source-header attribution is retained alongside the complete MIT notice.
+The build-only Fortify input retains both signed `fortify-headers 3.0.1-r2`
+APKs and keys, the complete matching upstream source and Alpine recipe/patch,
+all ten headers and their copyright notices, and the full 0BSD license. Its
+verified headers are used through an isolated compiler include directory.
+The development image's original signed SLSA statement, index, native-subject
+binding and OCI signature proof are also required and replayed offline. These
+records authenticate the compiler image; they do not claim that the complete
+compiler toolchain was rebuilt from source during this review.
+The existing GCC origin also pins matching DHI `g++` and `libstdc++-dev`
+`15.2.0-r7` as build-only packages. Expat's unmodified configure step requires
+C++11 with tests enabled, even though its Autotools regression targets are C.
+These packages are installed offline only in the development stage. Their exact
+signed bytes must match the native GCC package output already used to obtain
+the complete GCC source, recipes and notices. They do not enter the final
+runtime package inventory or disable any upstream tests.
 
 ## Contents and verification
 

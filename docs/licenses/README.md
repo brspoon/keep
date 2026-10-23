@@ -10,6 +10,8 @@ path, including original Expat and bundled pip/wheel notices from earlier layers
 The inventory explicitly records reviewed source copyright headers, including
 CA certificates, SQLite, GCC runtime libraries, libuuid and musl subcomponents,
 plus IANA's BSD exceptions and the POSIXtz build source's LGPL attribution.
+The patched Expat build also retains the full Fortify 0BSD license and all ten
+header attributions from its verified build-only input.
 Standalone upstream license texts remain complete. The native image copies this
 directory to `/app/licenses/os`. See
 [source distribution](../SOURCE_DISTRIBUTION.md) for the versioned source,
@@ -44,8 +46,8 @@ from CFFI release commit `fd33e7700f0ebafe6f30bd5053f13327221b77a2`.
 Keep's source bundle retains these materials alongside the exact Python source
 archives and per-architecture wheel identities.
 
-The certifi 2026.10.19 source archive retains its exact `cacert.pem`, MPL notice
+The certifi 2026.10.23 source archive retains its exact `cacert.pem`, MPL notice
 and build files. Its SHA-256 is
-`035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae`.
+`a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd`.
 Providing the complete MPL text does not itself provide the matching source;
 the versioned source archive remains part of the distribution materials.
