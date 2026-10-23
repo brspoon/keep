@@ -190,6 +190,12 @@ The development image's original signed SLSA statement, index, native-subject
 binding and OCI signature proof are also required and replayed offline. These
 records authenticate the compiler image; they do not claim that the complete
 compiler toolchain was rebuilt from source during this review.
+The local OCI layout's root `index.json` is a generated wrapper. Retention
+omits its copy-tool transfer timestamps and sorts its descriptors and JSON keys,
+then verifies the retained proof again. Original content-addressed manifests,
+statements, signatures, references and the pinned compiler image index retain
+their exact bytes. The generated wrapper is identified separately from those
+original proof objects.
 The existing GCC origin also pins matching DHI `g++` and `libstdc++-dev`
 `15.2.0-r7` as build-only packages. Expat's unmodified configure step requires
 C++11 with tests enabled, even though its Autotools regression targets are C.

@@ -578,10 +578,11 @@ def retain_expat_compiler_provenance(source, destination, architecture, *, root=
         raise ValueError('Expat compiler provenance must be a regular directory')
     group = expat_compiler_identity(read_regular(source / 'pinned-base-index.json'),
                                      architecture, root=root)
-    proof = verify_attestation_proof(source, architecture,
-        expected_base_digest=group['image_index_digest'], expected_repository='dhi.io/python',
-        expected_source_name='dhi/python', expected_native_digest=group['native_image_digest'],
-        expected_predicate_type=EXPAT_COMPILER_PREDICATE, index_is_native_manifest=False)
+    verification = {'expected_base_digest': group['image_index_digest'],
+        'expected_repository': 'dhi.io/python', 'expected_source_name': 'dhi/python',
+        'expected_native_digest': group['native_image_digest'],
+        'expected_predicate_type': EXPAT_COMPILER_PREDICATE, 'index_is_native_manifest': False}
+    proof = verify_attestation_proof(source, architecture, **verification)
     statement = json.loads(read_regular(source / 'statement.json'))
     predicate = statement.get('predicate', {})
     if (not isinstance(predicate, dict) or not isinstance(predicate.get('buildDefinition'), dict)
@@ -595,20 +596,36 @@ def retain_expat_compiler_provenance(source, destination, architecture, *, root=
     for name in ('pinned-base-index.json', 'dhi-verification-key.pem',
                  'attestation-reference.json', 'statement.json'):
         (destination / name).write_bytes(read_regular(source / name))
-    for name in ('oci-layout', 'index.json'):
-        target = destination / 'proof-oci' / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(read_regular(source / 'proof-oci' / name))
+    target = destination / 'proof-oci'
+    target.mkdir()
+    (target / 'oci-layout').write_bytes(read_regular(source / 'proof-oci/oci-layout'))
+    # This root index is a local copy-tool wrapper, not a registry blob. Its
+    # transfer timestamps/order must not change the matching-source identity.
+    # Only its descriptor-local created annotation is omitted; every original
+    # content-addressed manifest, statement and signature stays byte-for-byte.
+    index = json.loads(read_regular(source / 'proof-oci/index.json'))
+    for descriptor in index['manifests']:
+        annotations = descriptor.get('annotations')
+        if isinstance(annotations, dict):
+            annotations.pop('org.opencontainers.image.created', None)
+            if not annotations:
+                descriptor.pop('annotations')
+    index['manifests'].sort(key=lambda row: json.dumps(row, sort_keys=True))
+    (target / 'index.json').write_text(json.dumps(index, indent=2, sort_keys=True) + '\n')
     for value, body in sorted(layout.blobs.items()):
         path = destination / 'proof-oci/blobs/sha256' / value.split(':', 1)[1]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(body)
+    if verify_attestation_proof(destination, architecture, **verification) != proof:
+        raise ValueError('Retained Expat compiler proof differs after local OCI index reconstruction')
     (destination / 'proof-verification.json').write_text(json.dumps(proof, indent=2, sort_keys=True) + '\n')
     return {'schema': 'keep-expat-compiler-provenance-v1', **group,
             'repository': 'dhi.io/python', 'source_name': 'dhi/python',
             'predicate_type': EXPAT_COMPILER_PREDICATE, 'proof': proof,
             'coverage': 'Original Docker-key-signed SLSA provenance binds the compiler development '
-                        'image native child to the exact reviewed index. Compiler package matching '
+                        'image native child to the exact reviewed index. The local OCI layout index '
+                        'is reconstructed deterministically; original content-addressed proof objects '
+                        'retain their exact bytes. Compiler package matching '
                         'sources and Rekor inclusion are not claimed.'}
 
 
@@ -803,7 +820,10 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         if path.is_symlink() or not (path.is_dir() or path.is_file()):
             raise ValueError('Unsupported Expat compiler proof output')
         if path.is_file():
-            record(path, 'compiler-image-original-proof',
+            role = ('compiler-image-generated-layout-index'
+                    if path.relative_to(output / 'compiler-provenance').as_posix() == 'proof-oci/index.json'
+                    else 'compiler-image-original-proof')
+            record(path, role,
                    'verified-compiler-image-proof:' + path.relative_to(output / 'compiler-provenance').as_posix())
     source_downloads = {}
     for row in replacement_build.source_download_records():

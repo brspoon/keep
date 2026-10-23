@@ -1085,6 +1085,58 @@ class ExpatCompilerProvenanceTests(unittest.TestCase):
         self.assertEqual((self.source / 'statement.json').read_bytes(),
                          (self.root / 'retained/statement.json').read_bytes())
 
+    def test_local_transfer_times_and_descriptor_order_do_not_change_retained_proof(self):
+        layout = self.source / 'proof-oci'
+        index = json.loads((layout / 'index.json').read_bytes())
+        original_created = '2026-10-23T00:00:00Z'
+        inner = json.dumps({'schemaVersion': 2, 'manifests': index['manifests'],
+            'annotations': {'org.opencontainers.image.created': original_created}}).encode()
+        inner_digest = collection.digest(inner)
+        (layout / 'blobs/sha256' / inner_digest.split(':')[1]).write_bytes(inner)
+        index['manifests'].append({'digest': inner_digest, 'size': len(inner),
+                                  'mediaType': 'application/vnd.oci.image.index.v1+json'})
+        for number, descriptor in enumerate(index['manifests']):
+            descriptor['annotations'] = {'org.opencontainers.image.created': '2026-10-23T01:00:00Z',
+                                         'org.opencontainers.image.ref.name': str(number)}
+        (layout / 'index.json').write_text(json.dumps(index))
+        with patch.object(collection, 'verify_attestation_proof', return_value=self.proof) as verifier:
+            first = collection.retain_expat_compiler_provenance(self.source, self.root / 'first', 'amd64')
+            index['manifests'].reverse()
+            for descriptor in index['manifests']:
+                descriptor['annotations']['org.opencontainers.image.created'] = '2026-10-24T02:00:00Z'
+            changed_wrapper = (json.dumps(index, indent=4) + '\n').encode()
+            (layout / 'index.json').write_bytes(changed_wrapper)
+            second = collection.retain_expat_compiler_provenance(self.source, self.root / 'second', 'amd64')
+        self.assertEqual(verifier.call_count, 4)
+        self.assertEqual(first, second)
+        self.assertEqual((layout / 'index.json').read_bytes(), changed_wrapper)
+        first_files = {p.relative_to(self.root / 'first'): p.read_bytes()
+                       for p in (self.root / 'first').rglob('*') if p.is_file()}
+        second_files = {p.relative_to(self.root / 'second'): p.read_bytes()
+                        for p in (self.root / 'second').rglob('*') if p.is_file()}
+        self.assertEqual(first_files, second_files)
+        for path in self.source.rglob('*'):
+            if path.is_file() and path.relative_to(self.source).as_posix() != 'proof-oci/index.json':
+                self.assertEqual(path.read_bytes(), (self.root / 'first' / path.relative_to(self.source)).read_bytes())
+        retained_index = json.loads(first_files[Path('proof-oci/index.json')])
+        self.assertTrue(all('org.opencontainers.image.created' not in row['annotations']
+                            for row in retained_index['manifests']))
+        self.assertEqual(first_files[Path('proof-oci/blobs/sha256') / inner_digest.split(':')[1]], inner)
+
+    def test_changed_content_addressed_proof_blob_is_rejected(self):
+        path = next((self.source / 'proof-oci/blobs/sha256').iterdir())
+        path.write_bytes(path.read_bytes() + b'\n')
+        with patch.object(collection, 'verify_attestation_proof', return_value=self.proof):
+            with self.assertRaisesRegex(ValueError, 'Proof OCI blob digest mismatch'):
+                collection.retain_expat_compiler_provenance(self.source, self.root / 'tampered', 'amd64')
+
+    def test_reconstructed_layout_must_verify_to_the_same_original_proof(self):
+        changed = {**self.proof, 'attestation_digest': 'sha256:' + 'f' * 64}
+        with patch.object(collection, 'verify_attestation_proof', side_effect=[self.proof, changed]):
+            with self.assertRaisesRegex(ValueError,
+                    'Retained Expat compiler proof differs after local OCI index reconstruction'):
+                collection.retain_expat_compiler_provenance(self.source, self.root / 'different-proof', 'amd64')
+
     def test_missing_proof_wrong_index_ambiguous_native_and_missing_original_signature_fail_closed(self):
         with self.assertRaisesRegex(ValueError, 'compiler-image provenance is required'):
             collection.retain_expat_compiler_provenance(None, self.root / 'missing', 'amd64')
