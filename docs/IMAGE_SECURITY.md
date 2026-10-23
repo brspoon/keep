@@ -159,8 +159,8 @@ rejects a valid 19,536-byte document whose CDATA output is only 3,072 bytes;
 unpatched 2.9.0 accepts the same bytes. The preflight incorrectly counts literal
 entity-reference text inside CDATA as expanded content. The runtime checks now
 require this valid input to pass without changing parser limits. Native output
-pins remain unset, so installation and release acceptance stay blocked pending
-review of the local correction and fresh complete qualification. Do not drop the security
+pins were left unset until review of the local correction and fresh native
+preparation. Complete image qualification remains required. Do not drop the security
 fix, loosen the amplification limits or treat a passing upstream test suite as
 proof that this compatibility case passes.
 The [native compatibility run](https://github.com/brspoon/keep/actions/runs/40011470324)
@@ -178,6 +178,14 @@ compatibility correction, not a merged upstream fix or a qualified replacement.
 Its changed source identity invalidates the earlier preparatory output hashes;
 fresh native builds, security and compatibility checks, and source/license
 replay are required before either architecture can qualify.
+
+The [corrected native preparation](https://github.com/brspoon/keep/actions/runs/40016910663)
+at `e60589c295b661ac508c78c2fa26be1041a11de0` passed both upstream test suites
+and all ten security/compatibility probe groups on amd64 and arm64. The original
+outputs were independently checked for source replay, signed compiler-image
+provenance, all 83 ABI exports and effective hardening before both library and
+compiler hashes were pinned. The final images must reproduce those outputs and
+pass the remaining application, scanner and source-delivery gates.
 
 ## Certificate trust and build-tool candidate (October 21)
 

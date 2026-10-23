@@ -40,7 +40,7 @@
     "scripts/build_patched_expat.py": "e109de2f4dd099d0525f27bddb74e9576d420c58fff655e1845cd3bebc71489b",
     "scripts/expat_security_patches.json": "b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a",
     "scripts/expat_security_checks.py": "f12b75357c3e995294bba154af59b21d46388c1e78de0163f67dc0927244d4c7",
-    "docs/expat-build.json": "f7a4796f1b752d8cef9391b7948369427c4c5f984d580a69b7c084aa298c8523",
+    "docs/expat-build.json": "10d2d607bcc03e49ef51c20c7b85292ff84ffbc66fa9ebdca1ebdcced053f339",
     "scripts/image_distribution.py": "9cbd5031771c66543f278b38cf2c655489db8f5a16e51a9c49246bcdf1bd320c",
     ".github/workflows/runtime-base-review.yml": "66783b04882c7d24103000cd4b8d2ce0d936b716abe83d0c0eaec4ebe818a24c",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
