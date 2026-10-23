@@ -42,11 +42,17 @@ LITERAL_MARKUP_CONTROLS = (
     (b'<!DOCTYPE r [<!ENTITY word "ordinary"><!ENTITY literal "<!-- &word; -->">]><r>&literal;</r>', b''),
     (b'<!DOCTYPE r [<!ENTITY word "ordinary"><!ENTITY literal "<?keep &word;?>">]><r>&literal;</r>', b''),
 )
+DEFAULT_LITERAL_TEXT = b'&word;' * 512
+DEFAULT_LITERAL_DOCUMENT = (
+    b'<!DOCTYPE r [<!ENTITY word "' + b'a' * 16_384
+    + b'"><!ENTITY literal "<![CDATA[' + DEFAULT_LITERAL_TEXT
+    + b']]>">]><r>&literal;</r>'
+)
 
 EXPECTED_RESULT = {
     "schema": "keep-expat-security-probes-v1",
     "soname": SONAME,
-    "tests": 6,
+    "tests": 7,
     "passed": True,
     "ordinary_xml": True,
     "bounded_entity_control": True,
@@ -54,6 +60,7 @@ EXPECTED_RESULT = {
     "amplification_reset": True,
     "allocation_reset": True,
     "literal_markup_controls": True,
+    "default_literal_xml": True,
     "preflight_emitted_characters": 0,
     "reset_rejections": 2,
     "allocation_reset_cycles": ALLOCATION_RESET_CYCLES,
@@ -314,6 +321,20 @@ def _exercise(api) -> dict:
                 and not invalid[0],
                 "Expat literal markup control failed",
             )
+    with api.parser() as parser:
+        # Keep untouched defaults: the reference-looking text is literal CDATA.
+        data, callback, invalid = _capture(api, parser)
+        status, error = _parse(
+            api, parser, DEFAULT_LITERAL_DOCUMENT, deadline,
+            chunk_size=len(DEFAULT_LITERAL_DOCUMENT),
+        )
+        _require(
+            (status, error, bytes(data))
+            == (XML_STATUS_OK, XML_ERROR_NONE, DEFAULT_LITERAL_TEXT)
+            and not invalid[0],
+            "Expat default-limit literal XML compatibility failed "
+            f"(status={status}, error={error}, output_bytes={len(data)})",
+        )
     _check_deadline(deadline)
     return expected_report()
 

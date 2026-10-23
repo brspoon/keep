@@ -146,6 +146,19 @@ are present. Complete unsuppressed scans, source/license replay, all runtime and
 functional checks on native amd64 and arm64 remain required. This candidate is
 not a published or deployed security baseline.
 
+The [native preparatory build](https://github.com/brspoon/keep/actions/runs/40009916008)
+passed the upstream test suite, exact ABI, compiler hardening and signed build-input
+checks on both architectures. It does not qualify the candidate. A separate
+default-limit compatibility check found that the entity-accounting correction
+rejects a valid 19,536-byte document whose CDATA output is only 3,072 bytes;
+unpatched 2.9.0 accepts the same bytes. The preflight incorrectly counts literal
+entity-reference text inside CDATA as expanded content. The runtime checks now
+require this valid input to pass without changing parser limits. Native output
+pins remain unset, so installation and release acceptance stay blocked pending
+a reviewed correction and fresh complete qualification. Do not drop the security
+fix, loosen the amplification limits or treat a passing upstream test suite as
+proof that this compatibility case passes.
+
 ## Certificate trust and build-tool candidate (October 21)
 
 The [certifi advisory](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2)

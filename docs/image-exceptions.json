@@ -39,10 +39,10 @@
     "scripts/scout_exception_policy.py": "d662274ac8da047c6e62e3d6e5be0f429030cffe025d9d35a94e4cd40093fc0a",
     "scripts/build_patched_expat.py": "92b5d08d04b985ed525ccf41ecf6a2c5e067b98693535f25edc6abc768dec36b",
     "scripts/expat_security_patches.json": "1ec958c7d2400522c7d8cdf51f242702531c3448f8d3639cf23f88260725e5d6",
-    "scripts/expat_security_checks.py": "66ab61e7446f2b16b4257b66b0aa4f56ff2e08ecdf19c993c9ae7b7fe459323e",
+    "scripts/expat_security_checks.py": "ee66fde2f4597a4059df9eb2dc45f18251a00fd208a505171c5d87c0f2cab93c",
     "docs/expat-build.json": "0ffa6572089f837bd1830f2559940d7e7018acefffa6931accc07359632058d8",
     "scripts/image_distribution.py": "9cbd5031771c66543f278b38cf2c655489db8f5a16e51a9c49246bcdf1bd320c",
-    ".github/workflows/runtime-base-review.yml": "f166fa4a383d60a4ff102f4dbe558d408961082cf611afe71478ecc7ad0711ee",
+    ".github/workflows/runtime-base-review.yml": "66783b04882c7d24103000cd4b8d2ce0d936b716abe83d0c0eaec4ebe818a24c",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
     "scripts/dhi_cpp_packages.py": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb",
     "scripts/expat_build_tools.py": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa"

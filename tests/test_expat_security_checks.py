@@ -1,4 +1,5 @@
 import ctypes
+import hashlib
 import importlib.util
 import unittest
 from contextlib import contextmanager
@@ -39,6 +40,7 @@ def captures():
         (bytearray(), object(), [False]),
         *[(bytearray(expected), object(), [False])
           for _, expected in checks.LITERAL_MARKUP_CONTROLS],
+        (bytearray(checks.DEFAULT_LITERAL_TEXT), object(), [False]),
     ]
 
 
@@ -48,7 +50,7 @@ def parse_results():
         checks.XML_STATUS_ERROR,
         checks.XML_ERROR_AMPLIFICATION_LIMIT_BREACH,
     )
-    return [ok, ok, rejected, rejected, rejected, ok, ok, ok, ok, ok, ok, ok]
+    return [ok, ok, rejected, rejected, rejected, ok, ok, ok, ok, ok, ok, ok, ok]
 
 
 class ExpatSecurityChecksTests(unittest.TestCase):
@@ -66,14 +68,27 @@ class ExpatSecurityChecksTests(unittest.TestCase):
         self.assertEqual(result, checks.expected_report())
         self.assertIsNone(checks.validate_report(result))
         self.assertEqual(api.created, api.freed)
-        self.assertEqual(len(api.created), 8)
+        self.assertEqual(len(api.created), 9)
         self.assertEqual(api.XML_ParserReset.call_count, 4)
-        self.assertEqual(parse.call_count, 12)
+        self.assertEqual(parse.call_count, 13)
         documents = [call.args[2] for call in parse.call_args_list]
         self.assertEqual(max(map(len, documents)), 65_547)
         self.assertEqual(len(checks.ENTITY_DOCUMENT), 165)
         self.assertEqual(documents.count(checks.ALLOCATION_DOCUMENT), 2)
         self.assertEqual(documents.count(b"<hello/>"), 2)
+        self.assertEqual(len(checks.DEFAULT_LITERAL_DOCUMENT), 19_536)
+        self.assertEqual(hashlib.sha256(checks.DEFAULT_LITERAL_DOCUMENT).hexdigest(),
+                         'c7e9ee64fa6e9994c96335666cb146cd258036c7277e0841faa5851bdd3ca26d')
+        self.assertFalse(any(call.args[0] is api.created[-1]
+                             for call in api.limits.call_args_list))
+
+    def test_default_limit_rejection_of_literal_cdata_blocks(self):
+        results = parse_results()
+        results[-1] = (checks.XML_STATUS_ERROR, checks.XML_ERROR_AMPLIFICATION_LIMIT_BREACH)
+        captured = captures()
+        captured[-1][0].clear()
+        with self.assertRaisesRegex(RuntimeError, 'default-limit literal XML compatibility'):
+            self.run_fake(results=results, capture_results=captured)
 
     def test_loads_only_normal_soname(self):
         with (

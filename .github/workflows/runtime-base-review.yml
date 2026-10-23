@@ -197,6 +197,20 @@ jobs:
               subprocess.run(['docker', 'rm', container], check=True)
           print('Preparation only: final native image qualification remains required.')
           PY
+      - name: Verify upstream fixes preserve default XML compatibility
+        run: |
+          docker run --rm --network none --read-only --entrypoint python \
+            -v "$PWD/scripts/expat_security_checks.py:/checks.py:ro" \
+            keep-expat-preparation -B -c '
+          import ctypes, hashlib, importlib.util, json, pathlib
+          library = pathlib.Path("/opt/expat-preparation/libexpat.so.1.13.0")
+          manifest = json.loads(library.with_name("EXPAT_PATCHED_SECURITY.json").read_bytes())
+          assert hashlib.sha256(library.read_bytes()).hexdigest() == manifest["library"]["sha256"]
+          spec = importlib.util.spec_from_file_location("checks", "/checks.py")
+          checks = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(checks)
+          print(checks._exercise(checks._Expat(ctypes.CDLL(str(library)))))
+          '
       - name: Retain original Expat preparatory outputs for review
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
