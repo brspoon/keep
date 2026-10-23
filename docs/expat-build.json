@@ -29,7 +29,7 @@
       "CC": "/usr/bin/gcc",
       "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-expat-build=.",
       "CONFIG_SHELL": "/bin/sh",
-      "CPPFLAGS": "-D_FORTIFY_SOURCE=2",
+      "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-expat-build/fortify/include",
       "LC_ALL": "C",
       "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
       "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -40,7 +40,7 @@
     "image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d"
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "516ce0e54019b0bcccba1ea08d78bdf37ff2aa74e327a02c94b794f367c3a1c4",
+  "build_script_sha256": "7e34b1abf47c0a68e599f13af7add56c5748907a2eb1c249ac64fd046fa693ec",
   "commits": [
     "d545081f6a90792208e0d274888a352e2e5d894d",
     "da504c0c111086072172431c76867800673fbc34",
@@ -54,6 +54,76 @@
   "expected_library_sha256": {
     "amd64": null,
     "arm64": null
+  },
+  "fortify_headers": {
+    "build_commit": "363be18be4b1f33af5a058990ba9b297e8fb547b",
+    "context": {
+      "sha256": "8e2e9363eca846ea6dc9a8c0c741109e19677c26d94a823e1a7548bd325c19a2",
+      "url": "https://github.com/alpinelinux/aports/archive/363be18be4b1f33af5a058990ba9b297e8fb547b.tar.gz"
+    },
+    "data_sha256": "501448d04f6604ae5e50277a02b79abbe7c9546b2ef86a04be53c253a6927801",
+    "headers": {
+      "fortify-headers.h": "48e4cd8fedb6928c841d36ddb3affc6211013cce5e00691e422544d11dece694",
+      "poll.h": "7419da106bcd51e8665828cf87cae9565c550b01765e617156771e6417c926ae",
+      "stdio.h": "676bdbc3abfecc23d0147590f8aaeaf21c4791daa20f84bf6198054b2d2527af",
+      "stdlib.h": "8916d455b280f12f737b4b70d5c4489b9d2b078e3dc9a69a62a3e2c8b38d0b9d",
+      "string.h": "a4799fa3eab2f969f38ea4962cf2bd3e2ec8b49f376e9a459b024c0abc88926f",
+      "strings.h": "6c156a2e571e490c85c5ba0abc5e36ba90f56e3963049462043dd6a95fa9b1f4",
+      "sys/select.h": "cd8d09e913cf2eb3c78a77c59b47f957980b29ce9760647f6dda1d3f0ed579cb",
+      "sys/socket.h": "21329dcc81a50a04990a1cfe9cea3efb8cb11850ccf7541436a21bce41f6f926",
+      "unistd.h": "d53dade38894de3f7925898f605be52ab8dfed75f8224977bd603bb22dd566cc",
+      "wchar.h": "c2ba1bc129c88d466de0fab78867e01e691055358ca6f0feaa2ce9a55700a0d3"
+    },
+    "installation": "isolated-compiler-include-only",
+    "license": "0BSD",
+    "package": "fortify-headers",
+    "package_architecture": "noarch",
+    "packages": {
+      "amd64": {
+        "pkginfo_sha256": "17d62c70bbae7c291d4272c3ea0c38d2425ba7f41821ba11478737aef7086222",
+        "sha256": "5ffaebd9f141ac3e3fa0cc99f798f64b4c0aa16fb06a7a77e68f63f350fe23aa",
+        "signing_key": {
+          "name": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+          "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+        },
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/fortify-headers-3.0.1-r2.apk"
+      },
+      "arm64": {
+        "pkginfo_sha256": "df1fdf8be8b1deeb4e54efa6315d662a4236edbd4b1026a3b4fd47a5599bfa53",
+        "sha256": "72bf2a77475f2550a7345683c77b39487ee94ecbc2ca11ed5314161f3b927d76",
+        "signing_key": {
+          "name": "alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+          "sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+        },
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/fortify-headers-3.0.1-r2.apk"
+      }
+    },
+    "patch": {
+      "original_header_sha256": "1dbb77a0f1ecc319d682f429d29c3634c0046f6af7e16dd245410209a09e3bd3",
+      "sha256": "d89c6260d79af6f7022ecf45e9825dbbda3c9fea3ad917a524cddc158cef56ef",
+      "sha512": "96bce32ff14f0964ed304086ba124b0b3ed256228699ff7cd6b40c735995f3fc2c7de5a6518c40012dd81371c6a7fbbe2d9e6e6d4723aa43956028f5336dd0ad",
+      "upstream_commit": "c1642e5a43de3affa75d52c3577ee1be4c874a5d",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/363be18be4b1f33af5a058990ba9b297e8fb547b/main/fortify-headers/clang.patch"
+    },
+    "recipe": {
+      "sha256": "1723fbc05affc9376319d2ae18d036ee48ff1d1f9e259ca11ade11cc0ed515b0",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/363be18be4b1f33af5a058990ba9b297e8fb547b/main/fortify-headers/APKBUILD"
+    },
+    "schema": "keep-fortify-header-inputs-v1",
+    "source": {
+      "license_sha256": "f9c890cf570f24fefbe1605a073b430630b0ff63e8d9fc53591bb5528120d424",
+      "root": "fortify-headers-3.0.1",
+      "sha256": "576ac1dc2db9a503d8458c1e9f4a6ce8b0437cfc3c507859d7601a3b8d8ac0e6",
+      "sha512": "bb4e98ed5bcc5ba97f1a57935642b19b87b3c3b8c28c6421394d02ab4ef8d654819397910914cbfc2bc9c938a6b18b7efafd8a73d681a20c32b73dd22f5041bf",
+      "url": "https://github.com/jvoisin/fortify-headers/archive/refs/tags/3.0.1.tar.gz"
+    },
+    "version": "3.0.1-r2"
+  },
+  "fortify_helper": {
+    "path": "scripts/fortify_header_sources.py",
+    "sha256": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0"
   },
   "identity": "keep-expat-2.9.0-c30145b-d8f31e6-v1",
   "library": {

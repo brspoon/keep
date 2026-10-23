@@ -21,6 +21,11 @@ import subprocess
 import tarfile
 import urllib.request
 
+if __package__:
+    from . import fortify_header_sources as fortify
+else:
+    import fortify_header_sources as fortify
+
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = Path('/opt/keep-expat-build')
@@ -28,6 +33,8 @@ SOURCE_DIRECTORY = 'expat-2.9.0'
 LIBRARY = 'libexpat.so.1.13.0'
 PATCH_PATH = 'scripts/expat_security_patches.json'
 BUILD_SCRIPT = 'scripts/build_patched_expat.py'
+FORTIFY_HELPER = 'scripts/fortify_header_sources.py'
+FORTIFY_HELPER_SHA256 = '931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0'
 BUILD_IDENTITY = 'keep-expat-2.9.0-c30145b-d8f31e6-v1'
 BUILD_IMAGE = ('dhi.io/python:3.14-alpine3.24-dev@sha256:'
                'b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d')
@@ -64,7 +71,7 @@ ENVIRONMENT = {
     'CC': '/usr/bin/gcc',
     'CFLAGS': ('-Os -fstack-clash-protection -Wformat -Werror=format-security '
                '-fstack-protector-strong -ffile-prefix-map=/opt/keep-expat-build=.'),
-    'CPPFLAGS': '-D_FORTIFY_SOURCE=2',
+    'CPPFLAGS': '-D_FORTIFY_SOURCE=2 -I/opt/keep-expat-build/fortify/include',
     'LDFLAGS': ('-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 '
                 '-Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack'),
     'SOURCE_DATE_EPOCH': SOURCE_DATE_EPOCH, 'LC_ALL': 'C', 'TZ': 'UTC',
@@ -130,6 +137,8 @@ def immutable_spec():
         'patch_manifest': {'path': PATCH_PATH, 'sha256': PATCH_SHA256},
         'commits': list(COMMITS), 'original_files': dict(ORIGINAL_FILES),
         'patched_files': dict(PATCHED_FILES), 'build_script': BUILD_SCRIPT,
+        'fortify_headers': fortify.reviewed_spec(),
+        'fortify_helper': {'path': FORTIFY_HELPER, 'sha256': FORTIFY_HELPER_SHA256},
         'build': {'image': BUILD_IMAGE, 'directory': str(WORK),
                   'compiler': '/usr/bin/gcc', 'compiler_targets': dict(TARGETS),
                   'environment': dict(ENVIRONMENT), 'configure_options': list(CONFIGURE_OPTIONS),
@@ -162,6 +171,8 @@ def reviewed_spec(root=None, *, lock_path=None):
     require(remaining == immutable_spec(), 'Expat build lock differs from reviewed source or recipe facts')
     require(body == json_bytes(spec), 'Expat build lock must use canonical JSON bytes')
     checked(regular_bytes(Path(__file__), 'Expat build script'), script_hash, 'Expat build script')
+    checked(regular_bytes(Path(fortify.__file__), 'Fortify source helper'),
+            FORTIFY_HELPER_SHA256, 'Fortify source helper')
     return spec
 
 
@@ -173,10 +184,20 @@ def require_output_pins(spec):
 
 
 def source_replay_record():
-    return {'schema': 'keep-expat-source-replay-v1', 'identity': BUILD_IDENTITY,
+    return {'schema': 'keep-expat-source-replay-v2', 'identity': BUILD_IDENTITY,
             'source_sha256': SOURCE_SHA256, 'vendor_recipe_sha256': RECIPE_SHA256,
             'patch_manifest_sha256': PATCH_SHA256, 'commits': list(COMMITS),
-            'original_files': dict(ORIGINAL_FILES), 'patched_files': dict(PATCHED_FILES)}
+            'original_files': dict(ORIGINAL_FILES), 'patched_files': dict(PATCHED_FILES),
+            'fortify_headers': fortify.reviewed_spec()}
+
+
+def source_download_records():
+    """Actual original downloads retained below the common Expat replay root."""
+    return [
+        {'path': 'expat-2.9.0.tar.xz', 'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'role': 'upstream-source'},
+        {'path': 'APKBUILD', 'url': RECIPE_URL, 'sha256': RECIPE_SHA256, 'role': 'matching-apk-build-script'},
+        *[{**record, 'path': 'fortify/' + record['path']} for record in fortify.source_download_records()],
+    ]
 
 
 def _manifest(spec, arch, library_hash, compiler_hash, *, qualified):
@@ -192,6 +213,7 @@ def _manifest(spec, arch, library_hash, compiler_hash, *, qualified):
         'build_image': BUILD_IMAGE, 'source_sha256': SOURCE_SHA256,
         'patch_manifest_sha256': PATCH_SHA256, 'patched_files': dict(PATCHED_FILES),
         'source_replay_sha256': digest(json_bytes(source_replay_record())),
+        'fortify_source_manifest_sha256': digest(fortify.source_lock_bytes()),
         'compiler': {'path': '/usr/bin/gcc', 'target': TARGETS[arch], 'sha256': compiler_hash},
         'library': {**spec['library'], 'sha256': library_hash},
         'hardening': dict(EXPECTED_HARDENING),
@@ -309,10 +331,12 @@ def replay_sources(output, *, root=ROOT, lock_path=None, fetch=download):
     retained = {
         'expat-2.9.0.tar.xz': archive, 'expat_security_patches.json': patch_body,
         'APKBUILD': recipe, 'build_patched_expat.py': regular_bytes(Path(__file__), 'Expat build script'),
+        'fortify_header_sources.py': regular_bytes(Path(fortify.__file__), 'Fortify source helper'),
         'expat-build.json': json_bytes(spec), 'SOURCE_REPLAY.json': json_bytes(source_replay_record()),
     }
     for name, body in retained.items():
         (destination / name).write_bytes(body)
+    fortify.prepare(destination / 'fortify', fetch=fetch)
     return source_replay_record()
 
 
@@ -349,7 +373,8 @@ def compiler_diagnostics(macros, arch):
              '__SSP_STRONG__', '__SSP__', '__OPTIMIZE__', '__GNUC__', '__GNUC_MINOR__')
     headers = {}
     for name in ('/usr/include/string.h', '/usr/include/fortify/string.h',
-                 '/usr/include/fortify/fortify-headers.h'):
+                 '/usr/include/fortify/fortify-headers.h',
+                 str(WORK / 'fortify/include/string.h'), str(WORK / 'fortify/include/fortify-headers.h')):
         path = Path(name)
         item = {'exists': path.exists(), 'is_symlink': path.is_symlink()}
         if path.is_file() and not path.is_symlink() and path.stat().st_size <= 512 * 1024:
@@ -503,7 +528,6 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     require(os.environ.get('KEEP_EXPAT_BUILD_IMAGE') == BUILD_IMAGE,
             'Expat build image declaration differs from reviewed DHI development image')
     compiler_hash, compiler_version = compiler_identity(arch)
-    effective_hardening = compiler_hardening(arch)
     expected_compiler = spec['compiler_sha256'][arch]
     require(expected_compiler is None or compiler_hash == expected_compiler,
             'Expat native compiler differs from reviewed compiler hash')
@@ -511,6 +535,8 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     require(destination != WORK and not destination.is_relative_to(WORK)
             and not WORK.is_relative_to(destination), 'Expat output overlaps its fixed build workspace')
     replay_sources(WORK, root=root, fetch=fetch)
+    fortify.verify_prepared_headers(WORK / 'fortify/include')
+    effective_hardening = compiler_hardening(arch)
     source = WORK / SOURCE_DIRECTORY
     environment = build_environment(arch)
     configure = ['./configure', '--build=' + TARGETS[arch], '--host=' + TARGETS[arch],
@@ -521,6 +547,7 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     library = regular_bytes(built, 'Built Expat replacement')
     protections = elf_protections(library, arch)
     features = runtime_features(built)
+    fortify.verify_prepared_headers(WORK / 'fortify/include')
     library_hash = digest(library)
     expected_library = spec['expected_library_sha256'][arch]
     require(expected_library is None or library_hash == expected_library,
@@ -532,8 +559,10 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     (destination / LIBRARY).chmod(0o755)
     (destination / 'COPYING').write_bytes(regular_bytes(source / 'COPYING', 'Expat COPYING'))
     for name in ('expat-2.9.0.tar.xz', 'expat_security_patches.json', 'APKBUILD',
-                 'build_patched_expat.py', 'expat-build.json', 'SOURCE_REPLAY.json'):
+                 'build_patched_expat.py', 'fortify_header_sources.py',
+                 'expat-build.json', 'SOURCE_REPLAY.json'):
         shutil.copyfile(WORK / name, destination / name)
+    shutil.copytree(WORK / 'fortify', destination / 'fortify')
     (destination / 'BUILD_ENVIRONMENT.json').write_bytes(json_bytes({
         'compiler_version': compiler_version, 'compiler_sha256': compiler_hash,
         'configure': configure, 'environment': environment,

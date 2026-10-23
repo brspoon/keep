@@ -206,7 +206,8 @@ class PatchedExpatBuildTests(unittest.TestCase):
             for flag in ('-fstack-clash-protection', '-Wformat', '-Werror=format-security',
                          '-fstack-protector-strong'):
                 self.assertIn(flag, environment['CFLAGS'].split())
-            self.assertEqual(environment['CPPFLAGS'], '-D_FORTIFY_SOURCE=2')
+            self.assertIn('-D_FORTIFY_SOURCE=2', environment['CPPFLAGS'].split())
+            self.assertIn('-I/opt/keep-expat-build/fortify/include', environment['CPPFLAGS'].split())
             for flag in ('relro', 'now', 'noexecstack', 'pack-relative-relocs'):
                 self.assertIn(flag, environment['LDFLAGS'])
             self.assertEqual('-fno-plt' in environment['CFLAGS'].split(), arch == 'amd64')
@@ -234,8 +235,30 @@ class PatchedExpatBuildTests(unittest.TestCase):
         self.assertEqual(diagnostics['macros']['__SSP_STRONG__'], '3')
         self.assertIsNone(diagnostics['macros']['_FORTIFY_STRING_H'])
         self.assertEqual(set(diagnostics['headers']), {'/usr/include/string.h',
-                         '/usr/include/fortify/string.h', '/usr/include/fortify/fortify-headers.h'})
+                         '/usr/include/fortify/string.h', '/usr/include/fortify/fortify-headers.h',
+                         '/opt/keep-expat-build/fortify/include/string.h',
+                         '/opt/keep-expat-build/fortify/include/fortify-headers.h'})
         self.assertLess(len(str(raised.exception)), 3000)
+
+    def test_isolated_headers_are_replayed_and_verified_before_compiler_feature_check(self):
+        events = []
+        self.write_lock()
+        with patch.object(build, 'native_architecture', return_value='amd64'), \
+                patch.object(build, 'compiler_identity', return_value=('a' * 64, 'fixture GCC')), \
+                patch.dict(build.os.environ, {'KEEP_EXPAT_BUILD_IMAGE': build.BUILD_IMAGE}), \
+                patch.object(build, 'replay_sources', side_effect=lambda *args, **kwargs: events.append('replay')), \
+                patch.object(build.fortify, 'verify_prepared_headers',
+                             side_effect=lambda *args: events.append('verify')), \
+                patch.object(build.subprocess, 'run') as compile_command, \
+                patch.object(build, 'compiler_hardening') as hardening:
+            def check_after_replay(_):
+                events.append('compiler')
+                raise ValueError('stop after compiler ordering check')
+            hardening.side_effect = check_after_replay
+            with self.assertRaisesRegex(ValueError, 'ordering check'):
+                build.build(self.root / 'prepared', preparation=True, root=self.root)
+            compile_command.assert_not_called()
+        self.assertEqual(events, ['replay', 'verify', 'compiler'])
 
     @staticmethod
     def elf_fixture(*, stack_flags=6, relro=True, now=True, stack_protector=True):

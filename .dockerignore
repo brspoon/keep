@@ -39,6 +39,7 @@
 !scripts/install_runtime_packages.py
 !scripts/build_patched_expat.py
 !scripts/expat_security_patches.json
+!scripts/fortify_header_sources.py
 !docs/
 !docs/PYTHON_LICENSE.txt
 !docs/expat-build.json
