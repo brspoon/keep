@@ -224,6 +224,19 @@ class PatchedExpatBuildTests(unittest.TestCase):
                     self.assertRaisesRegex(ValueError, 'effective compiler'):
                 build.compiler_hardening('arm64')
 
+    def test_failed_compiler_precondition_reports_bounded_macro_and_header_evidence(self):
+        output = b'#define _FORTIFY_SOURCE 2\n#define __SSP_STRONG__ 3\n'
+        with patch.object(build.subprocess, 'check_output', return_value=output):
+            with self.assertRaises(ValueError) as raised:
+                build.compiler_hardening('amd64')
+        diagnostics = json.loads(str(raised.exception).split('; ', 1)[1])
+        self.assertEqual(diagnostics['macros']['_FORTIFY_SOURCE'], '2')
+        self.assertEqual(diagnostics['macros']['__SSP_STRONG__'], '3')
+        self.assertIsNone(diagnostics['macros']['_FORTIFY_STRING_H'])
+        self.assertEqual(set(diagnostics['headers']), {'/usr/include/string.h',
+                         '/usr/include/fortify/string.h', '/usr/include/fortify/fortify-headers.h'})
+        self.assertLess(len(str(raised.exception)), 3000)
+
     @staticmethod
     def elf_fixture(*, stack_flags=6, relro=True, now=True, stack_protector=True):
         body = bytearray(4096)

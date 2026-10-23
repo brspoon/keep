@@ -343,6 +343,24 @@ def compiler_identity(arch):
     return compiler_hash, version
 
 
+def compiler_diagnostics(macros, arch):
+    """Bounded non-secret evidence for a failed native compiler precondition."""
+    names = ('_FORTIFY_SOURCE', '_FORTIFY_STRING_H', '_FORTIFY_HEADERS_H',
+             '__SSP_STRONG__', '__SSP__', '__OPTIMIZE__', '__GNUC__', '__GNUC_MINOR__')
+    headers = {}
+    for name in ('/usr/include/string.h', '/usr/include/fortify/string.h',
+                 '/usr/include/fortify/fortify-headers.h'):
+        path = Path(name)
+        item = {'exists': path.exists(), 'is_symlink': path.is_symlink()}
+        if path.is_file() and not path.is_symlink() and path.stat().st_size <= 512 * 1024:
+            item['sha256'] = digest(regular_bytes(path, 'Compiler diagnostic header', 512 * 1024))
+        headers[name] = item
+    environment = build_environment(arch)
+    return {'schema': 'keep-expat-compiler-diagnostics-v1', 'architecture': arch,
+            'macros': {name: macros.get(name) for name in names}, 'headers': headers,
+            'cflags': environment['CFLAGS'], 'cppflags': environment['CPPFLAGS']}
+
+
 def compiler_hardening(arch):
     """Check effective SSP and fortify headers, rather than only spelling flags."""
     environment = build_environment(arch)
@@ -351,9 +369,10 @@ def compiler_hardening(arch):
     output = subprocess.check_output(command, input=b'#include <string.h>\n',
                                      env=environment, timeout=30).decode()
     macros = dict(re.findall(r'^#define (\w+)(?: ([^\n]*))?$', output, re.M))
-    require(macros.get('_FORTIFY_SOURCE') == '2' and '_FORTIFY_STRING_H' in macros
-            and '__SSP_STRONG__' in macros,
-            'Expat effective compiler stack protection or fortify headers are missing')
+    if not (macros.get('_FORTIFY_SOURCE') == '2' and '_FORTIFY_STRING_H' in macros
+            and '__SSP_STRONG__' in macros):
+        raise ValueError('Expat effective compiler stack protection or fortify headers are missing; '
+                         + json.dumps(compiler_diagnostics(macros, arch), sort_keys=True))
     return {'fortify_source': 2, 'fortify_headers_active': True, 'stack_protector_strong': True}
 
 

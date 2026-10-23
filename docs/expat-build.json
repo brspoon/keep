@@ -40,7 +40,7 @@
     "image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d"
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "eda3aac2fb1efe290cec4707f260803743bf95ee1be82ac666ad424c86c8c99e",
+  "build_script_sha256": "516ce0e54019b0bcccba1ea08d78bdf37ff2aa74e327a02c94b794f367c3a1c4",
   "commits": [
     "d545081f6a90792208e0d274888a352e2e5d894d",
     "da504c0c111086072172431c76867800673fbc34",
