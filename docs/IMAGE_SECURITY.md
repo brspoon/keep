@@ -158,6 +158,12 @@ pins remain unset, so installation and release acceptance stay blocked pending
 a reviewed correction and fresh complete qualification. Do not drop the security
 fix, loosen the amplification limits or treat a passing upstream test suite as
 proof that this compatibility case passes.
+The [native compatibility run](https://github.com/brspoon/keep/actions/runs/40011470324)
+reproduced the same error 43 with zero output on amd64 and arm64. Both rebuilt
+libraries were byte-identical to the earlier preparatory outputs, and both
+upstream test suites passed again. Complete final-image qualification, scans and
+source-distribution acceptance remain outstanding; preparation is not a release
+approval.
 
 ## Certificate trust and build-tool candidate (October 21)
 
