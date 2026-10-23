@@ -813,7 +813,8 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         source_downloads[name] = row
     cpp_sources = expat_cpp_source_binding(source_downloads, root=root)
     build_input_records = {}
-    for relative, label in (('fortify/manifest.json', 'Fortify'), ('cpp/CPP_BUILD_INPUTS.json', 'C++')):
+    for relative, label in (('fortify/manifest.json', 'Fortify'), ('cpp/CPP_BUILD_INPUTS.json', 'C++'),
+                            ('build-tools/manifest.json', 'Make and Bash')):
         manifest_path = replay_root / relative
         if manifest_path.is_symlink() or not manifest_path.is_file():
             raise ValueError('Missing verified ' + label + ' build-input manifest')
@@ -848,7 +849,7 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         record(path, role, url, source_path)
     replay_names = {path.relative_to(replay_root).as_posix() for path in replay_root.rglob('*') if path.is_file()}
     if not set(source_downloads) <= replay_names or not set(build_input_records) <= replay_names:
-        raise ValueError('Missing reviewed Expat, Fortify or C++ build source input')
+        raise ValueError('Missing reviewed Expat, Fortify, C++ or build-tool source input')
     manifest = {
         'schema': 1, 'origin': 'expat', 'version': origin['version'],
         'architecture': architecture, 'provider_oci_binding': False,
@@ -867,7 +868,8 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
                     'are retained as vendor input proof. Keep replaces the Expat library using '
                     'the separately reviewed build lock, native output hashes, exact upstream '
                     'patches and full replayed source tree, including verified Fortify headers '
-                    'and their complete matching sources and notices. The Alpine signature does not apply '
+                    'and verified make and bash inputs with their complete matching sources and notices. '
+                    'The Alpine signature does not apply '
                     'to the replacement library; no package-source OCI binding is claimed.',
     }
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')

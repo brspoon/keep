@@ -16,6 +16,8 @@ HEADER = (b'/*\n * Copyright Fixture Patch Contributors.\n'
 FORTIFY_LICENSE = b'Copyright Fortify Fixture Authors. Permission is hereby granted to use these headers.\n'
 FORTIFY_HEADER = (b'/*\n * Copyright Fortify Fixture Contributors.\n'
                   b' * Permission is hereby granted to use these headers.\n */')
+BUILD_TOOL_LICENSE = b'GNU GENERAL PUBLIC LICENSE\nCopyright GNU Build Tool Fixture Authors.\n'
+BUILD_TOOL_ATTRIBUTION = b'GNU build tool fixture authors and contributors.\n'
 
 
 def qualified_inventory(architecture='amd64'):
@@ -64,13 +66,26 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
     cpp_downloads.append(('keys/dhi.pub', 'https://example.test/cpp/dhi.pub', 'dhi-signing-key'))
     for name, url, _ in cpp_downloads:
         inputs[url] = ('checked C++ input: ' + name).encode()
+    build_tool_downloads = [
+        (name + '/packages/' + arch + '/' + name + '.apk',
+         'https://example.test/build-tools/' + name + '/' + arch + '.apk', 'signed-alpine-binary-evidence')
+        for name in ('make', 'bash') for arch in ('amd64', 'arm64')]
+    build_tool_downloads += [
+        (name + '/' + filename, 'https://example.test/build-tools/' + name + '/' + filename, role)
+        for name in ('make', 'bash') for filename, role in (
+            ('source.tar.gz', 'upstream-source'), ('aports.tar.gz', 'complete-alpine-build-recipes'),
+            ('APKBUILD', 'matching-apk-build-script'), ('source.patch', 'matching-source-patch'))]
+    build_tool_downloads.append(('keys/key.pub', 'https://example.test/key', 'alpine-signing-key'))
+    for name, url, _ in build_tool_downloads:
+        inputs.setdefault(url, ('checked make/bash input: ' + name).encode())
     download_records = [
         {'path': name, 'url': url, 'sha256': hashlib.sha256(inputs[url]).hexdigest(), 'role': role}
         for name, url, role in (
             [('expat-2.9.0.tar.xz', vendor.SOURCE_URL, 'upstream-source'),
              ('APKBUILD', vendor.APKBUILD_URL, 'matching-apk-build-script')]
             + [('fortify/' + name, url, role) for name, url, role in fortify_downloads]
-            + [('cpp/' + name, url, role) for name, url, role in cpp_downloads])]
+            + [('cpp/' + name, url, role) for name, url, role in cpp_downloads]
+            + [('build-tools/' + name, url, role) for name, url, role in build_tool_downloads])]
     gcc = next(row for row in json.loads((build.ROOT / 'docs/os-package-sources.json').read_bytes())['origins']
                if row['origin'] == 'gcc')
     reviewed_cpp = {'cpp/' + arch + '/' + package['name'] + '.apk': {
@@ -159,6 +174,28 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
                                     'sha256': hashlib.sha256(metadata).hexdigest(),
                                     'role': 'vendor-build-only-apk-metadata'})
         files['cpp/CPP_BUILD_INPUTS.json'] = build.json_bytes({'files': cpp_records})
+        build_tool_records = []
+        for name, url, role in build_tool_downloads:
+            body = fetch(url)
+            files['build-tools/' + name] = body
+            build_tool_records.append({'path': name, 'url': url, 'bytes': len(body),
+                                       'sha256': hashlib.sha256(body).hexdigest(), 'role': role})
+            if name.endswith('.apk'):
+                metadata = b'checked original make/bash package metadata'
+                files['build-tools/' + name + '.PKGINFO'] = metadata
+                build_tool_records.append({'path': name + '.PKGINFO', 'url': url, 'bytes': len(metadata),
+                                           'sha256': hashlib.sha256(metadata).hexdigest(),
+                                           'role': 'package-build-identity'})
+        for name in ('make', 'bash'):
+            for notice, body, role in (('COPYING', BUILD_TOOL_LICENSE, 'upstream-notice'),
+                                       ('AUTHORS', BUILD_TOOL_ATTRIBUTION, 'upstream-attribution')):
+                path = name + '/' + notice
+                files['build-tools/' + path] = body
+                build_tool_records.append({'path': path, 'bytes': len(body),
+                                           'sha256': hashlib.sha256(body).hexdigest(),
+                                           'url': 'https://example.test/build-tools/' + name + '/source.tar.gz',
+                                           'role': role, 'source_path': name + '/' + notice})
+        files['build-tools/manifest.json'] = build.json_bytes({'files': build_tool_records})
         for name, body in files.items():
             path = output / name
             path.parent.mkdir(parents=True, exist_ok=True)

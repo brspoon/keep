@@ -675,7 +675,8 @@ class PatchedExpatNoticeTests(unittest.TestCase):
     def test_original_full_notice_and_new_patched_source_attributions_are_retained(self):
         import collect_package_sources as collection
         from tests.expat_source_fixture import (checked_source_fixture, COPYING, HEADER,
-                                                FORTIFY_LICENSE, FORTIFY_HEADER)
+                                                FORTIFY_LICENSE, FORTIFY_HEADER, BUILD_TOOL_LICENSE,
+                                                BUILD_TOOL_ATTRIBUTION)
         with checked_source_fixture() as (origin, inventory, downloads):
             source = self.root / 'sources'
             collection.collect_patched_expat_sources(origin, 'amd64', inventory, source,
@@ -691,6 +692,16 @@ class PatchedExpatNoticeTests(unittest.TestCase):
         self.assertIn(HEADER, bodies)
         self.assertIn(FORTIFY_LICENSE, bodies)
         self.assertIn(FORTIFY_HEADER, bodies)
+        self.assertIn(BUILD_TOOL_LICENSE, bodies)
+        self.assertIn(BUILD_TOOL_ATTRIBUTION, bodies)
+        build_tool_licenses = [notice for notice in report['notices']
+                               if notice['path'].startswith('keep-build/build-tools/')
+                               and notice['discovery'] == 'checked-public-standalone-notice']
+        self.assertEqual({notice['path'] for notice in build_tool_licenses},
+                         {'keep-build/build-tools/make/COPYING', 'keep-build/build-tools/bash/COPYING'})
+        self.assertEqual({notice['path'] for notice in report['notices']
+                          if notice['discovery'] == 'checked-public-upstream-attribution'},
+                         {'keep-build/build-tools/make/AUTHORS', 'keep-build/build-tools/bash/AUTHORS'})
         headers = [notice for notice in report['notices']
                    if notice['discovery'] == 'reviewed-public-source-copyright']
         self.assertEqual(len(headers), 13)

@@ -1214,6 +1214,15 @@ class PatchedExpatSourceTests(unittest.TestCase):
                     self.assertEqual(row['url'], 'https://example.test/cpp/' + arch + '/' + name + '.apk')
                     self.assertTrue((output / (path + '.PKGINFO')).is_file())
             self.assertEqual(manifest['cpp_source_binding']['origin'], 'gcc')
+            for tool in ('make', 'bash'):
+                for arch in ('amd64', 'arm64'):
+                    name = 'keep-build/build-tools/' + tool + '/packages/' + arch + '/' + tool + '.apk'
+                    row = next(row for row in manifest['files'] if row['path'] == name)
+                    self.assertEqual(row['role'], 'reviewed-keep-build-source-input')
+                    self.assertEqual(row['url'], 'https://example.test/build-tools/' + tool + '/' + arch + '.apk')
+                    self.assertTrue((output / (name + '.PKGINFO')).is_file())
+                for source in ('source.tar.gz', 'aports.tar.gz', 'APKBUILD', 'source.patch', 'COPYING'):
+                    self.assertTrue((output / 'keep-build/build-tools' / tool / source).is_file())
             for record in manifest['files']:
                 relative = record['path']
                 self.assertEqual((output / relative).read_bytes(),

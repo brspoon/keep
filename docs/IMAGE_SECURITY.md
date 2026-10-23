@@ -110,9 +110,17 @@ vendor ABI and compiler hardening, and checks architecture-specific compiler
 and resulting library hashes. It replaces the canonical library behind the
 existing SONAME; no loader override or package-version relabeling is used.
 Alpine's signature authenticates the original package, not this replacement.
+The [October 19 DHI 2.9.0-r1 recipe](https://github.com/docker-hardened-images/catalog/blob/23c35f5bf25a68e572707c62a33bcbce6a36b99a/package/apk/main/expat/alpine-3.24/2.yaml)
+still selects the original release and Alpine recipe without these corrections;
+its revision number alone does not establish a replacement fix.
 The compiler uses isolated, verified Alpine `fortify-headers 3.0.1-r2` headers;
 they are a build input, without an APK transaction or package-database change.
 Both signed header payloads must match the complete source plus Alpine patch.
+The build also needs matching signed DHI `g++` and `libstdc++-dev` inputs and
+Alpine's Make and Bash tools for the unchanged upstream test suite. These are
+installed offline in the build stage, with complete payload, dependency and
+source/license checks. They are absent from the final runtime. The existing
+compiler and runtime package cohort must remain unchanged by their installation.
 The source gate also requires the development image's own original signed
 SLSA proof for the pinned index and native child. Runtime-base provenance or a
 compiler-driver hash alone cannot establish the compiler image's origin.
@@ -122,7 +130,8 @@ explicitly unqualified and cannot pass installation, source delivery or release
 checks. Both native hashes must be reviewed and pinned before a normal build
 can qualify. A fresh build must reproduce them. The dependency report binds the
 actual mapped replacement to the lock and exact source replay, then runs bounded
-entity-accounting and reset probes alongside ordinary XML controls. Retained
+entity-accounting and reset probes alongside ordinary XML, CDATA, comment and
+processing-instruction controls. Retained
 report revalidation requires the same proof without changing original bytes.
 
 Certifi `2026.10.23` removes emSign C1 and C3 as well as G3; G1 remains. Its

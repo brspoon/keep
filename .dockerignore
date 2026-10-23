@@ -41,6 +41,7 @@
 !scripts/expat_security_patches.json
 !scripts/fortify_header_sources.py
 !scripts/dhi_cpp_packages.py
+!scripts/expat_build_tools.py
 !docs/
 !docs/PYTHON_LICENSE.txt
 !docs/expat-build.json

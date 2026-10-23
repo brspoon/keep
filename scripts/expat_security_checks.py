@@ -37,17 +37,23 @@ RESET_DOCUMENT = b"<!DOCTYPE r [<!ENTITY e 'general entity'>]><r>&e;</r>"
 MAXIMUM_INPUT_BYTES = len(ALLOCATION_DOCUMENT)
 MAXIMUM_SECONDS = 10.0
 ALLOCATION_RESET_CYCLES = 2
+LITERAL_MARKUP_CONTROLS = (
+    (b'<!DOCTYPE r [<!ENTITY word "ordinary"><!ENTITY literal "<![CDATA[&word;]]>">]><r>&literal;</r>', b'&word;'),
+    (b'<!DOCTYPE r [<!ENTITY word "ordinary"><!ENTITY literal "<!-- &word; -->">]><r>&literal;</r>', b''),
+    (b'<!DOCTYPE r [<!ENTITY word "ordinary"><!ENTITY literal "<?keep &word;?>">]><r>&literal;</r>', b''),
+)
 
 EXPECTED_RESULT = {
     "schema": "keep-expat-security-probes-v1",
     "soname": SONAME,
-    "tests": 5,
+    "tests": 6,
     "passed": True,
     "ordinary_xml": True,
     "bounded_entity_control": True,
     "entity_preflight_rejection": True,
     "amplification_reset": True,
     "allocation_reset": True,
+    "literal_markup_controls": True,
     "preflight_emitted_characters": 0,
     "reset_rejections": 2,
     "allocation_reset_cycles": ALLOCATION_RESET_CYCLES,
@@ -298,6 +304,15 @@ def _exercise(api) -> dict:
                 _parse(api, parser, b"<hello/>", deadline, chunk_size=1)
                 == (XML_STATUS_OK, XML_ERROR_NONE),
                 "Expat reset retained allocation accounting from the previous document",
+            )
+    for document, expected in LITERAL_MARKUP_CONTROLS:
+        with api.parser() as parser:
+            data, callback, invalid = _capture(api, parser)
+            status, error = _parse(api, parser, document, deadline)
+            _require(
+                (status, error, bytes(data)) == (XML_STATUS_OK, XML_ERROR_NONE, expected)
+                and not invalid[0],
+                "Expat literal markup control failed",
             )
     _check_deadline(deadline)
     return expected_report()

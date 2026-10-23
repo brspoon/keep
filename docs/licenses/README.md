@@ -12,6 +12,8 @@ CA certificates, SQLite, GCC runtime libraries, libuuid and musl subcomponents,
 plus IANA's BSD exceptions and the POSIXtz build source's LGPL attribution.
 The patched Expat build also retains the full Fortify 0BSD license and all ten
 header attributions from its verified build-only input.
+It also retains the complete GNU Make and Bash licenses and bundled component
+attributions with their verified build-only sources and recipes.
 Standalone upstream license texts remain complete. The native image copies this
 directory to `/app/licenses/os`. See
 [source distribution](../SOURCE_DISTRIBUTION.md) for the versioned source,

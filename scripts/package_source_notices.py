@@ -779,6 +779,9 @@ Only explicitly reviewed attribution headers are copied from source code.
             if record['role'] in {'upstream-notice', 'upstream-lgpl-license'}:
                 body = checked_path(source, record['path']).read_bytes()
                 discovery = 'checked-public-standalone-notice'
+            elif origin == 'expat' and record['role'] == 'upstream-attribution':
+                body = checked_path(source, record['path']).read_bytes()
+                discovery = 'checked-public-upstream-attribution'
             elif record['role'] in selected_header_roles:
                 body = checked_path(source, record['path']).read_bytes()
                 body = leading_notice(body, complete_file=True)

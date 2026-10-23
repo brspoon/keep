@@ -207,6 +207,8 @@ jobs:
             expat-preparation/${{ matrix.arch }}/libexpat.so.1.13.0
             expat-preparation/${{ matrix.arch }}/EXPAT_PATCHED_SECURITY.json
             expat-preparation/${{ matrix.arch }}/BUILD_ENVIRONMENT.json
+            expat-preparation/${{ matrix.arch }}/CPP_BUILD_SECURITY.json
+            expat-preparation/${{ matrix.arch }}/BUILD_TOOLS_SECURITY.json
             expat-preparation/${{ matrix.arch }}/SOURCE_REPLAY.json
             expat-preparation/${{ matrix.arch }}/expat-build.json
             expat-preparation/${{ matrix.arch }}/COPYING

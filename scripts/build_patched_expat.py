@@ -24,9 +24,11 @@ import urllib.request
 if __package__:
     from . import fortify_header_sources as fortify
     from . import dhi_cpp_packages as cpp
+    from . import expat_build_tools as build_tools
 else:
     import fortify_header_sources as fortify
     import dhi_cpp_packages as cpp
+    import expat_build_tools as build_tools
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +41,8 @@ FORTIFY_HELPER = 'scripts/fortify_header_sources.py'
 FORTIFY_HELPER_SHA256 = '931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0'
 CPP_HELPER = 'scripts/dhi_cpp_packages.py'
 CPP_HELPER_SHA256 = '3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb'
+BUILD_TOOLS_HELPER = 'scripts/expat_build_tools.py'
+BUILD_TOOLS_HELPER_SHA256 = '648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa'
 BUILD_IDENTITY = 'keep-expat-2.9.0-c30145b-d8f31e6-v1'
 BUILD_IMAGE = ('dhi.io/python:3.14-alpine3.24-dev@sha256:'
                'b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d')
@@ -83,6 +87,12 @@ ENVIRONMENT = {
     'SHELL': '/bin/sh', 'CONFIG_SHELL': '/bin/sh',
 }
 ARCHITECTURE_CFLAGS = {'amd64': '-fno-plt', 'arm64': ''}
+REQUIRED_BUILD_TOOLS = (
+    'gcc', 'g++', 'make', 'bash', 'ar', 'ranlib', 'as', 'ld', 'nm', 'strip', 'objdump',
+    'sh', 'env', 'awk', 'sed', 'grep', 'sort', 'uniq', 'tr', 'head', 'tail', 'cut', 'expr',
+    'basename', 'dirname', 'cat', 'cp', 'mv', 'rm', 'mkdir', 'rmdir', 'ln', 'chmod',
+    'touch', 'uname', 'sleep', 'xargs', 'wc', 'install', 'find',
+)
 EXPECTED_HARDENING = {'gnu_stack_non_executable': True, 'relro': True,
                       'bind_now': True, 'stack_protector': True, 'fortify_source': 2}
 EXPECTED_ABI = {
@@ -147,10 +157,13 @@ def immutable_spec():
         'fortify_helper': {'path': FORTIFY_HELPER, 'sha256': FORTIFY_HELPER_SHA256},
         'cpp_packages': cpp.reviewed_spec(),
         'cpp_helper': {'path': CPP_HELPER, 'sha256': CPP_HELPER_SHA256},
+        'build_tools': build_tools.reviewed_spec(),
+        'build_tools_helper': {'path': BUILD_TOOLS_HELPER, 'sha256': BUILD_TOOLS_HELPER_SHA256},
         'build': {'image': BUILD_IMAGE, 'directory': str(WORK),
                   'compiler': '/usr/bin/gcc', 'compiler_targets': dict(TARGETS),
                   'environment': dict(ENVIRONMENT), 'configure_options': list(CONFIGURE_OPTIONS),
                   'architecture_cflags': dict(ARCHITECTURE_CFLAGS),
+                  'required_tools': list(REQUIRED_BUILD_TOOLS),
                   'commands': [['make', '-j2'], ['make', 'check']]},
         'library': {'path': '/usr/lib/' + LIBRARY, 'soname': 'libexpat.so.1'},
         'required_hardening': dict(EXPECTED_HARDENING),
@@ -183,6 +196,8 @@ def reviewed_spec(root=None, *, lock_path=None):
             FORTIFY_HELPER_SHA256, 'Fortify source helper')
     checked(regular_bytes(Path(cpp.__file__), 'C++ package helper'),
             CPP_HELPER_SHA256, 'C++ package helper')
+    checked(regular_bytes(Path(build_tools.__file__), 'Expat build-tool helper'),
+            BUILD_TOOLS_HELPER_SHA256, 'Expat build-tool helper')
     return spec
 
 
@@ -194,11 +209,12 @@ def require_output_pins(spec):
 
 
 def source_replay_record():
-    return {'schema': 'keep-expat-source-replay-v3', 'identity': BUILD_IDENTITY,
+    return {'schema': 'keep-expat-source-replay-v4', 'identity': BUILD_IDENTITY,
             'source_sha256': SOURCE_SHA256, 'vendor_recipe_sha256': RECIPE_SHA256,
             'patch_manifest_sha256': PATCH_SHA256, 'commits': list(COMMITS),
             'original_files': dict(ORIGINAL_FILES), 'patched_files': dict(PATCHED_FILES),
-            'fortify_headers': fortify.reviewed_spec(), 'cpp_packages': cpp.reviewed_spec()}
+            'fortify_headers': fortify.reviewed_spec(), 'cpp_packages': cpp.reviewed_spec(),
+            'build_tools': build_tools.reviewed_spec()}
 
 
 def source_download_records():
@@ -208,6 +224,7 @@ def source_download_records():
         {'path': 'APKBUILD', 'url': RECIPE_URL, 'sha256': RECIPE_SHA256, 'role': 'matching-apk-build-script'},
         *[{**record, 'path': 'fortify/' + record['path']} for record in fortify.source_download_records()],
         *[{**record, 'path': 'cpp/' + record['path']} for record in cpp.source_download_records()],
+        *[{**record, 'path': 'build-tools/' + record['path']} for record in build_tools.source_download_records()],
     ]
 
 
@@ -227,6 +244,8 @@ def _manifest(spec, arch, library_hash, compiler_hash, *, qualified):
         'fortify_source_manifest_sha256': digest(fortify.source_lock_bytes()),
         'cpp_source_manifest_sha256': digest(cpp.source_lock_bytes()),
         'cpp_installation_manifest_sha256': digest(cpp.json_bytes(cpp.installation_manifest(arch))),
+        'build_tools_source_manifest_sha256': digest(build_tools.source_lock_bytes()),
+        'build_tools_installation_manifest_sha256': digest(json_bytes(build_tools.installation_manifest(arch))),
         'compiler': {'path': '/usr/bin/gcc', 'target': TARGETS[arch], 'sha256': compiler_hash},
         'library': {**spec['library'], 'sha256': library_hash},
         'hardening': dict(EXPECTED_HARDENING),
@@ -346,12 +365,14 @@ def replay_sources(output, *, root=ROOT, lock_path=None, fetch=download):
         'APKBUILD': recipe, 'build_patched_expat.py': regular_bytes(Path(__file__), 'Expat build script'),
         'fortify_header_sources.py': regular_bytes(Path(fortify.__file__), 'Fortify source helper'),
         'dhi_cpp_packages.py': regular_bytes(Path(cpp.__file__), 'C++ package helper'),
+        'expat_build_tools.py': regular_bytes(Path(build_tools.__file__), 'Expat build-tool helper'),
         'expat-build.json': json_bytes(spec), 'SOURCE_REPLAY.json': json_bytes(source_replay_record()),
     }
     for name, body in retained.items():
         (destination / name).write_bytes(body)
     fortify.prepare(destination / 'fortify', fetch=fetch)
     cpp.prepare(destination / 'cpp', fetch=fetch)
+    build_tools.prepare(destination / 'build-tools', fetch=fetch)
     return source_replay_record()
 
 
@@ -368,6 +389,65 @@ def build_environment(arch):
     if ARCHITECTURE_CFLAGS[arch]:
         environment['CFLAGS'] += ' ' + ARCHITECTURE_CFLAGS[arch]
     return environment
+
+
+def required_build_tools(environment):
+    """Fail before configure if the complete upstream build/test tools are absent."""
+    tools, fingerprints = {}, {}
+    for name in REQUIRED_BUILD_TOOLS:
+        path = shutil.which(name, path=environment['PATH'])
+        row = {'path': path, 'sha256': None}
+        if path is not None:
+            resolved = Path(path).resolve(strict=True)
+            if resolved not in fingerprints:
+                fingerprints[resolved] = digest(regular_bytes(resolved, 'Expat build tool ' + name,
+                                                              128 * 1024 * 1024))
+            row['sha256'] = fingerprints[resolved]
+        tools[name] = row
+    missing = [name for name, row in tools.items() if row['path'] is None]
+    require(not missing, 'Missing required upstream Expat build/test tools: '
+            + ', '.join(missing) + '; ' + json.dumps(tools, sort_keys=True))
+    return tools
+
+
+def build_failure_diagnostics(source, command, error, environment):
+    """Capture bounded fixed-path configure/test evidence without inherited env."""
+    diagnostics = {'schema': 'keep-expat-build-failure-v1', 'command': list(command),
+                   'error': type(error).__name__, 'returncode': getattr(error, 'returncode', None),
+                   'tools': {name: shutil.which(name, path=environment['PATH'])
+                             for name in REQUIRED_BUILD_TOOLS}, 'logs': {}}
+    for name in ('config.log', 'tests/test-suite.log'):
+        path = Path(source) / name
+        if path.is_symlink() or not path.is_file():
+            continue
+        info = path.stat()
+        row = {'bytes': info.st_size}
+        if info.st_size <= 4 * 1024 * 1024:
+            body = regular_bytes(path, 'Expat failure log', 4 * 1024 * 1024)
+            row['sha256'] = digest(body)
+            lines = body.decode('utf-8', errors='replace').splitlines()
+            selected = set(range(max(0, len(lines) - 32), len(lines)))
+            for number, line in enumerate(lines):
+                if any(marker in line.lower() for marker in
+                       ('not found', 'no such file', 'am--depfiles', 'bootstrapping', 'error:',
+                        'make sets', 'make supports', 'dependency style')):
+                    selected.update(range(max(0, number - 2), min(len(lines), number + 4)))
+            excerpt = '\n'.join(str(number + 1) + ': ' + lines[number] for number in sorted(selected))
+            row['excerpt'] = excerpt[-16000:]
+        else:
+            row['excerpt'] = 'Log exceeds the bounded diagnostic read limit; retained in build workspace.'
+        diagnostics['logs'][name] = row
+    return diagnostics
+
+
+def run_build_command(command, source, environment, destination):
+    try:
+        subprocess.run(command, cwd=source, env=environment, check=True, timeout=1800)
+    except (OSError, subprocess.SubprocessError) as error:
+        diagnostics = build_failure_diagnostics(source, command, error, environment)
+        (Path(destination) / 'BUILD_FAILURE.json').write_bytes(json_bytes(diagnostics))
+        print('Expat build failure diagnostics: ' + json.dumps(diagnostics, sort_keys=True), flush=True)
+        raise
 
 
 def compiler_identity(arch):
@@ -549,6 +629,9 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     cpp_proof = cpp.verify_installed(arch)
     require(regular_bytes(cpp.PREPARED_ROOT / 'CPP_BUILD_SECURITY.json', 'Installed C++ build receipt')
             == cpp.json_bytes(cpp_proof), 'Expat C++ build receipt differs')
+    tools_proof = build_tools.verify_installed(arch)
+    require(regular_bytes(build_tools.PREPARED_ROOT / 'BUILD_TOOLS_SECURITY.json', 'Installed build-tool receipt')
+            == json_bytes(tools_proof), 'Expat build-tool receipt differs')
     destination = empty_directory(output)
     require(destination != WORK and not destination.is_relative_to(WORK)
             and not WORK.is_relative_to(destination), 'Expat output overlaps its fixed build workspace')
@@ -557,16 +640,18 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     effective_hardening = compiler_hardening(arch)
     source = WORK / SOURCE_DIRECTORY
     environment = build_environment(arch)
+    tools = required_build_tools(environment)
     configure = ['./configure', '--build=' + TARGETS[arch], '--host=' + TARGETS[arch],
                  *CONFIGURE_OPTIONS]
     for command in (configure, ['make', '-j2'], ['make', 'check']):
-        subprocess.run(command, cwd=source, env=environment, check=True, timeout=1800)
+        run_build_command(command, source, environment, destination)
     built = source / 'lib' / '.libs' / LIBRARY
     library = regular_bytes(built, 'Built Expat replacement')
     protections = elf_protections(library, arch)
     features = runtime_features(built)
     fortify.verify_prepared_headers(WORK / 'fortify/include')
     require(cpp.verify_installed(arch) == cpp_proof, 'Expat C++ build inputs changed during compilation')
+    require(build_tools.verify_installed(arch) == tools_proof, 'Expat build tools changed during compilation')
     library_hash = digest(library)
     expected_library = spec['expected_library_sha256'][arch]
     require(expected_library is None or library_hash == expected_library,
@@ -580,20 +665,25 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     for name in ('expat-2.9.0.tar.xz', 'expat_security_patches.json', 'APKBUILD',
                  'build_patched_expat.py', 'fortify_header_sources.py',
                  'dhi_cpp_packages.py',
+                 'expat_build_tools.py',
                  'expat-build.json', 'SOURCE_REPLAY.json'):
         shutil.copyfile(WORK / name, destination / name)
     shutil.copytree(WORK / 'fortify', destination / 'fortify')
     shutil.copytree(WORK / 'cpp', destination / 'cpp')
+    shutil.copytree(WORK / 'build-tools', destination / 'build-tools')
     (destination / 'CPP_BUILD_SECURITY.json').write_bytes(cpp.json_bytes(cpp_proof))
+    (destination / 'BUILD_TOOLS_SECURITY.json').write_bytes(json_bytes(tools_proof))
     (destination / 'BUILD_ENVIRONMENT.json').write_bytes(json_bytes({
         'compiler_version': compiler_version, 'compiler_sha256': compiler_hash,
         'configure': configure, 'environment': environment,
+        'required_build_tools': tools,
         'effective_compiler_hardening': effective_hardening,
         'elf_verification': protections, 'runtime_features': features,
         'build_image_declaration': BUILD_IMAGE,
         'image_identity_requires_external_provenance_verification': True,
         'upstream_make_check_passed': True,
         'cpp_build_inputs': cpp_proof,
+        'build_tool_inputs': tools_proof,
     }))
     # Write the accepted/unqualified record last; a partial build has no receipt.
     (destination / 'EXPAT_PATCHED_SECURITY.json').write_bytes(json_bytes(manifest))

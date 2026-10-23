@@ -198,6 +198,32 @@ class CppBuildPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'symbolic link'):
                 cpp.verify_payload_installed(payload, self.root)
 
+    def test_c_compiler_runtime_and_installed_package_identity_must_match_reviewed_cohort(self):
+        files = {'usr/bin/gcc': b'original signed C compiler',
+                 'usr/lib/libstdc++.so.6.0.34': b'original signed C++ runtime'}
+        for name, body in files.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
+        (self.root / 'usr/lib/libstdc++.so.6').symlink_to('libstdc++.so.6.0.34')
+        database = self.root / 'lib/apk/db/installed'
+        database.parent.mkdir(parents=True)
+        body = ''.join('P:' + name + '\nV:' + cpp.VERSION + '\nA:x86_64\no:gcc\nc:'
+                       + cpp.BUILD_COMMIT + '\nL:' + cpp.LICENSE + '\nU:https://gcc.gnu.org\n\n'
+                       for name in ('gcc', 'libstdc++'))
+        database.write_text(body)
+        pins = {arch: {name: cpp.digest(data) for name, data in files.items()} for arch in cpp.ARCHES}
+        with patch.object(cpp, 'COHORT_FILES', pins):
+            cpp.verify_cohort('amd64', self.root)
+            for name, original in files.items():
+                (self.root / name).write_bytes(b'changed dependency')
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError, r'Unchanged C\+\+ build dependency'):
+                    cpp.verify_cohort('amd64', self.root)
+                (self.root / name).write_bytes(original)
+            database.write_text(body.replace('V:' + cpp.VERSION, 'V:other', 1))
+            with self.assertRaisesRegex(ValueError, 'unchanged reviewed native'):
+                cpp.verify_cohort('amd64', self.root)
+
     def test_offline_transaction_installs_only_two_verified_packages_without_scripts(self):
         prepared = self.root / 'prepared'
         cpp.prepare(prepared, architecture='amd64', fetch=self.inputs.__getitem__)

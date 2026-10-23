@@ -190,6 +190,14 @@ These packages are installed offline only in the development stage. Their exact
 signed bytes must match the native GCC package output already used to obtain
 the complete GCC source, recipes and notices. They do not enter the final
 runtime package inventory or disable any upstream tests.
+The separate `keep-build/build-tools/` set retains signed Alpine v3.24 Make
+`4.4.1-r4` and Bash `5.3.9-r1` packages for both architectures, their keys,
+complete immutable aports contexts, checksum-matching GNU source archives,
+recipe patches and full license/attribution texts. Their installation is offline
+with package scripts disabled; exact payloads, required command paths and the
+unchanged compiler/package cohort are verified before running the upstream tests.
+These records identify Alpine build inputs without claiming a DHI package-build
+attestation or adding Make and Bash to the runtime package inventory.
 
 ## Contents and verification
 

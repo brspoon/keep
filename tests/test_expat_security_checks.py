@@ -37,6 +37,8 @@ def captures():
         (bytearray(b"safe & sound"), object(), [False]),
         (bytearray(b"ordinary"), object(), [False]),
         (bytearray(), object(), [False]),
+        *[(bytearray(expected), object(), [False])
+          for _, expected in checks.LITERAL_MARKUP_CONTROLS],
     ]
 
 
@@ -46,7 +48,7 @@ def parse_results():
         checks.XML_STATUS_ERROR,
         checks.XML_ERROR_AMPLIFICATION_LIMIT_BREACH,
     )
-    return [ok, ok, rejected, rejected, rejected, ok, ok, ok, ok]
+    return [ok, ok, rejected, rejected, rejected, ok, ok, ok, ok, ok, ok, ok]
 
 
 class ExpatSecurityChecksTests(unittest.TestCase):
@@ -64,9 +66,9 @@ class ExpatSecurityChecksTests(unittest.TestCase):
         self.assertEqual(result, checks.expected_report())
         self.assertIsNone(checks.validate_report(result))
         self.assertEqual(api.created, api.freed)
-        self.assertEqual(len(api.created), 5)
+        self.assertEqual(len(api.created), 8)
         self.assertEqual(api.XML_ParserReset.call_count, 4)
-        self.assertEqual(parse.call_count, 9)
+        self.assertEqual(parse.call_count, 12)
         documents = [call.args[2] for call in parse.call_args_list]
         self.assertEqual(max(map(len, documents)), 65_547)
         self.assertEqual(len(checks.ENTITY_DOCUMENT), 165)
@@ -83,6 +85,14 @@ class ExpatSecurityChecksTests(unittest.TestCase):
         load.assert_called_once_with("libexpat.so.1")
         api.assert_called_once_with(load.return_value)
         exercise.assert_called_once_with(api.return_value)
+
+    def test_literal_markup_keeps_entity_reference_text_literal(self):
+        captured = captures()
+        captured[3][0].extend(b'changed')
+        api = FakeAPI()
+        with self.assertRaisesRegex(RuntimeError, 'literal markup control'):
+            self.run_fake(capture_results=captured, api=api)
+        self.assertEqual(api.created, api.freed)
 
     def test_rejects_late_entity_expansion(self):
         captured = captures()

@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import struct
+import subprocess
 import tarfile
 import tempfile
 from types import SimpleNamespace
@@ -246,10 +247,14 @@ class PatchedExpatBuildTests(unittest.TestCase):
         self.write_lock()
         cpp_proof = build.cpp.installation_manifest('amd64')
         (self.root / 'CPP_BUILD_SECURITY.json').write_bytes(build.cpp.json_bytes(cpp_proof))
+        tools_proof = build.build_tools.installation_manifest('amd64')
+        (self.root / 'BUILD_TOOLS_SECURITY.json').write_bytes(build.json_bytes(tools_proof))
         with patch.object(build, 'native_architecture', return_value='amd64'), \
                 patch.object(build, 'compiler_identity', return_value=('a' * 64, 'fixture GCC')), \
                 patch.object(build.cpp, 'PREPARED_ROOT', self.root), \
                 patch.object(build.cpp, 'verify_installed', return_value=cpp_proof) as cpp_inputs, \
+                patch.object(build.build_tools, 'PREPARED_ROOT', self.root), \
+                patch.object(build.build_tools, 'verify_installed', return_value=tools_proof), \
                 patch.dict(build.os.environ, {'KEEP_EXPAT_BUILD_IMAGE': build.BUILD_IMAGE}), \
                 patch.object(build, 'replay_sources', side_effect=lambda *args, **kwargs: events.append('replay')), \
                 patch.object(build.fortify, 'verify_prepared_headers',
@@ -276,7 +281,36 @@ class PatchedExpatBuildTests(unittest.TestCase):
         self.assertEqual(len(cpp_records), 5)
         self.assertEqual(sum(row['path'].endswith('.apk') for row in cpp_records), 4)
         self.assertEqual(build.source_replay_record()['cpp_packages'], build.cpp.reviewed_spec())
-        self.assertEqual(build.source_replay_record()['schema'], 'keep-expat-source-replay-v3')
+        self.assertEqual(build.source_replay_record()['schema'], 'keep-expat-source-replay-v4')
+        self.assertEqual(build.source_replay_record()['build_tools'], build.build_tools.reviewed_spec())
+
+    def test_missing_make_and_bash_fail_before_upstream_build_commands(self):
+        def which(name, **_):
+            return None if name in ('make', 'bash') else build.__file__
+        with patch.object(build.shutil, 'which', side_effect=which), \
+                patch.object(build.subprocess, 'run') as command, \
+                self.assertRaisesRegex(ValueError, 'make, bash'):
+            build.required_build_tools(build.build_environment('amd64'))
+        command.assert_not_called()
+
+    def test_failed_configure_retains_bounded_original_log_context_without_relaxing_checks(self):
+        source = self.root / 'source'
+        source.mkdir()
+        body = b'ordinary configure context\n' * 3000 + b'config.status: make: not found\n'
+        (source / 'config.log').write_bytes(body)
+        command = ['./configure', *build.CONFIGURE_OPTIONS]
+        error = subprocess.CalledProcessError(127, command)
+        with patch.object(build.subprocess, 'run', side_effect=error), \
+                patch.object(build.shutil, 'which', return_value=None), \
+                patch('builtins.print'), self.assertRaises(subprocess.CalledProcessError):
+            build.run_build_command(command, source, build.build_environment('amd64'), self.root)
+        diagnostics = json.loads((self.root / 'BUILD_FAILURE.json').read_bytes())
+        self.assertEqual(diagnostics['returncode'], 127)
+        self.assertEqual(diagnostics['command'], command)
+        self.assertEqual(diagnostics['logs']['config.log']['sha256'], build.digest(body))
+        self.assertIn('make: not found', diagnostics['logs']['config.log']['excerpt'])
+        self.assertLess(len(build.json_bytes(diagnostics)), 18000)
+        self.assertNotIn('--disable-dependency-tracking', diagnostics['command'])
 
     @staticmethod
     def elf_fixture(*, stack_flags=6, relro=True, now=True, stack_protector=True):

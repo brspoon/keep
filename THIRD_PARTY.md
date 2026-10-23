@@ -58,6 +58,8 @@ The separately identified Expat build includes the exact upstream security
 patches and complete MIT notice. Its build uses Alpine's verified Fortify
 headers; their full 0BSD license, header attributions and matching source and
 patch are included with the source materials and notices.
+The build-only GNU Make and Bash inputs retain their complete GPL notices,
+bundled component attributions, matching sources and Alpine recipes too.
 
 The source map in `docs/os-package-sources.json` covers the final OS packages;
 the original Expat, Python, zlib and CA bundle in earlier image layers are covered separately. Full notices,

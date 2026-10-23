@@ -836,6 +836,7 @@ class CommittedKeepSourceTests(unittest.TestCase):
             'scripts/build_patched_expat.py', 'scripts/expat_security_patches.json',
             'scripts/fortify_header_sources.py',
             'scripts/dhi_cpp_packages.py',
+            'scripts/expat_build_tools.py',
             'scripts/expat_security_checks.py', 'docs/expat-build.json',
             'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
             'docs/distribution-sources.json', 'docs/os-package-sources.json',
@@ -869,6 +870,7 @@ class CommittedKeepSourceTests(unittest.TestCase):
                      'scripts/expat_security_patches.json', 'scripts/expat_security_checks.py',
                      'scripts/fortify_header_sources.py',
                      'scripts/dhi_cpp_packages.py',
+                     'scripts/expat_build_tools.py',
                      'docs/expat-build.json'):
             self.assertEqual((self.output / 'build' / name).read_bytes(), (self.root / name).read_bytes())
 
