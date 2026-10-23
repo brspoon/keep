@@ -83,7 +83,7 @@
     ]
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "92b5d08d04b985ed525ccf41ecf6a2c5e067b98693535f25edc6abc768dec36b",
+  "build_script_sha256": "e109de2f4dd099d0525f27bddb74e9576d420c58fff655e1845cd3bebc71489b",
   "build_tools": {
     "installation": "build-only-offline-apk",
     "packages": {
@@ -643,11 +643,14 @@
     "path": "scripts/fortify_header_sources.py",
     "sha256": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0"
   },
-  "identity": "keep-expat-2.9.0-c30145b-d8f31e6-v1",
+  "identity": "keep-expat-2.9.0-c30145b-d8f31e6-literal-v2",
   "library": {
     "path": "/usr/lib/libexpat.so.1.13.0",
     "soname": "libexpat.so.1"
   },
+  "local_patches": [
+    "keep-expat-literal-markup-accounting-v1"
+  ],
   "original_files": {
     "lib/xmlparse.c": "899afeaddf424a6f4bf9a0a77159248b485bf5c072475d547ef16c2942a86dd5",
     "tests/acc_tests.c": "d10a7cf72862400cd03e52686d037d2f07cd80a4a2153853ae2ccd09d7d7820d",
@@ -655,10 +658,10 @@
   },
   "patch_manifest": {
     "path": "scripts/expat_security_patches.json",
-    "sha256": "1ec958c7d2400522c7d8cdf51f242702531c3448f8d3639cf23f88260725e5d6"
+    "sha256": "b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a"
   },
   "patched_files": {
-    "lib/xmlparse.c": "743fe05595ffa5bd2724d49c00377caa21afb0a02a09e2d225533c94b68e830e",
+    "lib/xmlparse.c": "6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082",
     "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
     "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9"
   },

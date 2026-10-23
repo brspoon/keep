@@ -43,7 +43,7 @@ CPP_HELPER = 'scripts/dhi_cpp_packages.py'
 CPP_HELPER_SHA256 = '3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb'
 BUILD_TOOLS_HELPER = 'scripts/expat_build_tools.py'
 BUILD_TOOLS_HELPER_SHA256 = '648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa'
-BUILD_IDENTITY = 'keep-expat-2.9.0-c30145b-d8f31e6-v1'
+BUILD_IDENTITY = 'keep-expat-2.9.0-c30145b-d8f31e6-literal-v2'
 BUILD_IMAGE = ('dhi.io/python:3.14-alpine3.24-dev@sha256:'
                'b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d')
 SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz'
@@ -51,7 +51,7 @@ SOURCE_SHA256 = '1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d80305
 SOURCE_SHA512 = ('677b5a39ea47aa238813412061eefba0ff2e819597efee69452eab7fd63b138753'
                  '7eda0dfd4e5891b938be202dc87df4b5115bdae75c6b81643ac2363bb99b34')
 COPYING_SHA256 = '31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87'
-PATCH_SHA256 = '1ec958c7d2400522c7d8cdf51f242702531c3448f8d3639cf23f88260725e5d6'
+PATCH_SHA256 = 'b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a'
 RECIPE_URL = ('https://raw.githubusercontent.com/alpinelinux/aports/'
               '46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD')
 RECIPE_SHA256 = '40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5'
@@ -61,13 +61,14 @@ COMMITS = (
     'c30145b28632b31f805d57f9838ba36b8db99367',
     'd8f31e647a4d1eda088e89354f4769b0dad303d3',
 )
+LOCAL_PATCHES = ('keep-expat-literal-markup-accounting-v1',)
 ORIGINAL_FILES = {
     'lib/xmlparse.c': '899afeaddf424a6f4bf9a0a77159248b485bf5c072475d547ef16c2942a86dd5',
     'tests/acc_tests.c': 'd10a7cf72862400cd03e52686d037d2f07cd80a4a2153853ae2ccd09d7d7820d',
     'tests/alloc_tests.c': '1f8277ba331b043898f1048332ed4314d4b1ead4473171702dda3cf163fb574d',
 }
 PATCHED_FILES = {
-    'lib/xmlparse.c': '743fe05595ffa5bd2724d49c00377caa21afb0a02a09e2d225533c94b68e830e',
+    'lib/xmlparse.c': '6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082',
     'tests/acc_tests.c': 'b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b',
     'tests/alloc_tests.c': '0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9',
 }
@@ -151,7 +152,8 @@ def immutable_spec():
                    'directory': SOURCE_DIRECTORY, 'copying_sha256': COPYING_SHA256},
         'vendor_recipe': {'url': RECIPE_URL, 'sha256': RECIPE_SHA256},
         'patch_manifest': {'path': PATCH_PATH, 'sha256': PATCH_SHA256},
-        'commits': list(COMMITS), 'original_files': dict(ORIGINAL_FILES),
+        'commits': list(COMMITS), 'local_patches': list(LOCAL_PATCHES),
+        'original_files': dict(ORIGINAL_FILES),
         'patched_files': dict(PATCHED_FILES), 'build_script': BUILD_SCRIPT,
         'fortify_headers': fortify.reviewed_spec(),
         'fortify_helper': {'path': FORTIFY_HELPER, 'sha256': FORTIFY_HELPER_SHA256},
@@ -212,6 +214,7 @@ def source_replay_record():
     return {'schema': 'keep-expat-source-replay-v4', 'identity': BUILD_IDENTITY,
             'source_sha256': SOURCE_SHA256, 'vendor_recipe_sha256': RECIPE_SHA256,
             'patch_manifest_sha256': PATCH_SHA256, 'commits': list(COMMITS),
+            'local_patches': list(LOCAL_PATCHES),
             'original_files': dict(ORIGINAL_FILES), 'patched_files': dict(PATCHED_FILES),
             'fortify_headers': fortify.reviewed_spec(), 'cpp_packages': cpp.reviewed_spec(),
             'build_tools': build_tools.reviewed_spec()}
@@ -314,11 +317,15 @@ def apply_source_patches(files, manifest):
             'Invalid Expat patch manifest')
     require([row['commit'] for row in manifest.get('patches', [])] == list(COMMITS),
             'Expat upstream patch sequence differs')
+    local = manifest.get('local_patches', [])
+    require([row.get('source_id') for row in local] == list(LOCAL_PATCHES)
+            and all(row.get('source_kind') == 'keep-local' and row.get('commit') is None
+                    for row in local), 'Expat local patch provenance differs')
     result = dict(files)
     for path, expected in ORIGINAL_FILES.items():
         require(path in result, 'Missing original Expat source file')
         checked(result[path][0], expected, 'Original Expat source ' + path)
-    for patch in manifest['patches']:
+    for patch in [*manifest['patches'], *local]:
         for file in patch['files']:
             path = file['path']
             require(path in PATCHED_FILES, 'Unreviewed Expat patch target')

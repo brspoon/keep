@@ -298,6 +298,31 @@
   "patched_files": {
     "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
     "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9",
-    "lib/xmlparse.c": "743fe05595ffa5bd2724d49c00377caa21afb0a02a09e2d225533c94b68e830e"
-  }
+    "lib/xmlparse.c": "6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082"
+  },
+  "local_patches": [
+    {
+      "source_kind": "keep-local",
+      "source_id": "keep-expat-literal-markup-accounting-v1",
+      "commit": null,
+      "upstream_report": "https://github.com/libexpat/libexpat/issues/1438",
+      "files": [
+        {
+          "path": "lib/xmlparse.c",
+          "before_sha256": "743fe05595ffa5bd2724d49c00377caa21afb0a02a09e2d225533c94b68e830e",
+          "after_sha256": "6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082",
+          "hunks": [
+            {
+              "before": "static enum EntityScanResult\nscanEntityText(",
+              "after": "/* General-entity replacement text contains literal markup whose references\n   are not expanded. Use the normal internal-encoding tokenizers for those\n   regions only; start tags must remain on the reference scanner because their\n   attributes can contain active references. Parameter entities use DTD rules\n   and deliberately do not call this helper.\n\n   A malformed/unfinished literal construct cannot expand later references:\n   normal parsing rejects it first. Charge its remaining source once rather\n   than repeatedly tokenizing overlapping suffixes (quadratic work). This\n   helper only projects accounting; it never accepts malformed XML. */\nstatic const XML_Char *\nentityLiteralMarkupEnd(XML_Parser parser, const XML_Char *pos,\n                       const XML_Char *end) {\n  const ptrdiff_t length = end - pos;\n  const XML_Bool pi = length >= 2 && pos[1] == XML_T('?');\n  const XML_Bool comment = length >= 4 && pos[1] == XML_T('!')\n                           && pos[2] == XML_T('-') && pos[3] == XML_T('-');\n  const XML_Bool cdata = length >= 9 && pos[1] == XML_T('!')\n                         && pos[2] == XML_T('[') && pos[3] == XML_T('C')\n                         && pos[4] == XML_T('D') && pos[5] == XML_T('A')\n                         && pos[6] == XML_T('T') && pos[7] == XML_T('A')\n                         && pos[8] == XML_T('[');\n  if (! pi && ! comment && ! cdata)\n    return pos;\n\n  const ENCODING *const enc = parser->m_internalEncoding;\n  const char *cursor = (const char *)pos;\n  const char *const limit = (const char *)end;\n  const char *next = cursor;\n  const int tok = XmlContentTok(enc, cursor, limit, &next);\n  if (tok == XML_TOK_COMMENT || tok == XML_TOK_PI)\n    return (const XML_Char *)next;\n  if (tok != XML_TOK_CDATA_SECT_OPEN)\n    return end;\n\n  cursor = next;\n  while (cursor < limit) {\n    next = cursor;\n    const int cdataTok = XmlCdataSectionTok(enc, cursor, limit, &next);\n    if (cdataTok == XML_TOK_CDATA_SECT_CLOSE)\n      return (const XML_Char *)next;\n    if ((cdataTok != XML_TOK_DATA_CHARS && cdataTok != XML_TOK_DATA_NEWLINE)\n        || next <= cursor)\n      return end;\n    cursor = next;\n  }\n  return end;\n}\n\nstatic enum EntityScanResult\nscanEntityText("
+            },
+            {
+              "before": "  while (pos < end) {\n    if (*pos != refChar) {",
+              "after": "  while (pos < end) {\n    if (! entity->is_param && *pos == XML_T('<')) {\n      const XML_Char *const literalEnd = entityLiteralMarkupEnd(parser, pos, end);\n      if (literalEnd != pos) {\n        const XmlBigCount addend = (XmlBigCount)(literalEnd - pos);\n        if (*expandedSize > (XmlBigCount)(-1) - addend)\n          return ENTITY_SCAN_OVERFLOW;\n        *expandedSize += addend;\n        pos = literalEnd;\n        continue;\n      }\n    }\n    if (*pos != refChar) {"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

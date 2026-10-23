@@ -22,6 +22,7 @@ class FakeAPI:
         self.limits = mock.Mock()
         self.require_limits = mock.Mock()
         self.XML_ParserReset = mock.Mock(return_value=checks.XML_STATUS_OK)
+        self.XML_SetParamEntityParsing = mock.Mock(return_value=1)
 
     @contextmanager
     def parser(self):
@@ -59,6 +60,7 @@ class ExpatSecurityChecksTests(unittest.TestCase):
         with (
             mock.patch.object(checks, "_capture", side_effect=capture_results or captures()),
             mock.patch.object(checks, "_parse", side_effect=results or parse_results()) as parse,
+            mock.patch.object(checks, "_exercise_literal_contexts"),
         ):
             result = checks._exercise(api)
         return result, api, parse
@@ -89,6 +91,45 @@ class ExpatSecurityChecksTests(unittest.TestCase):
         captured[-1][0].clear()
         with self.assertRaisesRegex(RuntimeError, 'default-limit literal XML compatibility'):
             self.run_fake(results=results, capture_results=captured)
+
+    def test_context_checks_reject_compatibility_failures_hidden_references_and_bad_syntax(self):
+        good = (checks.XML_STATUS_OK, checks.XML_ERROR_NONE)
+        rejected = (checks.XML_STATUS_ERROR, checks.XML_ERROR_AMPLIFICATION_LIMIT_BREACH)
+        contexts = checks.LITERAL_CONTEXT_CONTROLS
+        active = checks.ACTIVE_REFERENCE_CONTROLS
+        malformed = checks.MALFORMED_LITERAL_CONTROLS
+        results = [good] * len(contexts) + [rejected] * (len(active) + len(malformed))
+        captured = [(bytearray(expected), object(), [False]) for _, expected, _ in contexts]
+        captured += [(bytearray(), object(), [False]) for _ in active]
+        for index, message in ((0, 'context compatibility'),
+                               (len(contexts), 'hid an active reference'),
+                               (len(contexts) + len(active), 'accepted malformed')):
+            changed = list(results)
+            changed[index] = rejected if index == 0 else good
+            api = FakeAPI()
+            with self.subTest(index=index), \
+                    mock.patch.object(checks, '_parse', side_effect=changed), \
+                    mock.patch.object(checks, '_capture', side_effect=captured), \
+                    self.assertRaisesRegex(RuntimeError, message):
+                checks._exercise_literal_contexts(api, checks.time.monotonic() + 10)
+            self.assertEqual(api.created, api.freed)
+
+    def test_default_contexts_do_not_change_limits_and_all_inputs_are_bounded(self):
+        good = (checks.XML_STATUS_OK, checks.XML_ERROR_NONE)
+        rejected = (checks.XML_STATUS_ERROR, checks.XML_ERROR_AMPLIFICATION_LIMIT_BREACH)
+        api = FakeAPI()
+        contexts = checks.LITERAL_CONTEXT_CONTROLS
+        active = checks.ACTIVE_REFERENCE_CONTROLS
+        results = [good] * len(contexts) + [rejected] * (len(active) + len(checks.MALFORMED_LITERAL_CONTROLS))
+        captured = [(bytearray(expected), object(), [False]) for _, expected, _ in contexts]
+        captured += [(bytearray(), object(), [False]) for _ in active]
+        with mock.patch.object(checks, '_parse', side_effect=results), \
+                mock.patch.object(checks, '_capture', side_effect=captured):
+            checks._exercise_literal_contexts(api, checks.time.monotonic() + 10)
+        self.assertEqual(api.limits.call_count, len(active))
+        self.assertFalse(any(call.args[0] in api.created[:len(contexts)]
+                             for call in api.limits.call_args_list))
+        self.assertLessEqual(max(len(row[0]) for row in contexts), checks.MAXIMUM_INPUT_BYTES)
 
     def test_loads_only_normal_soname(self):
         with (
@@ -159,6 +200,7 @@ class ExpatSecurityChecksTests(unittest.TestCase):
             "XML_ParserCreate", "XML_ParserFree", "XML_ParserReset", "XML_Parse",
             "XML_GetErrorCode", "XML_SetCharacterDataHandler", "XML_SetPropertyDouble",
             "XML_SetPropertyUInt64", "XML_GetPropertyDouble", "XML_GetPropertyUInt64",
+            "XML_SetParamEntityParsing",
         )
         for name in names:
             setattr(library, name, mock.Mock())

@@ -113,7 +113,11 @@ class PatchedExpatBuildTests(unittest.TestCase):
         manifest = json.loads(body)
         self.assertEqual([row['commit'] for row in manifest['patches']], list(build.COMMITS))
         hashes = dict(build.ORIGINAL_FILES)
-        for row in manifest['patches']:
+        self.assertEqual([row['source_id'] for row in manifest['local_patches']],
+                         list(build.LOCAL_PATCHES))
+        self.assertTrue(all(row['source_kind'] == 'keep-local' and row['commit'] is None
+                            for row in manifest['local_patches']))
+        for row in [*manifest['patches'], *manifest['local_patches']]:
             for file in row['files']:
                 self.assertEqual(file['before_sha256'], hashes[file['path']])
                 self.assertTrue(file['hunks'])
@@ -131,7 +135,10 @@ class PatchedExpatBuildTests(unittest.TestCase):
                              'after_sha256': patched[path],
                              'hunks': [{'before': before.decode(), 'after': after.decode()}]}]
         manifest = {'schema': 'keep-expat-patches-v1', 'upstream_version': '2.9.0',
-                    'patched_files': patched, 'patches': rows}
+                    'patched_files': patched, 'patches': rows,
+                    'local_patches': [{'source_id': source_id, 'source_kind': 'keep-local',
+                                       'commit': None, 'files': []}
+                                      for source_id in build.LOCAL_PATCHES]}
         return path, before, after, originals, patched, manifest
 
     def test_exact_patch_replay_preserves_modes_and_unmodified_source(self):
@@ -142,6 +149,22 @@ class PatchedExpatBuildTests(unittest.TestCase):
         self.assertEqual(result[path], (after, 0o644))
         self.assertEqual(result['configure'], files['configure'])
         self.assertEqual(files[path][0], before)
+
+    def test_local_correction_cannot_be_dropped_reordered_or_claimed_as_upstream(self):
+        for mutation in ('missing', 'identity', 'kind', 'commit'):
+            path, before, _, originals, patched, manifest = self.synthetic_patch()
+            if mutation == 'missing':
+                manifest['local_patches'] = []
+            elif mutation == 'identity':
+                manifest['local_patches'][0]['source_id'] = 'unreviewed-change'
+            elif mutation == 'kind':
+                manifest['local_patches'][0]['source_kind'] = 'upstream'
+            else:
+                manifest['local_patches'][0]['commit'] = build.COMMITS[-1]
+            with self.subTest(mutation=mutation), patch.object(build, 'ORIGINAL_FILES', originals), \
+                    patch.object(build, 'PATCHED_FILES', patched), \
+                    self.assertRaisesRegex(ValueError, 'local patch provenance'):
+                build.apply_source_patches({path: (before, 0o644)}, manifest)
 
     def test_changed_original_context_patch_output_or_target_cannot_replay(self):
         for mutation in ('original', 'context', 'output', 'target'):

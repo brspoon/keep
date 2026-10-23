@@ -105,7 +105,12 @@ Expat's [entity accounting correction](https://github.com/libexpat/libexpat/comm
 (`CVE-2026-113351`) are merged upstream. The reviewed signed packages predate
 them. `docs/expat-build.json` therefore identifies a separate Keep build of the
 exact Expat 2.9.0 release, the complete corrections and their two required type
-prerequisites. The build runs the upstream regression suite, preserves the
+prerequisites, followed by Keep's local literal-markup accounting correction.
+The patch manifest records this correction as
+`keep-expat-literal-markup-accounting-v1` with `source_kind: keep-local` and
+`commit: null`; the upstream commits retain their separate identities. The full
+local hunks and input/output hashes are replayed with the matching sources and
+complete MIT notice. The build runs the upstream regression suite, preserves the
 vendor ABI and compiler hardening, and checks architecture-specific compiler
 and resulting library hashes. It replaces the canonical library behind the
 existing SONAME; no loader override or package-version relabeling is used.
@@ -155,7 +160,7 @@ unpatched 2.9.0 accepts the same bytes. The preflight incorrectly counts literal
 entity-reference text inside CDATA as expanded content. The runtime checks now
 require this valid input to pass without changing parser limits. Native output
 pins remain unset, so installation and release acceptance stay blocked pending
-a reviewed correction and fresh complete qualification. Do not drop the security
+review of the local correction and fresh complete qualification. Do not drop the security
 fix, loosen the amplification limits or treat a passing upstream test suite as
 proof that this compatibility case passes.
 The [native compatibility run](https://github.com/brspoon/keep/actions/runs/40011470324)
@@ -164,6 +169,15 @@ libraries were byte-identical to the earlier preparatory outputs, and both
 upstream test suites passed again. Complete final-image qualification, scans and
 source-distribution acceptance remain outstanding; preparation is not a release
 approval.
+
+The local correction makes the entity-size preflight use Expat's existing
+tokenizers to account for literal CDATA, comments and processing instructions in
+general-entity replacement text. Attribute references still use the reference
+scanner, and parameter entities retain the DTD rules. This is a candidate
+compatibility correction, not a merged upstream fix or a qualified replacement.
+Its changed source identity invalidates the earlier preparatory output hashes;
+fresh native builds, security and compatibility checks, and source/license
+replay are required before either architecture can qualify.
 
 ## Certificate trust and build-tool candidate (October 21)
 

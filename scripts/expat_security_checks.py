@@ -48,11 +48,60 @@ DEFAULT_LITERAL_DOCUMENT = (
     + b'"><!ENTITY literal "<![CDATA[' + DEFAULT_LITERAL_TEXT
     + b']]>">]><r>&literal;</r>'
 )
+PARAMETER_ENTITY_DOCUMENT = (
+    b'<!DOCTYPE r [<!ENTITY % declaration "<!ENTITY word \'safe\'>">'
+    b'%declaration;]><r>&word;</r>'
+)
+
+
+def literal_context_controls():
+    """Default-limit controls large enough to expose preflight overcounting."""
+    controls = []
+    for opening, closing, literal in (
+        (b'<![CDATA[', b']]>', DEFAULT_LITERAL_TEXT),
+        (b'<!-- ', b' -->', b''),
+        (b'<?keep ', b'?>', b''),
+    ):
+        declaration = (b'<!DOCTYPE r [<!ENTITY outer "&head;&literal;&tail;">'
+                       b'<!ENTITY head "begin"><!ENTITY literal "' + opening
+                       + DEFAULT_LITERAL_TEXT + closing + b'">'
+                       b'<!ENTITY word "' + b'a' * 16_384
+                       + b'"><!ENTITY tail "end">]><r>&outer;</r>')
+        expected = b'begin' + literal + b'end'
+        for encoding in ('utf-8', 'utf-16'):
+            document = declaration.decode().encode(encoding)
+            controls.append((document, expected, len(document)))
+            controls.append((document, expected, 7))
+    # Numeric references are normalized before replacement text is scanned.
+    controls.append((DEFAULT_LITERAL_DOCUMENT.replace(b'<![CDATA[', b'&#60;![CDATA['),
+                     DEFAULT_LITERAL_TEXT, 11))
+    controls.append((PARAMETER_ENTITY_DOCUMENT, b'safe', 1))
+    controls.append((b'<!DOCTYPE r [<!ENTITY x "caf&#233;">]><r>&x;</r>',
+                     'café'.encode(), 1))
+    return tuple(controls)
+
+
+LITERAL_CONTEXT_CONTROLS = literal_context_controls()
+ACTIVE_REFERENCE_CONTROLS = tuple(
+    b'<!DOCTYPE r [<!ENTITY a "abcdefghijklmnop"><!ENTITY attack "'
+    + b'&a;' * 64 + b'"><!ENTITY body "' + prefix + b'&attack;' + suffix
+    + b'">]><r>&body;</r>'
+    for prefix, suffix in (
+        (b'<![CDATA[&a;]]>', b''),
+        (b'<!-- &a; -->', b''),
+        (b'<?keep &a;?>', b''),
+        (b"<n value='", b"'/>")
+    )
+)
+MALFORMED_LITERAL_CONTROLS = tuple(
+    b'<!DOCTYPE r [<!ENTITY body "' + prefix * 2_048 + b'">]><r>&body;</r>'
+    for prefix in (b'<?keep ', b'<![CDATA[', b'<!-- ')
+)
 
 EXPECTED_RESULT = {
     "schema": "keep-expat-security-probes-v1",
     "soname": SONAME,
-    "tests": 7,
+    "tests": 10,
     "passed": True,
     "ordinary_xml": True,
     "bounded_entity_control": True,
@@ -61,6 +110,9 @@ EXPECTED_RESULT = {
     "allocation_reset": True,
     "literal_markup_controls": True,
     "default_literal_xml": True,
+    "literal_contexts": True,
+    "active_reference_preflight": True,
+    "malformed_literal_rejection": True,
     "preflight_emitted_characters": 0,
     "reset_rejections": 2,
     "allocation_reset_cycles": ALLOCATION_RESET_CYCLES,
@@ -87,6 +139,7 @@ class _Expat:
             "XML_ParserCreate": ([ctypes.c_char_p], pointer),
             "XML_ParserFree": ([pointer], None),
             "XML_ParserReset": ([pointer, ctypes.c_char_p], ctypes.c_ubyte),
+            "XML_SetParamEntityParsing": ([pointer, ctypes.c_int], ctypes.c_int),
             "XML_Parse": (
                 [pointer, ctypes.c_char_p, ctypes.c_int, ctypes.c_int],
                 ctypes.c_int,
@@ -223,6 +276,32 @@ def _capture(api, parser):
     return data, callback, invalid
 
 
+def _exercise_literal_contexts(api, deadline):
+    for document, expected, chunk_size in LITERAL_CONTEXT_CONTROLS:
+        with api.parser() as parser:
+            if document == PARAMETER_ENTITY_DOCUMENT:
+                _require(api.XML_SetParamEntityParsing(parser, 2) == 1,
+                         'Expat parameter-entity control is unavailable')
+            data, callback, invalid = _capture(api, parser)
+            status, error = _parse(api, parser, document, deadline, chunk_size=chunk_size)
+            _require((status, error, bytes(data))
+                     == (XML_STATUS_OK, XML_ERROR_NONE, expected) and not invalid[0],
+                     'Expat default-limit XML context compatibility failed')
+    for document in ACTIVE_REFERENCE_CONTROLS:
+        with api.parser() as parser:
+            api.limits(parser, allocation=False, factor=2.0, threshold=0)
+            data, callback, invalid = _capture(api, parser)
+            status, error = _parse(api, parser, document, deadline, chunk_size=len(document))
+            _require((status, error) == (XML_STATUS_ERROR, XML_ERROR_AMPLIFICATION_LIMIT_BREACH)
+                     and not data and not invalid[0],
+                     'Expat literal markup hid an active reference from preflight')
+    for document in MALFORMED_LITERAL_CONTROLS:
+        with api.parser() as parser:
+            status, error = _parse(api, parser, document, deadline, chunk_size=len(document))
+            _require(status == XML_STATUS_ERROR and error != XML_ERROR_NONE,
+                     'Expat accepted malformed literal markup')
+
+
 def _exercise(api) -> dict:
     deadline = time.monotonic() + MAXIMUM_SECONDS
     with api.parser() as parser:
@@ -335,6 +414,7 @@ def _exercise(api) -> dict:
             "Expat default-limit literal XML compatibility failed "
             f"(status={status}, error={error}, output_bytes={len(data)})",
         )
+    _exercise_literal_contexts(api, deadline)
     _check_deadline(deadline)
     return expected_report()
 

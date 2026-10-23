@@ -867,7 +867,9 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         'coverage': 'Original Alpine-signed packages, signatures, complete recipes and sources '
                     'are retained as vendor input proof. Keep replaces the Expat library using '
                     'the separately reviewed build lock, native output hashes, exact upstream '
-                    'patches and full replayed source tree, including verified Fortify headers '
+                    'patches and explicitly identified Keep-local changes, all retained in the '
+                    'patch manifest, source replay record and full replayed source tree, '
+                    'including verified Fortify headers '
                     'and verified make and bash inputs with their complete matching sources and notices. '
                     'The Alpine signature does not apply '
                     'to the replacement library; no package-source OCI binding is claimed.',

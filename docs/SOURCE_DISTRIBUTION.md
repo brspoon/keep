@@ -165,8 +165,13 @@ signature is retained without claiming separate OpenPGP verification.
 The runtime then replaces the canonical library with the separately identified
 Keep build in `docs/expat-build.json`. Its source set contains the complete
 Expat 2.9.0 release, both merged security corrections and their prerequisites,
-the exact patch manifest and builder, native compiler/output hashes and full
-replayed sources. Original signed materials and manifests remain unchanged
+the Keep-local literal-markup accounting correction, the exact patch manifest
+and builder, native compiler/output hashes and full replayed sources. The local
+correction is identified as `keep-expat-literal-markup-accounting-v1`, with
+`source_kind: keep-local` and no upstream commit claim. Its exact hunks and
+before/after hashes remain in `expat_security_patches.json`; the source replay
+record lists the local identity separately from the merged upstream commits.
+Original signed materials and manifests remain unchanged
 under `alpine-expat-sources/vendor-inputs/`; the additional source set is under
 `keep-build/`. The combined proof records
 `signed-vendor-inputs-and-reviewed-keep-build`,
@@ -175,6 +180,8 @@ It verifies the independently inventoried loaded-library hash against the
 reviewed build rather than attributing modified bytes to Alpine's signature.
 Offline archive replay rejects missing, altered or extra source outputs.
 New source-header attribution is retained alongside the complete MIT notice.
+The current local correction still requires fresh native qualification; source
+replay alone does not qualify its output or pass source-delivery verification.
 The build-only Fortify input retains both signed `fortify-headers 3.0.1-r2`
 APKs and keys, the complete matching upstream source and Alpine recipe/patch,
 all ten headers and their copyright notices, and the full 0BSD license. Its
