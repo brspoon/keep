@@ -1,0 +1,114 @@
+{
+  "build": {
+    "architecture_cflags": {
+      "amd64": "-fno-plt",
+      "arm64": ""
+    },
+    "commands": [
+      [
+        "make",
+        "-j2"
+      ],
+      [
+        "make",
+        "check"
+      ]
+    ],
+    "compiler": "/usr/bin/gcc",
+    "compiler_targets": {
+      "amd64": "x86_64-alpine-linux-musl",
+      "arm64": "aarch64-alpine-linux-musl"
+    },
+    "configure_options": [
+      "--prefix=/usr",
+      "--mandir=/usr/share/man",
+      "--enable-static"
+    ],
+    "directory": "/opt/keep-expat-build",
+    "environment": {
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-expat-build=.",
+      "CONFIG_SHELL": "/bin/sh",
+      "CPPFLAGS": "-D_FORTIFY_SOURCE=2",
+      "LC_ALL": "C",
+      "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
+      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "SHELL": "/bin/sh",
+      "SOURCE_DATE_EPOCH": "1792762956",
+      "TZ": "UTC"
+    },
+    "image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d"
+  },
+  "build_script": "scripts/build_patched_expat.py",
+  "build_script_sha256": "eda3aac2fb1efe290cec4707f260803743bf95ee1be82ac666ad424c86c8c99e",
+  "commits": [
+    "d545081f6a90792208e0d274888a352e2e5d894d",
+    "da504c0c111086072172431c76867800673fbc34",
+    "c30145b28632b31f805d57f9838ba36b8db99367",
+    "d8f31e647a4d1eda088e89354f4769b0dad303d3"
+  ],
+  "compiler_sha256": {
+    "amd64": null,
+    "arm64": null
+  },
+  "expected_library_sha256": {
+    "amd64": null,
+    "arm64": null
+  },
+  "identity": "keep-expat-2.9.0-c30145b-d8f31e6-v1",
+  "library": {
+    "path": "/usr/lib/libexpat.so.1.13.0",
+    "soname": "libexpat.so.1"
+  },
+  "original_files": {
+    "lib/xmlparse.c": "899afeaddf424a6f4bf9a0a77159248b485bf5c072475d547ef16c2942a86dd5",
+    "tests/acc_tests.c": "d10a7cf72862400cd03e52686d037d2f07cd80a4a2153853ae2ccd09d7d7820d",
+    "tests/alloc_tests.c": "1f8277ba331b043898f1048332ed4314d4b1ead4473171702dda3cf163fb574d"
+  },
+  "patch_manifest": {
+    "path": "scripts/expat_security_patches.json",
+    "sha256": "1ec958c7d2400522c7d8cdf51f242702531c3448f8d3639cf23f88260725e5d6"
+  },
+  "patched_files": {
+    "lib/xmlparse.c": "743fe05595ffa5bd2724d49c00377caa21afb0a02a09e2d225533c94b68e830e",
+    "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
+    "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9"
+  },
+  "required_abi": {
+    "export_count": 83,
+    "exports_sha256": "89ef922b0558f2ee73e46ace5331d4ec9da8718bccb483738983d5dc04d20465",
+    "features": {
+      "XML_AT_ACT_THRES": 67108864,
+      "XML_AT_MAX_AMP": 100,
+      "XML_BLAP_ACT_THRES": 8388608,
+      "XML_BLAP_MAX_AMP": 100,
+      "XML_CONTEXT_BYTES": 1024,
+      "XML_DTD": 0,
+      "XML_GE": 0,
+      "XML_NS": 0,
+      "sizeof(XML_Char)": 1,
+      "sizeof(XML_LChar)": 1
+    }
+  },
+  "required_hardening": {
+    "bind_now": true,
+    "fortify_source": 2,
+    "gnu_stack_non_executable": true,
+    "relro": true,
+    "stack_protector": true
+  },
+  "schema": "keep-expat-build-v1",
+  "source": {
+    "copying_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+    "directory": "expat-2.9.0",
+    "sha256": "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051",
+    "sha512": "677b5a39ea47aa238813412061eefba0ff2e819597efee69452eab7fd63b1387537eda0dfd4e5891b938be202dc87df4b5115bdae75c6b81643ac2363bb99b34",
+    "url": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz"
+  },
+  "upstream_version": "2.9.0",
+  "vendor_package_version": "2.9.0-r0",
+  "vendor_recipe": {
+    "sha256": "40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5",
+    "url": "https://raw.githubusercontent.com/alpinelinux/aports/46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD"
+  }
+}
