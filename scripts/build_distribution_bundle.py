@@ -956,7 +956,17 @@ def check_generated_notices(root, generated, arch):
             # and value types. A shared notice text does not transfer its proof.
             attribution = json.dumps(provenance, sort_keys=True)
             if not any(json.dumps(row, sort_keys=True) == attribution for row in match['provenance']):
-                raise ValueError('Actual source notice attribution differs from committed runtime provenance')
+                related = [row for row in match['provenance'] if isinstance(row, dict)
+                           and all(row.get(key) == provenance.get(key)
+                                   for key in ('origin', 'architecture', 'source_path'))]
+                details = json.dumps({'notice_sha256': notice['sha256'],
+                    'actual_provenance': provenance,
+                    'committed_source_matches': related[:3],
+                    'committed_source_match_count': len(related)}, sort_keys=False)
+                if len(details) > 16384:
+                    details = details[:16384] + ' [truncated]'
+                raise ValueError('Actual source notice attribution differs from committed runtime provenance: '
+                                 + details)
 
 
 def file_records(directory):

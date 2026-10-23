@@ -681,6 +681,31 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'wrong native architecture'):
             bundle.check_generated_notices(self.root, actual, 'amd64')
 
+    def test_generated_attribution_mismatch_reports_bounded_exact_evidence(self):
+        proof = self.manifest['notices'][0]['provenance'][0]
+        proof.update(source_path='keep-build/expat-2.9.0/lib/xmlparse.c',
+                     source_manifest_sha256='a' * 64)
+        self.write_manifest(self.manifest)
+        actual = copy.deepcopy(self.manifest)
+        actual_proof = actual['notices'][0]['provenance'][0]
+        actual_proof['source_manifest_sha256'] = 'b' * 64
+        original = copy.deepcopy(actual)
+        prefix = 'Actual source notice attribution differs from committed runtime provenance: '
+        with self.assertRaisesRegex(ValueError, prefix) as raised:
+            bundle.check_generated_notices(self.root, actual, 'amd64')
+        evidence = json.loads(str(raised.exception)[len(prefix):])
+        self.assertEqual(evidence, {
+            'notice_sha256': actual['notices'][0]['sha256'],
+            'actual_provenance': actual_proof,
+            'committed_source_matches': [proof],
+            'committed_source_match_count': 1})
+        self.assertEqual(actual, original)
+        actual_proof['license_source_url'] = 'https://example.test/' + 'x' * 20000
+        with self.assertRaises(ValueError) as raised:
+            bundle.check_generated_notices(self.root, actual, 'amd64')
+        self.assertTrue(str(raised.exception).endswith(' [truncated]'))
+        self.assertLessEqual(len(str(raised.exception)), len(prefix) + 16384 + len(' [truncated]'))
+
     def test_source_comment_review_is_architecture_bound_and_explicit(self):
         provenance = self.manifest['notices'][0]['provenance'][0]
         provenance.update(source_path='sources/archive.tar.gz!package/source.c',
