@@ -234,12 +234,13 @@ After unpacking, the manifest identifies each retained file's SHA-256, release
 version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
-container. The reviewed runtime union contains 124 complete notice texts
-(814,844 bytes) and 560 complete native attributions, covering all 23 current and
+container. The reviewed runtime union contains 135 complete notice texts
+(919,491 bytes) and 626 complete native attributions, covering all 23 current and
 earlier-layer origins on both architectures. It retains 21 explicitly selected
-source copyright headers and four timezone headers from the checked public
-source fallback. The license text bytes are unchanged; the new Python and zlib
-packages have their own source attributions, and timezone attributions describe
+source copyright headers, three patched Expat headers, ten Fortify headers,
+eleven musl subcomponent headers and four timezone headers from the checked
+public sources. All 124 earlier notice texts retain their original bytes;
+Python and zlib packages have their own source attributions, and timezone attributions describe
 the verified fallback rather than reusing earlier provider signature claims.
 The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated

@@ -133,6 +133,28 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
         for arch in DIRECT:
             result = self.assess(clean, arch=arch, day=datetime.date(2026, 10, 26))
             self.assertFalse(result['scout_blocked'])
+
+    def test_fresh_same_scope_review_changes_only_its_deadline_and_preserves_raw_reports(self):
+        renewed = copy.deepcopy(self.policy)
+        renewed['scout_exceptions'][FINDING_ID]['review'].update(
+            reviewed_on='2026-10-23', deadline='2026-11-01')
+        self.assertEqual(renewed['exceptions'], self.policy['exceptions'])
+        for arch in DIRECT:
+            report = scout_report(arch)
+            original = json.dumps(report, sort_keys=True).encode()
+            for day, accepted in ((datetime.date(2026, 10, 26), True),
+                                  (datetime.date(2026, 11, 1), True),
+                                  (datetime.date(2026, 11, 2), False)):
+                result = self.assess(report, arch=arch, policy=renewed, day=day)
+                with self.subTest(arch=arch, day=day):
+                    self.assertEqual(result['scout_accepted_false_positive'],
+                                     [{**FINDING, 'deadline': '2026-11-01'}] if accepted else [])
+                    self.assertEqual(result['scout_blocked'],
+                                     [] if accepted else report['runs'][0]['results'])
+                    self.assertEqual(json.dumps(report, sort_keys=True).encode(), original)
+            changed = {**FINDING, 'severity': 'HIGH'}
+            self.assertEqual(finding_decision(changed, renewed, datetime.date(2026, 10, 26)),
+                             'exception_mismatch')
             self.assertFalse(result['scout_accepted_false_positive'])
 
     def test_absent_or_empty_scout_policy_preserves_zero_findings_default(self):

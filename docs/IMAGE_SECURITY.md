@@ -13,7 +13,7 @@ Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runt
 regression probes.
 Zero Scout and Docker Hub findings remain the default requirement. The only
 temporary Scout approval is the verified musl false positive described below,
-through October 25, 2026 UTC inclusive. Grype's complete raw findings remain visible;
+through November 1, 2026 UTC inclusive. Grype's complete raw findings remain visible;
 only the two exact verified-fixed Python `3.14.8-r0` scopes in
 docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
@@ -307,6 +307,18 @@ the installed fix. This is a scoped false-positive approval, not approval to shi
 unfixed musl. Old r2, other packages/distributions/versions/severities/thresholds,
 and every unmatched finding still block.
 
+The October 23 fresh review renews only that unchanged musl false-positive scope
+through **November 1, 2026 UTC inclusive**. Current stable and edge advisory feeds,
+the exact signed packages and complete upstream patch equivalence were rechecked.
+[Native qualification](https://github.com/brspoon/keep/actions/runs/40017413915)
+at `996b45565161ad9d71dfcade9956ebfaeff2711d` passed on both architectures,
+including the actual default-libc hashes and bounded controls, complete
+unsuppressed scans, provenance and checked source/license notice preparation.
+The two existing Python deadlines remain unchanged. The checked notice union
+must still be embedded and every source-archive member verified in the final
+native run before release. The raw reports remain unchanged; this review does
+not claim zero displayed Scout or Docker Hub findings or a scanner correction.
+
 Fresh complete qualification on both architectures and exact-main validation
 remain required. The original Scout reports remain unchanged and visible. Docker
 Hub must be reviewed with completed, unfiltered analysis for both exact digests;
@@ -546,7 +558,8 @@ one of the current exceptions on November 2 blocks validation and promotion;
 it requires a proven replacement or another explicit security review.
 Correcting deadline handling alone never renews an approval.
 The separate Scout false-positive entry uses the same advisory warning mechanism
-and expires October 25, 2026 UTC inclusive. It does not change the Python deadline.
+and was renewed by the fresh October 23 review through November 1, 2026 UTC
+inclusive. This aligns the current review dates without extending Python approvals.
 
 ## zlib delivery correction
 
