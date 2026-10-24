@@ -28,7 +28,7 @@
     ".github/workflows/image.yml": "cedf1d70acd863015c73783ccce80775fa58307667116278045560df0dbe9ef4",
     "scripts/publish_portable.py": "4c2b245014387e73354a235ebfe731ae45bc35a1e9cda80cef14445f35136b25",
     ".github/workflows/native-image.yml": "e485db0164bfcb7c0cafbe35a3420ab760a0111d33eb9dac38d4f351d1f31fa4",
-    "scripts/validated_build.py": "1f8baee9545f5157a7fbbd5ef23ad281f47d697551ffc70649428c87917e989f",
+    "scripts/validated_build.py": "863b2e33f63adff1ed3eacef8a452234ce711057621e3518980106c5e3379c04",
     "scripts/dhi_certificate_packages.py": "7816b3238d890045e30b49e0eec0ea4f704f2772a4d751b258c53105d661057a",
     "scripts/certificate_trust_checks.py": "2dbe723d7cd8c2423c4eb9bcd015486e53ecd87472904c08fec9432d115fe279",
     "scripts/bootstrap_build_pip.py": "e2f5aec604af9add63fab0f2078f02f794851c7d2ac8d0a19f0c54c5e4b01474",

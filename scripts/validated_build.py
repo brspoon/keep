@@ -70,6 +70,10 @@ LEGACY_NATIVE_STEPS = NATIVE_STEPS + (
 )
 RETAIN_STEP = 'Retain exact tested image, sources and original evidence'
 INDEX_STEP = 'Retain immutable validation index'
+# Bound metadata acceptance and retries. HTTP socket timeouts and the native
+# workflow's job timeout remain separate; this is not a total network-call timer.
+NATIVE_METADATA_WAIT_SECONDS = 1800
+NATIVE_METADATA_POLL_SECONDS = 15
 
 
 def positive(value, label):
@@ -88,25 +92,47 @@ def context():
     return version, revision
 
 
-def api(path, *, method='GET', data=None):
+def metadata_time_left(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ValueError('All native gates must succeed before retention; metadata did not settle before deadline')
+    return remaining
+
+
+def api(path, *, method='GET', data=None, metadata_deadline=None, poll_intervals=None):
     if path and (not path.startswith('/') or path.startswith('//')):
         raise ValueError('Invalid GitHub API path')
+    headers = {'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
+               'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
+               'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Keep-validated-build'}
+    timeout = 60
+    if metadata_deadline is not None:
+        if method != 'GET' or data is not None:
+            raise ValueError('Metadata waits are restricted to read-only requests')
+        timeout = min(timeout, metadata_time_left(metadata_deadline))
+        headers.update({'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache'})
     request = urllib.request.Request('https://api.github.com/repos/' + REPOSITORY + path,
         method=method, data=json.dumps(data).encode() if data is not None else None,
-        headers={'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'],
-                 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
-                 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Keep-validated-build'})
-    with urllib.request.build_opener(materials.NoRedirect()).open(request, timeout=60) as response:
+        headers=headers)
+    with urllib.request.build_opener(materials.NoRedirect()).open(request, timeout=timeout) as response:
         body = response.read(JSON_LIMIT + 1)
+        if metadata_deadline is not None and poll_intervals is not None:
+            interval = response.headers.get('X-Poll-Interval', '')
+            if isinstance(interval, str) and re.fullmatch(r'[0-9]{1,9}', interval):
+                poll_intervals.append(int(interval))
+    if metadata_deadline is not None:
+        metadata_time_left(metadata_deadline)
     if len(body) > JSON_LIMIT:
         raise ValueError('GitHub metadata exceeds its size limit')
     return json.loads(body)
 
 
-def pages(path, key=None):
+def pages(path, key=None, *, metadata_deadline=None, poll_intervals=None):
     rows = []
     for page in range(1, 1001):
-        result = api(path + ('&' if '?' in path else '?') + f'per_page=100&page={page}')
+        options = ({'metadata_deadline': metadata_deadline, 'poll_intervals': poll_intervals}
+                   if metadata_deadline is not None else {})
+        result = api(path + ('&' if '?' in path else '?') + f'per_page=100&page={page}', **options)
         batch = result.get(key) if key else result
         if not isinstance(batch, list) or any(not isinstance(row, dict) for row in batch):
             raise ValueError('Invalid paginated GitHub metadata')
@@ -319,34 +345,75 @@ def upload(release, path, name):
     return result
 
 
+def retention_job_state(job, run, arch, attempt, job_id=None):
+    if not isinstance(job, dict):
+        raise ValueError('Native producer metadata is unavailable')
+    if (type(job.get('run_id')) is not int or type(job.get('run_attempt')) is not int or
+            job.get('run_id') != run['id'] or job.get('run_attempt') != attempt or
+            job.get('head_sha') != run['head_sha'] or
+            job.get('head_sha') != os.environ['GITHUB_SHA'] or
+            job.get('name') != job_name(arch) or
+            (job_id is not None and job.get('id') != job_id)):
+        raise ValueError('Original native producer identity differs')
+    positive(job.get('id'), 'native job ID')
+    if job.get('status') != 'in_progress' or job.get('conclusion') is not None:
+        raise ValueError('Candidate retention must run in its original native job')
+    steps = job.get('steps')
+    if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+        raise ValueError('Native validation steps are unavailable')
+    required = [step for step in steps if step.get('name') in NATIVE_STEPS]
+    if len(required) != len({step['name'] for step in required}):
+        raise ValueError('Duplicate native validation gate')
+    by_name = {step['name']: step for step in required}
+    gates = [by_name.get(name, {}) for name in NATIVE_STEPS]
+    if any(gate.get('conclusion') not in (None, 'success') for gate in gates):
+        raise ValueError('A native gate failed or was skipped before retention')
+    return all(gate.get('status') == 'completed' and gate.get('conclusion') == 'success'
+               for gate in gates)
+
+
+def retaining_native_job(run, arch, attempt, job_id=None):
+    deadline = time.monotonic() + NATIVE_METADATA_WAIT_SECONDS
+    path = f"/actions/runs/{run['id']}/attempts/{attempt}/jobs"
+    pinned_id = None
+    while True:
+        metadata_time_left(deadline)
+        intervals = []
+        if pinned_id is None:
+            matches = [row for row in pages(path, 'jobs', metadata_deadline=deadline,
+                       poll_intervals=intervals) if row.get('name') == job_name(arch)]
+            if len(matches) != 1:
+                raise ValueError('Require one original native producer job')
+            retention_job_state(matches[0], run, arch, attempt, job_id)
+            pinned_id = positive(matches[0]['id'], 'native job ID')
+            metadata_time_left(deadline)
+        # Query only the selected producer. An updated list cannot switch jobs
+        # or use an older successful attempt while this job is still running.
+        job = api(f'/actions/jobs/{pinned_id}', metadata_deadline=deadline,
+                  poll_intervals=intervals)
+        ready = retention_job_state(job, run, arch, attempt, pinned_id)
+        remaining = metadata_time_left(deadline)
+        if ready:
+            return job
+        time.sleep(min(max([NATIVE_METADATA_POLL_SECONDS, *intervals]), remaining))
+
+
 def native_job(run, arch, attempt, *, job_id=None, completed=True, schema=SCHEMA):
-    path = f"/actions/runs/{run['id']}/attempts/{positive(attempt, 'producer attempt')}/jobs"
-    # GitHub's step metadata can lag the runner by a few seconds at the start
-    # of retention. Retry only nonterminal metadata, never a failed/skipped gate.
-    for poll in range(1 if completed else 6):
-        matches = [row for row in pages(path, 'jobs') if row.get('name') == job_name(arch)]
-        if len(matches) != 1:
-            raise ValueError('Require one original native producer job')
-        job = matches[0]
-        if (job.get('run_id') != run['id'] or job.get('run_attempt') != int(attempt) or
-                job.get('head_sha') != os.environ['GITHUB_SHA'] or
-                (job_id is not None and job.get('id') != job_id)):
-            raise ValueError('Original native producer identity differs')
-        positive(job.get('id'), 'native job ID')
-        if completed:
-            job_success(job, native=True, schema=schema)
-            return job
-        if job.get('status') != 'in_progress':
-            raise ValueError('Candidate retention must run in its original native job')
-        steps = {step.get('name'): step for step in job.get('steps', [])}
-        gates = [steps.get(name, {}) for name in NATIVE_STEPS]
-        if any(gate.get('conclusion') not in (None, 'success') for gate in gates):
-            raise ValueError('A native gate failed or was skipped before retention')
-        if all(gate.get('status') == 'completed' and gate.get('conclusion') == 'success' for gate in gates):
-            return job
-        if poll < 5:
-            time.sleep(2)
-    raise ValueError('All native gates must succeed before retention; metadata did not settle')
+    attempt = positive(attempt, 'producer attempt')
+    if not completed:
+        return retaining_native_job(run, arch, attempt, job_id)
+    path = f"/actions/runs/{run['id']}/attempts/{attempt}/jobs"
+    matches = [row for row in pages(path, 'jobs') if row.get('name') == job_name(arch)]
+    if len(matches) != 1:
+        raise ValueError('Require one original native producer job')
+    job = matches[0]
+    if (job.get('run_id') != run['id'] or job.get('run_attempt') != attempt or
+            job.get('head_sha') != os.environ['GITHUB_SHA'] or
+            (job_id is not None and job.get('id') != job_id)):
+        raise ValueError('Original native producer identity differs')
+    positive(job.get('id'), 'native job ID')
+    job_success(job, native=True, schema=schema)
+    return job
 
 
 def artifact_name(run_id, attempt, arch):
