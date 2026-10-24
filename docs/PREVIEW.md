@@ -36,7 +36,7 @@ A title's details bring together its runtime, synopsis, Keep status, and availab
 
 ## Choose protection
 
-A 30-day Keep gives you more time to watch. When the owner allows it, you can instead protect a title indefinitely until its Keep is removed.
+A temporary Keep gives you more time to watch. Its duration defaults to 30 days and can be changed by the owner in **Admin → General**. When the owner allows it, you can instead protect a title indefinitely until its Keep is removed.
 
 ### Dark mode
 

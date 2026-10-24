@@ -18,6 +18,13 @@ os.environ.update(FLASK_SECRET_KEY='test-only-secret-not-for-production-0000', P
 import app as keep
 keep.COLLECTIONS = keep.get_collections()
 
+
+def set_keep_duration_days(days):
+    with closing(keep.attribution_db()) as db, db:
+        db.execute("""INSERT INTO general_settings(id, keep_duration_days) VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET keep_duration_days=excluded.keep_duration_days""", (days,))
+
+
 class KeepTests(unittest.TestCase):
     def setUp(self):
         keep.app.config.update(TESTING=True)
@@ -28,6 +35,8 @@ class KeepTests(unittest.TestCase):
         self.cid = next(iter(keep.COLLECTIONS))
         self.item = {'id': 91, 'mediaServerId': '42',
                      'mediaData': {'title': 'Test Movie', 'year': 2026}}
+        set_keep_duration_days(30)
+        self.addCleanup(set_keep_duration_days, 30)
         with closing(keep.attribution_db()) as db, db:
             db.execute('DELETE FROM keep_attribution')
             db.execute('DELETE FROM keep_schedules')
@@ -339,6 +348,8 @@ class KeepTests(unittest.TestCase):
         response = self.keep_title()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['duration'], 'temporary')
+        self.assertEqual(response.json['durationDays'], 30)
+        self.assertIs(type(response.json['durationDays']), int)
         with closing(keep.attribution_db()) as db:
             expires_at = db.execute('SELECT expires_at FROM keep_schedules').fetchone()[0]
         expiry = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
@@ -349,8 +360,40 @@ class KeepTests(unittest.TestCase):
             db.execute('DELETE FROM keep_schedules')
         response = self.keep_title('indefinite')
         self.assertEqual(response.json['duration'], 'indefinite')
+        self.assertIsNone(response.json['durationDays'])
         with closing(keep.attribution_db()) as db:
             self.assertIsNone(db.execute('SELECT expires_at FROM keep_schedules').fetchone()[0])
+
+    @patch.object(keep, 'get_collection_media')
+    @patch.object(keep.requests, 'post')
+    def test_new_keeps_use_configured_bounds_and_ignore_request_day_overrides(self, post, media):
+        media.return_value = {'items': [self.item]}
+        for days, forged in ((1, 365), (365, 1)):
+            with self.subTest(days=days):
+                set_keep_duration_days(days)
+                with closing(keep.attribution_db()) as db, db:
+                    db.execute('DELETE FROM keep_attribution')
+                    db.execute('DELETE FROM keep_schedules')
+                before = datetime.now(timezone.utc)
+                response = self.post('/api/keep', {
+                    'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary',
+                    'days': forged, 'durationDays': forged})
+                after = datetime.now(timezone.utc)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json['durationDays'], days)
+                self.assertIs(type(response.json['durationDays']), int)
+                with closing(keep.attribution_db()) as db:
+                    stored = db.execute('SELECT expires_at FROM keep_schedules').fetchone()[0]
+                expiry = datetime.strptime(stored, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                self.assertGreaterEqual(expiry, before + timedelta(days=days, seconds=-1))
+                self.assertLessEqual(expiry, after + timedelta(days=days))
+
+    def test_explicit_legacy_expiry_uses_30_days_instead_of_current_setting(self):
+        set_keep_duration_days(1)
+        initial = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+        self.assertEqual(keep.temporary_keep_days(), 1)
+        self.assertEqual(keep.temporary_keep_expiry(initial), '2026-09-11 12:00:00')
+        self.assertEqual(keep.temporary_keep_expiry(initial, days=30), '2026-10-10 12:00:00')
 
     @patch.object(keep, 'get_collection_media')
     @patch.object(keep.requests, 'post')
@@ -366,6 +409,7 @@ class KeepTests(unittest.TestCase):
 
     @patch.object(keep, 'get_collection_exclusions')
     def test_existing_keeps_receive_fresh_grace_period_once(self, exclusions):
+        set_keep_duration_days(365)
         legacy = copy.deepcopy(self.item)
         scoped = copy.deepcopy(self.item)
         scoped['mediaServerId'] = '43'
@@ -402,6 +446,7 @@ class KeepTests(unittest.TestCase):
                 'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['expiresAt'], '2026-11-09 12:00:00')
+        self.assertEqual(response.json['durationDays'], 30)
         self.assertEqual(response.json['extensionAvailableAt'], '2026-10-10 12:00:00')
 
         with patch.object(keep, 'datetime') as clock:
@@ -415,6 +460,7 @@ class KeepTests(unittest.TestCase):
         response = self.post('/api/update-keep', {
             'mediaId': '42', 'collectionId': self.cid, 'duration': 'indefinite'})
         self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json['durationDays'])
         with closing(keep.attribution_db()) as db:
             self.assertIsNone(db.execute('SELECT expires_at FROM keep_schedules').fetchone()[0])
 
@@ -424,6 +470,84 @@ class KeepTests(unittest.TestCase):
                 'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['expiresAt'], '2026-10-12 12:00:00')
+
+    @patch.object(keep, 'get_collection_exclusions')
+    def test_configured_extension_preserves_existing_cooldown_after_setting_changes(self, exclusions):
+        exclusions.return_value = {'items': [self.item]}
+        initial = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+        keep.record_keeper(self.cid, '42', {'id': 7, 'username': 'Alice'}, now=initial)
+        set_keep_duration_days(7)
+        with patch.object(keep, 'datetime') as clock:
+            clock.now.return_value = initial + timedelta(days=1)
+            clock.strptime.side_effect = datetime.strptime
+            response = self.post('/api/update-keep', {
+                'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary',
+                'days': 365, 'durationDays': 365})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['durationDays'], 7)
+        self.assertEqual(response.json['expiresAt'], '2026-10-17 12:00:00')
+        self.assertEqual(response.json['extensionAvailableAt'], '2026-10-10 12:00:00')
+        with closing(keep.attribution_db()) as db:
+            before = tuple(db.execute('SELECT expires_at, extension_available_at FROM keep_schedules').fetchone())
+
+        set_keep_duration_days(365)
+        with patch.object(keep, 'datetime') as clock:
+            clock.now.return_value = initial + timedelta(days=2)
+            clock.strptime.side_effect = datetime.strptime
+            response = self.post('/api/update-keep', {
+                'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary'})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json['availableAt'], '2026-10-10 12:00:00')
+        with closing(keep.attribution_db()) as db:
+            self.assertEqual(tuple(db.execute('SELECT expires_at, extension_available_at FROM keep_schedules').fetchone()), before)
+
+        set_keep_duration_days(1)
+        with patch.object(keep, 'datetime') as clock:
+            clock.now.return_value = initial + timedelta(days=30)
+            clock.strptime.side_effect = datetime.strptime
+            response = self.post('/api/update-keep', {
+                'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['durationDays'], 1)
+        self.assertEqual(response.json['expiresAt'], '2026-10-18 12:00:00')
+        self.assertEqual(response.json['extensionAvailableAt'], '2026-10-17 12:00:00')
+
+    @patch.object(keep, 'get_collection_exclusions')
+    def test_overdue_extension_adds_configured_days_from_now(self, exclusions):
+        exclusions.return_value = {'items': [self.item]}
+        initial = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+        keep.record_keeper(self.cid, '42', {'id': 7, 'username': 'Alice'}, now=initial)
+        set_keep_duration_days(2)
+        with patch.object(keep, 'datetime') as clock:
+            clock.now.return_value = initial + timedelta(days=40)
+            clock.strptime.side_effect = datetime.strptime
+            response = self.post('/api/update-keep', {
+                'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['durationDays'], 2)
+        self.assertEqual(response.json['expiresAt'], '2026-10-22 12:00:00')
+        self.assertEqual(response.json['extensionAvailableAt'], '2026-10-10 12:00:00')
+
+    @patch.object(keep, 'get_collection_exclusions')
+    def test_indefinite_to_temporary_uses_current_duration_without_old_cooldown(self, exclusions):
+        exclusions.return_value = {'items': [self.item]}
+        initial = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+        keep.record_keeper(self.cid, '42', {'id': 7, 'username': 'Alice'}, duration='indefinite', now=initial)
+        set_keep_duration_days(45)
+        with patch.object(keep, 'datetime') as clock:
+            clock.now.return_value = initial + timedelta(days=2)
+            response = self.post('/api/update-keep', {
+                'mediaId': '42', 'collectionId': self.cid, 'duration': 'temporary'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['durationDays'], 45)
+        self.assertEqual(response.json['expiresAt'], '2026-10-27 12:00:00')
+        self.assertIsNone(response.json['extensionAvailableAt'])
+        response = self.post('/api/update-keep', {
+            'mediaId': '42', 'collectionId': self.cid, 'duration': 'indefinite'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json['durationDays'])
+        self.assertIsNone(response.json['expiresAt'])
+        self.assertIsNone(response.json['extensionAvailableAt'])
 
     @patch.object(keep, 'get_collection_media')
     @patch.object(keep.requests, 'post')
@@ -503,6 +627,7 @@ class KeepTests(unittest.TestCase):
         self.assertIn('id="keep-duration-dialog"', page)
         self.assertIn('id="manage-keep-dialog"', page)
         self.assertIn('data-option-title', page)
+        self.assertIn(f'/static/keep-duration.js?v={keep.APP_VERSION}', page)
         self.assertIn('Keep for 30 days', page)
         self.assertIn('Recommended · expires automatically', page)
         self.assertIn('A 30-day Keep protects this title. When it expires, the title may return to Leaving if it still meets the library’s rules.', page)
@@ -510,6 +635,14 @@ class KeepTests(unittest.TestCase):
         with patch.object(keep, 'get_collection_delete_after_days', return_value=30):
             leaving_page = self.client.get('/').get_data(as_text=True)
         self.assertNotIn('Maintainerr', leaving_page)
+
+        for days, label in ((1, '1 day'), (365, '365 days')):
+            set_keep_duration_days(days)
+            configured = self.client.get('/kept').get_data(as_text=True)
+            self.assertIn(f'data-keep-duration-days="{days}"', configured)
+            self.assertIn(f'Keep for {label}', configured)
+            self.assertIn(f'Extend by {label}', configured)
+            self.assertIn('30d', configured)
 
         with closing(keep.attribution_db()) as db, db:
             db.execute('UPDATE keep_schedules SET expires_at=NULL')

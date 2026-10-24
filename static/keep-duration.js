@@ -1,6 +1,11 @@
 (() => {
   const keepDialog = document.getElementById('keep-duration-dialog');
   const manageDialog = document.getElementById('manage-keep-dialog');
+  const validDurationDays = value => Number.isInteger(value) && value >= 1 && value <= 365;
+  const configuredDurationDays = Number(document.body?.dataset.keepDurationDays);
+  const keepDurationDays = validDurationDays(configuredDurationDays) ? configuredDurationDays : 30;
+  const durationLabel = days => `${days} ${days === 1 ? 'day' : 'days'}`;
+  const appliedDurationDays = result => validDurationDays(result?.durationDays) ? result.durationDays : keepDurationDays;
 
   function trapFocus(dialog, controls, isSubmitting) {
     dialog.addEventListener('keydown', event => {
@@ -34,11 +39,12 @@
       })
     });
     if (!response.ok) throw new Error('Keep request failed');
+    const result = await response.json();
 
     const card = opener.closest('.card');
     const section = opener.closest('section');
     refreshCounts(true);
-    showToast(duration === 'temporary' ? `${title} is protected for 30 days` : `${title} is kept indefinitely`);
+    showToast(duration === 'temporary' ? `${title} is protected for ${durationLabel(appliedDurationDays(result))}` : `${title} is kept indefinitely`);
     await (window.KeepUI?.finishMediaAction || ((item, button, updateLayout) => {
       item.remove(); updateLayout();
     }))(card, opener, () => {
@@ -64,7 +70,7 @@
       if (!armed) {
         armed = true;
         button.dataset.confirming = 'true';
-        button.textContent = 'KEEP FOR 30 DAYS?';
+        button.textContent = `KEEP FOR ${durationLabel(keepDurationDays).toUpperCase()}?`;
         timer = setTimeout(reset, 4000);
         return;
       }
@@ -174,7 +180,7 @@
       description.textContent = isTemporary
         ? `Currently protected for ${days} ${days === 1 ? 'day' : 'days'}, through ${opener.dataset.expiryLabel}. Choose a change below; selecting it applies immediately.`
         : 'Currently protected indefinitely. Choose a change below; selecting it applies immediately.';
-      temporaryTitle.textContent = isTemporary ? 'Extend by 30 days' : 'Switch to a 30-day keep';
+      temporaryTitle.textContent = isTemporary ? `Extend by ${durationLabel(keepDurationDays)}` : `Switch to a ${keepDurationDays}-day keep`;
       temporaryDetail.textContent = isTemporary && !canExtend
         ? `Available ${opener.dataset.extensionAvailableLabel}`
         : `${isTemporary ? 'New expiration' : 'Expires'}: ${opener.dataset.nextTemporaryLabel}`;
@@ -232,10 +238,11 @@
             })
           });
           if (!response.ok) throw new Error('Keep update failed');
+          const result = await response.json();
           actionButton.textContent = 'UPDATED ✓';
           manageDialog.close();
           const message = duration === 'temporary'
-            ? (actionButton.dataset.isTemporary === 'true' ? 'Keep extended by 30 days' : 'Title protected for 30 days')
+            ? (actionButton.dataset.isTemporary === 'true' ? `Keep extended by ${durationLabel(appliedDurationDays(result))}` : `Title protected for ${durationLabel(appliedDurationDays(result))}`)
             : 'Title kept indefinitely';
           showToast(message);
           window.KeepToastAfterReload?.(message);

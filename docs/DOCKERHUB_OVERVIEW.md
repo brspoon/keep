@@ -8,12 +8,12 @@ Keep gives the people who use your Plex server a say in what stays and what goes
 
 Disk space is limited, and automated cleanup helps keep a media library manageable. But a movie or show someone still plans to watch can be removed before they get around to it. Keep was created to make that decision more personal: a simple, interactive way to see what's leaving and give a title more time.
 
-Keep is a self-hosted companion for Plex and Maintainerr. Viewers sign in, browse titles scheduled for removal, and choose what they want to keep. A 30-day Keep buys time to watch; owners can also allow indefinite protection. Maintainerr continues to handle the cleanup rules, while Keep gives viewers an easy way to protect the titles that matter to them.
+Keep is a self-hosted companion for Plex and Maintainerr. Viewers sign in, browse titles scheduled for removal, and choose what they want to keep. A temporary Keep buys time to watch; the owner chooses its duration and can also allow indefinite protection. Maintainerr continues to handle the cleanup rules, while Keep gives viewers an easy way to protect the titles that matter to them.
 
 When it's time to make room, **Manage Library** lets people with the owner's permission delete movies, shows, or selected seasons they no longer want. Access can be limited to specific libraries and a person's own Seerr requests. Active Keeps are checked before deletion, and every deletion requires confirmation.
 
 - **See what's leaving.** Browse selected Maintainerr collections and the time remaining before possible removal.
-- **Keep your watch plans.** Protect titles for 30 days, manage your Keeps, and see who kept each title.
+- **Keep your watch plans.** Protect titles temporarily, manage your Keeps, and see who kept each title.
 - **Make space together.** Give trusted users controlled access to library cleanup through Radarr and Sonarr.
 - **Stay informed.** Optional email summaries and watch history help people decide what to keep.
 
@@ -51,7 +51,7 @@ Open the printed `/setup` address and enter the setup code supplied by the insta
 
 Follow the [installation and configuration guide](https://github.com/brspoon/keep/blob/main/docs/INSTALLATION.md) for setup, manual Compose installation, supported image tags, and HTTPS configuration. Back up your configuration and data before upgrading.
 
-Use an explicit version tag, such as `brspoon/keep:2.27.6`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
+Use an explicit version tag, such as `brspoon/keep:2.28.0`, for a predictable deployment; `stable` tracks the current stable release and can change. [GitHub Releases](https://github.com/brspoon/keep/releases) provides release notes, matching source archives, and checksums. Only the latest stable release receives support and security fixes.
 
 ## Integrations and API
 

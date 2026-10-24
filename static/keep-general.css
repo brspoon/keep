@@ -1,0 +1,13 @@
+.general-ui { margin:0; }
+.general-ui .general-panel { box-sizing:border-box; max-width:760px; padding:24px; border:1px solid var(--border); border-radius:16px; background:var(--surface); }
+.general-ui .general-panel h2 { margin:0 0 8px; font-size:20px; }
+.general-ui .general-panel>p { margin:0 0 24px; color:var(--muted); font-size:14px; }
+.general-ui .general-form label { display:block; margin-bottom:8px; font-size:14px; }
+.general-ui .general-number-field { display:flex; align-items:center; gap:12px; }
+.general-ui .general-number-field input { box-sizing:border-box; width:112px; padding:10px 12px; border:1px solid var(--border); color:var(--text); }
+.general-ui .general-number-field span { color:var(--muted); font-size:14px; }
+.general-ui .general-help { max-width:66ch; margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.6; }
+.general-ui .general-save { margin-top:24px; padding:10px 18px; border:1px solid transparent; border-radius:10px; cursor:pointer; }
+.general-ui .general-save:not(:disabled):hover { background:var(--accent-hover); }
+.general-ui .general-feedback { max-width:760px; box-sizing:border-box; margin:0 0 20px; padding:12px 16px; border:1px solid var(--negative-border); border-radius:10px; background:var(--negative-surface); color:var(--negative); font-size:14px; }
+@media(max-width:600px) { .general-ui .general-panel { padding:20px; } }

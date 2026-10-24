@@ -177,7 +177,7 @@ Idempotency-Key: client-keep-create-0001
 {"collection_id": 1, "media_id": "42"}
 ```
 
-`duration` is optional and defaults to `temporary`. The only accepted fields are `collection_id`, `media_id`, and `duration`. The API returns `201 Created` with a Keep record in the `{ "data": ... }` envelope.
+`duration` accepts `temporary` or `indefinite` and defaults to `temporary`. Temporary Keeps use the duration currently set by the owner under **Admin → General**: 1–365 days, with a default of 30. The only accepted fields are `collection_id`, `media_id`, and `duration`. The API returns `201 Created` with a Keep record in the `{ "data": ... }` envelope.
 
 Change a Keep's duration:
 
@@ -192,7 +192,7 @@ Idempotency-Key: client-keep-update-0001
 {"duration": "temporary"}
 ```
 
-The only accepted field is `duration`, which is required. Changing a temporary Keep follows Keep's existing extension-availability rules; an unavailable extension returns `409 conflict`. The response contains the updated Keep in the `{ "data": ... }` envelope; read the Keep record to see its availability time.
+The only accepted field is `duration`, which is required. Extending a temporary Keep or changing an indefinite Keep to temporary uses the owner's current duration. Changing a temporary Keep follows Keep's existing extension-availability rules; an unavailable extension returns `409 conflict`. Saving a different duration in Admin does not change existing expiry dates or extension availability. The response contains the updated Keep in the `{ "data": ... }` envelope; read the Keep record to see its availability time.
 
 Remove protection:
 

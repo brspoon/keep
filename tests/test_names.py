@@ -88,7 +88,7 @@ class SettingsTests(unittest.TestCase):
     def test_owner_settings_page_and_name_update(self):
         landing = self.client.get('/settings')
         self.assertEqual(landing.status_code, 302)
-        self.assertEqual(landing.headers['Location'], '/settings/users')
+        self.assertEqual(landing.headers['Location'], '/settings/general')
         page = self.client.get('/settings/users')
         self.assertEqual(page.status_code, 200)
         body = page.get_data(as_text=True)
@@ -718,7 +718,7 @@ class SettingsTests(unittest.TestCase):
             page = self.client.get('/').get_data(as_text=True)
             kept_page = self.client.get('/kept').get_data(as_text=True)
         self.assertIn('href="/preferences" aria-haspopup="dialog" aria-controls="preferences-dialog">Preferences</a>', page)
-        self.assertRegex(page, r'href="/settings/users"[^>]*>Admin</a>')
+        self.assertRegex(page, r'href="/settings/general"[^>]*>Admin</a>')
         self.assertIn('class="user-links"', page)
         self.assertIn('grid-template-columns: auto minmax(0, 1fr);', page)
         self.assertIn('grid-column: 1 / -1;', page)
@@ -750,7 +750,7 @@ class SettingsTests(unittest.TestCase):
              patch.object(keep, 'get_collection_exclusions', return_value={'items': []}):
             page = self.client.get('/').get_data(as_text=True)
         self.assertIn('href="/preferences" aria-haspopup="dialog" aria-controls="preferences-dialog">Preferences</a>', page)
-        self.assertNotIn('href="/settings/users">Admin</a>', page)
+        self.assertNotIn('href="/settings/general">Admin</a>', page)
 
     def test_preferences_use_plain_email_notification_label(self):
         page = self.client.get('/preferences').get_data(as_text=True)
