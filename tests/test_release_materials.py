@@ -1,4 +1,5 @@
 """Offline integrity and release-asset lifecycle tests."""
+import argparse
 import base64
 import copy
 import datetime
@@ -6,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import runpy
 import subprocess
 import urllib.parse
 from contextlib import chdir, redirect_stdout
@@ -898,11 +900,14 @@ class ReleaseMaterialsTests(unittest.TestCase):
         self.write_transfer_record()
         release_image = self.root / 'release-image-amd64.json'
         with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
-             patch.object(materials, 'hub', side_effect=self.native_hub(tag_digest='sha256:' + '0' * 64)), \
+             patch.object(materials, 'hub', side_effect=self.native_hub(tag_digest='sha256:' + '0' * 64)) as hub, \
+             patch.object(materials.time, 'sleep') as sleep, \
              patch.object(materials.subprocess, 'check_output') as inspect, \
              patch.object(materials, 'archive') as archive:
             with self.assertRaisesRegex(ValueError, 'transfer tag changed'):
                 materials.archive_native('amd64')
+        self.assertEqual(sum('/tags/' in call.args[0] for call in hub.call_args_list), 1)
+        sleep.assert_not_called()
         inspect.assert_not_called()
         archive.assert_not_called()
         self.assertFalse(release_image.exists())
@@ -936,6 +941,115 @@ class ReleaseMaterialsTests(unittest.TestCase):
                     materials.archive_native('amd64')
                 archive.assert_not_called()
                 self.assertFalse(release_image.exists())
+
+    def test_fresh_transfer_metadata_retries_transient_reads_then_returns_exact_response(self):
+        failures = [urllib.error.HTTPError('https://hub.docker.com/private?token=secret', code,
+                                          'private error', {}, io.BytesIO(b'private response'))
+                    for code in (404, 429, 500, 502, 503, 504)]
+        failures += [urllib.error.URLError('private transport error'), TimeoutError('private timeout'),
+                     ConnectionResetError('private reset'), materials.http.client.IncompleteRead(b'private partial')]
+        tag = 'transfer-123456-3-amd64'
+        response = {'digest': self.DIGEST}
+        for error in failures:
+            with self.subTest(error=type(error).__name__, code=getattr(error, 'code', None)), \
+                 patch.object(materials, 'hub', side_effect=[error, response]) as hub, \
+                 patch.object(materials.time, 'sleep') as sleep:
+                self.assertIs(materials.transfer_tag_metadata(tag, 'synthetic-token'), response)
+            self.assertEqual(hub.call_args_list, [unittest.mock.call(
+                'repositories/brspoon/keep/tags/' + tag + '/', 'synthetic-token')] * 2)
+            sleep.assert_called_once_with(1)
+            if isinstance(error, urllib.error.HTTPError):
+                self.assertTrue(error.fp.closed)
+
+    def test_fresh_transfer_metadata_stops_after_bounded_http_or_transport_failures(self):
+        for error in (urllib.error.HTTPError('https://hub.docker.com/private', 503, 'private', {}, None),
+                      urllib.error.URLError('private transport error')):
+            with self.subTest(error=type(error).__name__), \
+                 patch.object(materials, 'hub', side_effect=error) as hub, \
+                 patch.object(materials.time, 'sleep') as sleep:
+                with self.assertRaises(type(error)) as raised:
+                    materials.transfer_tag_metadata('transfer-123456-3-amd64', 'synthetic-token')
+            self.assertIs(raised.exception, error)
+            self.assertEqual(hub.call_count, 5)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4, 8])
+            self.assertLessEqual(sum(call.args[0] for call in sleep.call_args_list), 30)
+
+    def test_fresh_transfer_metadata_does_not_retry_other_http_or_malformed_responses(self):
+        failures = [urllib.error.HTTPError('https://hub.docker.com/private', code, 'private', {}, None)
+                    for code in (400, 401, 403, 409, 422, 501)]
+        failures.append(json.JSONDecodeError('malformed metadata', 'private response', 0))
+        for error in failures:
+            with self.subTest(error=type(error).__name__, code=getattr(error, 'code', None)), \
+                 patch.object(materials, 'hub', side_effect=error) as hub, \
+                 patch.object(materials.time, 'sleep') as sleep:
+                with self.assertRaises(type(error)) as raised:
+                    materials.transfer_tag_metadata('transfer-123456-3-amd64', 'synthetic-token')
+            self.assertIs(raised.exception, error)
+            hub.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_archive_native_recovers_only_fresh_tag_metadata_before_archival(self):
+        self.write_transfer_record()
+        original_hub = self.native_hub()
+        observed_tags = []
+        def hub(path, token=None, payload=None):
+            if '/tags/' in path:
+                observed_tags.append(path)
+                if len(observed_tags) == 1:
+                    raise urllib.error.HTTPError('https://hub.docker.com/private', 404, 'private', {}, None)
+            return original_hub(path, token=token, payload=payload)
+        with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \
+             patch.object(materials, 'hub', side_effect=hub) as calls, \
+             patch.object(materials.time, 'sleep') as sleep, \
+             patch.object(materials.subprocess, 'check_output', return_value=json.dumps(self.native_image()).encode()), \
+             patch.object(materials, 'registry_config', return_value='sha256:' + 'd' * 64), \
+             patch.object(materials, 'archive') as archive:
+            materials.archive_native('amd64')
+        self.assertEqual(len(observed_tags), 2)
+        self.assertEqual(sum(call.args[0] == 'auth/token' for call in calls.call_args_list), 1)
+        self.assertEqual(sum(call.args[0] == 'repositories/brspoon/keep/' for call in calls.call_args_list), 1)
+        sleep.assert_called_once_with(1)
+        archive.assert_called_once_with('amd64', native_digest=self.DIGEST)
+        identity = json.loads((self.root / 'release-image-amd64.json').read_text())
+        self.assertEqual(identity['native_digest'], self.DIGEST)
+
+    def test_archive_native_does_not_retry_token_writes_or_other_metadata_reads(self):
+        self.write_transfer_record()
+        for responses in ([urllib.error.HTTPError('https://hub.docker.com/private', 503, 'private', {}, None)],
+                          [{'access_token': 'synthetic-token'},
+                           urllib.error.HTTPError('https://hub.docker.com/private', 503, 'private', {}, None)]):
+            with self.subTest(calls_before_failure=len(responses)), chdir(self.root), \
+                 patch.object(materials, 'guard', return_value=self.VERSION), \
+                 patch.object(materials, 'hub', side_effect=responses) as hub, \
+                 patch.object(materials.time, 'sleep') as sleep, \
+                 patch.object(materials, 'archive') as archive:
+                with self.assertRaises(urllib.error.HTTPError):
+                    materials.archive_native('amd64')
+            self.assertEqual(hub.call_count, len(responses))
+            sleep.assert_not_called()
+            archive.assert_not_called()
+            self.assertFalse((self.root / 'release-image-amd64.json').exists())
+
+    def test_http_failure_diagnostic_only_reports_status_and_known_service(self):
+        private = 'do-not-print-this-secret'
+        for url, service in (
+                (f'https://user:{private}@hub.docker.com/path?token={private}', 'hub.docker.com'),
+                (f'https://api.github.com/private/{private}', 'api.github.com'),
+                (f'https://uploads.github.com/path?signature={private}', 'uploads.github.com'),
+                (f'https://auth.docker.io/token?secret={private}', 'auth.docker.io'),
+                (f'https://registry-1.docker.io/path?token={private}', 'registry-1.docker.io'),
+                (f'https://release-assets.githubusercontent.com/path?signature={private}', 'release-assets.githubusercontent.com'),
+                (f'https://{private}.example/path', 'unknown service'),
+                ('https://[invalid', 'unknown service')):
+            with self.subTest(service=service):
+                error = urllib.error.HTTPError(url, 429, private, {'Authorization': private}, io.BytesIO(private.encode()))
+                with patch.object(argparse.ArgumentParser, 'parse_args', side_effect=error):
+                    with self.assertRaises(SystemExit) as raised:
+                        runpy.run_path(materials.__file__, run_name='__main__')
+                self.assertEqual(str(raised.exception),
+                                 'Release materials failed: HTTPError: HTTP 429 from ' + service)
+                self.assertNotIn(private, str(raised.exception))
+                error.close()
 
     def test_archive_native_binds_only_its_own_verified_digest(self):
         self.write_transfer_record()

@@ -15,6 +15,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -338,6 +339,22 @@ def registry_config(native):
     return checked_digest(manifest['config'].get('digest'))
 
 
+def transfer_tag_metadata(tag, token):
+    """Allow a freshly pushed tag's read-only Hub metadata to settle."""
+    delays = (1, 2, 4, 8)
+    for attempt in range(len(delays) + 1):
+        try:
+            return hub('repositories/brspoon/keep/tags/' + tag + '/', token)
+        except urllib.error.HTTPError as error:
+            if error.code not in (404, 429, 500, 502, 503, 504) or attempt == len(delays):
+                raise
+            error.close()
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+            if attempt == len(delays):
+                raise
+        time.sleep(delays[attempt])
+
+
 def archive_native(arch):
     """Archive the original tested job files directly, without Actions storage."""
     version = guard()
@@ -359,7 +376,7 @@ def archive_native(arch):
                                      'secret': os.environ['DOCKERHUB_TOKEN']})['access_token']
     repository_visibility(hub('repositories/' + image + '/', token), 'is_private', 'Docker Hub')
     tag = f'transfer-{run}-{attempt}-{arch}'
-    if hub('repositories/' + image + '/tags/' + tag + '/', token).get('digest') != native:
+    if transfer_tag_metadata(tag, token).get('digest') != native:
         raise ValueError('Native transfer tag changed before source archival')
     inspected = json.loads(subprocess.check_output(['docker', 'image', 'inspect', 'keep-ci']))[0]
     labels = inspected.get('Config', {}).get('Labels') or {}
@@ -649,10 +666,26 @@ def main():
         parser.error('A native architecture is required')
 
 
+def failure_message(error):
+    # Hostnames come only from this fixed catalog, never provider error prose.
+    detail = ''
+    if isinstance(error, urllib.error.HTTPError):
+        services = {'api.github.com', 'uploads.github.com', 'hub.docker.com',
+                    'auth.docker.io', 'registry-1.docker.io', 'release-assets.githubusercontent.com'}
+        try:
+            host = urllib.parse.urlsplit(error.url).hostname
+        except (TypeError, ValueError):
+            host = None
+        service = host if host in services else 'unknown service'
+        status = error.code if type(error.code) is int and 100 <= error.code <= 599 else 'unknown'
+        detail = f': HTTP {status} from {service}'
+    elif isinstance(error, ValueError):
+        detail = ': ' + str(error)
+    return 'Release materials failed: ' + type(error).__name__ + detail
+
+
 if __name__ == '__main__':
     try:
         main()
     except Exception as error:
-        # Never print request headers, redirect URLs or provider credentials.
-        detail = ': ' + str(error) if isinstance(error, ValueError) else ''
-        raise SystemExit('Release materials failed: ' + type(error).__name__ + detail) from None
+        raise SystemExit(failure_message(error)) from None
