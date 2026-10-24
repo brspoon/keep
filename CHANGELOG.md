@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.27.5 — Unreleased
+## 2.27.5 — 2026-10-23
 
 - Apply upstream Python archive-extraction and Expat XML-parser security fixes in the container.
 - Update trusted certificate authorities for HTTPS connections to match the current certifi release.
