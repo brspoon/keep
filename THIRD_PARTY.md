@@ -54,6 +54,15 @@ The Dockerfile includes Alpine software, exact CPython security patches identifi
 in scripts/python_security_patches.json, and the signed Alpine zlib 1.3.2-r1
 package. Python's license is retained in docs/PYTHON_LICENSE.txt; zlib's complete
 license is retained with its verified upstream sources and OS notices.
+The separately identified Expat build includes the exact upstream security
+patches, the Keep-local literal-markup accounting correction, and the complete
+MIT notice and source-header attributions. The local correction has its own
+source identity in the retained patch manifest and source replay record; it is
+not attributed to an upstream commit. Its build uses Alpine's verified Fortify
+headers; their full 0BSD license, header attributions and matching source and
+patch are included with the source materials and notices.
+The build-only GNU Make and Bash inputs retain their complete GPL notices,
+bundled component attributions, matching sources and Alpine recipes too.
 
 The source map in `docs/os-package-sources.json` covers the final OS packages;
 the original Expat, Python, zlib and CA bundle in earlier image layers are covered separately. Full notices,

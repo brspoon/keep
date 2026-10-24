@@ -72,6 +72,20 @@
     ]
   },
   {
+    "path": "tarfile.py",
+    "commit": "0901ad4ffb22605f12b705d1c1197f0a01f0ba0b",
+    "hunks": [
+      {
+        "before": "                                   strict=os.path.ALLOW_MISSING)\n    if os.path.commonpath([target_path, dest_path]) != dest_path:\n        raise OutsideDestinationError(member, target_path)\n    # Limit permissions (no high bits, and go-w)\n    mode = member.mode\n    if mode is not None:\n",
+        "after": "                                   strict=os.path.ALLOW_MISSING)\n    if os.path.commonpath([target_path, dest_path]) != dest_path:\n        raise OutsideDestinationError(member, target_path)\n    # A link member named after the destination directory itself\n    # would replace it with a (sym)link, redirecting the destination\n    # for all subsequent members.\n    if ((member.islnk() or member.issym())\n            and os.path.normpath(name) == os.curdir):\n        raise OutsideDestinationError(member, target_path)\n    # Limit permissions (no high bits, and go-w)\n    mode = member.mode\n    if mode is not None:\n"
+      },
+      {
+        "before": "        if member.islnk() or member.issym():\n            if os.path.isabs(member.linkname):\n                raise AbsoluteLinkError(member)\n            # A link member that resolves to the destination directory itself\n            # would replace it with a (sym)link, redirecting the destination\n            # for all subsequent members.\n            if target_path == dest_path:\n                raise OutsideDestinationError(member, target_path)\n            normalized = os.path.normpath(member.linkname)\n            if normalized != member.linkname:\n                new_attrs['linkname'] = normalized\n",
+        "after": "        if member.islnk() or member.issym():\n            if os.path.isabs(member.linkname):\n                raise AbsoluteLinkError(member)\n            normalized = os.path.normpath(member.linkname)\n            if normalized != member.linkname:\n                new_attrs['linkname'] = normalized\n"
+      }
+    ]
+  },
+  {
     "path": "zipfile/__init__.py",
     "commit": "31980e84b9a708424a0a1dfecde3fc991e313f89",
     "hunks": [

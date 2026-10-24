@@ -292,6 +292,44 @@
             }
           }
         }
+      ],
+      "build_only_packages": [
+        {
+          "name": "g++",
+          "version": "15.2.0-r7",
+          "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+          "build_commit": "ddcf93c394b61ccf6be91b915a92a7454a14fcba",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/g++-15.2.0-r7.apk",
+              "sha256": "355ab6821be1969fad319ce774f8b0e1a51158e9f27065f75478fda5aa1f6a7e",
+              "pkginfo_sha256": "7b0bb38d3683b0f01402cc916c3c746591be89ce994aa885b435f91c19c983f4"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/g++-15.2.0-r7.apk",
+              "sha256": "ddeaf586e369190b045e0a47f27b607c367ee001a1c5f00b99450d0358d878f8",
+              "pkginfo_sha256": "5525bdcbbe57bb58db231fa3afd60fa601e5f7d5b46cbbe6d41d15c9b30d0970"
+            }
+          }
+        },
+        {
+          "name": "libstdc++-dev",
+          "version": "15.2.0-r7",
+          "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+          "build_commit": "ddcf93c394b61ccf6be91b915a92a7454a14fcba",
+          "binaries": {
+            "amd64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libstdc++-dev-15.2.0-r7.apk",
+              "sha256": "d98e3f81bf5995356525cc908b60e2252d59c86b38a417bcdb4d4008ce1e42b3",
+              "pkginfo_sha256": "10e9228c6f212f1c19125e6405222e6f99946e5ccc39b79e2d6f08d3f69eeb15"
+            },
+            "arm64": {
+              "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libstdc++-dev-15.2.0-r7.apk",
+              "sha256": "35d53729002314bb547781917194fa756d65d083cc5691a4a52845dd7dff32e5",
+              "pkginfo_sha256": "b8d9472c6fc7c27d7fbcaf67a3e9e2ef643d37b9d90a7d110b374f96083298c8"
+            }
+          }
+        }
       ]
     },
     {

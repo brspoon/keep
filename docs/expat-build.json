@@ -1,0 +1,705 @@
+{
+  "build": {
+    "architecture_cflags": {
+      "amd64": "-fno-plt",
+      "arm64": ""
+    },
+    "commands": [
+      [
+        "make",
+        "-j2"
+      ],
+      [
+        "make",
+        "check"
+      ]
+    ],
+    "compiler": "/usr/bin/gcc",
+    "compiler_targets": {
+      "amd64": "x86_64-alpine-linux-musl",
+      "arm64": "aarch64-alpine-linux-musl"
+    },
+    "configure_options": [
+      "--prefix=/usr",
+      "--mandir=/usr/share/man",
+      "--enable-static"
+    ],
+    "directory": "/opt/keep-expat-build",
+    "environment": {
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-expat-build=.",
+      "CONFIG_SHELL": "/bin/sh",
+      "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-expat-build/fortify/include",
+      "CXX": "/usr/bin/g++",
+      "LC_ALL": "C",
+      "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
+      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "SHELL": "/bin/sh",
+      "SOURCE_DATE_EPOCH": "1792762956",
+      "TZ": "UTC"
+    },
+    "image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d",
+    "required_tools": [
+      "gcc",
+      "g++",
+      "make",
+      "bash",
+      "ar",
+      "ranlib",
+      "as",
+      "ld",
+      "nm",
+      "strip",
+      "objdump",
+      "sh",
+      "env",
+      "awk",
+      "sed",
+      "grep",
+      "sort",
+      "uniq",
+      "tr",
+      "head",
+      "tail",
+      "cut",
+      "expr",
+      "basename",
+      "dirname",
+      "cat",
+      "cp",
+      "mv",
+      "rm",
+      "mkdir",
+      "rmdir",
+      "ln",
+      "chmod",
+      "touch",
+      "uname",
+      "sleep",
+      "xargs",
+      "wc",
+      "install",
+      "find"
+    ]
+  },
+  "build_script": "scripts/build_patched_expat.py",
+  "build_script_sha256": "e109de2f4dd099d0525f27bddb74e9576d420c58fff655e1845cd3bebc71489b",
+  "build_tools": {
+    "installation": "build-only-offline-apk",
+    "packages": {
+      "bash": {
+        "binaries": {
+          "amd64": {
+            "controls": {
+              ".PKGINFO": "88bf03ab7cc3bcd76217845253883da926618a4f668c0cf3bcab359aa247a6f6",
+              ".post-install": "8d3f6002c8da057110c04bb8e823d2a90e555df1cec438833cd1768ef293bbf8",
+              ".post-upgrade": "8d3f6002c8da057110c04bb8e823d2a90e555df1cec438833cd1768ef293bbf8",
+              ".pre-deinstall": "c704907faf0ff83d5e6625bb8b1adbc7334eee9f0e78f76dd482aa7104507fa6"
+            },
+            "data_sha256": "c42cf7677b39f188f9faeb0ae954f275c1c07a8268afbeec5841b03181012295",
+            "depend": [
+              "/bin/sh",
+              "so:libc.musl-x86_64.so.1",
+              "so:libreadline.so.8"
+            ],
+            "install_if": [],
+            "payload_sha256": "3f0c4634f5fadf4bf1824e59fde09bad80c2aa8979d4dc58194d8623cf998187",
+            "provides": [
+              "cmd:bash=5.3.9-r1"
+            ],
+            "replaces": [],
+            "sha256": "4ad962f26fb3c68365171233fe61e3c51bbee1cab35e8dc661198233daeab0dd",
+            "triggers": [],
+            "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/bash-5.3.9-r1.apk"
+          },
+          "arm64": {
+            "controls": {
+              ".PKGINFO": "9ca10155f6d1ef7da238f101b6af51a0e76b6e145161fb455a68a22410b092fe",
+              ".post-install": "8d3f6002c8da057110c04bb8e823d2a90e555df1cec438833cd1768ef293bbf8",
+              ".post-upgrade": "8d3f6002c8da057110c04bb8e823d2a90e555df1cec438833cd1768ef293bbf8",
+              ".pre-deinstall": "c704907faf0ff83d5e6625bb8b1adbc7334eee9f0e78f76dd482aa7104507fa6"
+            },
+            "data_sha256": "bfbd96492477bb776613589e4de2bfde5f820473b8e306f78939862edc6cb19a",
+            "depend": [
+              "/bin/sh",
+              "so:libc.musl-aarch64.so.1",
+              "so:libreadline.so.8"
+            ],
+            "install_if": [],
+            "payload_sha256": "a811af66c1705eec314312e1d1d2c6196e1da62078146e12e1687228a8f408a6",
+            "provides": [
+              "cmd:bash=5.3.9-r1"
+            ],
+            "replaces": [],
+            "sha256": "95f4f976bdf2f4ca18ff41c32916eb6d7b12a0dae12504d55d04427460d6542f",
+            "triggers": [],
+            "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/bash-5.3.9-r1.apk"
+          }
+        },
+        "build_commit": "1522c3193610902d8493f9790a2755c11f21f26d",
+        "context_path": "aports-1522c3193610902d8493f9790a2755c11f21f26d.tar.gz",
+        "license": "GPL-3.0-or-later",
+        "notices": [
+          {
+            "archive": "bash-5.3-1.tar.gz",
+            "path": "notices/AUTHORS",
+            "sha256": "8ea258e958e649cd29f8094c23e6f58efb83fa0745adb5943d811735a627983a",
+            "source_path": "bash-5.3/AUTHORS",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+          },
+          {
+            "archive": "bash-5.3-1.tar.gz",
+            "path": "notices/COPYING",
+            "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+            "source_path": "bash-5.3/COPYING",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+          },
+          {
+            "archive": "bash-5.3-1.tar.gz",
+            "path": "notices/lib/readline/COPYING",
+            "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+            "source_path": "bash-5.3/lib/readline/COPYING",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+          },
+          {
+            "archive": "bash-5.3-1.tar.gz",
+            "path": "notices/examples/shellmath/LICENSE",
+            "sha256": "5908bd3b6f430bffa4f8a20290eebdd933b62e2213908b83da1230355f3e9c1a",
+            "source_path": "bash-5.3/examples/shellmath/LICENSE",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+          },
+          {
+            "archive": "bash-5.3-1.tar.gz",
+            "path": "notices/tests/COPYRIGHT",
+            "sha256": "e649815d1b6becdc545dda87c91f1b65497ddf6461240b904b2d8511a63476fb",
+            "source_path": "bash-5.3/tests/COPYRIGHT",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+          }
+        ],
+        "recipe_files": {
+          "APKBUILD": {
+            "bytes": 4518,
+            "sha256": "4dbeb2dcbde454870383a81c79d04a63aed951bc9ec7c3ecdc7e9f251d7a55bb",
+            "target": null,
+            "type": "file"
+          },
+          "bash-noinfo.patch": {
+            "bytes": 393,
+            "sha256": "d821496623974e1930dab5f9c11e82f7d4d92c5d6005a2b28a9da62bc6a0699d",
+            "target": null,
+            "type": "file"
+          },
+          "bash.post-install": {
+            "bytes": 39,
+            "sha256": "8d3f6002c8da057110c04bb8e823d2a90e555df1cec438833cd1768ef293bbf8",
+            "target": null,
+            "type": "file"
+          },
+          "bash.post-upgrade": {
+            "bytes": null,
+            "sha256": null,
+            "target": "bash.post-install",
+            "type": "symlink"
+          },
+          "bash.pre-deinstall": {
+            "bytes": 42,
+            "sha256": "c704907faf0ff83d5e6625bb8b1adbc7334eee9f0e78f76dd482aa7104507fa6",
+            "target": null,
+            "type": "file"
+          },
+          "bashrc": {
+            "bytes": 265,
+            "sha256": "ff75bd25a858d543a9a42089dccabcd2e27778e786b4bcb35ae2a376201fef03",
+            "target": null,
+            "type": "file"
+          },
+          "profile-bashrc.sh": {
+            "bytes": 402,
+            "sha256": "92995ce139ad668bf9e70b9246cee6cdd080942d9a13fdcfbbe1cdaaacdfd9a8",
+            "target": null,
+            "type": "file"
+          }
+        },
+        "recipe_url_prefix": "https://raw.githubusercontent.com/alpinelinux/aports/1522c3193610902d8493f9790a2755c11f21f26d/main/bash",
+        "source_inputs": [
+          {
+            "path": "aports-1522c3193610902d8493f9790a2755c11f21f26d.tar.gz",
+            "role": "complete-alpine-build-recipes",
+            "sha256": "2650f18e000b4ca9b997b6867c8ff98d89712873143cc5255983d0eb6ad426a3",
+            "url": "https://github.com/alpinelinux/aports/archive/1522c3193610902d8493f9790a2755c11f21f26d.tar.gz"
+          },
+          {
+            "path": "APKBUILD",
+            "role": "matching-apk-build-script",
+            "sha256": "4dbeb2dcbde454870383a81c79d04a63aed951bc9ec7c3ecdc7e9f251d7a55bb",
+            "url": "https://raw.githubusercontent.com/alpinelinux/aports/1522c3193610902d8493f9790a2755c11f21f26d/main/bash/APKBUILD"
+          },
+          {
+            "path": "bash-5.3-1.tar.gz",
+            "role": "upstream-source",
+            "sha256": "0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba",
+            "sha512": "426702c8b0fb9e0c9956259973ce5b657890fd47f4f807a64febf20077bb48d0b91474ed6e843d2ef277186b46c5fffa79b808da9b48d4ec027d5e2de1b28ed8",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+          },
+          {
+            "path": "bash53-001",
+            "role": "matching-source-patch",
+            "sha256": "1f608434364af86b9b45c8b0ea3fb3b165fb830d27697e6cdfc7ac17dee3287f",
+            "sha512": "66d0987f1a8951974c3a707a1980ef391a1f2a2938f0fa46adb77fcdcef6a3ca49e67182b9640ece3e59bb289e5b4a17eb870aa2a525a03e829a7be158d020a6",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-001"
+          },
+          {
+            "path": "bash53-002",
+            "role": "matching-source-patch",
+            "sha256": "e385548a00130765ec7938a56fbdca52447ab41fabc95a25f19ade527e282001",
+            "sha512": "05caea1c1f5a3d27f2aa351c24f324f9d544ded89db4183ae2872e0283dde62dd6166ca4e780304398935b4aa3fb4db77ecf57acd0f0e295d279ffe40b772158",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-002"
+          },
+          {
+            "path": "bash53-003",
+            "role": "matching-source-patch",
+            "sha256": "f245d9c7dc3f5a20d84b53d249334747940936f09dc97e1dcb89fc3ab37d60ed",
+            "sha512": "3d4004653cb3f2cba984e67b8e7ae54c19351e176b62bb415f88fdd482ae04be063dacf6303c8343ab6c8bf4f2388026c1742ac603a5cd5c330db22a4b76f4cb",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-003"
+          },
+          {
+            "path": "bash53-004",
+            "role": "matching-source-patch",
+            "sha256": "9591d245045529f32f0812f94180b9d9ce9023f5a765c039b852e5dfc99747d0",
+            "sha512": "d3c7c83ae0742f2a4e1bc96e8fdb3f05c8c0a7e631d3473922ac245f83194925ae443e761269fa6a519298b1123ee4008bcbcdaf9180dff0a0df7fbe5e029bbb",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-004"
+          },
+          {
+            "path": "bash53-005",
+            "role": "matching-source-patch",
+            "sha256": "cca1ef52dbbf433bc98e33269b64b2c814028efe2538be1e2c9a377da90bc99d",
+            "sha512": "e81b43b084c1e9d59acd174d0792a93053780bdef61e7f4072d90b425d99a3fb7d35ef4c0ab79c4fb24bb6b38a8d9e99aad2fceac6efddf723a2cd123b32f0ea",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-005"
+          },
+          {
+            "path": "bash53-006",
+            "role": "matching-source-patch",
+            "sha256": "29119addefed8eff91ae37fd51822c31780ee30d4a28376e96002706c995ff10",
+            "sha512": "f7e303405571635e20c26507c46f9ae0a61ea1328fa0492f2eba2095d398f799e62c1dbf0c07b440c290244f2c54186691ef4aaa2d65f2de101f9888386e2391",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-006"
+          },
+          {
+            "path": "bash53-007",
+            "role": "matching-source-patch",
+            "sha256": "c0976bbfffa1453c7cfdd62058f206a318568ff2d690f5d4fa048793fa3eb299",
+            "sha512": "5f9419b34c759b92a29f25d97e5da3f02603b3138afc11523c7bd304139db0cd02ff82a093cf78a338a7f9d88cb50a880fa6a105be83f8ca85ea8ff7d5c5d80b",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-007"
+          },
+          {
+            "path": "bash53-008",
+            "role": "matching-source-patch",
+            "sha256": "097cd723cbfb8907674ac32214063a3fd85282657ec5b4e544d2c0f719653fb4",
+            "sha512": "094b7dc2abe6fc41c62494c6b69640fbd8c6bd93e7cde0618504bb8589fc51fec2fb1686b2729c37e430d336d93ec174233d78f23c82026aca49a240a00477c1",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-008"
+          },
+          {
+            "path": "bash53-009",
+            "role": "matching-source-patch",
+            "sha256": "eee30fe78a4b0cb2fe20e010e00308899cfc613e0774ebb3c8557a1552f24f8c",
+            "sha512": "07f37cee118e510ae58ea408f9d97b942017e1378532d4e3cd5a4d7405994ddadaba5d3ddb4bbda6b375760967faa51add7f46914ba919a27c14e7036f64f3be",
+            "url": "https://ftp.gnu.org/gnu/bash/bash-5.3-patches/bash53-009"
+          }
+        ],
+        "url": "https://www.gnu.org/software/bash/bash.html",
+        "version": "5.3.9-r1"
+      },
+      "make": {
+        "binaries": {
+          "amd64": {
+            "controls": {
+              ".PKGINFO": "ee01140d5cc1f2c8a77884d6085540a300e73b69e74573ffb2f8bc50224bd55b"
+            },
+            "data_sha256": "1c2e7c907027416eaad7e1812822d3acce9addce7a57cfb45f7a308091c4c0d7",
+            "depend": [
+              "so:libc.musl-x86_64.so.1"
+            ],
+            "install_if": [],
+            "payload_sha256": "b095ec2d15c572c7e939555cfbb0718fc10ef208a277b4dc711b7ac0eb8dbaa2",
+            "provides": [
+              "cmd:gmake=4.4.1-r4",
+              "cmd:make=4.4.1-r4"
+            ],
+            "replaces": [],
+            "sha256": "a916626a876f64c6b6fb32a6bf0fa93351d09fae0aa7684135642390da647e60",
+            "triggers": [],
+            "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/make-4.4.1-r4.apk"
+          },
+          "arm64": {
+            "controls": {
+              ".PKGINFO": "eb8477a4843dc8525345d48106d6dd36b6aa1cfbac08b0638877e05207257783"
+            },
+            "data_sha256": "089957b2eb357c06fb29c275fdafc70721a2755f7883b6f60c5cac2e3842d314",
+            "depend": [
+              "so:libc.musl-aarch64.so.1"
+            ],
+            "install_if": [],
+            "payload_sha256": "19d7952ba52c7c1630f0580205058729f46ef80ec45a29c5f3e0e88c58327662",
+            "provides": [
+              "cmd:gmake=4.4.1-r4",
+              "cmd:make=4.4.1-r4"
+            ],
+            "replaces": [],
+            "sha256": "0a2c6c3fa0d90b652bbaeac362d1bfe54b75aae57631a6b448826f8b51c85170",
+            "triggers": [],
+            "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/make-4.4.1-r4.apk"
+          }
+        },
+        "build_commit": "9368161bd37f74fb11747ba79197f8480aaca7dc",
+        "context_path": "aports-9368161bd37f74fb11747ba79197f8480aaca7dc.tar.gz",
+        "license": "GPL-3.0-or-later",
+        "notices": [
+          {
+            "archive": "make-4.4.1.tar.gz",
+            "path": "notices/AUTHORS",
+            "sha256": "602720d79792fc690cc90e36507385299e86279a9947b0d188e90477917c6db7",
+            "source_path": "make-4.4.1/AUTHORS",
+            "url": "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+          },
+          {
+            "archive": "make-4.4.1.tar.gz",
+            "path": "notices/COPYING",
+            "sha256": "e79e9c8a0c85d735ff98185918ec94ed7d175efc377012787aebcf3b80f0d90b",
+            "source_path": "make-4.4.1/COPYING",
+            "url": "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+          }
+        ],
+        "recipe_files": {
+          "APKBUILD": {
+            "bytes": 1087,
+            "sha256": "f0d914d8fd78e99fab1f82b8f002e19ccaa88bf8d4f65986c744490cdf943c1c",
+            "target": null,
+            "type": "file"
+          },
+          "getopt-gcc15.patch": {
+            "bytes": 1128,
+            "sha256": "54a9713fa5ecf7626342d271d389f2483a293322f2fafad8ad206a7db4d83f5d",
+            "target": null,
+            "type": "file"
+          }
+        },
+        "recipe_url_prefix": "https://raw.githubusercontent.com/alpinelinux/aports/9368161bd37f74fb11747ba79197f8480aaca7dc/main/make",
+        "source_inputs": [
+          {
+            "path": "aports-9368161bd37f74fb11747ba79197f8480aaca7dc.tar.gz",
+            "role": "complete-alpine-build-recipes",
+            "sha256": "0582cb9a24be86c34028e55fc5b61f1d5873e70e2bfbf486dc0e5b0da450210d",
+            "url": "https://github.com/alpinelinux/aports/archive/9368161bd37f74fb11747ba79197f8480aaca7dc.tar.gz"
+          },
+          {
+            "path": "APKBUILD",
+            "role": "matching-apk-build-script",
+            "sha256": "f0d914d8fd78e99fab1f82b8f002e19ccaa88bf8d4f65986c744490cdf943c1c",
+            "url": "https://raw.githubusercontent.com/alpinelinux/aports/9368161bd37f74fb11747ba79197f8480aaca7dc/main/make/APKBUILD"
+          },
+          {
+            "path": "make-4.4.1.tar.gz",
+            "role": "upstream-source",
+            "sha256": "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3",
+            "sha512": "145260cbd6a8226cef3dfef0c8baba31847beaebc7e6b65d39d02715fd4f4cab9b139b6c3772e550088d4f9ae80c6d3ed20b9a7664c693644dfb96b4cb60e67c",
+            "url": "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+          }
+        ],
+        "url": "https://www.gnu.org/software/make",
+        "version": "4.4.1-r4"
+      }
+    },
+    "schema": "keep-expat-build-tools-v1",
+    "signing_keys": {
+      "amd64": {
+        "name": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+        "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+        "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+      },
+      "arm64": {
+        "name": "alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+        "sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+        "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+      }
+    }
+  },
+  "build_tools_helper": {
+    "path": "scripts/expat_build_tools.py",
+    "sha256": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa"
+  },
+  "commits": [
+    "d545081f6a90792208e0d274888a352e2e5d894d",
+    "da504c0c111086072172431c76867800673fbc34",
+    "c30145b28632b31f805d57f9838ba36b8db99367",
+    "d8f31e647a4d1eda088e89354f4769b0dad303d3"
+  ],
+  "compiler_sha256": {
+    "amd64": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
+    "arm64": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db"
+  },
+  "cpp_helper": {
+    "path": "scripts/dhi_cpp_packages.py",
+    "sha256": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb"
+  },
+  "cpp_packages": {
+    "build_commit": "ddcf93c394b61ccf6be91b915a92a7454a14fcba",
+    "installation": "build-only-offline-apk",
+    "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+    "origin": "gcc",
+    "packages": {
+      "amd64": {
+        "g++": {
+          "data_sha256": "2b85abd29682fc5130ef8b378f9fee3f085180f29ce01aa9d5b90174ee0bf496",
+          "depend": [
+            "libstdc++-dev=15.2.0-r7",
+            "gcc=15.2.0-r7",
+            "musl-dev",
+            "libstdc++=15.2.0-r7",
+            "so:libc.musl-x86_64.so.1",
+            "so:libgmp.so.10",
+            "so:libisl.so.23",
+            "so:libmpc.so.3",
+            "so:libmpfr.so.6",
+            "so:libz.so.1"
+          ],
+          "payload_sha256": "067f1ce44b9e0ce261083619fee865a3ce4f08da3b38af8a92ac22263da079a3",
+          "pkginfo_sha256": "7b0bb38d3683b0f01402cc916c3c746591be89ce994aa885b435f91c19c983f4",
+          "provides": [
+            "++_provides",
+            "cmd:c++=15.2.0-r7",
+            "cmd:g++=15.2.0-r7",
+            "cmd:x86_64-alpine-linux-musl-c++=15.2.0-r7",
+            "cmd:x86_64-alpine-linux-musl-g++=15.2.0-r7"
+          ],
+          "replaces": [
+            "++_replaces"
+          ],
+          "sha256": "355ab6821be1969fad319ce774f8b0e1a51158e9f27065f75478fda5aa1f6a7e",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/g++-15.2.0-r7.apk"
+        },
+        "libstdc++-dev": {
+          "data_sha256": "56c2cabd61fb2112db708c0363482c81fe91365f8aaed2338ea3db7c504b0f29",
+          "depend": [
+            "libstdc++=15.2.0-r7"
+          ],
+          "payload_sha256": "d076ddec58e4386826f30a7b8d8684f495c5632f53e8daa53620f9477f462380",
+          "pkginfo_sha256": "10e9228c6f212f1c19125e6405222e6f99946e5ccc39b79e2d6f08d3f69eeb15",
+          "provides": [
+            "++_dev_provides"
+          ],
+          "replaces": [
+            "g++"
+          ],
+          "sha256": "d98e3f81bf5995356525cc908b60e2252d59c86b38a417bcdb4d4008ce1e42b3",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/x86_64/libstdc++-dev-15.2.0-r7.apk"
+        }
+      },
+      "arm64": {
+        "g++": {
+          "data_sha256": "aef88ed1fc1d6c5933cb37bf50ddb0fcb97accd91d0f262e6f602af93f41840b",
+          "depend": [
+            "libstdc++-dev=15.2.0-r7",
+            "gcc=15.2.0-r7",
+            "musl-dev",
+            "libstdc++=15.2.0-r7",
+            "so:libc.musl-aarch64.so.1",
+            "so:libgmp.so.10",
+            "so:libisl.so.23",
+            "so:libmpc.so.3",
+            "so:libmpfr.so.6",
+            "so:libz.so.1"
+          ],
+          "payload_sha256": "5ff632839094f8fac17fd279590db2b32a24460182792d1f38b72fcd3540b51f",
+          "pkginfo_sha256": "5525bdcbbe57bb58db231fa3afd60fa601e5f7d5b46cbbe6d41d15c9b30d0970",
+          "provides": [
+            "++_provides",
+            "cmd:c++=15.2.0-r7",
+            "cmd:g++=15.2.0-r7",
+            "cmd:aarch64-alpine-linux-musl-c++=15.2.0-r7",
+            "cmd:aarch64-alpine-linux-musl-g++=15.2.0-r7"
+          ],
+          "replaces": [
+            "++_replaces"
+          ],
+          "sha256": "ddeaf586e369190b045e0a47f27b607c367ee001a1c5f00b99450d0358d878f8",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/g++-15.2.0-r7.apk"
+        },
+        "libstdc++-dev": {
+          "data_sha256": "4e6e96a8e72199f9a58c06f98849cde1d131de9f36707f70d0f29df847dacbaf",
+          "depend": [
+            "libstdc++=15.2.0-r7"
+          ],
+          "payload_sha256": "cfbd8990e9b2f7edcc8809d1e6fa166cc291541351c3a6c12e36beebcbd3fcc3",
+          "pkginfo_sha256": "b8d9472c6fc7c27d7fbcaf67a3e9e2ef643d37b9d90a7d110b374f96083298c8",
+          "provides": [
+            "++_dev_provides"
+          ],
+          "replaces": [
+            "g++"
+          ],
+          "sha256": "35d53729002314bb547781917194fa756d65d083cc5691a4a52845dd7dff32e5",
+          "url": "https://dhi.io/apk/alpine/v3.24/main/aarch64/libstdc++-dev-15.2.0-r7.apk"
+        }
+      }
+    },
+    "schema": "keep-dhi-cpp-build-inputs-v1",
+    "signing_key": {
+      "name": "dhi-apk@docker-0F81AD7700D99184.rsa.pub",
+      "sha256": "0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd",
+      "url": "https://dhi.io/keyring/dhi-apk@docker-0F81AD7700D99184.rsa.pub"
+    },
+    "unchanged_cohort_apk_sha256": {
+      "amd64": {
+        "gcc": "498f20fa6658279a911f0358df6d5726a51ccc40f57a00dfd9871445126026db",
+        "libstdc++": "967d7c1f8c21daa1b1e3ae1feafcfacd0278e2cbf143693fae9c2f2690f67257"
+      },
+      "arm64": {
+        "gcc": "1939c626eaa94bf14d9d4c80c7078d8c2ccd68c4caf5e644aa60b83c6966c5cb",
+        "libstdc++": "d62d3b0f270635020079ba131f3cadf1bf8a8dc66324d6d6696c5abf88522f48"
+      }
+    },
+    "unchanged_cohort_files": {
+      "amd64": {
+        "usr/bin/gcc": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
+        "usr/lib/libstdc++.so.6.0.34": "cdcb4026e2372f703c5c9eb9b967a29ff9002b07d732d3060fb2102083fdf52e"
+      },
+      "arm64": {
+        "usr/bin/gcc": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db",
+        "usr/lib/libstdc++.so.6.0.34": "3e1212917fc686611dd17dd1df8e06a61eef9c08309d3e34c8516975d5a6e8f2"
+      }
+    },
+    "version": "15.2.0-r7"
+  },
+  "expected_library_sha256": {
+    "amd64": "a0085a9bdc0f79fc13e42ace607df940a6da9814ed6f77135059aa753538d460",
+    "arm64": "e8522311a437d411d269f98abdd53ca1eb87cbe684a8276245b886e9ac812b78"
+  },
+  "fortify_headers": {
+    "build_commit": "363be18be4b1f33af5a058990ba9b297e8fb547b",
+    "context": {
+      "sha256": "8e2e9363eca846ea6dc9a8c0c741109e19677c26d94a823e1a7548bd325c19a2",
+      "url": "https://github.com/alpinelinux/aports/archive/363be18be4b1f33af5a058990ba9b297e8fb547b.tar.gz"
+    },
+    "data_sha256": "501448d04f6604ae5e50277a02b79abbe7c9546b2ef86a04be53c253a6927801",
+    "headers": {
+      "fortify-headers.h": "48e4cd8fedb6928c841d36ddb3affc6211013cce5e00691e422544d11dece694",
+      "poll.h": "7419da106bcd51e8665828cf87cae9565c550b01765e617156771e6417c926ae",
+      "stdio.h": "676bdbc3abfecc23d0147590f8aaeaf21c4791daa20f84bf6198054b2d2527af",
+      "stdlib.h": "8916d455b280f12f737b4b70d5c4489b9d2b078e3dc9a69a62a3e2c8b38d0b9d",
+      "string.h": "a4799fa3eab2f969f38ea4962cf2bd3e2ec8b49f376e9a459b024c0abc88926f",
+      "strings.h": "6c156a2e571e490c85c5ba0abc5e36ba90f56e3963049462043dd6a95fa9b1f4",
+      "sys/select.h": "cd8d09e913cf2eb3c78a77c59b47f957980b29ce9760647f6dda1d3f0ed579cb",
+      "sys/socket.h": "21329dcc81a50a04990a1cfe9cea3efb8cb11850ccf7541436a21bce41f6f926",
+      "unistd.h": "d53dade38894de3f7925898f605be52ab8dfed75f8224977bd603bb22dd566cc",
+      "wchar.h": "c2ba1bc129c88d466de0fab78867e01e691055358ca6f0feaa2ce9a55700a0d3"
+    },
+    "installation": "isolated-compiler-include-only",
+    "license": "0BSD",
+    "package": "fortify-headers",
+    "package_architecture": "noarch",
+    "packages": {
+      "amd64": {
+        "pkginfo_sha256": "17d62c70bbae7c291d4272c3ea0c38d2425ba7f41821ba11478737aef7086222",
+        "sha256": "5ffaebd9f141ac3e3fa0cc99f798f64b4c0aa16fb06a7a77e68f63f350fe23aa",
+        "signing_key": {
+          "name": "alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+          "sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+        },
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/fortify-headers-3.0.1-r2.apk"
+      },
+      "arm64": {
+        "pkginfo_sha256": "df1fdf8be8b1deeb4e54efa6315d662a4236edbd4b1026a3b4fd47a5599bfa53",
+        "sha256": "72bf2a77475f2550a7345683c77b39487ee94ecbc2ca11ed5314161f3b927d76",
+        "signing_key": {
+          "name": "alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub",
+          "sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+          "url": "https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+        },
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/fortify-headers-3.0.1-r2.apk"
+      }
+    },
+    "patch": {
+      "original_header_sha256": "1dbb77a0f1ecc319d682f429d29c3634c0046f6af7e16dd245410209a09e3bd3",
+      "sha256": "d89c6260d79af6f7022ecf45e9825dbbda3c9fea3ad917a524cddc158cef56ef",
+      "sha512": "96bce32ff14f0964ed304086ba124b0b3ed256228699ff7cd6b40c735995f3fc2c7de5a6518c40012dd81371c6a7fbbe2d9e6e6d4723aa43956028f5336dd0ad",
+      "upstream_commit": "c1642e5a43de3affa75d52c3577ee1be4c874a5d",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/363be18be4b1f33af5a058990ba9b297e8fb547b/main/fortify-headers/clang.patch"
+    },
+    "recipe": {
+      "sha256": "1723fbc05affc9376319d2ae18d036ee48ff1d1f9e259ca11ade11cc0ed515b0",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/363be18be4b1f33af5a058990ba9b297e8fb547b/main/fortify-headers/APKBUILD"
+    },
+    "schema": "keep-fortify-header-inputs-v1",
+    "source": {
+      "license_sha256": "f9c890cf570f24fefbe1605a073b430630b0ff63e8d9fc53591bb5528120d424",
+      "root": "fortify-headers-3.0.1",
+      "sha256": "576ac1dc2db9a503d8458c1e9f4a6ce8b0437cfc3c507859d7601a3b8d8ac0e6",
+      "sha512": "bb4e98ed5bcc5ba97f1a57935642b19b87b3c3b8c28c6421394d02ab4ef8d654819397910914cbfc2bc9c938a6b18b7efafd8a73d681a20c32b73dd22f5041bf",
+      "url": "https://github.com/jvoisin/fortify-headers/archive/refs/tags/3.0.1.tar.gz"
+    },
+    "version": "3.0.1-r2"
+  },
+  "fortify_helper": {
+    "path": "scripts/fortify_header_sources.py",
+    "sha256": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0"
+  },
+  "identity": "keep-expat-2.9.0-c30145b-d8f31e6-literal-v2",
+  "library": {
+    "path": "/usr/lib/libexpat.so.1.13.0",
+    "soname": "libexpat.so.1"
+  },
+  "local_patches": [
+    "keep-expat-literal-markup-accounting-v1"
+  ],
+  "original_files": {
+    "lib/xmlparse.c": "899afeaddf424a6f4bf9a0a77159248b485bf5c072475d547ef16c2942a86dd5",
+    "tests/acc_tests.c": "d10a7cf72862400cd03e52686d037d2f07cd80a4a2153853ae2ccd09d7d7820d",
+    "tests/alloc_tests.c": "1f8277ba331b043898f1048332ed4314d4b1ead4473171702dda3cf163fb574d"
+  },
+  "patch_manifest": {
+    "path": "scripts/expat_security_patches.json",
+    "sha256": "b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a"
+  },
+  "patched_files": {
+    "lib/xmlparse.c": "6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082",
+    "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
+    "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9"
+  },
+  "required_abi": {
+    "export_count": 83,
+    "exports_sha256": "89ef922b0558f2ee73e46ace5331d4ec9da8718bccb483738983d5dc04d20465",
+    "features": {
+      "XML_AT_ACT_THRES": 67108864,
+      "XML_AT_MAX_AMP": 100,
+      "XML_BLAP_ACT_THRES": 8388608,
+      "XML_BLAP_MAX_AMP": 100,
+      "XML_CONTEXT_BYTES": 1024,
+      "XML_DTD": 0,
+      "XML_GE": 0,
+      "XML_NS": 0,
+      "sizeof(XML_Char)": 1,
+      "sizeof(XML_LChar)": 1
+    }
+  },
+  "required_hardening": {
+    "bind_now": true,
+    "fortify_source": 2,
+    "gnu_stack_non_executable": true,
+    "relro": true,
+    "stack_protector": true
+  },
+  "schema": "keep-expat-build-v1",
+  "source": {
+    "copying_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+    "directory": "expat-2.9.0",
+    "sha256": "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051",
+    "sha512": "677b5a39ea47aa238813412061eefba0ff2e819597efee69452eab7fd63b1387537eda0dfd4e5891b938be202dc87df4b5115bdae75c6b81643ac2363bb99b34",
+    "url": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz"
+  },
+  "upstream_version": "2.9.0",
+  "vendor_package_version": "2.9.0-r0",
+  "vendor_recipe": {
+    "sha256": "40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5",
+    "url": "https://raw.githubusercontent.com/alpinelinux/aports/46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD"
+  }
+}

@@ -13,7 +13,7 @@ Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runt
 regression probes.
 Zero Scout and Docker Hub findings remain the default requirement. The only
 temporary Scout approval is the verified musl false positive described below,
-through October 25, 2026 UTC inclusive. Grype's complete raw findings remain visible;
+through November 1, 2026 UTC inclusive. Grype's complete raw findings remain visible;
 only the two exact verified-fixed Python `3.14.8-r0` scopes in
 docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
@@ -48,7 +48,8 @@ signatures without networking or repository updates. BuildKit mounts the APKs,
 keys and package manager read-only; those inputs do not enter a final image layer.
 A separate native dependency report verifies ordinary `pyexpat` and `ssl` imports,
 functional XML/TLS checks and the mapped libraries' canonical paths, file
-identities and hashes. Expat's loaded bytes must match its signed APK. This
+identities and hashes. The original signed Expat APK is retained as vendor input;
+the loaded library must match the separately reviewed Keep build described below. This
 report is retained with the original evidence and rechecked during promotion.
 No OpenSSL or Expat exception is added.
 Native jobs acquire corresponding package sources and original signature
@@ -89,6 +90,102 @@ For a release, review the successful native workflow for its exact source revisi
 and image digests. The exception policy, patch inputs and regression checks are
 tracked in this repository; results for an older image do not validate a newer
 candidate.
+
+## Python, Expat and certificate maintenance (October 23)
+
+The candidate adds CPython's complete [tarfile destination-boundary correction](https://github.com/python/cpython/commit/0901ad4ffb22605f12b705d1c1197f0a01f0ba0b)
+for `CVE-2026-114583` to the existing exact source patch sequence. Both `tar`
+and `data` filters must reject destination aliases outside the extraction root;
+ordinary replacement of a safe link remains supported. The earlier hardlink,
+fallback-filter, cleanup and descriptor-bound permission-reset protections remain.
+These cases run within the existing nine loaded-runtime security probes.
+
+Expat's [entity accounting correction](https://github.com/libexpat/libexpat/commit/c30145b28632b31f805d57f9838ba36b8db99367)
+(`CVE-2026-115506`) and [parser-reset correction](https://github.com/libexpat/libexpat/commit/d8f31e647a4d1eda088e89354f4769b0dad303d3)
+(`CVE-2026-113351`) are merged upstream. The reviewed signed packages predate
+them. `docs/expat-build.json` therefore identifies a separate Keep build of the
+exact Expat 2.9.0 release, the complete corrections and their two required type
+prerequisites, followed by Keep's local literal-markup accounting correction.
+The patch manifest records this correction as
+`keep-expat-literal-markup-accounting-v1` with `source_kind: keep-local` and
+`commit: null`; the upstream commits retain their separate identities. The full
+local hunks and input/output hashes are replayed with the matching sources and
+complete MIT notice. The build runs the upstream regression suite, preserves the
+vendor ABI and compiler hardening, and checks architecture-specific compiler
+and resulting library hashes. It replaces the canonical library behind the
+existing SONAME; no loader override or package-version relabeling is used.
+Alpine's signature authenticates the original package, not this replacement.
+The [October 19 DHI 2.9.0-r1 recipe](https://github.com/docker-hardened-images/catalog/blob/23c35f5bf25a68e572707c62a33bcbce6a36b99a/package/apk/main/expat/alpine-3.24/2.yaml)
+still selects the original release and Alpine recipe without these corrections;
+its revision number alone does not establish a replacement fix.
+The compiler uses isolated, verified Alpine `fortify-headers 3.0.1-r2` headers;
+they are a build input, without an APK transaction or package-database change.
+Both signed header payloads must match the complete source plus Alpine patch.
+The build also needs matching signed DHI `g++` and `libstdc++-dev` inputs and
+Alpine's Make and Bash tools for the unchanged upstream test suite. These are
+installed offline in the build stage, with complete payload, dependency and
+source/license checks. They are absent from the final runtime. The existing
+compiler and runtime package cohort must remain unchanged by their installation.
+The source gate also requires the development image's own original signed
+SLSA proof for the pinned index and native child. Runtime-base provenance or a
+compiler-driver hash alone cannot establish the compiler image's origin.
+
+Preparatory builds only collect native output identities. Their manifests are
+explicitly unqualified and cannot pass installation, source delivery or release
+checks. Both native hashes must be reviewed and pinned before a normal build
+can qualify. A fresh build must reproduce them. The dependency report binds the
+actual mapped replacement to the lock and exact source replay, then runs bounded
+entity-accounting and reset probes alongside ordinary XML, CDATA, comment and
+processing-instruction controls. Retained
+report revalidation requires the same proof without changing original bytes.
+
+Certifi `2026.10.23` removes emSign C1 and C3 as well as G3; G1 remains. Its
+118-root inventory now matches the reviewed system bundle. Certificate checks
+require the exact source/wheel, full notices, both bundle hashes, effective
+Requests and SMTP trust, and the hashed CA directory. Earlier 120-root certifi
+receipts below describe the October 22 image only.
+
+These source changes do not add scanner exceptions or renew existing approvals.
+New unmatched Python or Expat findings still block even when source-level fixes
+are present. Complete unsuppressed scans, source/license replay, all runtime and
+functional checks on native amd64 and arm64 remain required. This candidate is
+not a published or deployed security baseline.
+
+The [native preparatory build](https://github.com/brspoon/keep/actions/runs/40009916008)
+passed the upstream test suite, exact ABI, compiler hardening and signed build-input
+checks on both architectures. It does not qualify the candidate. A separate
+default-limit compatibility check found that the entity-accounting correction
+rejects a valid 19,536-byte document whose CDATA output is only 3,072 bytes;
+unpatched 2.9.0 accepts the same bytes. The preflight incorrectly counts literal
+entity-reference text inside CDATA as expanded content. The runtime checks now
+require this valid input to pass without changing parser limits. Native output
+pins were left unset until review of the local correction and fresh native
+preparation. Complete image qualification remains required. Do not drop the security
+fix, loosen the amplification limits or treat a passing upstream test suite as
+proof that this compatibility case passes.
+The [native compatibility run](https://github.com/brspoon/keep/actions/runs/40011470324)
+reproduced the same error 43 with zero output on amd64 and arm64. Both rebuilt
+libraries were byte-identical to the earlier preparatory outputs, and both
+upstream test suites passed again. Complete final-image qualification, scans and
+source-distribution acceptance remain outstanding; preparation is not a release
+approval.
+
+The local correction makes the entity-size preflight use Expat's existing
+tokenizers to account for literal CDATA, comments and processing instructions in
+general-entity replacement text. Attribute references still use the reference
+scanner, and parameter entities retain the DTD rules. This is a candidate
+compatibility correction, not a merged upstream fix or a qualified replacement.
+Its changed source identity invalidates the earlier preparatory output hashes;
+fresh native builds, security and compatibility checks, and source/license
+replay are required before either architecture can qualify.
+
+The [corrected native preparation](https://github.com/brspoon/keep/actions/runs/40016910663)
+at `e60589c295b661ac508c78c2fa26be1041a11de0` passed both upstream test suites
+and all ten security/compatibility probe groups on amd64 and arm64. The original
+outputs were independently checked for source replay, signed compiler-image
+provenance, all 83 ABI exports and effective hardening before both library and
+compiler hashes were pinned. The final images must reproduce those outputs and
+pass the remaining application, scanner and source-delivery gates.
 
 ## Certificate trust and build-tool candidate (October 21)
 
@@ -209,6 +306,18 @@ actual default-loader bytes, native probes and complete matching sources establi
 the installed fix. This is a scoped false-positive approval, not approval to ship
 unfixed musl. Old r2, other packages/distributions/versions/severities/thresholds,
 and every unmatched finding still block.
+
+The October 23 fresh review renews only that unchanged musl false-positive scope
+through **November 1, 2026 UTC inclusive**. Current stable and edge advisory feeds,
+the exact signed packages and complete upstream patch equivalence were rechecked.
+[Native qualification](https://github.com/brspoon/keep/actions/runs/40017413915)
+at `996b45565161ad9d71dfcade9956ebfaeff2711d` passed on both architectures,
+including the actual default-libc hashes and bounded controls, complete
+unsuppressed scans, provenance and checked source/license notice preparation.
+The two existing Python deadlines remain unchanged. The checked notice union
+must still be embedded and every source-archive member verified in the final
+native run before release. The raw reports remain unchanged; this review does
+not claim zero displayed Scout or Docker Hub findings or a scanner correction.
 
 Fresh complete qualification on both architectures and exact-main validation
 remain required. The original Scout reports remain unchanged and visible. Docker
@@ -449,7 +558,8 @@ one of the current exceptions on November 2 blocks validation and promotion;
 it requires a proven replacement or another explicit security review.
 Correcting deadline handling alone never renews an approval.
 The separate Scout false-positive entry uses the same advisory warning mechanism
-and expires October 25, 2026 UTC inclusive. It does not change the Python deadline.
+and was renewed by the fresh October 23 review through November 1, 2026 UTC
+inclusive. This aligns the current review dates without extending Python approvals.
 
 ## zlib delivery correction
 

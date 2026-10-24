@@ -113,10 +113,10 @@ readable source and notice before adding the checked full MPL 2.0 terms; another
 version or source hash cannot reuse that approval. Complete new and original CA
 attributions still require native notice preparation and review.
 
-The Python source lock now pins certifi `2026.10.19` and its matching MPL-covered
-source distribution. Its trust policy differs from the vendor system bundle:
-certifi preserves unaffected emSign C1/C3 roots, while the vendor follows
-Mozilla NSS's additional removals. See the [certificate candidate](IMAGE_SECURITY.md#certificate-trust-and-build-tool-candidate-october-21)
+The Python source lock pins certifi `2026.10.23` and its matching MPL-covered
+source distribution. Its 118-root inventory removes emSign G3, C1 and C3,
+retains G1, and matches the reviewed vendor system bundle. See the
+[current maintenance candidate](IMAGE_SECURITY.md#python-expat-and-certificate-maintenance-october-23)
 for the advisory and policy references. Pip `26.2.2` is a checksum-verified build
 bootstrap input and is removed before the application environment enters the
 runtime. It does not replace the older pip/ensurepip source records required by
@@ -151,7 +151,7 @@ and checksum-verified OpenSSL source. Its report explicitly records the absence
 of a signed package build or source-image binding. This method does not rescue
 a signature failure or an unrelated missing package.
 
-The Expat replacement uses Alpine's signed `2.9.0-r0` APKs, independently
+The original Expat inputs use Alpine's signed `2.9.0-r0` APKs, independently
 pinned for amd64 and arm64. The installer checks each APK and official key hash,
 its RSA signature, signed metadata and payload hash, exact library bytes and
 SONAME alias. It installs only these files with networking disabled and the
@@ -161,6 +161,56 @@ APKs and key, complete immutable aports context, checksum-matching upstream
 source and full MIT notice. It records Alpine package verification without a
 Docker package-build or source-image attestation claim. The upstream detached
 signature is retained without claiming separate OpenPGP verification.
+
+The runtime then replaces the canonical library with the separately identified
+Keep build in `docs/expat-build.json`. Its source set contains the complete
+Expat 2.9.0 release, both merged security corrections and their prerequisites,
+the Keep-local literal-markup accounting correction, the exact patch manifest
+and builder, native compiler/output hashes and full replayed sources. The local
+correction is identified as `keep-expat-literal-markup-accounting-v1`, with
+`source_kind: keep-local` and no upstream commit claim. Its exact hunks and
+before/after hashes remain in `expat_security_patches.json`; the source replay
+record lists the local identity separately from the merged upstream commits.
+Original signed materials and manifests remain unchanged
+under `alpine-expat-sources/vendor-inputs/`; the additional source set is under
+`keep-build/`. The combined proof records
+`signed-vendor-inputs-and-reviewed-keep-build`,
+`apk_binary_match_verified: false` and `runtime_build_verified: true`.
+It verifies the independently inventoried loaded-library hash against the
+reviewed build rather than attributing modified bytes to Alpine's signature.
+Offline archive replay rejects missing, altered or extra source outputs.
+New source-header attribution is retained alongside the complete MIT notice.
+The current local correction still requires fresh native qualification; source
+replay alone does not qualify its output or pass source-delivery verification.
+The build-only Fortify input retains both signed `fortify-headers 3.0.1-r2`
+APKs and keys, the complete matching upstream source and Alpine recipe/patch,
+all ten headers and their copyright notices, and the full 0BSD license. Its
+verified headers are used through an isolated compiler include directory.
+The development image's original signed SLSA statement, index, native-subject
+binding and OCI signature proof are also required and replayed offline. These
+records authenticate the compiler image; they do not claim that the complete
+compiler toolchain was rebuilt from source during this review.
+The local OCI layout's root `index.json` is a generated wrapper. Retention
+omits its copy-tool transfer timestamps and sorts its descriptors and JSON keys,
+then verifies the retained proof again. Original content-addressed manifests,
+statements, signatures, references and the pinned compiler image index retain
+their exact bytes. The generated wrapper is identified separately from those
+original proof objects.
+The existing GCC origin also pins matching DHI `g++` and `libstdc++-dev`
+`15.2.0-r7` as build-only packages. Expat's unmodified configure step requires
+C++11 with tests enabled, even though its Autotools regression targets are C.
+These packages are installed offline only in the development stage. Their exact
+signed bytes must match the native GCC package output already used to obtain
+the complete GCC source, recipes and notices. They do not enter the final
+runtime package inventory or disable any upstream tests.
+The separate `keep-build/build-tools/` set retains signed Alpine v3.24 Make
+`4.4.1-r4` and Bash `5.3.9-r1` packages for both architectures, their keys,
+complete immutable aports contexts, checksum-matching GNU source archives,
+recipe patches and full license/attribution texts. Their installation is offline
+with package scripts disabled; exact payloads, required command paths and the
+unchanged compiler/package cohort are verified before running the upstream tests.
+These records identify Alpine build inputs without claiming a DHI package-build
+attestation or adding Make and Bash to the runtime package inventory.
 
 ## Contents and verification
 
@@ -190,12 +240,13 @@ After unpacking, the manifest identifies each retained file's SHA-256, release
 version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
-container. The reviewed runtime union contains 124 complete notice texts
-(814,844 bytes) and 560 complete native attributions, covering all 23 current and
+container. The reviewed runtime union contains 135 complete notice texts
+(919,491 bytes) and 626 complete native attributions, covering all 23 current and
 earlier-layer origins on both architectures. It retains 21 explicitly selected
-source copyright headers and four timezone headers from the checked public
-source fallback. The license text bytes are unchanged; the new Python and zlib
-packages have their own source attributions, and timezone attributions describe
+source copyright headers, three patched Expat headers, ten Fortify headers,
+eleven musl subcomponent headers and four timezone headers from the checked
+public sources. All 124 earlier notice texts retain their original bytes;
+Python and zlib packages have their own source attributions, and timezone attributions describe
 the verified fallback rather than reusing earlier provider signature claims.
 The native gate checks the rebuilt candidate against those committed hashes.
 It also verifies the exact installed notice-manifest bytes and every generated

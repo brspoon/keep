@@ -1,26 +1,33 @@
-"""Original native dependency report fixtures for archive revalidation tests."""
+"""Native dependency report fixtures bound to reviewed replacement output pins."""
 import hashlib
 import json
+from pathlib import Path
 
 from scripts.alpine_expat_sources import build_security_manifest
+from scripts.build_patched_expat import expected_manifest, json_bytes
 from scripts.dhi_python_packages import build_security_manifest as python_security_manifest
 from scripts.alpine_musl_sources import build_security_manifest as musl_security_manifest
-from scripts.runtime_dependency_checks import EXPAT_LIBRARY_SHA256, MUSL_PROBES
+from scripts.expat_security_checks import expected_report as expat_probe_report
+from scripts.runtime_dependency_checks import MUSL_PROBES
 from tests.certificate_trust_fixture import trust_report
 
 
-def dependency_report(arch):
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def dependency_report(arch, *, root=ROOT):
     manifest = build_security_manifest(arch, root=None)
+    replacement = expected_manifest(arch, root=root)
     python = python_security_manifest(arch, root=None)
     musl = musl_security_manifest(arch, root=None)
     return {
-        'schema': 4, 'arch': arch, 'success': True, 'tests': 4,
+        'schema': 5, 'arch': arch, 'success': True, 'tests': 4,
         'failures': 0, 'errors': [],
         'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8', 'musl': '1.2.6-r3'},
         'loaded_libraries': {
             name: {'path': path, 'sha256': digest, 'device': '0:1', 'inode': inode}
             for name, path, digest, inode in (
-                ('expat', '/usr/lib/libexpat.so.1.13.0', EXPAT_LIBRARY_SHA256[arch], 101),
+                ('expat', '/usr/lib/libexpat.so.1.13.0', replacement['library']['sha256'], 101),
                 ('ssl', '/usr/lib/libssl.so.3', 'e' * 64, 102),
                 ('crypto', '/usr/lib/libcrypto.so.3', 'f' * 64, 103),
                 ('python', python['library']['path'], python['library']['sha256'], 104),
@@ -31,6 +38,9 @@ def dependency_report(arch):
         'expat_source_manifest_sha256': manifest['source_manifest_sha256'],
         'expat_install_manifest_sha256': hashlib.sha256(
             (json.dumps(manifest, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
+        'expat_build_manifest': replacement,
+        'expat_build_manifest_sha256': hashlib.sha256(json_bytes(replacement)).hexdigest(),
+        'expat_security_probes': expat_probe_report(),
         'python_source_manifest_sha256': python['source_manifest_sha256'],
         'python_install_manifest_sha256': hashlib.sha256(
             (json.dumps(python, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
@@ -51,11 +61,11 @@ def dependency_report(arch):
     }
 
 
-def certificate_failure_reports(arch):
+def certificate_failure_reports(arch, *, root=ROOT):
     """Keep other native evidence valid while changing one trust obligation."""
     excluded_root = '86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b'
     for failure in ('missing_proof', 'certifi_hash', 'system_hash', 'failed_tls', 'ca_environment', 'excluded_capath_root'):
-        report = dependency_report(arch)
+        report = dependency_report(arch, root=root)
         if failure == 'missing_proof':
             report['certificate_trust'] = None
             message = 'Invalid certificate trust report schema'
@@ -76,11 +86,11 @@ def certificate_failure_reports(arch):
         yield failure, report, message
 
 
-def musl_failure_reports(arch):
+def musl_failure_reports(arch, *, root=ROOT):
     """Keep other evidence valid while breaking one fixed-libc obligation."""
     for failure in ('source_proof', 'install_proof', 'loader_hash', 'libc_alias',
                     'package_version', 'regex_probe', 'missing_libc'):
-        report = dependency_report(arch)
+        report = dependency_report(arch, root=root)
         if failure in ('source_proof', 'install_proof'):
             name = 'source' if failure == 'source_proof' else 'install'
             report['musl_' + name + '_manifest_sha256'] = None

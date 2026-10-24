@@ -4,6 +4,8 @@
 Acquisition OCI images stay outside the archive. Source files, complete recipes,
 original signature proof, notices and every omitted APK identity are retained.
 The timezone exception is explicitly version/checksum bound, not OCI signed.
+The Expat replacement has a separate reviewed build identity; its original
+vendor signatures apply only to the retained Alpine inputs.
 """
 import argparse
 import gzip
@@ -19,7 +21,9 @@ from urllib.parse import urlsplit
 import urllib.request
 
 from python_distribution_sources import canonical_name, collect_sources, exact_requirements, fetch_public, public_url
-from collect_package_sources import expected_packages, match_package_output, resolve_native
+from collect_package_sources import (EXPAT_BUILD_BINDING, expected_packages, match_package_output,
+                                     replay_patched_expat_sources, resolve_native,
+                                     verify_expat_replacement)
 from oci_source_materials import retain_materials, safe_name
 from verify_source_proof import BASE_DIGEST, PREDICATE, ProofLayout, digest, verify_source_proof, verify_attestation_proof
 
@@ -147,7 +151,7 @@ def check_native_wheels(inventory, lock, arch):
             raise ValueError('Runtime native wheel differs from reviewed source: ' + wheel['package'])
 
 
-def check_runtime(inventory, lock, os_lock, arch):
+def check_runtime(inventory, lock, os_lock, arch, *, root=ROOT):
     """Cover exactly the packages in the candidate, including build identities."""
     if not isinstance(inventory, dict) or not inventory.get('python') or not inventory.get('os_packages'):
         raise ValueError('A complete candidate runtime inventory is required')
@@ -171,6 +175,8 @@ def check_runtime(inventory, lock, os_lock, arch):
         actual[row['name']] = (row['version'], row['origin'], row['build_commit'], row['license'])
     if actual != expected:
         raise ValueError('Runtime OS packages differ from reviewed source map')
+    if any(row.get('source_method') == 'alpine-signed-expat-v1' for row in os_lock['origins']):
+        verify_expat_replacement(inventory, arch, root=root)
     check_native_wheels(inventory, lock, arch)
     return {'python_packages': len(expected_python), 'os_packages': len(expected),
             'os_origins': len(os_lock['origins']), 'native_wheels': 2}
@@ -538,8 +544,29 @@ def retain_alpine_expat(source, destination, origin, result, arch, runtime_inven
 def retain_signed_alpine(source, destination, origin, result, arch, runtime_inventory):
     """Replay signed Alpine APK/source verification against original downloads."""
     if origin.get('source_method') == 'alpine-signed-expat-v1':
-        from alpine_expat_sources import collect_sources
         directory = 'alpine-expat-sources'
+        if (result.get('binding_method') != EXPAT_BUILD_BINDING
+                or result.get('provider_oci_binding') is not False
+                or result.get('signature_verified') is not True
+                or result.get('vendor_apk_signature_verified') is not True
+                or result.get('apk_binary_match_verified') is not False
+                or result.get('runtime_build_verified') is not True
+                or runtime_inventory is None
+                or result.get('public_sources') != {'directory': directory,
+                                                    'manifest': 'manifest.json'}):
+            raise ValueError('Require signed vendor inputs and the reviewed Keep Expat build')
+        checked = replay_patched_expat_sources(Path(source) / directory, destination,
+                                               origin, arch, runtime_inventory)
+        return {'origin': origin['origin'], 'version': origin['version'],
+                'provider_oci_binding': False, 'binding_method': EXPAT_BUILD_BINDING,
+                'signature_verified': True, 'vendor_apk_signature_verified': True,
+                'apk_binary_match_verified': False, 'runtime_build_verified': True,
+                'source_manifest_sha256': checked['source_manifest_sha256'],
+                'replacement_build_lock_sha256': checked['replacement_build_lock_sha256'],
+                'replacement_manifest_sha256': checked['replacement_manifest_sha256'],
+                'replacement_library': checked['replacement_library'],
+                'cpp_source_binding': checked['cpp_source_binding'],
+                'files': len(checked['files'])}
     elif origin.get('source_method') == 'alpine-signed-zlib-v1':
         from alpine_zlib_sources import collect_sources
         directory = 'alpine-zlib-sources'
@@ -569,6 +596,43 @@ def retain_signed_alpine(source, destination, origin, result, arch, runtime_inve
             'signature_verified': True, 'apk_binary_match_verified': True,
             'source_manifest_sha256': checked['source_manifest_sha256'],
             'files': len(checked['files'])}
+
+
+def bind_expat_cpp_matching_sources(coverage, os_lock, arch):
+    """Require the original GCC source and notice proofs for Expat's C++ inputs."""
+    expat = [row for row in coverage if row['origin'] == 'expat' and row.get('runtime_build_verified') is True]
+    if not expat:
+        return
+    origins = [row for row in os_lock['origins'] if row['origin'] == 'gcc']
+    gcc = [row for row in coverage if row['origin'] == 'gcc']
+    if len(expat) != 1 or len(origins) != 1 or len(gcc) != 1:
+        raise ValueError('Expat C++ build inputs require complete GCC matching sources and notices')
+    binding, origin, proof = expat[0].get('cpp_source_binding'), origins[0], gcc[0]
+    expected_origin_hash = hashlib.sha256(
+        (json.dumps(origin, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
+    if (not isinstance(binding, dict) or binding.get('origin') != 'gcc'
+            or binding.get('version') != origin['version']
+            or binding.get('packages') != ['g++', 'libstdc++-dev']
+            or binding.get('source_origin_sha256') != expected_origin_hash
+            or binding.get('build_commit') != 'ddcf93c394b61ccf6be91b915a92a7454a14fcba'
+            or proof.get('version') != origin['version']
+            or proof.get('provider_oci_binding') is not True
+            or proof.get('apk_binary_match_verified') is not True):
+        raise ValueError('Expat C++ matching-source origin differs from the verified GCC origin')
+    selected = [row for row in expected_packages(origin, arch) if row['name'] in binding['packages']]
+    if len(selected) != 2:
+        raise ValueError('Both Expat C++ build-only packages require reviewed GCC sources')
+    for package in selected:
+        matches = [row for row in proof.get('apk_matches', []) if row.get('name') == package['name']]
+        sources = [row for row in proof.get('sources', [])
+                   if package['name'] in row.get('for_packages', [])
+                   and row.get('signature_verified') is True
+                   and row.get('preferred_source_verified') is True
+                   and row.get('notice_inventory')]
+        if (len(matches) != 1 or any(matches[0].get(key) != value for key, value in package.items())
+                or not matches[0].get('matches') or not sources):
+            raise ValueError('Expat C++ inputs lack exact GCC APK, preferred-source or notice coverage')
+    expat[0]['cpp_matching_sources_verified'] = True
 
 
 def retain_packages(source, destination, os_lock, arch, *, material_inspector=None,
@@ -662,6 +726,7 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
                          'output_groups': [{key: group[key] for key in ('architecture', 'allow_noarch', 'packages',
                                                                       'native_image_digest', 'image_index_digest')}
                                            for group in groups], 'sources': proofs})
+    bind_expat_cpp_matching_sources(coverage, os_lock, arch)
     write_json(destination / 'package-sources.json', report)
     return coverage
 
@@ -891,7 +956,17 @@ def check_generated_notices(root, generated, arch):
             # and value types. A shared notice text does not transfer its proof.
             attribution = json.dumps(provenance, sort_keys=True)
             if not any(json.dumps(row, sort_keys=True) == attribution for row in match['provenance']):
-                raise ValueError('Actual source notice attribution differs from committed runtime provenance')
+                related = [row for row in match['provenance'] if isinstance(row, dict)
+                           and all(row.get(key) == provenance.get(key)
+                                   for key in ('origin', 'architecture', 'source_path'))]
+                details = json.dumps({'notice_sha256': notice['sha256'],
+                    'actual_provenance': provenance,
+                    'committed_source_matches': related[:3],
+                    'committed_source_match_count': len(related)}, sort_keys=False)
+                if len(details) > 16384:
+                    details = details[:16384] + ' [truncated]'
+                raise ValueError('Actual source notice attribution differs from committed runtime provenance: '
+                                 + details)
 
 
 def file_records(directory):
@@ -945,6 +1020,11 @@ def keep_source(root, destination):
                      'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
                      'scripts/certificate_trust_checks.py',
                      'scripts/alpine_expat_sources.py', 'scripts/runtime_dependency_checks.py',
+                     'scripts/build_patched_expat.py', 'scripts/expat_security_patches.json',
+                     'scripts/fortify_header_sources.py',
+                     'scripts/dhi_cpp_packages.py',
+                     'scripts/expat_build_tools.py',
+                     'scripts/expat_security_checks.py', 'docs/expat-build.json',
                      'scripts/python_security_patches.json', 'docs/PYTHON_LICENSE.txt',
                      'docs/distribution-sources.json', 'docs/os-package-sources.json',
                      'docs/aports-source-lock.json', 'docs/base-python-sources.json'):
@@ -968,7 +1048,7 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         raise ValueError('Requirements differ from reviewed source lock')
     inventory_path = Path(runtime_inventory)
     inventory = read_json(inventory_path.parent, inventory_path.name)
-    counts = check_runtime(inventory, lock, os_lock, architecture)
+    counts = check_runtime(inventory, lock, os_lock, architecture, root=root)
     runtime_notices = check_runtime_notices(root, inventory, os_lock, architecture)
     version = regular(root, 'VERSION').read_text().strip()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.+_-]*', version):
@@ -1043,7 +1123,7 @@ def prepare_notices(sources, architecture, runtime_inventory, output, *, root=RO
     os_lock = read_json(root, 'docs/os-package-sources.json')
     inventory_path = Path(runtime_inventory)
     inventory = read_json(inventory_path.parent, inventory_path.name)
-    counts = check_runtime(inventory, lock, os_lock, architecture)
+    counts = check_runtime(inventory, lock, os_lock, architecture, root=root)
     package_root = source / 'packages'
     if not package_root.exists():
         package_root = source / 'os-packages'

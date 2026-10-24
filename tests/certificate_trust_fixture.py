@@ -11,7 +11,6 @@ CERTIFI_FINGERPRINTS = (
     '06c08d7dafd876971eb1124fe67f847ec0c7a158d3ea53cbe940e2ea9791f4c3',
     '08170d1aa36453901a2f959245e347db0c8d37abaabc56b81aa100dc958970db',
     '098e08a91dbbf77478b96cceb89b1413a5da37b7c862606a955deb07179f4326',
-    '125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f',
     '1435f225c5d252d7a21948cc3ce62aecfa88001e3dd72d1cc3555100eb372f93',
     '1793927a0614549789adce2f8f34f7f0b66d0f3ae3a3b84d21ec15dbba4fadc7',
     '179fbc148a3dd00fd24ea13458cc43bfa7f59c8182d783a513f6ebec100c8924',
@@ -92,7 +91,6 @@ CERTIFI_FINGERPRINTS = (
     'b4585f22e4ac756a4e8612a1361c5d9d031a93fd84febb778fa3068b0fc42dc2',
     'b49141502d00663d740f2e7ec340c52800962666121a36d09cf7dd2b90384fb4',
     'b676f2eddae8775cd36cb0f63cd1d4603961f49e6265ba013a2f0307b6d0b804',
-    'bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3',
     'be4b56cb5056c0136a526df444508daa36a0b54f42e4ac38f72af470e479654c',
     'beb00b30839b9bc32c32e4447905950641f26421b15ed089198b518ae2ea1b99',
     'bfd88fe1101c41ae3e801bf8be56350ee9bad1a6b9bd515edc5c6d5b8711ac44',
@@ -255,13 +253,13 @@ def trust_report(arch='amd64'):
     manifest = build_security_manifest(arch, root=None)
     return {
         'schema': 1, 'arch': arch, 'success': True, 'tests': 8, 'failures': 0, 'errors': [],
-        'certifi_version': '2026.10.19',
+        'certifi_version': '2026.10.23',
         'ca_environment': {'SSL_CERT_FILE': '/etc/ssl/certs/ca-certificates.crt'},
         'certifi': {
             'path': '/venv/lib/python3.14/site-packages/certifi/cacert.pem',
-            'sha256': '50f79f98dac192b20dbf73f35c56f0b0c557ab267ff5199d1117cc1180b70785',
-            'certificates': 120, 'fingerprints': list(CERTIFI_FINGERPRINTS),
-            'fingerprints_sha256': '4b23d6276df62146e4278710951c658a026c69dcb7048c8a2033d78a0f5debe6',
+            'sha256': '2ef52ad56b4803e264045c915e55c236cbfa045b84b81efefc218a19eb44bd2b',
+            'certificates': 118, 'fingerprints': list(CERTIFI_FINGERPRINTS),
+            'fingerprints_sha256': '077fe6a7639d6ef14a8fe2661e92b064f7701b8df283e1445f38a66a47b07acb',
         },
         'system': {
             'path': '/etc/ssl/certs/ca-certificates.crt',
@@ -274,7 +272,7 @@ def trust_report(arch='amd64'):
             'fingerprints_sha256': hashlib.sha256(b'\n').hexdigest(),
         },
         'default_root_inventories': {
-            'requests': '4b23d6276df62146e4278710951c658a026c69dcb7048c8a2033d78a0f5debe6',
+            'requests': '077fe6a7639d6ef14a8fe2661e92b064f7701b8df283e1445f38a66a47b07acb',
             'smtp': '077fe6a7639d6ef14a8fe2661e92b064f7701b8df283e1445f38a66a47b07acb',
         },
         'tls_probes': {backend + '_' + probe: True for backend in ('requests', 'smtp')

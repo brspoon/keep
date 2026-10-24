@@ -15,16 +15,17 @@ import tempfile
 from types import SimpleNamespace
 
 
-CERTIFI_VERSION = '2026.10.19'
+CERTIFI_VERSION = '2026.10.23'
 CERTIFI_PATH = Path('/venv/lib/python3.14/site-packages/certifi/cacert.pem')
-CERTIFI_SHA256 = '50f79f98dac192b20dbf73f35c56f0b0c557ab267ff5199d1117cc1180b70785'
-CERTIFI_CERTIFICATES = 120
-CERTIFI_FINGERPRINTS_SHA256 = '4b23d6276df62146e4278710951c658a026c69dcb7048c8a2033d78a0f5debe6'
+CERTIFI_SHA256 = '2ef52ad56b4803e264045c915e55c236cbfa045b84b81efefc218a19eb44bd2b'
+CERTIFI_CERTIFICATES = 118
+CERTIFI_FINGERPRINTS_SHA256 = '077fe6a7639d6ef14a8fe2661e92b064f7701b8df283e1445f38a66a47b07acb'
 EXCLUDED_ROOT = '86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b'
+C1_ROOT = '125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f'
+C3_ROOT = 'bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3'
+EXCLUDED_ROOTS = frozenset((EXCLUDED_ROOT, C1_ROOT, C3_ROOT))
 G1_ROOT = '40f6af0346a99aa1cd1d555a4e9cce62c7f9634603ee406615833dc8c8d00367'
-CERTIFI_RETAINED_ROOTS = frozenset((G1_ROOT,
-    '125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f',
-    'bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3'))
+CERTIFI_RETAINED_ROOTS = frozenset((G1_ROOT,))
 MANIFEST_PATH = Path('/app/CA_CERTIFICATES_SECURITY.json')
 OVERRIDE_VARIABLES = ('SSL_CERT_FILE', 'SSL_CERT_DIR', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE')
 TLS_PROBES = {backend + '_' + probe: True for backend in ('requests', 'smtp')
@@ -153,7 +154,7 @@ def validate_bundle(identity, path, digest, certificates, inventory_digest, reta
             and identity['certificates'] == certificates == len(fingerprints)
             and identity['fingerprints_sha256'] == inventory_digest == fingerprint_digest(fingerprints),
             'Certificate bundle differs from the reviewed bytes or root inventory')
-    require(EXCLUDED_ROOT not in fingerprints and set(retained) <= set(fingerprints),
+    require(not EXCLUDED_ROOTS.intersection(fingerprints) and set(retained) <= set(fingerprints),
             'Excluded root present or unaffected certificate roots missing')
 
 
@@ -185,7 +186,7 @@ def capath_inventory(path, system_bundle):
     require(all(getattr(before, name) == getattr(after, name) for name in
                 ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')),
             'OpenSSL certificate directory changed during inspection')
-    require(EXCLUDED_ROOT not in fingerprints
+    require(not EXCLUDED_ROOTS.intersection(fingerprints)
             and fingerprints <= set(system_bundle['fingerprints']),
             'OpenSSL hashed certificate directory contains an unreviewed root')
     return {'path': str(path), 'entries': entries, 'certificates': len(fingerprints),
@@ -201,6 +202,8 @@ def context_fingerprints(context):
                           for cert in context.get_ca_certs(binary_form=True))
     require(fingerprints and len(set(fingerprints)) == len(fingerprints),
             'Default TLS context has no roots or duplicate roots')
+    require(not EXCLUDED_ROOTS.intersection(fingerprints),
+            'Default TLS context contains an excluded root')
     return fingerprints
 
 
@@ -345,7 +348,7 @@ def validate_trust_report(report, arch, root=None):
             and SHA256.fullmatch(value) for value in fingerprints)
             and fingerprints == sorted(set(fingerprints))
             and set(fingerprints) <= set(report['system']['fingerprints'])
-            and EXCLUDED_ROOT not in fingerprints
+            and not EXCLUDED_ROOTS.intersection(fingerprints)
             and capath['fingerprints_sha256'] == fingerprint_digest(fingerprints)
             and type(capath['certificates']) is int and capath['certificates'] == len(fingerprints)
             and type(capath['entries']) is int and 0 <= capath['entries'] <= MAX_CAPATH_ENTRIES

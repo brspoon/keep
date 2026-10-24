@@ -21,6 +21,20 @@ and arm64 images, Compose, non-root runtime, durable web/worker startup and secu
 policy. Local development does not require publishing to the project's registry.
 See [release policy](RELEASE_POLICY.md) and [image security](IMAGE_SECURITY.md).
 
+The Expat source build has a separate preparation mode in **Review vendor
+runtime candidate**. On a `brspoon/` branch, dispatch with
+`expat_preparation=true` and `qualification=false` to obtain both native
+compiler/library identities and upstream `make check` results. These outputs
+are explicitly unqualified. Review them against the pinned source, compiler
+image, ABI and hardening before recording both architectures' hashes in
+`docs/expat-build.json`; a normal build rejects missing pins or changed output.
+Then dispatch with `qualification=true` and `prepare_notices=true`, review the
+combined notices, commit them and repeat with `prepare_notices=false` to require
+complete source-archive member and installed-notice verification. Neither mode
+publishes an image or authorizes promotion. The final dependency checks require
+the normal loaded SONAME and bounded security/ordinary XML behavior, not merely
+a successful source build or version string.
+
 The nine native security probes include zlib delivery verification. The patched
 library must replace `/usr/lib/libz.so.1.3.2` behind the existing `libz.so.1`
 alias. The probe imports ordinary Python consumers and uses default SONAME

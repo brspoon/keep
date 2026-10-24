@@ -37,8 +37,14 @@
 !scripts/certificate_trust_checks.py
 !scripts/bootstrap_build_pip.py
 !scripts/install_runtime_packages.py
+!scripts/build_patched_expat.py
+!scripts/expat_security_patches.json
+!scripts/fortify_header_sources.py
+!scripts/dhi_cpp_packages.py
+!scripts/expat_build_tools.py
 !docs/
 !docs/PYTHON_LICENSE.txt
+!docs/expat-build.json
 !docs/licenses/**
 !templates/
 !templates/**

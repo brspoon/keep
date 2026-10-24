@@ -6,6 +6,8 @@ runtime or build-only APK must occur as a regular file with the exact checksum
 in the resolved native package image.
 Full acquisition OCI layouts and original signatures are retained; the release
 bundle may separately retain source contexts without unrelated tool binaries.
+Keep's Expat overlay retains signed vendor inputs separately from its reviewed
+build lock, full patched sources and independently inventoried native library.
 """
 import argparse
 import gzip
@@ -27,11 +29,14 @@ from image_distribution import redacted
 from inspect_candidate import BASE, DIRECT, HASHES, download
 from oci_source_materials import SourceInventory, open_layer, safe_name
 from tzdata_distribution_sources import collect_sources as collect_timezone_sources
-from verify_source_proof import KEY_SHA256, PREDICATE, digest, read_regular, verify_attestation_proof, verify_source_proof
+from verify_source_proof import (KEY_SHA256, PREDICATE, ProofLayout, digest, read_regular,
+                                 verify_attestation_proof, verify_source_proof)
 from source_concurrency import ordered_map, source_workers
 
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPAT_BUILD_BINDING = 'signed-vendor-inputs-and-reviewed-keep-build'
+EXPAT_COMPILER_PREDICATE = 'https://slsa.dev/provenance/v1'
 ACQUISITION_ERRORS = (ValueError, KeyError, OSError, EOFError, tarfile.TarError,
                       lzma.LZMAError, subprocess.CalledProcessError)
 
@@ -549,11 +554,377 @@ def discover_origin(origin, architecture, destination, registry):
     return result
 
 
+def expat_compiler_identity(raw_index, architecture, *, root=ROOT):
+    """Resolve the compiler native child only through its pinned development index."""
+    from build_patched_expat import reviewed_spec
+    image = reviewed_spec(root)['build']['image']
+    if not re.fullmatch(r'dhi\.io/python:[A-Za-z0-9_.-]+@sha256:[a-f0-9]{64}', image):
+        raise ValueError('Unreviewed Expat compiler image reference')
+    expected_index = image.split('@', 1)[1]
+    native, index_digest, direct = resolve_native(raw_index, architecture)
+    if direct or index_digest != expected_index:
+        raise ValueError('Expat compiler index differs from the reviewed development image')
+    return {'build_image': image, 'image_index_digest': index_digest,
+            'architecture': architecture, 'native_image_digest': native,
+            'index_is_native_manifest': False}
+
+
+def retain_expat_compiler_provenance(source, destination, architecture, *, root=ROOT):
+    """Verify and curate the original signed compiler-image SLSA proof offline."""
+    if source is None:
+        raise ValueError('Original signed Expat compiler-image provenance is required')
+    source, destination = Path(source), Path(destination)
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError('Expat compiler provenance must be a regular directory')
+    group = expat_compiler_identity(read_regular(source / 'pinned-base-index.json'),
+                                     architecture, root=root)
+    verification = {'expected_base_digest': group['image_index_digest'],
+        'expected_repository': 'dhi.io/python', 'expected_source_name': 'dhi/python',
+        'expected_native_digest': group['native_image_digest'],
+        'expected_predicate_type': EXPAT_COMPILER_PREDICATE, 'index_is_native_manifest': False}
+    proof = verify_attestation_proof(source, architecture, **verification)
+    statement = json.loads(read_regular(source / 'statement.json'))
+    predicate = statement.get('predicate', {})
+    if (not isinstance(predicate, dict) or not isinstance(predicate.get('buildDefinition'), dict)
+            or not predicate['buildDefinition'] or not isinstance(predicate.get('runDetails'), dict)
+            or not predicate['runDetails']):
+        raise ValueError('Expat compiler SLSA provenance is incomplete')
+    layout = ProofLayout(source / 'proof-oci').verify()
+    if destination.is_symlink() or destination.exists() and any(destination.iterdir()):
+        raise ValueError('Expat compiler provenance output must be empty without symlinks')
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in ('pinned-base-index.json', 'dhi-verification-key.pem',
+                 'attestation-reference.json', 'statement.json'):
+        (destination / name).write_bytes(read_regular(source / name))
+    target = destination / 'proof-oci'
+    target.mkdir()
+    (target / 'oci-layout').write_bytes(read_regular(source / 'proof-oci/oci-layout'))
+    # This root index is a local copy-tool wrapper, not a registry blob. Its
+    # transfer timestamps/order must not change the matching-source identity.
+    # Only its descriptor-local created annotation is omitted; every original
+    # content-addressed manifest, statement and signature stays byte-for-byte.
+    index = json.loads(read_regular(source / 'proof-oci/index.json'))
+    for descriptor in index['manifests']:
+        annotations = descriptor.get('annotations')
+        if isinstance(annotations, dict):
+            annotations.pop('org.opencontainers.image.created', None)
+            if not annotations:
+                descriptor.pop('annotations')
+    index['manifests'].sort(key=lambda row: json.dumps(row, sort_keys=True))
+    (target / 'index.json').write_text(json.dumps(index, indent=2, sort_keys=True) + '\n')
+    for value, body in sorted(layout.blobs.items()):
+        path = destination / 'proof-oci/blobs/sha256' / value.split(':', 1)[1]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    if verify_attestation_proof(destination, architecture, **verification) != proof:
+        raise ValueError('Retained Expat compiler proof differs after local OCI index reconstruction')
+    (destination / 'proof-verification.json').write_text(json.dumps(proof, indent=2, sort_keys=True) + '\n')
+    return {'schema': 'keep-expat-compiler-provenance-v1', **group,
+            'repository': 'dhi.io/python', 'source_name': 'dhi/python',
+            'predicate_type': EXPAT_COMPILER_PREDICATE, 'proof': proof,
+            'coverage': 'Original Docker-key-signed SLSA provenance binds the compiler development '
+                        'image native child to the exact reviewed index. The local OCI layout index '
+                        'is reconstructed deterministically; original content-addressed proof objects '
+                        'retain their exact bytes. Compiler package matching '
+                        'sources and Rekor inclusion are not claimed.'}
+
+
+def acquire_expat_compiler_provenance(architecture, output, registry, *, root=ROOT):
+    """Acquire the exact development-image proof; preparation stays unqualified."""
+    from build_patched_expat import reviewed_spec
+    image = reviewed_spec(root)['build']['image']
+    raw_index = registry.manifest(image)
+    group = expat_compiler_identity(raw_index, architecture, root=root)
+    listing = registry.referrers('dhi.io/python@' + group['native_image_digest'])
+    descriptors = listing.get('manifests') if isinstance(listing, dict) else None
+    if not isinstance(descriptors, list) or len(descriptors) > 64:
+        raise ValueError('Invalid Expat compiler-image provenance referrers')
+    with tempfile.TemporaryDirectory(prefix='keep-expat-compiler-proof-') as directory:
+        source = Path(directory) / 'original-proof'
+        acquire_build_attestation({'image': 'dhi.io/python', 'predicate_image_name': 'dhi/python'},
+            group, raw_index, source, registry, descriptors, (EXPAT_COMPILER_PREDICATE,))
+        return retain_expat_compiler_provenance(source, output, architecture, root=root)
+
+
+def verify_expat_replacement(runtime_inventory, architecture, *, root=ROOT):
+    """Bind independently inventoried library bytes to the reviewed native build.
+
+    The Alpine package database describes the original vendor installation. It
+    cannot prove the identity of the library Keep replaces after that install.
+    """
+    from build_patched_expat import json_bytes, reviewed_spec, verify_build_manifest
+    replacement = runtime_inventory.get('expat_replacement') if isinstance(runtime_inventory, dict) else None
+    if (not isinstance(replacement, dict)
+            or set(replacement) != {'build_lock', 'build_lock_sha256', 'manifest',
+                                    'manifest_sha256', 'library'}):
+        raise ValueError('Require the actual candidate Expat replacement inventory')
+    spec = reviewed_spec(root)
+    manifest = verify_build_manifest(replacement.get('manifest'), architecture, root)
+    expected_library = {'path': '/usr/lib/libexpat.so.1.13.0',
+                        'sha256': manifest['library']['sha256']}
+    if (replacement['build_lock'] != spec
+            or replacement['build_lock_sha256'] != hashlib.sha256(json_bytes(spec)).hexdigest()
+            or replacement['manifest_sha256'] != hashlib.sha256(json_bytes(manifest)).hexdigest()
+            or replacement['library'] != expected_library):
+        raise ValueError('Candidate Expat replacement differs from reviewed lock, manifest or library bytes')
+    return replacement
+
+
+def expat_source_files(directory, manifest):
+    """Require exactly the declared regular files and their parent directories."""
+    directory = Path(directory)
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError('Expat retained source root must be a regular directory')
+    records = manifest.get('files') if isinstance(manifest, dict) else None
+    if not isinstance(records, list) or not records or len(records) > 11000:
+        raise ValueError('Invalid Expat retained source inventory')
+    actual_files, actual_directories = set(), set()
+    for path in directory.rglob('*'):
+        if path.is_symlink():
+            raise ValueError('Expat retained sources must not contain symlinks')
+        name = path.relative_to(directory).as_posix()
+        if path.is_file():
+            actual_files.add(name)
+        elif path.is_dir():
+            actual_directories.add(name)
+        else:
+            raise ValueError('Unsupported Expat retained source entry')
+    expected_files, expected_directories = {'manifest.json'}, set()
+    for record in records:
+        if not isinstance(record, dict):
+            raise ValueError('Invalid Expat retained source record')
+        name = safe_name(record.get('path', ''))
+        if name in expected_files:
+            raise ValueError('Duplicate Expat retained source path')
+        expected_files.add(name)
+        path = directory / name
+        for parent in Path(name).parents:
+            if parent != Path('.'):
+                expected_directories.add(parent.as_posix())
+        if (path.is_symlink() or not path.is_file()
+                or path.stat().st_size != record.get('bytes')):
+            raise ValueError('Expat retained source checksum or size mismatch: ' + name)
+        hasher = hashlib.sha256()
+        with path.open('rb') as stream:
+            while chunk := stream.read(1024 * 1024):
+                hasher.update(chunk)
+        if hasher.hexdigest() != record.get('sha256'):
+            raise ValueError('Expat retained source checksum or size mismatch: ' + name)
+    if actual_files != expected_files or actual_directories != expected_directories:
+        raise ValueError('Expat retained source tree has missing or extra outputs')
+
+
+def retained_expat_fetch(directory, manifest):
+    """Replay checked vendor and build-input downloads without network fallbacks."""
+    expat_source_files(directory, manifest)
+    roles = {'alpine-signing-key', 'signed-alpine-binary-evidence',
+             'complete-alpine-build-recipes', 'matching-apk-build-script',
+             'upstream-source', 'upstream-detached-signature',
+             'reviewed-keep-build-source-input'}
+    downloads = {}
+    for record in manifest['files']:
+        if record['role'] not in roles:
+            continue
+        url = record.get('url')
+        if not isinstance(url, str):
+            raise ValueError('Ambiguous Expat retained download identity')
+        path = Path(directory) / record['path']
+        if url in downloads:
+            # The vendor and build-input collections may retain the same
+            # Alpine signing key. Each copy was checked above; only identical
+            # bytes can share one deterministic offline fetch identity.
+            if path.read_bytes() != downloads[url].read_bytes():
+                raise ValueError('Conflicting Expat retained download bytes')
+            continue
+        downloads[url] = path
+
+    def fetch(url):
+        if url not in downloads:
+            raise ValueError('Required pinned Expat source input is missing: ' + url)
+        return downloads[url].read_bytes()
+    return fetch
+
+
+def expat_cpp_source_binding(downloads, *, root=ROOT):
+    """Bind signed C++ build inputs to the existing complete GCC source origin."""
+    lock = json.loads(read_regular(Path(root) / 'docs/os-package-sources.json'))
+    origins = [row for row in lock.get('origins', []) if row.get('origin') == 'gcc']
+    if len(origins) != 1:
+        raise ValueError('Expat C++ inputs require one reviewed GCC source origin')
+    origin = origins[0]
+    packages = origin.get('build_only_packages', [])
+    if (origin.get('version') != '15.2.0-r7' or len(packages) != 2
+            or {row.get('name') for row in packages} != {'g++', 'libstdc++-dev'}
+            or any(row.get('version') != origin['version']
+                   or row.get('build_commit') != 'ddcf93c394b61ccf6be91b915a92a7454a14fcba'
+                   or row.get('license') != 'GPL-2.0-or-later AND LGPL-2.1-or-later'
+                   for row in packages)):
+        raise ValueError('Expat C++ inputs differ from the reviewed GCC build-only packages')
+    for architecture in ('amd64', 'arm64'):
+        expected_packages(origin, architecture)
+    expected = {row['binaries'][architecture]['url']: row['binaries'][architecture]['sha256']
+                for row in packages for architecture in ('amd64', 'arm64')}
+    actual = [row for row in downloads.values()
+              if row['path'].startswith('cpp/') and row['path'].endswith('.apk')]
+    if len(actual) != 4 or {row['url']: row['sha256'] for row in actual} != expected:
+        raise ValueError('Expat C++ input APKs lack the exact reviewed GCC matching-source binding')
+    return {'origin': 'gcc', 'version': origin['version'],
+            'build_commit': 'ddcf93c394b61ccf6be91b915a92a7454a14fcba',
+            'packages': sorted(row['name'] for row in packages),
+            'source_origin_sha256': hashlib.sha256(
+                (json.dumps(origin, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
+            'coverage': 'Matching sources and GPL/LGPL notices require the separately verified '
+                        'complete GCC origin, including exact native output matches for these '
+                        'build-only packages; compiler APK receipts alone do not provide them.'}
+
+
+def collect_patched_expat_sources(origin, architecture, runtime_inventory, output,
+                                  *, compiler_proof=None, fetch=None, root=ROOT):
+    """Retain signed vendor proof and full matching sources for Keep's overlay."""
+    import alpine_expat_sources as vendor
+    import build_patched_expat as replacement_build
+    replacement = verify_expat_replacement(runtime_inventory, architecture, root=root)
+    output = Path(output)
+    if output.is_symlink() or output.exists() and any(output.iterdir()):
+        raise ValueError('Expat combined source output must be empty without symlinks')
+    output.mkdir(parents=True, exist_ok=True)
+    compiler = retain_expat_compiler_provenance(compiler_proof, output / 'compiler-provenance',
+                                               architecture, root=root)
+    fetch = fetch or vendor.download
+    vendor_root = output / 'vendor-inputs'
+    vendor_manifest = vendor.collect_sources(origin, architecture, runtime_inventory,
+                                              vendor_root, fetch=fetch)
+    replay_root = output / 'keep-build'
+    replay = replacement_build.replay_sources(replay_root.resolve(), root=root, fetch=fetch)
+    (replay_root / 'EXPAT_PATCHED_SECURITY.json').write_bytes(
+        replacement_build.json_bytes(replacement['manifest']))
+    runtime = {'os_packages': sorted(
+        [row for row in runtime_inventory.get('os_packages', [])
+         if row.get('name') in {'expat', 'libexpat'}], key=lambda row: row['name']),
+        'expat_replacement': replacement}
+    (output / 'runtime-expat-replacement.json').write_bytes(replacement_build.json_bytes(runtime))
+    records = [{**row, 'path': 'vendor-inputs/' + row['path']}
+               for row in vendor_manifest['files']]
+
+    def record(path, role, url, source_path=None):
+        body = path.read_bytes()
+        name = path.relative_to(output).as_posix()
+        records.append({'path': name, 'bytes': len(body),
+                        'sha256': hashlib.sha256(body).hexdigest(), 'role': role,
+                        'url': url, 'source_path': source_path or name})
+    record(vendor_root / 'manifest.json', 'signed-vendor-source-proof',
+           'verified-alpine-source-collection:expat')
+    record(output / 'runtime-expat-replacement.json', 'runtime-replacement-build-identity',
+           'verified-candidate-runtime:expat-replacement')
+    for path in sorted((output / 'compiler-provenance').rglob('*')):
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise ValueError('Unsupported Expat compiler proof output')
+        if path.is_file():
+            role = ('compiler-image-generated-layout-index'
+                    if path.relative_to(output / 'compiler-provenance').as_posix() == 'proof-oci/index.json'
+                    else 'compiler-image-original-proof')
+            record(path, role,
+                   'verified-compiler-image-proof:' + path.relative_to(output / 'compiler-provenance').as_posix())
+    source_downloads = {}
+    for row in replacement_build.source_download_records():
+        name = safe_name(row['path'])
+        if name in source_downloads:
+            raise ValueError('Duplicate reviewed Expat build download path')
+        source_downloads[name] = row
+    cpp_sources = expat_cpp_source_binding(source_downloads, root=root)
+    build_input_records = {}
+    for relative, label in (('fortify/manifest.json', 'Fortify'), ('cpp/CPP_BUILD_INPUTS.json', 'C++'),
+                            ('build-tools/manifest.json', 'Make and Bash')):
+        manifest_path = replay_root / relative
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            raise ValueError('Missing verified ' + label + ' build-input manifest')
+        for row in json.loads(read_regular(manifest_path))['files']:
+            name = relative.split('/', 1)[0] + '/' + safe_name(row['path'])
+            if name in build_input_records:
+                raise ValueError('Duplicate verified ' + label + ' build-input path')
+            build_input_records[name] = row
+    for path in sorted(replay_root.rglob('*')):
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise ValueError('Unsupported Expat build source output')
+        if not path.is_file():
+            continue
+        name = path.relative_to(replay_root).as_posix()
+        source_name = name.removeprefix(replacement_build.SOURCE_DIRECTORY + '/')
+        role = ('reviewed-keep-build-attribution-source'
+                if name.startswith(replacement_build.SOURCE_DIRECTORY + '/')
+                and source_name in replacement_build.PATCHED_FILES
+                else 'reviewed-keep-build-source')
+        url, source_path = 'reviewed-keep-expat-build:' + name, None
+        if name in build_input_records:
+            row = build_input_records[name]
+            if (hashlib.sha256(path.read_bytes()).hexdigest() != row['sha256']
+                    or path.stat().st_size != row['bytes']):
+                raise ValueError('Verified build-input manifest differs from replayed bytes')
+            role, url, source_path = row['role'], row['url'], row.get('source_path')
+        if name in source_downloads:
+            row = source_downloads[name]
+            if hashlib.sha256(path.read_bytes()).hexdigest() != row['sha256']:
+                raise ValueError('Reviewed Expat build download differs from replayed bytes')
+            role, url = 'reviewed-keep-build-source-input', row['url']
+        record(path, role, url, source_path)
+    replay_names = {path.relative_to(replay_root).as_posix() for path in replay_root.rglob('*') if path.is_file()}
+    if not set(source_downloads) <= replay_names or not set(build_input_records) <= replay_names:
+        raise ValueError('Missing reviewed Expat, Fortify, C++ or build-tool source input')
+    manifest = {
+        'schema': 1, 'origin': 'expat', 'version': origin['version'],
+        'architecture': architecture, 'provider_oci_binding': False,
+        'source_image_digest': None, 'binding_method': EXPAT_BUILD_BINDING,
+        'vendor_apk_signature_verified': True, 'apk_binary_match_verified': False,
+        'runtime_build_verified': True, 'package_inputs': vendor_manifest['package_inputs'],
+        'source_manifest_sha256': vendor_manifest['source_manifest_sha256'],
+        'vendor_manifest_sha256': hashlib.sha256((vendor_root / 'manifest.json').read_bytes()).hexdigest(),
+        'replacement_build_lock_sha256': replacement['build_lock_sha256'],
+        'replacement_manifest_sha256': replacement['manifest_sha256'],
+        'replacement_library': replacement['library'], 'source_replay': replay,
+        'compiler_provenance': compiler,
+        'cpp_source_binding': cpp_sources,
+        'files': records,
+        'coverage': 'Original Alpine-signed packages, signatures, complete recipes and sources '
+                    'are retained as vendor input proof. Keep replaces the Expat library using '
+                    'the separately reviewed build lock, native output hashes, exact upstream '
+                    'patches and explicitly identified Keep-local changes, all retained in the '
+                    'patch manifest, source replay record and full replayed source tree, '
+                    'including verified Fortify headers '
+                    'and verified make and bash inputs with their complete matching sources and notices. '
+                    'The Alpine signature does not apply '
+                    'to the replacement library; no package-source OCI binding is claimed.',
+    }
+    (output / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    expat_source_files(output, manifest)
+    return manifest
+
+
+def replay_patched_expat_sources(source, destination, origin, architecture,
+                                 runtime_inventory=None, *, root=ROOT):
+    """Recheck exact retained outputs by rebuilding both source trees offline."""
+    source = Path(source)
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError('Expat retained source root must be a regular directory')
+    raw = read_regular(source / 'manifest.json', 32 * 1024 * 1024)
+    manifest = json.loads(raw)
+    if raw != (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode():
+        raise ValueError('Expat retained source manifest must use exact canonical bytes')
+    fetch = retained_expat_fetch(source, manifest)
+    retained_runtime = json.loads((source / 'runtime-expat-replacement.json').read_bytes())
+    if runtime_inventory is None:
+        runtime_inventory = retained_runtime
+    checked = collect_patched_expat_sources(origin, architecture, runtime_inventory,
+        destination, compiler_proof=source / 'compiler-provenance', fetch=fetch, root=root)
+    if checked != manifest:
+        raise ValueError('Expat sources differ from signed vendor inputs and reviewed Keep build')
+    return checked
+
+
 def acquire_origin(origin, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None):
     if origin.get('source_method') in {
             'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1'}:
         if origin['source_method'] == 'alpine-signed-expat-v1':
-            from alpine_expat_sources import collect_sources
+            collect_sources = collect_patched_expat_sources
             directory = 'alpine-expat-sources'
         elif origin['source_method'] == 'alpine-signed-zlib-v1':
             from alpine_zlib_sources import collect_sources
@@ -565,13 +936,23 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
             raise ValueError('Signed Alpine sources require the actual candidate inventory')
         root = Path(destination)
         root.mkdir(parents=True, exist_ok=True)
-        manifest = collect_sources(origin, architecture, runtime_inventory,
-                                   root / directory)
+        if origin['origin'] == 'expat':
+            with tempfile.TemporaryDirectory(prefix='keep-expat-compiler-acquisition-') as temporary:
+                compiler_proof = Path(temporary) / 'compiler-provenance'
+                acquire_expat_compiler_provenance(architecture, compiler_proof, registry)
+                manifest = collect_sources(origin, architecture, runtime_inventory,
+                    root / directory, compiler_proof=compiler_proof)
+        else:
+            manifest = collect_sources(origin, architecture, runtime_inventory, root / directory)
         result = {'origin': origin['origin'], 'version': origin['version'],
                   'architecture': architecture, 'success': True,
                   'provider_oci_binding': False, 'signature_verified': True,
-                  'apk_binary_match_verified': True, 'binding_method': manifest['binding_method'],
+                  'apk_binary_match_verified': origin['origin'] != 'expat',
+                  'binding_method': manifest['binding_method'],
                   'public_sources': {'directory': directory, 'manifest': 'manifest.json'}}
+        if origin['origin'] == 'expat':
+            result['runtime_build_verified'] = True
+            result['vendor_apk_signature_verified'] = True
         (root / 'acquisition.json').write_text(json.dumps(result, indent=2) + '\n')
         return result
     origin_name = origin.get('origin', '')

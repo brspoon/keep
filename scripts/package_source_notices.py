@@ -695,13 +695,13 @@ Only explicitly reviewed attribution headers are copied from source code.
             selected_header_roles = set()
             binding_method = 'Pinned original Alpine package build commit, complete recipes and checked source archive; caller verifies native base provenance.'
         elif origin == 'expat':
-            from alpine_expat_sources import collect_sources
+            from collect_package_sources import replay_patched_expat_sources
             if package_spec is None:
-                raise ValueError('Alpine Expat notices require the reviewed package source map')
-            if runtime_inventory is None:
-                runtime_inventory = json.loads(checked_path(source, 'runtime-expat-identity.json').read_bytes())
-            verified = collect_sources(package_spec, architecture, runtime_inventory, directory, fetch=fetch)
-            selected_header_roles = set()
+                raise ValueError('Expat notices require the reviewed package source map')
+            verified = replay_patched_expat_sources(source, directory, package_spec,
+                                                    architecture, runtime_inventory)
+            selected_header_roles = {'reviewed-keep-build-attribution-source',
+                                     'upstream-permissive-attribution-source'}
             binding_method = verified['binding_method']
         elif origin == 'zlib':
             from alpine_zlib_sources import collect_sources
@@ -779,6 +779,9 @@ Only explicitly reviewed attribution headers are copied from source code.
             if record['role'] in {'upstream-notice', 'upstream-lgpl-license'}:
                 body = checked_path(source, record['path']).read_bytes()
                 discovery = 'checked-public-standalone-notice'
+            elif origin == 'expat' and record['role'] == 'upstream-attribution':
+                body = checked_path(source, record['path']).read_bytes()
+                discovery = 'checked-public-upstream-attribution'
             elif record['role'] in selected_header_roles:
                 body = checked_path(source, record['path']).read_bytes()
                 body = leading_notice(body, complete_file=True)

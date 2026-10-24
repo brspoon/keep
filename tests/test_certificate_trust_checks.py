@@ -51,6 +51,45 @@ CUfvO6wIBHxcmbHtRwfSAjEAnbpV/KlK6O3t5nYBQnvI+GDZjVGLVTv7jHvrZQnD
 +JbNR6iC8hZVdyR+EhCVBCyj
 -----END CERTIFICATE-----
 """
+C1_PEM = """-----BEGIN CERTIFICATE-----
+MIIDczCCAlugAwIBAgILAK7PALrEzzL4Q7IwDQYJKoZIhvcNAQELBQAwVjELMAkG
+A1UEBhMCVVMxEzARBgNVBAsTCmVtU2lnbiBQS0kxFDASBgNVBAoTC2VNdWRocmEg
+SW5jMRwwGgYDVQQDExNlbVNpZ24gUm9vdCBDQSAtIEMxMB4XDTE4MDIxODE4MzAw
+MFoXDTQzMDIxODE4MzAwMFowVjELMAkGA1UEBhMCVVMxEzARBgNVBAsTCmVtU2ln
+biBQS0kxFDASBgNVBAoTC2VNdWRocmEgSW5jMRwwGgYDVQQDExNlbVNpZ24gUm9v
+dCBDQSAtIEMxMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz+upufGZ
+BczYKCFK83M0UYRWEPWgTywS4/oTmifQz/l5GnRfHXk5/Fv4cI7gklL35CX5VIPZ
+HdPIWoU/Xse2B+4+wM6ar6xWQio5JXDWv7V7Nq2s9nPczdcdioOl+yuQFTdrHCZH
+3DspVpNqs8FqOp099cGXOFgFixwR4+S0uF2FHYP+eF8LRWgYSKVGczQ7/g/IdrvH
+GPMF0Ybzhe3nudkyrVWIzqa2kbBPrH4VI5b2P/AgNBbeCsbEBEV5f6f9vtKppa+c
+xSMq9zwhbL2vj07FOrLzNBL834AaSaTUqZX3noleoomslMuoaJuvimUnzYnu3Yy1
+aylwQ6BpC+S5DwIDAQABo0IwQDAdBgNVHQ4EFgQU/qHgcB4qAzlSWkK+XJGFehiq
+TbUwDgYDVR0PAQH/BAQDAgEGMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQEL
+BQADggEBAMJKVvoVIXsoounlHfv4LcQ5lkFMOycsxGwYFYDGrK9HWS8mC+M2sO87
+/kOXSTKZEhVb3xEp/6tT+LvBeA+snFOvV71ojD1pM/CjoCNjO2RnIkSt1XHLVip4
+kqNPEjE2NuLe/gDEo2APJ62gsIq1NnpSob0n9CAnYuhNlCQT5AoE6TyrLshDCUrG
+YQTlSTR+08TI9Q/Aqum6VF7zYytPT1DU/rl7mYw9wC68AivTxEDkigcxHpvOJpkT
++xHqmiIMERnHXhuBUDDIlhJu58tBf5E7oke3VIAb3ADMmpDqw8NQBmIMMMAVSKeo
+WXzhriKi4gp6D/piq1JM4fHfyr6DDUI=
+-----END CERTIFICATE-----
+"""
+C3_PEM = """-----BEGIN CERTIFICATE-----
+MIICKzCCAbGgAwIBAgIKe3G2gla4EnycqDAKBggqhkjOPQQDAzBaMQswCQYDVQQG
+EwJVUzETMBEGA1UECxMKZW1TaWduIFBLSTEUMBIGA1UEChMLZU11ZGhyYSBJbmMx
+IDAeBgNVBAMTF2VtU2lnbiBFQ0MgUm9vdCBDQSAtIEMzMB4XDTE4MDIxODE4MzAw
+MFoXDTQzMDIxODE4MzAwMFowWjELMAkGA1UEBhMCVVMxEzARBgNVBAsTCmVtU2ln
+biBQS0kxFDASBgNVBAoTC2VNdWRocmEgSW5jMSAwHgYDVQQDExdlbVNpZ24gRUND
+IFJvb3QgQ0EgLSBDMzB2MBAGByqGSM49AgEGBSuBBAAiA2IABP2lYa57JhAd6bci
+MK4G9IGzsUJxlTm801Ljr6/58pc1kjZGDoeVjbk5Wum739D+yAdBPLtVb4Ojavti
+sIGJAnB9SMVK4+kiVCJNk7tCDK93nCOmfddhEc5lx/h//vXyqaNCMEAwHQYDVR0O
+BBYEFPtaSNCAIEDyqOkAB2kZd6fmw/TPMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMB
+Af8EBTADAQH/MAoGCCqGSM49BAMDA2gAMGUCMQC02C8Cif22TGK6Q04ThHK1rt0c
+3ta13FaPWEBaLd4gTCKDypOofu4SQMfWh0/434UCMBwUZOR8loMRnLDRWmFLpg9J
+0wD8ofzkpf9/rdcw0Md3f76BB1UwUCAU9Vc4CqgxUQ==
+-----END CERTIFICATE-----
+"""
+EXCLUDED_PEMS = ((checks.EXCLUDED_ROOT, EXCLUDED_PEM),
+                 (checks.C1_ROOT, C1_PEM), (checks.C3_ROOT, C3_PEM))
 ROOT_FINGERPRINT = hashlib.sha256(ssl.PEM_cert_to_DER_cert(ROOT_PEM)).hexdigest()
 
 
@@ -58,7 +97,10 @@ class PemInventoryTests(unittest.TestCase):
     def test_comments_and_whitespace_do_not_change_der_fingerprints(self):
         body = ('\n# Subject: public fixture\n' + ROOT_PEM + '\n').encode()
         self.assertEqual(checks.pem_fingerprints(body), [ROOT_FINGERPRINT])
-        self.assertEqual(checks.pem_fingerprints(EXCLUDED_PEM.encode()), [checks.EXCLUDED_ROOT])
+        self.assertEqual(checks.EXCLUDED_ROOTS, {fingerprint for fingerprint, _ in EXCLUDED_PEMS})
+        for fingerprint, pem in EXCLUDED_PEMS:
+            with self.subTest(excluded=fingerprint):
+                self.assertEqual(checks.pem_fingerprints(pem.encode()), [fingerprint])
 
     def test_partial_ambiguous_noncertificate_and_duplicate_pem_fail(self):
         der = ssl.PEM_cert_to_DER_cert(ROOT_PEM)
@@ -75,14 +117,15 @@ class PemInventoryTests(unittest.TestCase):
             with self.subTest(body=body[:50]), self.assertRaises(ValueError):
                 checks.pem_fingerprints(body)
 
-    def test_excluded_root_fails_even_with_consistent_hashes_and_counts(self):
+    def test_all_excluded_roots_fail_even_with_consistent_hashes_and_counts(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'bundle.pem'
-            path.write_text(ROOT_PEM + EXCLUDED_PEM)
-            identity = checks.bundle_identity(path)
-            with self.assertRaisesRegex(ValueError, 'Excluded root'):
-                checks.validate_bundle(identity, path, identity['sha256'], 2,
-                                       identity['fingerprints_sha256'], (ROOT_FINGERPRINT,))
+            for fingerprint, pem in EXCLUDED_PEMS:
+                path.write_text(ROOT_PEM + pem)
+                identity = checks.bundle_identity(path)
+                with self.subTest(excluded=fingerprint), self.assertRaisesRegex(ValueError, 'Excluded root'):
+                    checks.validate_bundle(identity, path, identity['sha256'], 2,
+                                           identity['fingerprints_sha256'], (ROOT_FINGERPRINT,))
             path.write_text(ROOT_PEM)
             identity = checks.bundle_identity(path)
             with self.assertRaisesRegex(ValueError, 'unaffected certificate roots missing'):
@@ -219,8 +262,9 @@ class TrustQualificationTests(unittest.TestCase):
 
     def test_same_roots_with_modified_bytes_and_changed_root_bundle_fail(self):
         for path in (self.certifi_path, self.system_path):
-            for body in (ROOT_PEM + '\n# modified bundle\n', ROOT_PEM + EXCLUDED_PEM):
-                with self.subTest(path=path, excluded='RzMw' in body):
+            for body in (ROOT_PEM + '\n# modified bundle\n',
+                         *(ROOT_PEM + pem for _, pem in EXCLUDED_PEMS)):
+                with self.subTest(path=path, sha256=hashlib.sha256(body.encode()).hexdigest()):
                     path.write_text(body)
                     with self.assertRaisesRegex(ValueError, 'root inventory'):
                         self.qualify()
@@ -247,15 +291,39 @@ class TrustQualificationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Default SMTP CA file'):
                 self.qualify()
 
+    def test_all_excluded_roots_in_effective_requests_and_smtp_stores_fail(self):
+        for backend in ('requests', 'smtp'):
+            for fingerprint, pem in EXCLUDED_PEMS:
+                def create_context(*args, **kwargs):
+                    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    context.load_verify_locations(cadata=ROOT_PEM)
+                    if ('requests' if kwargs else 'smtp') == backend:
+                        context.load_verify_locations(cadata=pem)
+                    return context
+                with self.subTest(backend=backend, excluded=fingerprint), \
+                     patch.object(ssl, 'create_default_context', side_effect=create_context), \
+                     self.assertRaisesRegex(ValueError, 'TLS context contains an excluded root'):
+                    self.qualify()
+
+    def test_all_excluded_lazy_capath_roots_fail_even_if_the_bundle_includes_them(self):
+        hashed = self.system_path.with_name('01234567.0')
+        for fingerprint, pem in EXCLUDED_PEMS:
+            self.system_path.write_text(ROOT_PEM + pem)
+            hashed.write_text(pem)
+            bundle = checks.bundle_identity(self.system_path)
+            with self.subTest(excluded=fingerprint), self.assertRaisesRegex(ValueError, 'unreviewed root'):
+                checks.capath_inventory(self.system_path.parent, bundle)
+
     def test_lazy_capath_roots_are_inspected_and_broken_or_unreadable_entries_fail(self):
         hashed = self.system_path.with_name('01234567.0')
         hashed.write_text(ROOT_PEM)
         report = self.qualify()
         self.assertEqual(report['capath']['entries'], 1)
         self.assertEqual(report['capath']['fingerprints'], [ROOT_FINGERPRINT])
-        hashed.write_text(EXCLUDED_PEM)
-        with self.assertRaisesRegex(ValueError, 'unreviewed root'):
-            self.qualify()
+        for fingerprint, pem in EXCLUDED_PEMS:
+            hashed.write_text(pem)
+            with self.subTest(excluded=fingerprint), self.assertRaisesRegex(ValueError, 'unreviewed root'):
+                self.qualify()
         hashed.unlink()
         hashed.symlink_to('missing.pem')
         with self.assertRaises(FileNotFoundError):
@@ -315,6 +383,15 @@ class TrustQualificationTests(unittest.TestCase):
             with self.subTest(report=changed), self.assertRaises(ValueError):
                 checks.validate_trust_report(changed, 'amd64')
 
+    def test_retained_proof_rejects_each_excluded_capath_root_with_consistent_metadata(self):
+        report = self.qualify()
+        for fingerprint, _ in EXCLUDED_PEMS:
+            changed = copy.deepcopy(report)
+            changed['capath'].update(entries=1, certificates=1, fingerprints=[fingerprint],
+                fingerprints_sha256=checks.fingerprint_digest([fingerprint]))
+            with self.subTest(excluded=fingerprint), self.assertRaisesRegex(ValueError, 'hashed certificate inventory'):
+                checks.validate_trust_report(changed, 'amd64')
+
     def test_module_import_and_retained_replay_need_no_tls_or_application_imports(self):
         report = self.qualify()
         real_import = __import__
@@ -337,8 +414,9 @@ class ReviewedTrustReportTests(unittest.TestCase):
             with self.subTest(arch=arch):
                 report = trust_report(arch)
                 self.assertEqual(checks.validate_trust_report(report, arch), report)
-                self.assertNotIn(checks.EXCLUDED_ROOT, report['certifi']['fingerprints'])
-                self.assertNotIn(checks.EXCLUDED_ROOT, report['system']['fingerprints'])
+                self.assertFalse(checks.EXCLUDED_ROOTS.intersection(report['certifi']['fingerprints']))
+                self.assertFalse(checks.EXCLUDED_ROOTS.intersection(report['system']['fingerprints']))
+                self.assertEqual(checks.CERTIFI_RETAINED_ROOTS, {checks.G1_ROOT})
                 self.assertTrue(checks.CERTIFI_RETAINED_ROOTS <= set(report['certifi']['fingerprints']))
                 self.assertIn(checks.G1_ROOT, report['system']['fingerprints'])
 
