@@ -403,13 +403,15 @@ def get_plex_user_access_snapshot():
         for account in accounts:
             if account.tag != 'Account':
                 raise ValueError('Invalid Plex account response')
-            account_id = _plex_sync_id(account.get('id'))
+            # PMS includes a local system account numbered zero. It is not a
+            # Plex account identity and must never authorize or import a user.
+            account_id = '0' if account.get('id') == '0' else _plex_sync_id(account.get('id'))
             if account_id in account_ids:
                 raise ValueError('Duplicate Plex account identity')
             account_ids.add(account_id)
         # Preserve existing access-proof semantics for known server accounts.
         # Server account history alone never imports a new Keep profile.
-        authorized.update(account_ids)
+        authorized.update(account_ids - {'0'})
         for user in shared:
             if user.tag != 'User':
                 raise ValueError('Invalid Plex user response')

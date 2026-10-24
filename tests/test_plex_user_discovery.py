@@ -172,6 +172,26 @@ class PlexUserDiscoveryTests(unittest.TestCase):
         self.assertIsNone(self.sync(xml_users()))
         self.assertEqual(self.profiles(), before)
 
+    def test_server_system_account_zero_does_not_block_discovery_or_authorize_a_user(self):
+        self.accounts = b'<MediaContainer><Account id="0" name=""/><Account id="7"/></MediaContainer>'
+        with patch('service_discovery.read_service', side_effect=[self.identity, self.accounts, xml_users(friend())]):
+            snapshot = keep.get_plex_user_access_snapshot()
+        self.assertIsNotNone(snapshot)
+        self.assertNotIn('0', snapshot['authorized'])
+        self.assertNotIn('0', snapshot['profiles'])
+        with patch.object(keep, 'get_plex_user_access_snapshot', return_value=snapshot):
+            self.assertEqual(keep.sync_plex_user_access(), 1)
+        self.assertIsNone(self.profile('0'))
+        self.assertIsNotNone(self.profile('8'))
+
+    def test_duplicate_zero_or_negative_server_accounts_leave_profiles_unchanged(self):
+        for accounts in (b'<Account id="0"/><Account id="0"/>', b'<Account id="-1"/>'):
+            with self.subTest(accounts=accounts):
+                self.accounts = b'<MediaContainer>' + accounts + b'</MediaContainer>'
+                before = self.profiles()
+                self.assertIsNone(self.sync(xml_users(friend())))
+                self.assertEqual(self.profiles(), before)
+
     def test_wrong_server_identity_cannot_import_or_revoke_users(self):
         self.sync(xml_users(friend()))
         before = self.profiles()
