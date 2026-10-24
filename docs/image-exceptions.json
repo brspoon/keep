@@ -21,7 +21,7 @@
     "scripts/package_source_notices.py": "2cc8c77ee008739947a14404eaa2a0680bb259aa17c450e8af60c8a77a2add63",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
     "scripts/publish_release.py": "dee91c93a08d8dba96d61ea2fa22e37f195cea3685a0c5bc78e8f339ecfe10ae",
-    "scripts/release_materials.py": "323e71220ccffda2370350a2415deee096e09e5318721b5d721202f1aa892676",
+    "scripts/release_materials.py": "c8c176da8a8dd1993ce7b02e3541dba82416714c54f773714ab5fc5df9b095a9",
     "scripts/registry_transfer.py": "ddd75f23e65bd7739f0f1f970052efd614cb6ceeb13369ed83c587609f058d47",
     "scripts/candidate_publication.py": "4caa8c48aad6bbf64d89a0cc9278369fd7717a6bd4435357c01f4091db297564",
     "scripts/hub_analysis_review.py": "43d96d7c2ffd64ac163dc853b59c4602f13be9bedbda4e80311775657a828e8c",
