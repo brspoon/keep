@@ -72,7 +72,7 @@ test('automatically imported user cards gain disclosure, save and library contro
   const library = {disabled:false}, libraries = {hidden:false,querySelectorAll:()=>[library]};
   const permission = {checked:false,disabled:false,closest:()=>form,
     addEventListener:(name,handler)=>{permissionListeners[name]=handler;}};
-  const group = {querySelector:selector=>selector === '[data-library-permission-toggle]' ? permission : libraries};
+  const group = {querySelector:selector=>selector === '[data-library-permission-toggle]' ? permission : selector === '[data-library-permissions]' ? libraries : null};
   f.document.querySelectorAll = selector => ({'[data-user-toggle]':[toggle],'.permissions':[group],
     'form[data-save-key]':[form]}[selector] || []);
   f.documentListeners['keep-users-updated']();
@@ -98,6 +98,36 @@ test('automatically imported user cards gain disclosure, save and library contro
   permission.checked=true;formListeners.change();
   assert.equal(libraries.hidden,false);
   assert.equal(library.disabled,false);
+});
+test('Plex-following access stays read-only until the owner chooses manual access', () => {
+  const f = fixture();
+  const changes = {}, formChanges = {};
+  const automatic = { checked: true, addEventListener: (name, callback) => changes[name] = callback };
+  const permission = { checked: true, disabled: true, addEventListener() {},
+    closest: () => ({ addEventListener: (name, callback) => formChanges[name] = callback }) };
+  const deleteAny = { disabled: true };
+  const library = { checked: true, disabled: false };
+  const libraries = { hidden: false, querySelectorAll: () => [library] };
+  const group = {
+    querySelector: selector => ({ '[data-library-permission-toggle]': permission,
+      '[data-library-permissions]': libraries, '[data-plex-auto-libraries]': automatic }[selector] || null),
+    querySelectorAll: () => [permission, deleteAny]
+  };
+  f.document.querySelectorAll = selector => selector === '.permissions' ? [group] : [];
+  f.documentListeners['keep-users-updated']();
+  assert.equal(permission.disabled, true);
+  assert.equal(deleteAny.disabled, true);
+  assert.equal(library.disabled, true);
+  automatic.checked = false;
+  changes.change();
+  assert.equal(permission.disabled, false);
+  assert.equal(deleteAny.disabled, false);
+  assert.equal(library.disabled, false);
+  assert.equal(library.checked, true);
+  automatic.checked = true;
+  formChanges.change();
+  assert.equal(library.disabled, true);
+  assert.equal(library.checked, true);
 });
 test('reduced motion removes the confirmed card without animation and restores keyboard focus', async () => {
   const f = fixture();

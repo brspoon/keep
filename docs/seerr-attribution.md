@@ -38,13 +38,45 @@ public name when no display name has been set. Unlinked requesters remain
 unlinked; Keep does not match names or email addresses or display private Seerr
 labels as requester names.
 
-Discovery gives new profiles basic Keep access. It does not grant indefinite
-Keeps, management of other users' Keeps, deletion or library permissions, API
-keys, or notification subscriptions. Existing permissions and manual account
-disables remain intact. Pending invitations, users shared only with another
+Discovery gives new profiles basic Keep access. Under **Admin → General → Plex
+users**, the owner chooses whether new users also receive email and Manage
+Library access for their verified shared libraries. Both defaults start enabled;
+changing them affects future users. Indefinite Keeps, management of other users'
+Keeps, Delete any title, and API keys remain separate permissions.
+Existing permissions, email opt-outs, and manual account disables remain intact.
+Pending invitations, users shared only with another
 server, and unverified identities are not imported. A failed or incomplete
 Plex check leaves the previous profiles unchanged; existing Plex access leases
 still apply.
+
+### Email and Manage Library defaults
+
+Keep reads explicit Plex library shares and matches them to Manage Library folders
+and notification topics automatically. Verified Plex library paths identify
+Radarr/Sonarr folders; exact Maintainerr library IDs identify email topics.
+Each media folder needs a unique Plex library match covering the whole folder.
+Ambiguous or unverified matches do not grant automatic access.
+
+Automatic email follows only matched topics within the user's shared libraries;
+each title is checked again before sending, including queued digests. Users can
+turn email off in Preferences. Changing their Plex email address preserves that
+choice. Duplicate addresses receive no automatic email and never combine two
+users' library access.
+
+Automatic defaults wait when Plex access, library matches, or sharing restrictions
+cannot be verified. They never override a disabled account. Manage Library still
+requires current Seerr request history and permits only exclusive-request movies
+and TV seasons unless the owner separately grants Delete any title. Kept titles
+remain protected.
+Library verification is valid for 30 minutes. Keep the Plex account access job
+at its default 15-minute interval or shorter when using automatic defaults.
+After verification expires or a check fails, automatic access and scoped email
+wait for a successful refresh; saved permissions and preferences are retained.
+
+Changing a General default does not reset existing permissions, configured
+recipients, or opt-outs.
+On Users, **Follow Plex library access** keeps automatic access in sync; turn it
+off to choose and save manual permissions instead.
 
 ## Request details
 

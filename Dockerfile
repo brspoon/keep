@@ -64,7 +64,7 @@ COPY --from=dependencies /opt/runtime-packages/musl/MUSL_SECURITY.json /app/MUSL
 COPY --from=dependencies /venv /venv
 COPY --from=dependencies --chown=10001:10001 /app/data /app/data
 RUN ["python", "-c", "import os; os.chmod('/app/data', 0o700)"]
-COPY app.py api_v1.py email_templates.py artwork_cache.py background_jobs.py release_updates.py notifications.py notification_settings.py notifications_app.py notifications_routes.py pushover.py connection_settings.py connection_monitor.py deployment_transport.py media_services.py service_discovery.py onboarding.py seerr.py title_details.py leaving_forecast.py portable_backup.py helper_retirement.py VERSION ./
+COPY app.py api_v1.py email_templates.py artwork_cache.py background_jobs.py release_updates.py notifications.py notification_settings.py notifications_app.py notifications_routes.py pushover.py connection_settings.py connection_monitor.py deployment_transport.py media_services.py service_discovery.py onboarding.py seerr.py title_details.py leaving_forecast.py portable_backup.py helper_retirement.py plex_library_access.py plex_user_defaults.py plex_defaults_email.py VERSION ./
 COPY static ./static
 COPY templates ./templates
 COPY LICENSE ./LICENSE

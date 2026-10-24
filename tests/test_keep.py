@@ -38,6 +38,12 @@ class KeepTests(unittest.TestCase):
         set_keep_duration_days(30)
         self.addCleanup(set_keep_duration_days, 30)
         with closing(keep.attribution_db()) as db, db:
+            tables = [row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                      if row[0].startswith(('plex_user_default_', 'plex_default_email_', 'plex_defaults_email_'))]
+            for table in tables:
+                db.execute('DELETE FROM "' + table.replace('"', '""') + '"')
+            keep.plex_user_defaults.init_schema(db)
+            keep.plex_defaults_email.init_schema(db)
             db.execute('DELETE FROM keep_attribution')
             db.execute('DELETE FROM keep_schedules')
             db.execute('DELETE FROM activity_log')

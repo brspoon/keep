@@ -53,3 +53,6 @@
 !portable_backup.py
 
 !helper_retirement.py
+!plex_library_access.py
+!plex_user_defaults.py
+!plex_defaults_email.py

@@ -159,11 +159,18 @@
       const libraries = group.querySelector('[data-library-permissions]');
       if (!toggle || !libraries) return;
       boundPermissions.add(group);
+      const automatic = group.querySelector('[data-plex-auto-libraries]');
       const sync = () => {
+        if (automatic) {
+          group.querySelectorAll('[data-plex-manual-permission]').forEach(input => {
+            input.disabled = automatic.checked;
+          });
+        }
         libraries.hidden = !toggle.checked;
         libraries.querySelectorAll('input').forEach(input => { input.disabled = !toggle.checked || toggle.disabled; });
       };
       toggle.addEventListener('change', sync);
+      automatic?.addEventListener('change', sync);
       // Discarding edits resets the form, then emits a form-level change.
       toggle.closest?.('form')?.addEventListener('change', sync);
       sync();

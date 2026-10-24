@@ -1,13 +1,21 @@
 """Bounded, read-only service probes. Callers must enforce owner access and CSRF."""
 import json
+import math
 import time
 import xml.etree.ElementTree as ET
 import requests
 
 
-def read_service(url, headers=None):
-    deadline = time.monotonic() + 15
-    with requests.get(url, headers=headers or {}, timeout=(3, 8),
+def read_service(url, headers=None, *, deadline=None):
+    started = time.monotonic()
+    if deadline is not None and (isinstance(deadline, bool) or not isinstance(deadline, (int, float))
+                                 or not math.isfinite(deadline) or deadline <= started):
+        raise ValueError('Service request exceeded time limit')
+    supplied_deadline = deadline is not None
+    deadline = min(started + 15, deadline) if supplied_deadline else started + 15
+    remaining = deadline - started
+    timeout = (min(3, remaining / 2), min(8, remaining / 2)) if supplied_deadline else (3, 8)
+    with requests.get(url, headers=headers or {}, timeout=timeout,
                       allow_redirects=False, stream=True) as response:
         if response.status_code != 200:
             raise ValueError('Service did not return success')

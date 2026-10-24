@@ -49,6 +49,28 @@ def read_trailing_deflate(raw=False):
 
 
 class HTTPTransportTests(unittest.TestCase):
+    def test_shared_deadline_clamps_connection_and_read_timeouts(self):
+        with patch('service_discovery.time.monotonic', return_value=100), \
+             patch('service_discovery.requests.get', return_value=response(b'{}')) as get:
+            self.assertEqual(read_service('https://upstream.example', deadline=102), b'{}')
+        self.assertEqual(get.call_args.kwargs['timeout'], (1, 1))
+        self.assertFalse(get.call_args.kwargs['allow_redirects'])
+
+    def test_invalid_or_expired_shared_deadline_sends_no_request(self):
+        for deadline in (True, float('nan'), float('inf'), '102', 100, 99):
+            with self.subTest(deadline=deadline), \
+                 patch('service_discovery.time.monotonic', return_value=100), \
+                 patch('service_discovery.requests.get') as get:
+                with self.assertRaises(ValueError):
+                    read_service('https://upstream.example', deadline=deadline)
+                get.assert_not_called()
+
+    def test_shared_deadline_rejects_a_response_that_finishes_too_late(self):
+        with patch('service_discovery.time.monotonic', side_effect=(100, 103)), \
+             patch('service_discovery.requests.get', return_value=response(b'{}')):
+            with self.assertRaises(ValueError):
+                read_service('https://upstream.example', deadline=102)
+
     def test_valid_chunked_and_compressed_responses(self):
         original = b'{"items":[]}' * 4000
         for encoding, body in ((None, original), ('deflate', zlib.compress(original)),
