@@ -8,12 +8,12 @@ Keep gives the people who use your Plex server a say in what stays and what goes
 
 Disk space is limited, and automated cleanup helps keep a media library manageable. But a movie or show someone still plans to watch can be removed before they get around to it. Keep was created to make that decision more personal: a simple, interactive way to see what's leaving and give a title more time.
 
-Keep is a self-hosted companion for Plex and Maintainerr. Viewers sign in, browse titles scheduled for removal, and choose what they want to keep. A 30-day Keep buys time to watch; owners can also allow indefinite protection. Maintainerr continues to handle the cleanup rules, while Keep gives viewers an easy way to protect the titles that matter to them.
+Keep is a self-hosted companion for Plex and Maintainerr. Viewers sign in, browse titles scheduled for removal, and choose what they want to keep. A temporary Keep buys time to watch; the owner chooses its duration and can also allow indefinite protection. Maintainerr continues to handle the cleanup rules, while Keep gives viewers an easy way to protect the titles that matter to them.
 
 When it's time to make room, **Manage Library** lets people with the owner's permission delete movies, shows, or selected seasons they no longer want. Access can be limited to specific libraries and a person's own Seerr requests. Active Keeps are checked before deletion, and every deletion requires confirmation.
 
 - **See what's leaving.** Browse selected Maintainerr collections and the time remaining before possible removal.
-- **Keep your watch plans.** Protect titles for 30 days, manage your Keeps, and see who kept each title.
+- **Keep your watch plans.** Protect titles temporarily, manage your Keeps, and see who kept each title.
 - **Make space together.** Give trusted users controlled access to library cleanup through Radarr and Sonarr.
 - **Stay informed.** Optional email and Pushover notifications, plus watch history, help people decide what to keep.
 
@@ -54,13 +54,13 @@ After installing the prerequisites, run one command for your system on the compu
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.27.6/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.28.0/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.27.6/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.28.0/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.

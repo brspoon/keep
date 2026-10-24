@@ -121,6 +121,7 @@ def release_context():
             context['theme_mode'] = profile['theme_mode']
         context.update(plex_user=user, owner=is_owner(), capabilities=user_capabilities(),
                        granted_libraries=granted_library_keys(), csrf_token=get_csrf_token(),
+                       keep_duration_days=temporary_keep_days(),
                        announcement_version=ANNOUNCEMENT_VERSION,
                        show_announcement=bool(profile and request.path != '/help'
                                               and not announcement_seen(profile['plex_id'])))
@@ -621,12 +622,26 @@ def db_timestamp(value):
     return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def temporary_keep_expiry(now=None):
+def temporary_keep_days():
+    if has_request_context() and 'keep_duration_days' in g:
+        return g.keep_duration_days
+    with closing(attribution_db()) as db:
+        row = db.execute('SELECT keep_duration_days FROM general_settings WHERE id=1').fetchone()
+    days = row['keep_duration_days'] if row else TEMPORARY_KEEP_DAYS
+    if type(days) is not int or not 1 <= days <= 365:
+        raise ValueError('Keep duration must be a whole number between 1 and 365 days')
+    if has_request_context():
+        g.keep_duration_days = days
+    return days
+
+
+def temporary_keep_expiry(now=None, *, days=None):
     now = now or datetime.now(timezone.utc)
-    return db_timestamp(now + timedelta(days=TEMPORARY_KEEP_DAYS))
+    days = temporary_keep_days() if days is None else days
+    return db_timestamp(now + timedelta(days=days))
 
 
-def record_keeper(collection_id, media_id, user, duration="temporary", now=None):
+def record_keeper(collection_id, media_id, user, duration="temporary", now=None, *, days=None):
     if duration not in {"temporary", "indefinite"}:
         raise ValueError("unsupported keep duration")
     remember_plex_user(user)
@@ -645,7 +660,7 @@ def record_keeper(collection_id, media_id, user, duration="temporary", now=None)
             ON CONFLICT(collection_id, media_id) DO UPDATE SET
                 expires_at=excluded.expires_at, extension_available_at=NULL
         """, (str(collection_id), str(media_id),
-              temporary_keep_expiry(now) if duration == "temporary" else None))
+              temporary_keep_expiry(now, days=days) if duration == "temporary" else None))
 
 
 def can_manage_keep(collection_id, media_id, user=None):
@@ -684,7 +699,7 @@ def migrate_existing_keep_schedules(exclusions_by_collection=None):
             for collection_id in get_collections()
         }
 
-    expires_at = temporary_keep_expiry(keep_migration_started_at())
+    expires_at = temporary_keep_expiry(keep_migration_started_at(), days=TEMPORARY_KEEP_DAYS)
     migrated = 0
     with closing(attribution_db()) as db, db:
         db.execute("BEGIN IMMEDIATE")
@@ -1686,6 +1701,7 @@ def build_review_collections():
 
 def build_kept_collections():
     collections = []
+    keep_days = temporary_keep_days()
     exclusions_by_collection = {
         collection_id: get_collection_exclusions(collection_id).get("items", [])
         for collection_id in get_collections()
@@ -1731,7 +1747,7 @@ def build_kept_collections():
                 seconds = max(0, int((expiry - now).total_seconds()))
                 item["keep_days_left"] = (seconds + 86399) // 86400
                 item["keep_expiry_label"] = f"{expiry.strftime('%B')} {expiry.day}, {expiry.year}"
-                next_expiry = max(now, expiry) + timedelta(days=TEMPORARY_KEEP_DAYS)
+                next_expiry = max(now, expiry) + timedelta(days=keep_days)
                 available_at = schedule.get("extension_available_at") if schedule else None
                 available = (datetime.strptime(available_at, "%Y-%m-%d %H:%M:%S").replace(
                     tzinfo=timezone.utc) if available_at else None)
@@ -1743,7 +1759,7 @@ def build_kept_collections():
             else:
                 item["keep_days_left"] = None
                 item["keep_expiry_label"] = None
-                next_expiry = now + timedelta(days=TEMPORARY_KEEP_DAYS)
+                next_expiry = now + timedelta(days=keep_days)
                 item["keep_can_extend"] = False
                 item["keep_extension_available_label"] = ""
             item["keep_next_temporary_label"] = (
@@ -2501,7 +2517,7 @@ def home():
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
-<script defer src="/static/keep-duration.js?v=2.6.0"></script>
+<script defer src="/static/keep-duration.js?v={{ app_version }}"></script>
 <style>
 @media (prefers-reduced-motion: no-preference) {
     @view-transition { navigation: auto; }
@@ -2510,7 +2526,7 @@ def home():
 {% include 'shared_assets.html' %}
 </head>
 
-<body class="library-ui" data-csrf="{{ csrf_token }}">
+<body class="library-ui" data-csrf="{{ csrf_token }}" data-keep-duration-days="{{ keep_duration_days }}">
 <script defer src="/static/keep-whats-new.js?v={{ app_version }}"></script>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <main class="page" id="main-content" tabindex="-1">
@@ -2669,11 +2685,11 @@ def home():
         <div class="dialog-eyebrow">Choose protection</div>
         <h2 id="keep-duration-title" tabindex="-1">How long should Keep protect this?</h2>
         <p id="keep-duration-description" class="welcome-intro">
-            A 30-day Keep protects this title. When it expires, the title may return to Leaving if it still meets the library’s rules.
+            A {{ keep_duration_days }}-day Keep protects this title. When it expires, the title may return to Leaving if it still meets the library’s rules.
         </p>
         <div class="keep-duration-options">
             <button type="button" class="keep-duration-option recommended" data-duration="temporary">
-                <span><strong>Keep for 30 days</strong><small>Recommended · expires automatically</small></span>
+                <span><strong>Keep for {{ keep_duration_days }} {{ 'day' if keep_duration_days == 1 else 'days' }}</strong><small>Recommended · expires automatically</small></span>
                 <span aria-hidden="true">→</span>
             </button>
             {% if capabilities.keep_indefinitely %}
@@ -2697,7 +2713,7 @@ def home():
         <p id="manage-keep-description" class="welcome-intro"></p>
         <div class="keep-duration-options">
             <button type="button" class="keep-duration-option" data-duration="temporary">
-                <span><strong data-option-title>Extend by 30 days</strong><small data-option-detail></small></span>
+                <span><strong data-option-title>Extend by {{ keep_duration_days }} {{ 'day' if keep_duration_days == 1 else 'days' }}</strong><small data-option-detail></small></span>
                 <span aria-hidden="true">→</span>
             </button>
             {% if capabilities.keep_indefinitely %}
@@ -3939,7 +3955,37 @@ def settings_page():
     denied = require_owner()
     if denied:
         return denied
-    return redirect(url_for("settings_users"))
+    return redirect(url_for("settings_general"))
+
+
+@app.route('/settings/general', methods=['GET', 'POST'])
+def settings_general():
+    denied = require_owner()
+    if denied:
+        return denied
+    error = ''
+    value = temporary_keep_days()
+    if request.method == 'POST':
+        denied = require_form_csrf()
+        if denied:
+            return denied
+        value = request.form.get('keep_duration_days', '').strip()
+        if not re.fullmatch(r'[0-9]{1,3}', value) or not 1 <= int(value) <= 365:
+            error = 'Enter a whole number between 1 and 365 days.'
+        else:
+            days = int(value)
+            with closing(attribution_db()) as db, db:
+                db.execute('BEGIN IMMEDIATE')
+                db.execute('UPDATE general_settings SET keep_duration_days=? WHERE id=1', (days,))
+            g.keep_duration_days = days
+            log_activity('configuration-updated',
+                         f"Set temporary Keep duration to {days} {'day' if days == 1 else 'days'}")
+            session['general_notice'] = 'Keep duration saved.'
+            return redirect(url_for('settings_general'))
+    response = app.make_response((render_template('general.html', duration_value=value,
+        error=error, notice=session.pop('general_notice', None)), 400 if error else 200))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 def test_smtp_connection(getter=None):
@@ -5535,6 +5581,7 @@ def update_keep():
         if duration == "indefinite" and not can_keep_indefinitely():
             return jsonify({"error": "Indefinite keeps require permission"}), 403
 
+        keep_days = temporary_keep_days() if duration == 'temporary' else None
         expires_at = None
         extension_available_at = None
         if duration == "temporary":
@@ -5554,10 +5601,10 @@ def update_keep():
                                             "availableAt": available_text}), 409
                     current = datetime.strptime(
                         existing["expires_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                    expires_at = temporary_keep_expiry(max(now, current))
+                    expires_at = temporary_keep_expiry(max(now, current), days=keep_days)
                     extension_available_at = db_timestamp(current)
                 else:
-                    expires_at = temporary_keep_expiry(now)
+                    expires_at = temporary_keep_expiry(now, days=keep_days)
                 db.execute("""INSERT INTO keep_schedules
                     (collection_id, media_id, expires_at, extension_available_at)
                     VALUES (?, ?, ?, ?)
@@ -5578,7 +5625,7 @@ def update_keep():
         action = "Extended" if duration == "temporary" else "Made indefinite"
         log_activity("keep-updated", f"{action} keep for {title} in {get_collections()[collection_id]}")
         return jsonify({"status": "updated", "duration": duration, "expiresAt": expires_at,
-                        "extensionAvailableAt": extension_available_at})
+                        "extensionAvailableAt": extension_available_at, "durationDays": keep_days})
     except requests.RequestException:
         return jsonify({"error": "Keep could not update this title. Please try again."}), 502
 
@@ -5652,7 +5699,8 @@ def keep():
         return jsonify(error="Account access changed. Sign in again."), 403
     change_maintainerr_exclusion(media_id, collection_id, 0)
 
-    record_keeper(collection_id, media_id, session["plex_user"], duration=duration)
+    keep_days = temporary_keep_days() if duration == 'temporary' else None
+    record_keeper(collection_id, media_id, session["plex_user"], duration=duration, days=keep_days)
     cancel_queued_notifications(collection_id, media_id)
 
     # Remove only this title's collection membership. A full rule execution
@@ -5665,10 +5713,10 @@ def keep():
     removal.raise_for_status()
 
     title = (media_item.get("mediaData") or {}).get("title") or f"Plex item {media_id}"
-    duration_label = "for 30 days" if duration == "temporary" else "indefinitely"
+    duration_label = f"for {keep_days} {'day' if keep_days == 1 else 'days'}" if duration == "temporary" else "indefinitely"
     log_activity("keep-added", f"Kept {title} {duration_label} from {get_collections()[collection_id]}")
 
-    return {"status": "protected", "duration": duration}, 200
+    return {"status": "protected", "duration": duration, "durationDays": keep_days}, 200
 
 # Webhook events are durably queued; only the dedicated worker sends mail.
 DIGEST_QUIET_SECONDS = max(60, int(os.environ.get("DIGEST_QUIET_SECONDS", "600")))
@@ -6175,7 +6223,7 @@ def expire_due_keeps(now=None):
                         released += 1
                         log_activity(
                             "keep-expired",
-                            f"30-day keep expired for {title} in {collection_label}",
+                            f"Temporary keep expired for {title} in {collection_label}",
                             actor={"username": "Keep maintenance worker"},
                         )
                     else:
@@ -6333,6 +6381,12 @@ def _initialize_application_schema():
         PLEX_CLIENT_IDENTIFIER=onboarding.client_id()
     with closing(attribution_db()) as db, db:
         db.execute("BEGIN IMMEDIATE")
+        db.execute('''CREATE TABLE IF NOT EXISTS general_settings (
+            id INTEGER PRIMARY KEY CHECK(id=1),
+            keep_duration_days INTEGER NOT NULL DEFAULT 30
+                CHECK(typeof(keep_duration_days)='integer' AND keep_duration_days BETWEEN 1 AND 365)
+        )''')
+        db.execute('INSERT OR IGNORE INTO general_settings(id, keep_duration_days) VALUES (1, 30)')
         db.execute("""
             CREATE TABLE IF NOT EXISTS keep_attribution (
                 collection_id TEXT NOT NULL,

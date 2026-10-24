@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.28.0 — 2026-10-24
+
+- Let the owner set temporary Keep duration to 1–365 days in Admin → General. New Keeps and extensions use the setting; existing expiration dates and extension availability stay unchanged.
+
 ## 2.27.6 — 2026-10-24
 
 - Show update status beside the installed version on About and keep successful checks green.

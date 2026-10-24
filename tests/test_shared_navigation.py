@@ -50,6 +50,8 @@ class SharedNavigationTests(unittest.TestCase):
         labels = lambda section: re.findall(r'>([^<>]+)</a>', section)
         self.assertEqual(labels(browse), ['Leaving', 'Kept'] + (['Manage Library'] if library else []))
         self.assertEqual(labels(account), ['Preferences'] + (['Admin'] if owner else []) + ['FAQ', 'Logout'])
+        if owner:
+            self.assertRegex(account, r'href="/settings/general"[^>]*>Admin</a>')
         self.assertNotIn('/settings/api-', menu)
         self.assertIn('id="preferences-open"', account)
         self.assertIn('aria-haspopup="dialog" aria-controls="preferences-dialog">Preferences', account)
@@ -60,7 +62,7 @@ class SharedNavigationTests(unittest.TestCase):
              patch.object(keep, 'get_collection_delete_after_days', return_value=30), \
              patch.object(keep, 'build_library_sections', return_value=[]), \
              patch.object(keep, 'granted_library_keys', return_value=['radarr:1']):
-            for path in ('/', '/kept', '/library', '/help', '/settings/users', '/settings/notifications',
+            for path in ('/', '/kept', '/library', '/help', '/settings/general', '/settings/users', '/settings/notifications',
                          '/settings/connections', '/settings/activity', '/settings/jobs',
                          '/settings/api-keys', '/settings/api-reference', '/preferences'):
                 response = self.client.get(path)

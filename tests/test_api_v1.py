@@ -6,6 +6,7 @@ import re
 import time
 import unittest
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import test_keep
@@ -20,6 +21,8 @@ class ApiV1Tests(unittest.TestCase):
         keep.app.config.update(TESTING=True)
         self.client = keep.app.test_client()
         self.cid = 1
+        test_keep.set_keep_duration_days(30)
+        self.addCleanup(test_keep.set_keep_duration_days, 30)
         with closing(keep.attribution_db()) as db, db:
             saved_connections = [tuple(row) for row in db.execute('SELECT name,value FROM connection_settings')]
             for table in ('api_idempotency', 'api_rate_limits', 'api_keys', 'keep_attribution',
@@ -253,7 +256,8 @@ class ApiV1Tests(unittest.TestCase):
         for path in ('/settings/api-keys', '/settings/api-reference'):
             owner_page = self.client.get(path).get_data(as_text=True)
             owner_nav = re.search(r'<nav class="admin-nav".*?</nav>', owner_page, re.S).group(0)
-            self.assertEqual(len(re.findall(r'<a\s', owner_nav)), 8)
+            self.assertEqual(len(re.findall(r'<a\s', owner_nav)), 9)
+            self.assertEqual(re.findall(r'href="([^"]+)"', owner_nav)[0], '/settings/general')
             self.assertIn('href="/settings/about"', owner_nav)
             self.assertIn('href="/settings/jobs"', owner_nav)
             owner_menu = re.search(r'<div class="user-links".*?</div>', owner_page, re.S).group(0)
@@ -272,6 +276,7 @@ class ApiV1Tests(unittest.TestCase):
         self.assertNotIn('/settings/api-keys', member_menu)
         self.assertNotIn('/settings/api-reference', member_menu)
         self.assertNotIn('/settings/users', member_menu)
+        self.assertNotIn('/settings/general', member_menu)
 
         # Owners retain the old POST route while its GET canonicalizes.
         legacy_post = self.client.post('/account/api-keys', data={
@@ -879,6 +884,88 @@ class ApiV1Tests(unittest.TestCase):
             self.assertEqual(exclusion.call_count, 1)
         with closing(keep.attribution_db()) as db:
             self.assertIsNone(db.execute('SELECT 1 FROM keep_schedules WHERE collection_id=? AND media_id=?', ('1', '42')).fetchone())
+
+    def test_configured_duration_applies_to_api_creation_extension_and_indefinite_conversion(self):
+        token = self.make_key(scopes=('keeps:read', 'keeps:write'))
+        initial = datetime(2027, 1, 1, 12, tzinfo=timezone.utc)
+        item = {'mediaServerId': '42', 'mediaData': {'title': 'Eligible'}, 'ruleGroupId': 1}
+        test_keep.set_keep_duration_days(5)
+        with patch.object(api, 'feed') as feed, \
+             patch.object(api, 'exclusion_write') as exclusion, \
+             patch.object(api, 'membership_remove') as membership, \
+             patch.object(api_v1, 'datetime', wraps=datetime) as clock:
+            clock.now.return_value = initial
+            feed.side_effect = lambda cid, kind, deadline: [] if kind == 'exclusions' else [item]
+            created = self.auth(token, method='POST', path='/api/v1/keeps',
+                                json={'collection_id': 1, 'media_id': '42'},
+                                headers={'Idempotency-Key': 'configured-create-0001'})
+            self.assertEqual(created.status_code, 201)
+            self.assertEqual(created.json['data']['expires_at'], '2027-01-06T12:00:00Z')
+
+            test_keep.set_keep_duration_days(12)
+            clock.now.return_value = initial + timedelta(days=1)
+            feed.side_effect = None
+            feed.return_value = [item]
+            extended = self.auth(token, method='PATCH', path='/api/v1/keeps/1:42',
+                                 json={'duration': 'temporary'},
+                                 headers={'Idempotency-Key': 'configured-extension-001'})
+            self.assertEqual(extended.status_code, 200)
+            self.assertEqual(extended.json['data']['expires_at'], '2027-01-18T12:00:00Z')
+            self.assertEqual(extended.json['data']['extension_available_at'], '2027-01-06T12:00:00Z')
+            indefinite = self.auth(token, method='PATCH', path='/api/v1/keeps/1:42',
+                                   json={'duration': 'indefinite'},
+                                   headers={'Idempotency-Key': 'configured-indefinite-001'})
+            self.assertEqual(indefinite.status_code, 200)
+            self.assertIsNone(indefinite.json['data']['expires_at'])
+            self.assertIsNone(indefinite.json['data']['extension_available_at'])
+
+            test_keep.set_keep_duration_days(3)
+            temporary = self.auth(token, method='PATCH', path='/api/v1/keeps/1:42',
+                                  json={'duration': 'temporary'},
+                                  headers={'Idempotency-Key': 'configured-temporary-001'})
+            self.assertEqual(temporary.status_code, 200)
+            self.assertEqual(temporary.json['data']['expires_at'], '2027-01-05T12:00:00Z')
+            self.assertIsNone(temporary.json['data']['extension_available_at'])
+            exclusion.assert_called_once()
+            membership.assert_called_once()
+
+    def test_api_replay_keeps_original_expiry_after_owner_changes_duration(self):
+        token = self.make_key(scopes=('keeps:read', 'keeps:write'))
+        initial = datetime(2027, 1, 1, 12, tzinfo=timezone.utc)
+        item = {'mediaServerId': '42', 'mediaData': {}, 'ruleGroupId': 1}
+        test_keep.set_keep_duration_days(5)
+        with patch.object(api, 'feed') as feed, \
+             patch.object(api, 'exclusion_write') as exclusion, \
+             patch.object(api, 'membership_remove') as membership, \
+             patch.object(api_v1, 'datetime', wraps=datetime) as clock:
+            clock.now.return_value = initial
+            feed.side_effect = lambda cid, kind, deadline: [] if kind == 'exclusions' else [item]
+            payload = {'collection_id': 1, 'media_id': '42'}
+            request_key = {'Idempotency-Key': 'duration-replay-create-001'}
+            original = self.auth(token, method='POST', path='/api/v1/keeps', json=payload, headers=request_key)
+            self.assertEqual(original.status_code, 201)
+            saved = self.client.post('/settings/general', data={
+                'csrf_token': 'test-csrf', 'keep_duration_days': '21'})
+            self.assertIn(saved.status_code, (302, 303))
+            clock.now.return_value = initial + timedelta(days=1)
+            replayed = self.auth(token, method='POST', path='/api/v1/keeps', json=payload, headers=request_key)
+            self.assertEqual(replayed.status_code, 201)
+            self.assertEqual(replayed.headers['Idempotency-Replayed'], 'true')
+            self.assertEqual(replayed.json, original.json)
+            with closing(keep.attribution_db()) as db:
+                self.assertEqual(db.execute('SELECT expires_at FROM keep_schedules').fetchone()[0],
+                                 '2027-01-06 12:00:00')
+
+            feed.side_effect = None
+            feed.return_value = [item]
+            fresh = self.auth(token, method='PATCH', path='/api/v1/keeps/1:42',
+                              json={'duration': 'temporary'},
+                              headers={'Idempotency-Key': 'duration-fresh-extension-001'})
+            self.assertEqual(fresh.status_code, 200)
+            self.assertEqual(fresh.json['data']['expires_at'], '2027-01-27T12:00:00Z')
+            self.assertEqual(fresh.json['data']['extension_available_at'], '2027-01-06T12:00:00Z')
+            exclusion.assert_called_once()
+            membership.assert_called_once()
 
     def test_uncertain_attempt_is_retained_and_never_automatically_retried(self):
         token = self.make_key(scopes=('keeps:write',))

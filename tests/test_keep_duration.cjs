@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 
-function fixture(fetcher = async () => ({ok:true})) {
+function fixture(fetcher = async () => ({ok:true,json:async()=>({})}), {durationDays} = {}) {
   const element = () => {
     const classes=new Set(), attrs=new Map();
     return ({
@@ -31,7 +31,8 @@ function fixture(fetcher = async () => ({ok:true})) {
     showModal(){this.open=true;},close(){this.open=false;this.listeners.close();}
   });
   const classes=new Set();
-  const document={activeElement:null,documentElement:{classList:{add:v=>classes.add(v),remove:v=>classes.delete(v)}},
+  const document={body:{dataset:durationDays===undefined?{}:{keepDurationDays:String(durationDays)}},
+    activeElement:null,documentElement:{classList:{add:v=>classes.add(v),remove:v=>classes.delete(v)}},
     getElementById:id=>id==='keep-duration-dialog'?dialog:null,
     querySelectorAll:s=>s==='.new-keep-button'?[opener]:[]};
   let request, toast, counts=0, searches=0;
@@ -83,8 +84,7 @@ test('keyboard focus wraps through every dialog action',()=>{
   assert.equal(prevented,2);
 });
 
-test('30-day-only users confirm inline without opening a dialog', async()=>{
-  const classes=new Set();
+function directFixture({durationDays,fetcher=async()=>({ok:true,json:async()=>({})})}={}) {
   const count={textContent:'1'};
   const title={textContent:'A Very Good Movie'};
   const card={removed:false,querySelector:s=>s==='.title'?title:null,remove(){this.removed=true;}};
@@ -93,27 +93,33 @@ test('30-day-only users confirm inline without opening a dialog', async()=>{
       mediaId:'42',collectionId:'1',directTemporary:'true'
     },addEventListener(name,fn){this.listeners[name]=fn;},
     closest:s=>s==='.card'?card:section};
-  const document={body:{dataset:{csrf:'csrf'}},documentElement:{classList:{add(){},remove(){}}},
+  const document={body:{dataset:{csrf:'csrf',...(durationDays===undefined?{}:{keepDurationDays:String(durationDays)})}},documentElement:{classList:{add(){},remove(){}}},
     getElementById:()=>null,
     querySelectorAll:s=>s==='.new-keep-button[data-direct-temporary="true"]'||s==='.new-keep-button'?[opener]:[]};
   let request,toast;
-  const context={document,fetch:async(...args)=>{request=args;return {ok:true};},
+  const context={document,fetch:async(...args)=>{request=args;return fetcher(...args);},
     refreshCounts(){},showToast(message){toast=message;},applyMediaSearch(){},setTimeout,clearTimeout,
     window:{KeepUI:null,showToast(message){toast=message;},location:{reload(){}}}};
   vm.runInNewContext(fs.readFileSync('static/keep-duration.js','utf8'),context);
-  await opener.listeners.click();
-  assert.equal(request,undefined);
-  assert.equal(opener.textContent,'KEEP FOR 30 DAYS?');
-  assert.equal(opener.dataset.confirming,'true');
-  await opener.listeners.click();
-  assert.equal(request[0],'/api/keep');
-  assert.deepEqual(JSON.parse(request[1].body),{mediaId:'42',collectionId:1,duration:'temporary'});
-  assert.equal(request[1].headers['X-CSRF-Token'],'csrf');
-  assert.equal(card.removed,true);
-  assert.ok(toast.includes('30 days'));
+  return {opener,card,request:()=>request,toast:()=>toast};
+}
+
+test('30-day-only users confirm inline without opening a dialog', async()=>{
+  const f=directFixture();
+  await f.opener.listeners.click();
+  assert.equal(f.request(),undefined);
+  assert.equal(f.opener.textContent,'KEEP FOR 30 DAYS?');
+  assert.equal(f.opener.dataset.confirming,'true');
+  await f.opener.listeners.click();
+  const [url,options]=f.request();
+  assert.equal(url,'/api/keep');
+  assert.deepEqual(JSON.parse(options.body),{mediaId:'42',collectionId:1,duration:'temporary'});
+  assert.equal(options.headers['X-CSRF-Token'],'csrf');
+  assert.equal(f.card.removed,true);
+  assert.ok(f.toast().includes('30 days'));
 });
 
-function manageFixture({temporary=true, canExtend=true, fetcher=async()=>({ok:true})}={}) {
+function manageFixture({temporary=true, canExtend=true, durationDays, fetcher=async()=>({ok:true,json:async()=>({})})}={}) {
   const element = () => {
     const classes=new Set(), attrs=new Map();
     return {listeners:{},disabled:false,isConnected:true,textContent:'',
@@ -138,7 +144,8 @@ function manageFixture({temporary=true, canExtend=true, fetcher=async()=>({ok:tr
     querySelectorAll:s=>s==='[data-duration]'?[temporaryChoice,indefiniteChoice]:[],
     showModal(){this.open=true;},close(){this.open=false;this.listeners.close();}});
   const classes=new Set();
-  const document={activeElement:null,documentElement:{classList:{add:v=>classes.add(v),remove:v=>classes.delete(v)}},
+  const document={body:{dataset:durationDays===undefined?{}:{keepDurationDays:String(durationDays)}},
+    activeElement:null,documentElement:{classList:{add:v=>classes.add(v),remove:v=>classes.delete(v)}},
     getElementById:id=>id==='manage-keep-dialog'?dialog:null,
     querySelectorAll:s=>s==='.keep-manage-button'?[opener]:[]};
   let request,toast,replay,reloads=0;
@@ -204,4 +211,155 @@ test('failed management stays open and cancel restores focus',async()=>{
   f.cancel.listeners.click();
   assert.equal(f.dialog.open,false);
   assert.equal(f.document.activeElement,f.opener);
+});
+
+for (const days of [7,365,1]) {
+  test(`a ${days}-day policy controls inline confirmation, management choices, and legacy-response messages`,async()=>{
+    const label=`${days} ${days===1?'day':'days'}`;
+    const direct=directFixture({durationDays:days});
+    await direct.opener.listeners.click();
+    assert.equal(direct.opener.textContent,`KEEP FOR ${label.toUpperCase()}?`);
+    assert.equal(direct.request(),undefined);
+    await direct.opener.listeners.click();
+    assert.equal(direct.toast(),`A Very Good Movie is protected for ${label}`);
+    assert.deepEqual(JSON.parse(direct.request()[1].body),{mediaId:'42',collectionId:1,duration:'temporary'});
+
+    const create=fixture(undefined,{durationDays:days});
+    create.opener.listeners.click();
+    await create.temporary.listeners.click();
+    assert.equal(create.toast()[0],`A Very Good Movie is protected for ${label}`);
+    assert.deepEqual(JSON.parse(create.request()[1].body),{mediaId:'42',collectionId:1,duration:'temporary'});
+
+    const extend=manageFixture({durationDays:days});
+    extend.opener.listeners.click();
+    assert.equal(extend.temporaryTitle.textContent,`Extend by ${label}`);
+    await extend.temporaryChoice.listeners.click();
+    assert.equal(extend.toast()[0],`Keep extended by ${label}`);
+    assert.equal(extend.replay(),`Keep extended by ${label}`);
+    assert.deepEqual(JSON.parse(extend.request()[1].body),{mediaId:'42',collectionId:1,duration:'temporary'});
+
+    const change=manageFixture({durationDays:days,temporary:false});
+    change.opener.listeners.click();
+    assert.equal(change.temporaryTitle.textContent,`Switch to a ${days}-day keep`);
+    assert.equal(change.indefiniteChoice.disabled,true);
+    await change.temporaryChoice.listeners.click();
+    assert.equal(change.toast()[0],`Title protected for ${label}`);
+    assert.equal(change.replay(),`Title protected for ${label}`);
+  });
+}
+
+test('all temporary success messages use the applied server duration when the page policy is stale',async()=>{
+  let parsed=0;
+  const fetcher=async()=>({ok:true,json:async()=>{parsed++;return {durationDays:1};}});
+  const create=fixture(fetcher,{durationDays:7});
+  create.opener.listeners.click();
+  await create.temporary.listeners.click();
+  assert.equal(create.toast()[0],'A Very Good Movie is protected for 1 day');
+
+  const direct=directFixture({durationDays:365,fetcher});
+  await direct.opener.listeners.click();
+  assert.equal(direct.opener.textContent,'KEEP FOR 365 DAYS?');
+  await direct.opener.listeners.click();
+  assert.equal(direct.toast(),'A Very Good Movie is protected for 1 day');
+
+  const extend=manageFixture({durationDays:7,fetcher});
+  extend.opener.listeners.click();
+  assert.equal(extend.temporaryTitle.textContent,'Extend by 7 days');
+  await extend.temporaryChoice.listeners.click();
+  assert.equal(extend.toast()[0],'Keep extended by 1 day');
+  assert.equal(extend.replay(),'Keep extended by 1 day');
+
+  const change=manageFixture({durationDays:365,temporary:false,fetcher});
+  change.opener.listeners.click();
+  await change.temporaryChoice.listeners.click();
+  assert.equal(change.toast()[0],'Title protected for 1 day');
+  assert.equal(change.replay(),'Title protected for 1 day');
+  assert.equal(parsed,4);
+});
+
+test('server duration metadata accepts only whole numbers in the supported range',async()=>{
+  for (const durationDays of [7,365,0,366,1.5,'365',true,null,undefined]) {
+    const expected=durationDays===7||durationDays===365?durationDays:30;
+    const fetcher=async()=>({ok:true,json:async()=>({durationDays})});
+    const create=fixture(fetcher);
+    create.opener.listeners.click();
+    await create.temporary.listeners.click();
+    assert.equal(create.toast()[0],`A Very Good Movie is protected for ${expected} days`);
+    const extend=manageFixture({fetcher});
+    extend.opener.listeners.click();
+    await extend.temporaryChoice.listeners.click();
+    assert.equal(extend.toast()[0],`Keep extended by ${expected} days`);
+  }
+});
+
+test('invalid or missing server duration metadata falls back to the valid page policy',async()=>{
+  for (const durationDays of [undefined,null,0,366,'365']) {
+    const f=manageFixture({durationDays:7,fetcher:async()=>({ok:true,json:async()=>({durationDays})})});
+    f.opener.listeners.click();
+    await f.temporaryChoice.listeners.click();
+    assert.equal(f.toast()[0],'Keep extended by 7 days');
+  }
+});
+
+test('invalid page policy values retain the 30-day fallback',async()=>{
+  for (const durationDays of ['',0,366,1.5,'not-a-number',null]) {
+    const direct=directFixture({durationDays});
+    await direct.opener.listeners.click();
+    assert.equal(direct.opener.textContent,'KEEP FOR 30 DAYS?');
+    direct.opener.listeners.blur();
+    assert.equal(direct.opener.textContent,'KEEP');
+    const manage=manageFixture({durationDays});
+    manage.opener.listeners.click();
+    assert.equal(manage.temporaryTitle.textContent,'Extend by 30 days');
+  }
+});
+
+test('indefinite success messages and request permissions stay independent of the day policy',async()=>{
+  const fetcher=async()=>({ok:true,json:async()=>({durationDays:null})});
+  const create=fixture(fetcher,{durationDays:1});
+  create.opener.listeners.click();
+  await create.indefinite.listeners.click();
+  assert.equal(create.toast()[0],'A Very Good Movie is kept indefinitely');
+  assert.deepEqual(JSON.parse(create.request()[1].body),{mediaId:'42',collectionId:1,duration:'indefinite'});
+  const manage=manageFixture({durationDays:365,fetcher});
+  manage.opener.listeners.click();
+  await manage.indefiniteChoice.listeners.click();
+  assert.equal(manage.toast()[0],'Title kept indefinitely');
+  assert.equal(manage.replay(),'Title kept indefinitely');
+  assert.deepEqual(JSON.parse(manage.request()[1].body),{mediaId:'42',collectionId:1,duration:'indefinite'});
+  const unavailable=manageFixture({durationDays:1,canExtend:false});
+  unavailable.opener.listeners.click();
+  assert.equal(unavailable.temporaryTitle.textContent,'Extend by 1 day');
+  assert.equal(unavailable.temporaryChoice.disabled,true);
+  await unavailable.temporaryChoice.listeners.click();
+  assert.equal(unavailable.request(),undefined);
+});
+
+test('permission failures do not parse success metadata or remove a title and leave controls retryable',async()=>{
+  let parsed=0;
+  const fetcher=async()=>({ok:false,status:403,json:async()=>{parsed++;return {durationDays:365};}});
+  const create=fixture(fetcher,{durationDays:7});
+  create.opener.listeners.click();
+  await create.temporary.listeners.click();
+  assert.equal(create.dialog.open,true);
+  assert.equal(create.error.hidden,false);
+  assert.equal(create.card.removed,false);
+  assert.equal(create.counts(),0);
+  assert.equal(create.toast(),undefined);
+  const direct=directFixture({durationDays:7,fetcher});
+  await direct.opener.listeners.click();
+  await direct.opener.listeners.click();
+  assert.equal(direct.card.removed,false);
+  assert.equal(direct.opener.textContent,'KEEP');
+  assert.equal(direct.opener.disabled,false);
+  const manage=manageFixture({durationDays:7,fetcher});
+  manage.opener.listeners.click();
+  await manage.temporaryChoice.listeners.click();
+  assert.equal(manage.dialog.open,true);
+  assert.equal(manage.error.hidden,false);
+  assert.equal(manage.temporaryChoice.disabled,false);
+  assert.equal(manage.opener.textContent,'MANAGE KEEP');
+  assert.equal(manage.reloads(),0);
+  assert.equal(manage.toast(),undefined);
+  assert.equal(parsed,0);
 });

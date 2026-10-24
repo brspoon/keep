@@ -14,7 +14,7 @@
       {% if capabilities.delete_media and granted_libraries %}<a class="logout-link" href="/library" {% if request.path == '/library' %}aria-current="page"{% endif %}>Manage Library</a>{% endif %}
       <hr class="account-menu-divider">
       <a class="logout-link" id="preferences-open" href="/preferences" aria-haspopup="dialog" aria-controls="preferences-dialog">Preferences</a>
-      {% if owner %}<a class="logout-link" href="/settings/users" {% if request.path.startswith('/settings/') %}aria-current="page"{% endif %}>Admin</a>{% endif %}
+      {% if owner %}<a class="logout-link" href="/settings/general" {% if request.path.startswith('/settings/') %}aria-current="page"{% endif %}>Admin</a>{% endif %}
       <a class="logout-link" href="/help" {% if request.path == '/help' %}aria-current="page"{% endif %}>FAQ</a>
       <a class="logout-link" href="/logout">Logout</a>
     </div>

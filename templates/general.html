@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme_mode }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="/static/keep-theme.js?v={{ app_version }}"></script>
+<meta name="theme-color" content="#f5a623"><meta name="referrer" content="same-origin">
+<title>General · Keep Admin</title>
+{% include 'shared_brand_head.html' %}
+<link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
+<link rel="stylesheet" href="/static/keep-general.css?v={{ app_version }}">
+<script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
+<script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% include 'shared_assets.html' %}
+</head>
+<body class="admin-ui general-ui">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<main class="page" id="main-content" tabindex="-1">
+{% include 'shared_header.html' %}
+<div class="page-heading"><h2>General</h2></div>
+{% include 'shared_admin_tabs.html' %}
+{% if error %}<p class="general-feedback is-error" id="general-error" role="alert">{{ error }}</p>
+{% elif notice %}<p id="settings-saved-notice" hidden>{{ notice }}</p>{% endif %}
+<section class="general-panel" aria-labelledby="keep-duration-heading">
+  <h2 id="keep-duration-heading">Keep duration</h2>
+  <p>Choose how long a temporary Keep protects a title.</p>
+  <form method="post" action="/settings/general" class="general-form" data-save-key="general-settings">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="keep-duration-days">Temporary Keep duration</label>
+    <div class="general-number-field">
+      <input type="number" id="keep-duration-days" name="keep_duration_days" min="1" max="365" step="1" required value="{{ duration_value }}" aria-describedby="keep-duration-range keep-duration-effect{% if error %} general-error{% endif %}"{% if error %} aria-invalid="true"{% endif %}>
+      <span>days</span>
+    </div>
+    <p class="general-help" id="keep-duration-range">1–365 days. Default: 30 days.</p>
+    <p class="general-help" id="keep-duration-effect">New Keeps and extensions use this duration. Saving leaves existing expiration dates and extension availability unchanged.</p>
+    <button class="general-save save-button" type="submit">Save changes</button>
+  </form>
+</section>
+</main>
+{% include 'shared_whats_new.html' %}
+</body></html>

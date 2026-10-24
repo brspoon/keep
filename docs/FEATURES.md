@@ -14,7 +14,9 @@ Keep periodically rechecks Plex server access. Non-owner Plex accounts need curr
 
 **Leaving** shows titles in the Maintainerr collections selected by the owner. Countdown badges show the time before possible removal. A title's details can show its current status, request history, and watch information when the relevant integrations and data are available.
 
-Choose **Keep** to protect a title from scheduled removal. A temporary Keep lasts 30 days. On **Kept**, see who protected each title, when protection expires, and use **Manage Keep** to extend it when available. The owner can grant indefinite protection and permission to manage other people's Keeps.
+Choose **Keep** to protect a title from scheduled removal. A temporary Keep lasts 30 days by default. The owner can choose **1–365 days** under **Admin → General**. New temporary Keeps, extensions, and changes from indefinite to temporary protection use the current duration. Saving a different duration does not change existing expiry dates or extension availability.
+
+On **Kept**, see who protected each title, when protection expires, and use **Manage Keep** to extend it when available. The owner can grant indefinite protection and permission to manage other people's Keeps.
 
 When a temporary Keep expires, or someone removes its protection, the title may qualify for Leaving again under the library's rules. **Removing a Keep does not delete the title or its files.** Leaving and Kept are shared browsing views; deletion access is controlled separately.
 
