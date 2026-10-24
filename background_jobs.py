@@ -22,7 +22,7 @@ import seerr
 JOBS = (
     ('onboarding-cleanup', 'Setup cleanup', 'Remove expired setup codes and Plex sign-in attempts.'),
     ('release-check', 'Release checks', 'Check published stable releases of Keep.'),
-    ('plex-access-sync', 'Plex account access', 'Refresh server access for Plex accounts.'),
+    ('plex-access-sync', 'Plex account access', 'Discover server users and refresh their Plex access.'),
     ('keep-expiry', 'Temporary Keeps', 'Release expired Keep protection.'),
     ('reminder-scan', 'Leaving reminders', 'Find titles eligible for a seven-day reminder.'),
     ('reminder-reconcile', 'Reminder reconciliation', 'Resolve and deduplicate queued reminders.'),

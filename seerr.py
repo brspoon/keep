@@ -355,7 +355,14 @@ def attribution(snapshot, identities, kind, external_id, *, season=None):
         records = [r for r in records if any(s['number'] == season and s['status'] in (2, 5) for s in r['seasons'])]
     ids = sorted({r['user'] for r in records})
     state = 'shared' if len(ids) > 1 else ('known' if ids else 'unknown')
-    names = [(identities[i].get('display_name') or 'Keep user') if i in identities else 'Unlinked requester' for i in ids]
+    names = []
+    for user_id in ids:
+        profile = identities.get(user_id)
+        if profile is None:
+            names.append('Unlinked requester')
+        else:
+            plex_username = profile.get('plex_username') if profile.get('auth_type') == 'plex' else ''
+            names.append(profile.get('display_name') or plex_username or 'Keep user')
     return {'state': state, 'freshness': snapshot['state'], 'names': names,
             'request_ids': [r['id'] for r in records],
             'label': 'Requested by ' + ', '.join(names) if names else 'Requester unknown'}

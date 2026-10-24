@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from contextlib import closing
 from unittest.mock import Mock, patch
 
 import seerr
@@ -102,10 +103,47 @@ class SeerrTests(unittest.TestCase):
 
     def test_no_name_matching_and_conflicting_ids_fail_closed(self):
         data = self.refresh()
-        data['users'][1]['label'] = 'Other K'
-        self.assertNotIn(11, self.store.identities(config, data, self.profiles))
+        self.profiles[0].update(plex_username='same-handle', email='same@example.test')
+        data['users'][1].update(label='Owner K', username='same-handle', email='same@example.test')
+        for plex_id in ('', '8'):
+            data['users'][1]['plex_id'] = plex_id
+            self.assertNotIn(11, self.store.identities(config, data, self.profiles))
         data['users'][1]['plex_id'] = '7'
         self.assertEqual(self.store.identities(config, data, self.profiles), {})
+
+    def test_requester_names_preserve_custom_names_and_limit_username_fallback_to_plex(self):
+        data = self.refresh()
+        self.profiles[0].update(display_name='', plex_username='movie_fan88')
+        identities = self.store.identities(config, data, self.profiles)
+        self.assertEqual(seerr.attribution(data, identities, 'movie', 100)['names'], ['movie_fan88'])
+        self.profiles[0].update(display_name='Alex M', plex_username='new-plex-handle')
+        identities = self.store.identities(config, data, self.profiles)
+        self.assertEqual(seerr.attribution(data, identities, 'movie', 100)['names'], ['Alex M'])
+
+        self.profiles[1].update(display_name='', plex_username='private-local-handle')
+        self.store.link(config, 'local:1', 11, self.profiles)
+        identities = self.store.identities(config, data, self.profiles)
+        self.assertEqual(seerr.attribution(data, identities, 'tv', 200, season=2)['names'], ['Keep user'])
+        self.profiles[0]['display_name'] = self.profiles[0]['plex_username'] = ''
+        identities = self.store.identities(config, data, self.profiles)
+        self.assertEqual(seerr.attribution(data, identities, 'movie', 100)['names'], ['Keep user'])
+
+    def test_new_plex_profile_conflicting_with_manual_local_link_stays_unlinked(self):
+        data = self.refresh()
+        local = self.profiles[1]
+        self.store.link(config, 'local:1', 10, [local])
+        imported = {'plex_id': '7', 'auth_type': 'plex', 'display_name': '',
+                    'plex_username': 'discovered-user', 'last_seen_at': None}
+        profiles = [local, imported]
+        identities = self.store.identities(config, data, profiles)
+        self.assertNotIn(10, identities)
+        self.assertEqual(seerr.attribution(data, identities, 'movie', 100)['names'], ['Unlinked requester'])
+        with self.assertRaises(ValueError):
+            self.store.save_links(config, {'local:1': 10}, profiles, seerr.namespace(config))
+        self.store.link(config, 'local:1', None, profiles)
+        identities = self.store.identities(config, data, profiles)
+        self.assertEqual(identities[10]['plex_id'], '7')
+        self.assertEqual(seerr.attribution(data, identities, 'movie', 100)['names'], ['discovered-user'])
 
     def test_read_does_not_contact_seerr(self):
         self.refresh()
@@ -164,6 +202,24 @@ class SeerrTests(unittest.TestCase):
 
 class SeerrRouteTests(unittest.TestCase):
     setUp = test_keep.KeepTests.setUp
+
+    def test_never_signed_in_profile_links_by_plex_id_without_enrolling_a_session(self):
+        with closing(keep.attribution_db()) as db, db:
+            db.execute("""INSERT INTO user_profiles(plex_id, plex_username, auth_type)
+                          VALUES ('8', 'new-viewer', 'plex')""")
+        data = {**snapshot(), 'state': 'current'}
+        data['users'][0].update(plex_id='8', label='A different Seerr label')
+        store = keep.seerr_store()
+        identities = store.identities(config, data, keep.seerr_profiles())
+        self.assertEqual(identities[10]['plex_id'], '8')
+        self.assertEqual(seerr.attribution(data, identities, 'movie', 100)['names'], ['new-viewer'])
+        with closing(keep.attribution_db()) as db:
+            profile = db.execute("SELECT * FROM user_profiles WHERE plex_id='8'").fetchone()
+        self.assertIsNone(profile['last_seen_at'])
+        self.assertTrue(all(profile[name] == 0 for name in (
+            'can_remove_any', 'can_keep_indefinitely', 'can_delete_media', 'can_delete_any')))
+        with self.client.session_transaction() as session:
+            self.assertNotEqual(str(session['plex_user']['id']), '8')
 
     def test_batch_form_action_survives_disabled_submit_button(self):
         response = self.client.get('/settings/connections')

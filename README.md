@@ -21,6 +21,10 @@ When it's time to make room, **Manage Library** lets people with the owner's per
 
 Sign in with Plex using the account that owns the selected server or an account with access to that server. Having a Plex account alone does not grant access to Keep. Keep verifies server access for non-owner Plex accounts and rechecks it in the background. The owner can also disable an account in Keep.
 
+Keep discovers users shared with the selected Plex server before their first
+Keep sign-in, so their Seerr requests can show a name. **Admin → Users** offers
+**Sync Plex users** and keeps extra permissions and notifications separate.
+
 The owner can create local Keep accounts that sign in with an email address and password, without requiring a Plex account or Plex server access. These accounts give access to Keep under the owner's chosen permissions; they do not grant access to watch media in Plex. There is no public account registration.
 
 See the [features and access guide](docs/FEATURES.md) for account types, permissions, integrations, and how Keep protection and library cleanup work.
@@ -54,13 +58,13 @@ After installing the prerequisites, run one command for your system on the compu
 **Linux / macOS**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.28.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brspoon/keep/2.29.0/install.sh | sh
 ```
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://raw.githubusercontent.com/brspoon/keep/2.28.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/brspoon/keep/2.29.0/install.ps1 | iex
 ```
 
 The installer downloads the release files into a `keep` folder in your home directory, creates private configuration and secrets, pulls the prebuilt image, and starts the web app and background worker. Once both services are healthy, it prints a local setup address and a temporary owner setup code.

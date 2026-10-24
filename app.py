@@ -348,71 +348,205 @@ def mark_plex_access(plex_id, access):
     return changed
 
 
-def get_authorized_plex_user_ids():
-    """Return users currently authorized by Plex, or None when Plex cannot be checked."""
-    if not connection_value('PLEX_ADMIN_TOKEN'):
-        return None
-    headers = {**plex_headers(), "Accept": "application/xml",
-               "X-Plex-Token": connection_value('PLEX_ADMIN_TOKEN')}
+def _plex_sync_connection(*, fresh=False):
+    values = connection_settings.snapshot() if fresh else None
+    return {'owner': owner_id(), **{name: (values.get(name, globals().get(name, ''))
+        if values is not None else connection_value(name)) for name in PLEX_FIELDS}}
+
+
+def _plex_sync_scope(connection):
+    return hashlib.sha256(json.dumps(connection, sort_keys=True).encode()).hexdigest()
+
+
+def _plex_sync_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', value):
+        raise ValueError('Invalid Plex account identity')
+    return value
+
+
+def _plex_sync_text(value, limit):
+    if value is None:
+        return ''
+    if not isinstance(value, str) or len(value) > limit or any(ord(char) < 32 for char in value):
+        raise ValueError('Invalid Plex account metadata')
+    return ' '.join(value.split())
+
+
+def get_plex_user_access_snapshot():
+    """Read one bounded, server-scoped access/identity snapshot; failures grant nothing."""
+    from service_discovery import read_service
+    started = time.monotonic()
+    deadline = started + 45
     try:
-        accounts_response = requests.get(
-            f"{connection_value('PLEX_SERVER_URL')}/accounts", headers=headers, timeout=15, allow_redirects=False)
-        accounts_response.raise_for_status()
-        shared_response = requests.get(
-            "https://plex.tv/api/users", headers=headers, timeout=15)
-        shared_response.raise_for_status()
-        account_root = ET.fromstring(accounts_response.content)
-        shared_root = ET.fromstring(shared_response.content)
-    except (requests.RequestException, ET.ParseError):
-        app.logger.error("Could not refresh Plex user access")
+        connection = _plex_sync_connection()
+        if (not all(connection.values())
+                or connection != _plex_sync_connection(fresh=True)):
+            return None
+        owner = _plex_sync_id(connection['owner'])
+        headers = {**plex_headers(), 'Accept': 'application/xml',
+                   'X-Plex-Token': connection['PLEX_ADMIN_TOKEN']}
+
+        def read(url):
+            if time.monotonic() >= deadline:
+                raise ValueError('Plex user refresh exceeded its deadline')
+            root = ET.fromstring(read_service(url, headers))
+            if time.monotonic() >= deadline or root.tag != 'MediaContainer' or len(root) > 5000:
+                raise ValueError('Invalid Plex user response')
+            return root
+
+        identity = read(connection['PLEX_SERVER_URL'] + '/identity')
+        if identity.get('machineIdentifier') != connection['PLEX_MACHINE_IDENTIFIER']:
+            raise ValueError('Plex server identity changed')
+        accounts = read(connection['PLEX_SERVER_URL'] + '/accounts')
+        shared = read('https://plex.tv/api/users/')
+        authorized, account_ids, seen, profiles = {owner}, set(), set(), {}
+        for account in accounts:
+            if account.tag != 'Account':
+                raise ValueError('Invalid Plex account response')
+            account_id = _plex_sync_id(account.get('id'))
+            if account_id in account_ids:
+                raise ValueError('Duplicate Plex account identity')
+            account_ids.add(account_id)
+        # Preserve existing access-proof semantics for known server accounts.
+        # Server account history alone never imports a new Keep profile.
+        authorized.update(account_ids)
+        for user in shared:
+            if user.tag != 'User':
+                raise ValueError('Invalid Plex user response')
+            user_id = _plex_sync_id(user.get('id'))
+            if user_id in seen:
+                raise ValueError('Duplicate Plex user identity')
+            seen.add(user_id)
+            username = _plex_sync_text(user.get('username'), 200)
+            if '@' in username:
+                username = ''
+            email = _plex_sync_text(user.get('email'), 254)
+            if email and not valid_email_address(email):
+                raise ValueError('Invalid Plex account email')
+            machines, active = set(), False
+            for server in user:
+                if server.tag != 'Server':
+                    raise ValueError('Invalid Plex user server response')
+                machine = server.get('machineIdentifier')
+                if not machine or machine in machines:
+                    raise ValueError('Ambiguous Plex server identity')
+                machines.add(machine)
+                if machine != connection['PLEX_MACHINE_IDENTIFIER']:
+                    continue
+                pending = server.get('pending')
+                if pending not in ('0', '1'):
+                    raise ValueError('Plex share acceptance cannot be verified')
+                if pending == '1':
+                    continue
+                all_libraries = server.get('allLibraries')
+                libraries = server.get('numLibraries')
+                if (all_libraries not in ('0', '1') or
+                        (libraries is not None and not re.fullmatch(r'[0-9]{1,6}', libraries)) or
+                        (all_libraries == '0' and libraries is None)):
+                    raise ValueError('Plex shared libraries cannot be verified')
+                active = all_libraries == '1' or int(libraries or '0') > 0
+            if active:
+                authorized.add(user_id)
+                if username and user_id != owner:
+                    profiles[user_id] = {'username': username, 'email': email}
+        if connection != _plex_sync_connection(fresh=True):
+            return None
+        return {'authorized': authorized, 'profiles': profiles,
+                'scope': _plex_sync_scope(connection), 'started': started}
+    except (requests.RequestException, ET.ParseError, ValueError, TypeError, sqlite3.Error):
+        app.logger.error('Could not refresh Plex user access')
         return None
 
-    authorized = {owner_id()} if owner_id() else set()
-    authorized.update(
-        str(account.get("id")) for account in account_root.findall("Account")
-        if account.get("id")
-    )
 
-    for user in shared_root.findall("User"):
-        servers = user.findall("Server")
-        if user.get("id") and (
-            not servers or any(server.get("machineIdentifier") == connection_value('PLEX_MACHINE_IDENTIFIER')
-                               for server in servers)
-        ):
-            authorized.add(str(user.get("id")))
-    return authorized
+def get_authorized_plex_user_ids():
+    """Return current access IDs, preserving the existing ID-only caller contract."""
+    snapshot = get_plex_user_access_snapshot()
+    return snapshot['authorized'] if snapshot is not None else None
+
+
+def _plex_snapshot_current(snapshot):
+    if (not isinstance(snapshot, dict) or set(snapshot) != {'authorized', 'profiles', 'scope', 'started'}
+            or not isinstance(snapshot['authorized'], set) or not isinstance(snapshot['profiles'], dict)
+            or type(snapshot['started']) not in (int, float)):
+        return False
+    try:
+        if owner_id() not in snapshot['authorized'] or not set(snapshot['profiles']) <= snapshot['authorized']:
+            return False
+        for user_id in snapshot['authorized']:
+            _plex_sync_id(user_id)
+        for user_id, identity in snapshot['profiles'].items():
+            if (user_id == owner_id() or not isinstance(identity, dict)
+                    or set(identity) != {'username', 'email'}):
+                return False
+            username, email = identity['username'], identity['email']
+            if (not username or '@' in username or _plex_sync_text(username, 200) != username
+                    or _plex_sync_text(email, 254) != email or (email and not valid_email_address(email))):
+                return False
+        age = time.monotonic() - snapshot['started']
+        return (math.isfinite(age) and 0 <= age < 60
+                and snapshot['scope'] == _plex_sync_scope(_plex_sync_connection(fresh=True)))
+    except (ValueError, TypeError, sqlite3.Error):
+        return False
 
 
 def sync_plex_user_access():
-    authorized = get_authorized_plex_user_ids()
-    if authorized is None:
+    snapshot = get_plex_user_access_snapshot()
+    if snapshot is None:
         return None
-    changes = []
+    changes, imported, updated = [], [], set()
     with closing(attribution_db()) as db, db:
         db.execute('BEGIN IMMEDIATE')
+        if not _plex_snapshot_current(snapshot):
+            return None
+        authorized = snapshot['authorized']
+        existing = {user_id: db.execute('SELECT * FROM user_profiles WHERE plex_id=?',
+                                      (user_id,)).fetchone() for user_id in snapshot['profiles']}
+        if any(user and user['auth_type'] != 'plex' for user in existing.values()):
+            # Reject the entire snapshot before any write; never reinterpret a
+            # local account or partially import a conflicting set of identities.
+            app.logger.error('Plex discovery conflicts with an existing account')
+            return None
+        for user_id, identity in snapshot['profiles'].items():
+            user = existing[user_id]
+            username, email = identity['username'], identity['email']
+            if not user:
+                db.execute("""INSERT INTO user_profiles
+                    (plex_id, plex_username, email, auth_type, status, plex_access,
+                     plex_checked_at, plex_sync_visible)
+                    VALUES (?, ?, ?, 'plex', 'active', 'active', CURRENT_TIMESTAMP, 1)""",
+                    (user_id, username, email))
+                imported.append(username)
+                updated.add(user_id)
+            else:
+                next_email = email or user['email']
+                if user['plex_username'] != username or user['email'] != next_email:
+                    db.execute('UPDATE user_profiles SET plex_username=?, email=? WHERE plex_id=?',
+                               (username, next_email, user_id))
+                    updated.add(user_id)
         users = db.execute("SELECT * FROM user_profiles WHERE auth_type = 'plex'").fetchall()
         for user in users:
-            is_authorized = str(user["plex_id"]) in authorized
-            if (not is_authorized and not user["plex_sync_visible"]
+            is_authorized = str(user['plex_id']) in authorized
+            if (not is_authorized and not user['plex_sync_visible']
                     and plex_account_access_active(user)):
                 continue
-            next_access = "active" if is_authorized else "revoked"
-            changed = user["plex_access"] != next_access
+            next_access = 'active' if is_authorized else 'revoked'
+            changed = user['plex_access'] != next_access
             db.execute("""UPDATE user_profiles SET plex_access = ?,
                 plex_checked_at = CURRENT_TIMESTAMP, plex_sync_visible = ?,
                 session_version = session_version + ? WHERE plex_id = ?""",
-                (next_access, int(is_authorized or user["plex_sync_visible"]),
-                 int(changed or (is_authorized and not plex_account_access_active(user))),
-                 user["plex_id"]))
+                (next_access, int(is_authorized or user['plex_sync_visible']),
+                 int(changed or (is_authorized and not plex_account_access_active(user))), user['plex_id']))
             if changed:
-                changes.append((user["display_name"] or user["plex_username"] or user["plex_id"],
-                                next_access))
+                changes.append((user['display_name'] or user['plex_username'] or user['plex_id'], next_access))
+                updated.add(user['plex_id'])
+    for label in imported:
+        log_activity('plex-user-discovered', f'Discovered Plex user {label}',
+                     actor={'username': 'Keep access sync'})
     for label, access in changes:
-        description = (f"Restored Plex access for {label}" if access == "active"
-                       else f"Marked {label} as no longer having Plex access")
-        log_activity("plex-access-changed", description,
-                     actor={"username": "Keep access sync"})
-    return len(changes)
+        description = (f'Restored Plex access for {label}' if access == 'active'
+                       else f'Marked {label} as no longer having Plex access')
+        log_activity('plex-access-changed', description, actor={'username': 'Keep access sync'})
+    return len(updated)
 
 
 def local_session_user(profile):
@@ -4619,6 +4753,55 @@ def jobs_action_response(message, status=200, **details):
     return response
 
 
+def plex_user_sync_snapshot():
+    try:
+        return next(row for row in jobs_snapshot(read_only=True)['jobs']
+                    if row['id'] == 'plex-access-sync')
+    except (sqlite3.Error, OSError, StopIteration):
+        return {'id': 'plex-access-sync', 'status': 'waiting', 'queued': False,
+                'can_run': False, 'label': 'Unavailable', 'result': '', 'last_run': None,
+                'action_reason': 'Sync status is unavailable. Try refreshing shortly.'}
+
+
+@app.route('/settings/users/plex-sync', methods=['GET', 'POST'])
+def settings_plex_user_sync():
+    denied = require_owner()
+    if denied:
+        return denied
+
+    def respond(message, status, job=None):
+        if request.accept_mimetypes.best == 'application/json':
+            response = jsonify({('error' if status >= 400 else 'message'): message,
+                                'job': job or plex_user_sync_snapshot()})
+            response.status_code = status
+        elif status >= 400:
+            response = app.make_response((render_settings_section('users', error=message), status))
+        else:
+            session['settings_notice'] = 'plex-sync'
+            response = redirect(url_for('settings_users'), code=303)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    if request.method == 'GET':
+        response = jsonify(job=plex_user_sync_snapshot())
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    if require_form_csrf():
+        return respond('Your session changed. Refresh the page and try again.', 403)
+    row = plex_user_sync_snapshot()
+    if row['queued'] or row['status'] == 'running':
+        return respond('Plex user sync is already queued or running.', 202, row)
+    if not row['can_run']:
+        return respond(row['action_reason'] or 'Plex user sync cannot run right now.', 409, row)
+    try:
+        queued = job_store().request_run('plex-access-sync')
+    except (sqlite3.Error, OSError):
+        return respond('Keep could not queue Plex user sync. Try again shortly.', 503)
+    if queued:
+        log_activity('job-requested', 'Queued Plex user discovery and access sync')
+    return respond('Plex user sync queued.' if queued else 'Plex user sync is already queued.', 202)
+
+
 @app.post('/settings/jobs/<job_id>/run')
 def settings_job_run(job_id):
     denied = require_owner()
@@ -4673,9 +4856,11 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
     denied = require_owner()
     if denied:
         return denied
+    # A completed job marker must never describe users read before its imports.
+    plex_sync = plex_user_sync_snapshot() if section == 'users' else None
     activity_filters = {
         "all": ("All activity", ""),
-        "users": ("Users & access", "WHERE action LIKE 'user-%' OR action LIKE 'password-%' OR action IN ('login', 'plex-access-changed')"),
+        "users": ("Users & access", "WHERE action LIKE 'user-%' OR action LIKE 'password-%' OR action IN ('login', 'plex-access-changed', 'plex-user-discovered')"),
         "api": ("API keys", "WHERE action LIKE 'api-key-%'"),
         "email": ("Email", "WHERE action LIKE 'recipient-%' OR action LIKE 'digest-%' OR action IN ('subscriptions-updated', 'personal-preferences-updated')"),
         "keeps": ("Keeps", "WHERE action LIKE 'keep-%' OR action LIKE 'api-keep-%'"),
@@ -4768,7 +4953,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
             "SELECT MAX(received_at) FROM notification_queue WHERE batch_id IS NULL"
         ).fetchone()[0]
     for user in users:
-        user["last_seen_label"] = relative_timestamp(user["last_seen_at"])
+        user["last_seen_label"] = relative_timestamp(user["last_seen_at"]) if user["last_seen_at"] else 'Never signed in'
         user["invite_label"] = invite_expiry_label(user["invite_expires_at"])
         user["is_owner"] = str(user["plex_id"]) == owner_id()
         if user["is_owner"]:
@@ -4798,6 +4983,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         "access": "User access updated.",
         "deleted": "Local user deleted. Their recipient entry, if any, remains separate.",
         "subscriptions": "Email collection preferences saved.",
+        "plex-sync": "Plex user sync queued.",
     }
     notice = notices.get(session.pop("settings_notice", None))
     settings_error = session.pop("settings_error", None)
@@ -4961,12 +5147,13 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
 <link rel="stylesheet" href="/static/keep-ui.css?v={{ app_version }}">
 <script defer src="/static/keep-toast.js?v={{ app_version }}"></script>
 <script defer src="/static/keep-interactions.js?v={{ app_version }}"></script>
+{% if section == 'users' %}<script defer src="/static/keep-user-list.js?v={{ app_version }}"></script><script defer src="/static/keep-plex-users.js?v={{ app_version }}"></script>{% endif %}
 {% include 'shared_assets.html' %}
 </head>
 <body class="admin-ui">{% include 'shared_whats_new.html' %}<a class="skip-link" href="#main-content">Skip to content</a>
     <main class="page" id="main-content" tabindex="-1">
     {% include 'shared_header.html' %}
-    <div class="page-heading"><h2>{{ {'users':'Users', 'email':'Email', 'activity':'Activity'}[section] }}</h2><p class="subtitle">{{ {'users':'Manage accounts, library access, and Keep permissions. Display names appear publicly; full names stay here.', 'email':'Manage digest recipients and the collections they follow.', 'activity':'Review account, library, and email activity.'}[section] }}</p></div>
+    <div class="page-heading"><h2>{{ {'users':'Users', 'email':'Email', 'activity':'Activity'}[section] }}</h2><p class="subtitle">{{ {'users':'Manage accounts, library access, and Keep permissions.', 'email':'Manage digest recipients and the collections they follow.', 'activity':'Review account, library, and email activity.'}[section] }}</p></div>
     {% include 'shared_admin_tabs.html' %}
     {% if notice %}<div class="notice" id="settings-saved-notice" role="status">{{ notice }}</div>{% endif %}
     {% if settings_error %}<div class="settings-error" role="alert">{{ settings_error }}</div>{% endif %}
@@ -5081,7 +5268,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
             {% endif %}
             </div>
         </article>
-        {% else %}<div class="empty">No linked Plex users have been imported yet.</div>{% endfor %}
+        {% else %}<div class="empty">No users yet. Sync Plex users or add a local user.</div>{% endfor %}
     </section>
     {% endif %}
     {% if section == "email" %}
@@ -5200,20 +5387,6 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
                 }
             });
         });
-        document.querySelectorAll(".permissions").forEach((group) => {
-            const toggle = group.querySelector("[data-library-permission-toggle]");
-            const libraryPermissions = group.querySelector("[data-library-permissions]");
-            if (!toggle || !libraryPermissions) return;
-            const syncLibraryPermissions = () => {
-                const visible = toggle.checked;
-                libraryPermissions.hidden = !visible;
-                libraryPermissions.querySelectorAll("input").forEach((input) => {
-                    input.disabled = !visible || toggle.disabled;
-                });
-            };
-            toggle.addEventListener("change", syncLibraryPermissions);
-            syncLibraryPermissions();
-        });
     </script>
 </main></body></html>
     """, section=section, section_title={"users": "Users", "email": "Email",
@@ -5227,7 +5400,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         expanded_recipient=expanded_recipient, new_recipient_email=new_recipient_email,
         admin_active_path=f'/settings/{section}',
         owner_plex_id=owner_id(), email_delivery_enabled=email_enabled(), csrf_token=get_csrf_token(),
-        libraries=libraries)
+        libraries=libraries, plex_sync=plex_sync)
 
 
 def recipient_settings_error(message, address='', status=400, new_recipient_email=''):

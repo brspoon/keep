@@ -56,6 +56,49 @@ test('pointer focus rings stay quiet until keyboard navigation resumes', () => {
   f.documentListeners.keydown({ metaKey: false, ctrlKey: false, altKey: false });
   assert.equal(f.rootClasses.has('pointer-input'), false);
 });
+test('automatically imported user cards gain disclosure, save and library controls once', () => {
+  const f = fixture();
+  const toggle = element(), editor = {hidden:true}, editLabel = element(), button = element();
+  const toggleListeners = {}, formListeners = {}, permissionListeners = {};
+  let toggleBindings = 0;
+  const card = element();
+  toggle.setAttribute('aria-label', 'Edit New viewer');
+  toggle.querySelector = () => editLabel;
+  toggle.closest = () => card;
+  toggle.addEventListener = (name, handler) => { toggleBindings++; toggleListeners[name] = handler; };
+  card.querySelector = selector => selector === '[data-user-toggle]' ? toggle : editor;
+  const form = {dataset:{saveKey:'user-9'},isConnected:true,querySelector:()=>button,
+    addEventListener:(name,handler)=>{formListeners[name]=handler;}};
+  const library = {disabled:false}, libraries = {hidden:false,querySelectorAll:()=>[library]};
+  const permission = {checked:false,disabled:false,closest:()=>form,
+    addEventListener:(name,handler)=>{permissionListeners[name]=handler;}};
+  const group = {querySelector:selector=>selector === '[data-library-permission-toggle]' ? permission : libraries};
+  f.document.querySelectorAll = selector => ({'[data-user-toggle]':[toggle],'.permissions':[group],
+    'form[data-save-key]':[form]}[selector] || []);
+  f.documentListeners['keep-users-updated']();
+  f.documentListeners['keep-users-updated']();
+  assert.equal(toggleBindings,1);
+  toggleListeners.click();
+  assert.equal(editor.hidden,false);
+  assert.equal(toggle.getAttribute('aria-expanded'),'true');
+  assert.equal(button.dataset.saveLabel,'Save');
+  let prevented=false;
+  button.disabled=true;
+  formListeners.submit({preventDefault(){prevented=true;}});
+  assert.equal(prevented,true);
+  assert.equal(libraries.hidden,true);
+  assert.equal(library.disabled,true);
+  permission.checked=true;permissionListeners.change();
+  assert.equal(libraries.hidden,false);
+  assert.equal(library.disabled,false);
+  permission.checked=false;permissionListeners.change();
+  assert.equal(library.disabled,true);
+  // The discard guard restores checkbox defaults before emitting change on
+  // the form; existing library grants must remain included in the next Save.
+  permission.checked=true;formListeners.change();
+  assert.equal(libraries.hidden,false);
+  assert.equal(library.disabled,false);
+});
 test('reduced motion removes the confirmed card without animation and restores keyboard focus', async () => {
   const f = fixture();
   const card = element(), next = element(), nextButton = element();

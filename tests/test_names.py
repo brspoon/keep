@@ -483,12 +483,11 @@ class SettingsTests(unittest.TestCase):
                 (plex_id, plex_username, auth_type, status, plex_access, plex_sync_visible, plex_checked_at)
                 VALUES ('9', 'directlogin', 'plex', 'active', 'active', 0, CURRENT_TIMESTAMP)""")
 
-        server_accounts = Mock(content=b'<MediaContainer><Account id="7"/></MediaContainer>')
-        shared_users = Mock(content=b'<MediaContainer></MediaContainer>')
-        server_accounts.raise_for_status.return_value = None
-        shared_users.raise_for_status.return_value = None
+        server_identity = b'<MediaContainer machineIdentifier="test"/>'
+        server_accounts = b'<MediaContainer><Account id="7"/></MediaContainer>'
+        shared_users = b'<MediaContainer></MediaContainer>'
         with patch.object(keep, 'PLEX_ADMIN_TOKEN', 'owner-token'), \
-             patch.object(keep.requests, 'get', side_effect=[server_accounts, shared_users]):
+             patch('service_discovery.read_service', side_effect=[server_identity, server_accounts, shared_users]):
             self.assertEqual(keep.sync_plex_user_access(), 1)
         with closing(keep.attribution_db()) as db:
             revoked = db.execute("SELECT * FROM user_profiles WHERE plex_id='8'").fetchone()
@@ -499,10 +498,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(direct_login['plex_access'], 'active')
         self.assertEqual(direct_login['plex_sync_visible'], 0)
 
-        shared_users.content = (b'<MediaContainer><User id="8"><Server machineIdentifier="test"/>'
-                                b'</User></MediaContainer>')
+        shared_users = (b'<MediaContainer><User id="8"><Server machineIdentifier="test" '
+                        b'pending="0" allLibraries="1" numLibraries="0"/></User></MediaContainer>')
         with patch.object(keep, 'PLEX_ADMIN_TOKEN', 'owner-token'), \
-             patch.object(keep.requests, 'get', side_effect=[server_accounts, shared_users]):
+             patch('service_discovery.read_service', side_effect=[server_identity, server_accounts, shared_users]):
             self.assertEqual(keep.sync_plex_user_access(), 1)
         with closing(keep.attribution_db()) as db:
             restored = db.execute("SELECT * FROM user_profiles WHERE plex_id='8'").fetchone()

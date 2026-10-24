@@ -138,10 +138,8 @@
     if (!toggle.dataset.editName) toggle.dataset.editName = toggle.getAttribute('aria-label').replace(/^Edit /, '');
     toggle.setAttribute('aria-label', `${open ? 'Close settings for' : 'Edit'} ${toggle.dataset.editName}`);
   };
-  document.querySelectorAll('[data-user-toggle]').forEach(toggle => {
-    toggle.addEventListener('click', () => setUserEditor(toggle.closest('.user-card, .recipient-row'), toggle.getAttribute('aria-expanded') !== 'true'));
-  });
-  const forms = [...document.querySelectorAll('form[data-save-key]')];
+  const forms = [];
+  const boundToggles = new WeakSet(), boundPermissions = new WeakSet();
   const saveButtons = new Map();
   const reset = button => {
     button.textContent = button.dataset.saveLabel;
@@ -149,20 +147,49 @@
     button.removeAttribute('aria-busy');
     button.classList.remove('action-succeeded');
   };
-  for (const form of forms) {
-    const button = form.querySelector('.save-button');
-    if (!button) continue;
-    saveButtons.set(form, button);
-    button.dataset.saveLabel = button.textContent;
-    button.setAttribute('aria-live', 'polite');
-    form.addEventListener('submit', event => {
-      if (event.defaultPrevented) return;
-      if (button.disabled) { event.preventDefault(); return; }
+  const initializeAdminUsers = () => {
+    document.querySelectorAll('[data-user-toggle]').forEach(toggle => {
+      if (boundToggles.has(toggle)) return;
+      boundToggles.add(toggle);
+      toggle.addEventListener('click', () => setUserEditor(toggle.closest('.user-card, .recipient-row'), toggle.getAttribute('aria-expanded') !== 'true'));
     });
-    form.addEventListener('input', () => {
-      if (button.classList.contains('action-succeeded')) reset(button);
+    document.querySelectorAll('.permissions').forEach(group => {
+      if (boundPermissions.has(group)) return;
+      const toggle = group.querySelector('[data-library-permission-toggle]');
+      const libraries = group.querySelector('[data-library-permissions]');
+      if (!toggle || !libraries) return;
+      boundPermissions.add(group);
+      const sync = () => {
+        libraries.hidden = !toggle.checked;
+        libraries.querySelectorAll('input').forEach(input => { input.disabled = !toggle.checked || toggle.disabled; });
+      };
+      toggle.addEventListener('change', sync);
+      // Discarding edits resets the form, then emits a form-level change.
+      toggle.closest?.('form')?.addEventListener('change', sync);
+      sync();
     });
-  }
+    for (const form of document.querySelectorAll('form[data-save-key]')) {
+      if (saveButtons.has(form)) continue;
+      const button = form.querySelector('.save-button');
+      if (!button) continue;
+      forms.push(form);
+      saveButtons.set(form, button);
+      button.dataset.saveLabel = button.textContent;
+      button.setAttribute('aria-live', 'polite');
+      form.addEventListener('submit', event => {
+        if (event.defaultPrevented) return;
+        if (button.disabled) { event.preventDefault(); return; }
+      });
+      form.addEventListener('input', () => {
+        if (button.classList.contains('action-succeeded')) reset(button);
+      });
+    }
+    for (let index = forms.length - 1; index >= 0; index--) {
+      if (forms[index].isConnected === false) { saveButtons.delete(forms[index]); forms.splice(index, 1); }
+    }
+  };
+  initializeAdminUsers();
+  document.addEventListener('keep-users-updated', initializeAdminUsers);
   // Document-level validation and unsaved-change guards run before this phase.
   window.addEventListener('submit', event => {
     const form = event.target;

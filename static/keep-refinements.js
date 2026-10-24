@@ -109,12 +109,12 @@
   });
   const wrapper = document.querySelector('.admin-list-search');
   if (wrapper) {
-    const rows = [...document.querySelectorAll(wrapper.dataset.searchRows)];
     const label = wrapper.dataset.searchLabel;
     const input = wrapper.querySelector('input');
     const clear = wrapper.querySelector('.admin-search-clear');
     const status = wrapper.querySelector('[role=status]');
     const filter = () => {
+      const rows = [...document.querySelectorAll(wrapper.dataset.searchRows)];
       const query = input.value.trim().toLocaleLowerCase();
       clear.hidden = !input.value;
       let count = 0;
@@ -129,6 +129,7 @@
     };
     input.addEventListener('input', filter); filter();
     window.addEventListener('pageshow', filter);
+    document.addEventListener('keep-users-updated', filter);
     clear.addEventListener('click', () => {
       input.value = '';
       filter();

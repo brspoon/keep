@@ -10,6 +10,12 @@ keep = test_api_v1.keep
 api = keep.app.extensions['keep_api']
 
 
+def access_snapshot(authorized):
+    return {'authorized': set(authorized), 'profiles': {},
+            'scope': keep._plex_sync_scope(keep._plex_sync_connection(fresh=True)),
+            'started': keep.time.monotonic()}
+
+
 class PlexAccessLeaseTests(unittest.TestCase):
     setUp = test_api_v1.ApiV1Tests.setUp
     login = test_api_v1.ApiV1Tests.login
@@ -34,7 +40,7 @@ class PlexAccessLeaseTests(unittest.TestCase):
                     db.execute("UPDATE user_profiles SET session_version=0 WHERE plex_id='8'")
                 token = self.make_key(user_id='8')
                 self.expire(visible)
-                with patch.object(keep, 'get_authorized_plex_user_ids', return_value=None):
+                with patch.object(keep, 'get_plex_user_access_snapshot', return_value=None):
                     self.assertIsNone(keep.sync_plex_user_access())
                 response = self.auth(token, path='/api/v1/keeps')
                 self.assertEqual(response.status_code, 401)
@@ -46,7 +52,7 @@ class PlexAccessLeaseTests(unittest.TestCase):
     def test_current_omitted_account_survives_feed_absence(self):
         token = self.make_key(user_id='8')
         before = self.profile()['plex_checked_at']
-        with patch.object(keep, 'get_authorized_plex_user_ids', return_value={'7'}):
+        with patch.object(keep, 'get_plex_user_access_snapshot', return_value=access_snapshot({'7'})):
             self.assertEqual(keep.sync_plex_user_access(), 0)
         profile = self.profile()
         self.assertEqual(profile['plex_access'], 'active')
@@ -58,7 +64,7 @@ class PlexAccessLeaseTests(unittest.TestCase):
 
     def test_expired_omitted_account_is_revoked_and_version_changes(self):
         self.expire()
-        with patch.object(keep, 'get_authorized_plex_user_ids', return_value={'7'}):
+        with patch.object(keep, 'get_plex_user_access_snapshot', return_value=access_snapshot({'7'})):
             self.assertEqual(keep.sync_plex_user_access(), 1)
         profile = self.profile()
         self.assertEqual(profile['plex_access'], 'revoked')
@@ -107,7 +113,7 @@ class PlexAccessLeaseTests(unittest.TestCase):
     def test_positive_sync_after_expiry_cannot_resurrect_old_credentials(self):
         token = self.make_key(user_id='8')
         self.expire(1)
-        with patch.object(keep, 'get_authorized_plex_user_ids', return_value={'7', '8'}):
+        with patch.object(keep, 'get_plex_user_access_snapshot', return_value=access_snapshot({'7', '8'})):
             keep.sync_plex_user_access()
         self.assertTrue(keep.plex_account_access_active(self.profile()))
         self.assertEqual(self.profile()['session_version'], 1)
@@ -183,7 +189,7 @@ class PlexAccessLeaseTests(unittest.TestCase):
                 failures.append(error)
         worker = threading.Thread(target=sync, name='lease-sync')
         renewal = threading.Thread(target=login, name='lease-login')
-        with patch.object(keep, 'get_authorized_plex_user_ids', return_value={'7'}), \
+        with patch.object(keep, 'get_plex_user_access_snapshot', return_value=access_snapshot({'7'})), \
              patch.object(keep, 'plex_account_access_active', side_effect=pause_before_first_write):
             worker.start()
             try:
