@@ -108,19 +108,20 @@
     text(byId('about-installed'), snapshot.installed_version);
     text(byId('about-latest'), snapshot.latest_version || 'Not checked');
     const comparison = byId('about-comparison');
-    const label = snapshot.stale && snapshot.latest_version ? 'Last known'
-      : ({update_available:'Update available', up_to_date:'Up to date', ahead:'Ahead of latest stable'})[snapshot.comparison] || '';
+    const label = ({update_available:'Update available', up_to_date:'Up to date', ahead:'Ahead of latest stable'})[snapshot.comparison] || '';
     text(comparison, label);
     if (comparison) {
       comparison.hidden = !label;
       comparison.setAttribute('data-comparison', snapshot.comparison);
       comparison.setAttribute('data-status', snapshot.comparison === 'up_to_date' ? 'ok' : snapshot.comparison === 'update_available' ? 'warn' : 'neutral');
     }
+    const stale = byId('about-latest-stale');
+    if (stale) stale.hidden = !snapshot.stale || !snapshot.latest_version;
     formatTime(byId('about-last-check'), snapshot.last_attempt_at);
     text(byId('about-check-state'), snapshot.check_state === 'queued' ? 'Queued' : snapshot.check_state === 'running' ? 'Checking'
       : ({never:'Not checked', success:'Checked', failed:'Failed', rate_limited:'Rate limited'})[snapshot.status]);
     byId('about-check-state')?.setAttribute('data-status', busy() ? 'neutral' : snapshot.status === 'failed' ? 'error'
-      : snapshot.status === 'rate_limited' ? 'warn' : snapshot.status === 'success' && !snapshot.stale ? 'ok' : 'neutral');
+      : snapshot.status === 'rate_limited' ? 'warn' : snapshot.status === 'success' ? 'ok' : 'neutral');
     const reason = byId('about-check-reason'); text(reason, snapshot.reason);
     if (reason) reason.hidden = !snapshot.reason || busy() && snapshot.worker_available;
     renderReleases(); controls();

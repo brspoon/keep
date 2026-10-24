@@ -113,6 +113,40 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(row['full_name'], 'Alex Ray Morgan')
         self.assertEqual(row['display_name'], 'Alex W')
 
+    def test_user_cards_show_saved_display_names_and_keep_plex_username_in_details(self):
+        body = self.client.get('/settings/users').get_data(as_text=True)
+        header = body.split('data-user-toggle', 1)[1].split('</button>', 1)[0]
+        self.assertIn('aria-label="Edit Alex W"', header)
+        self.assertIn('<strong>Alex W</strong>', header)
+        self.assertNotIn('testowner', header)
+        self.assertIn('<span>Plex username: testowner</span>', body)
+
+        response = self.form('/settings/users/7', full_name='Alex Morgan',
+                             display_name='Alex <Admin> & "W"')
+        self.assertEqual(response.status_code, 302)
+        updated = self.client.get(response.headers['Location']).get_data(as_text=True)
+        header = updated.split('data-user-toggle', 1)[1].split('</button>', 1)[0]
+        escaped_name = 'Alex &lt;Admin&gt; &amp; &#34;W&#34;'
+        self.assertIn('aria-label="Edit ' + escaped_name + '"', header)
+        self.assertIn('<strong>' + escaped_name + '</strong>', header)
+        self.assertNotIn('<Admin>', header)
+        self.assertNotIn('testowner', header)
+        self.assertIn('<span>Plex username: testowner</span>', updated)
+
+    def test_user_cards_without_display_names_fall_back_to_account_name(self):
+        for username, expected in (('testowner', 'testowner'), ('', 'Local user')):
+            with self.subTest(username=username):
+                with closing(keep.attribution_db()) as db, db:
+                    db.execute("UPDATE user_profiles SET display_name='', plex_username=? WHERE plex_id='7'",
+                               (username,))
+                with self.client.session_transaction() as session:
+                    session['plex_user'] = {**session['plex_user'], 'username': username}
+                body = self.client.get('/settings/users').get_data(as_text=True)
+                header = body.split('data-user-toggle', 1)[1].split('</button>', 1)[0]
+                self.assertIn('aria-label="Edit ' + expected + '"', header)
+                self.assertIn('<strong>' + expected + '</strong>', header)
+                self.assertNotIn('<strong>Alex Morgan</strong>', header)
+
     def test_admin_saved_notice_is_one_time_and_auto_dismisses(self):
         response = self.form('/settings/users/7', full_name='Alex Morgan',
                              display_name='Alex W')

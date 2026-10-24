@@ -34,7 +34,7 @@ html[data-appearance="light"] :is(.auth-ui .login-card,.setup-ui main,.preferenc
   box-shadow:0 12px 34px #25324817;
 }
 html[data-appearance="light"] :is(.library-ui .view-switcher,.library-ui .count,
-  .admin-ui .admin-nav,.library-ui .user-links,.app-header .user-links,
+  .admin-ui .admin-nav,
   .admin-ui .user-card.is-editing .user-editor) {
   background:var(--surface-2); color:var(--text); border-color:var(--border);
 }
@@ -133,6 +133,10 @@ html[data-appearance="light"] .library-ui .header-views .view-tab.active {
 }
 html[data-appearance="light"] .app-header .user-links :is(a,button) {
   background:transparent; border-color:transparent;
+}
+html[data-appearance="light"] .app-header .user-links { background:var(--surface); }
+html[data-appearance="light"] .app-header .user-links :is(a,button):not([aria-current="page"]):not(:disabled):is(:hover,:focus-visible) {
+  background:var(--surface-hover); color:var(--text); border-color:var(--border-hover); filter:none;
 }
 html[data-appearance="light"] .app-header .user-links [aria-current="page"] {
   background:var(--accent); color:var(--on-accent);

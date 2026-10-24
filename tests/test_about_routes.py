@@ -136,27 +136,65 @@ class AboutRoutesTests(TestCase):
         self.assertIn('Update check queued.', feedback)
         self.assertNotIn('is-error', feedback)
 
-    def test_server_comparison_badge_hides_unknown_labels_and_keeps_stale_data_neutral(self):
+    def test_server_badges_compare_installed_version_and_identify_stale_latest_data(self):
         original = keep.about_snapshot()
-        for changes, label, tone in (
-            ({'status': 'success', 'stale': False, 'comparison': 'unknown'}, '', 'neutral'),
-            ({'status': 'success', 'stale': False, 'comparison': 'unexpected'}, '', 'neutral'),
-            ({'status': 'success', 'stale': False, 'comparison': 'up_to_date'}, 'Up to date', 'ok'),
-            ({'status': 'success', 'stale': True, 'comparison': 'up_to_date'}, 'Last known', 'neutral'),
-            ({'status': 'failed', 'stale': True, 'comparison': 'up_to_date'}, 'Last known', 'neutral'),
+        for changes, label, tone, stale_latest in (
+            ({'status': 'success', 'stale': False, 'comparison': 'unknown'}, '', 'neutral', False),
+            ({'status': 'success', 'stale': False, 'comparison': 'unexpected'}, '', 'neutral', False),
+            ({'status': 'success', 'stale': False, 'comparison': 'up_to_date'}, 'Up to date', 'ok', False),
+            ({'status': 'success', 'stale': False, 'comparison': 'update_available'}, 'Update available', 'warn', False),
+            ({'status': 'success', 'stale': False, 'comparison': 'ahead'}, 'Ahead of latest stable', 'neutral', False),
+            ({'status': 'success', 'stale': True, 'comparison': 'up_to_date'}, '', 'neutral', True),
+            ({'status': 'failed', 'stale': True, 'comparison': 'up_to_date'}, '', 'neutral', True),
+            ({'status': 'rate_limited', 'stale': True, 'comparison': 'up_to_date'}, '', 'neutral', True),
+            ({'status': 'never', 'stale': True, 'comparison': 'unknown', 'latest_version': None}, '', 'neutral', False),
         ):
             with self.subTest(changes=changes), patch.object(keep, 'about_snapshot', return_value={
                     **original, 'latest_version': keep.APP_VERSION, **changes}):
                 page = self.client.get('/settings/about').get_data(as_text=True)
-                badge = re.search(r'<span id="about-comparison".*?</span>', page, re.S).group()
+                installed = re.search(r'<div><dt>Installed</dt><dd>(.*?)</dd></div>', page, re.S).group(1)
+                latest = re.search(r'<div><dt>Latest stable</dt><dd>(.*?)</dd></div>', page, re.S).group(1)
+                self.assertIn(f'<span id="about-installed">{keep.APP_VERSION}</span>', installed)
+                self.assertNotIn('about-comparison', latest)
+                self.assertNotIn('about-latest-stale', installed)
+                badge = re.search(r'<span id="about-comparison".*?</span>', installed, re.S).group()
                 self.assertIn('data-status="' + tone + '"', badge)
                 self.assertIn('>' + label + '</span>', badge)
                 self.assertEqual('hidden' in badge, not bool(label))
+                stale_badge = re.search(r'<span id="about-latest-stale".*?</span>', latest, re.S).group()
+                self.assertIn('data-status="neutral"', stale_badge)
+                self.assertIn('>Last known</span>', stale_badge)
+                self.assertEqual('hidden' in stale_badge, not stale_latest)
                 if changes['status'] == 'failed':
                     feedback = re.search(r'<p id="about-feedback".*?</p>', page, re.S).group()
                     self.assertIn('data-feedback-status="error"', feedback)
                     self.assertIn('is-error', feedback)
                     self.assertNotIn('hidden', feedback)
+
+    def test_server_check_badge_reports_success_even_when_release_data_is_stale(self):
+        original = keep.about_snapshot()
+        for status, stale, check_state, label, tone in (
+            ('success', False, 'idle', 'Checked', 'ok'),
+            ('success', True, 'idle', 'Checked', 'ok'),
+            ('success', True, 'queued', 'Queued', 'neutral'),
+            ('success', True, 'running', 'Checking', 'neutral'),
+            ('failed', True, 'idle', 'Failed', 'error'),
+            ('rate_limited', True, 'idle', 'Rate limited', 'warn'),
+            ('never', True, 'idle', 'Not checked', 'neutral'),
+        ):
+            with self.subTest(status=status, stale=stale, check_state=check_state), patch.object(
+                    keep, 'about_snapshot', return_value={**original, 'latest_version': keep.APP_VERSION,
+                        'status': status, 'stale': stale, 'check_state': check_state}):
+                page = self.client.get('/settings/about').get_data(as_text=True)
+                badge = re.search(r'<span id="about-check-state".*?</span>', page, re.S).group()
+                self.assertIn(f'data-status="{tone}"', badge)
+                self.assertIn(f'>{label}</span>', badge)
+                if stale:
+                    comparison = re.search(r'<span id="about-comparison".*?</span>', page, re.S).group()
+                    self.assertIn('hidden', comparison)
+                    latest = re.search(r'<span id="about-latest-stale".*?</span>', page, re.S).group()
+                    self.assertIn('data-status="neutral"', latest)
+                    self.assertNotIn('hidden', latest)
 
     def test_unavailable_worker_prevents_queueing_without_becoming_an_update_result(self):
         self.heartbeat.unlink()

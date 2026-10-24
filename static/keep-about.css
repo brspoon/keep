@@ -7,6 +7,7 @@
 .about-ui :is(.about-button,.about-link).secondary { border-color:var(--border); background:var(--surface-hover); color:var(--text); }
 .about-ui .about-link:visited { color:var(--text); }
 .about-ui :is(.about-button,.about-link):hover { border-color:var(--border-hover); transform:none; }
+.about-ui :is(.about-button,.about-link).secondary:not(:disabled):is(:hover,:focus-visible) { background:var(--surface-hover); color:var(--text); border-color:var(--border-hover); filter:none; }
 .about-ui :is(.about-button,.about-link):not(.secondary):hover { background:var(--accent-hover); }
 .about-ui :is(.about-button,.about-link):focus-visible,.about-ui summary:focus-visible { outline:2px solid var(--focus,var(--accent)); outline-offset:3px; }
 .about-ui .about-version-details { display:grid; gap:0; margin:0; }
