@@ -17,11 +17,17 @@ def access_snapshot(authorized):
 
 
 class PlexAccessLeaseTests(unittest.TestCase):
-    setUp = test_api_v1.ApiV1Tests.setUp
     login = test_api_v1.ApiV1Tests.login
     make_key = test_api_v1.ApiV1Tests.make_key
     bearer_client = test_api_v1.ApiV1Tests.bearer_client
     auth = test_api_v1.ApiV1Tests.auth
+
+    def setUp(self):
+        test_api_v1.ApiV1Tests.setUp(self)
+        # Lease tests isolate library sharing, which has separate provider tests.
+        library_proof = patch.object(keep, 'get_plex_library_access_snapshot', return_value=(None, None, []))
+        library_proof.start()
+        self.addCleanup(library_proof.stop)
 
     def expire(self, visible=0):
         with closing(keep.attribution_db()) as db, db:
