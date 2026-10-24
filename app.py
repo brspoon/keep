@@ -5182,7 +5182,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
                         <button type="button" class="admin-card-header" data-user-toggle aria-expanded="false" aria-controls="user-editor-{{ user.plex_id }}" aria-label="Edit {{ user_name }}">
             <span class="identity">
                 <span>Account <span class="source source-{{ user.auth_type }}">{{ user.auth_type }}</span>{% if user.is_owner %}<span class="source source-owner"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 8 3v6c0 4-5 7-8 9-3-2-8-5-8-9V6l8-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Owner</span>{% endif %}<br><strong>{{ user_name }}</strong></span>
-                <span>Email<br><strong>{{ user.email or "Not provided" }}</strong><br>
+                <span>Email<br><strong><!--email_off-->{{ user.email or "Not provided" }}<!--/email_off--></strong><br>
                     <span class="status {{ user.access_tone }}">{{ user.access_label }}</span></span>
             </span>
             <span class="visually-hidden" data-edit-label>Edit</span>{% include "admin_chevron.html" %}</button>

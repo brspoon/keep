@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.29.1 — 2026-10-24
+
+- Keep email addresses readable and searchable after the Users list refreshes behind Cloudflare.
+
 ## 2.29.0 — 2026-10-24
 
 - Discover Plex server users before their first Keep sign-in and link their Seerr requests by Plex ID.
