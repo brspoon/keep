@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.27.6 — 2026-10-24
+
+- Show update status beside the installed version on About and keep successful checks green.
+- Make About buttons and account menu hover states visible in light mode.
+- Show display names first on Users, with Plex usernames in account details.
+
 ## 2.27.5 — 2026-10-23
 
 - Apply upstream Python archive-extraction and Expat XML-parser security fixes in the container.

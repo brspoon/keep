@@ -29,7 +29,11 @@ function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, init
   document=new Element();document.hidden=hidden;document.activeElement=null;document.createElement=tag=>new Element(tag);
   const window=new Element();if(toast)window.showToast=(message,tone)=>toasts.push({message,tone});window.events=[];window.dispatchEvent=event=>{window.events.push(event.type);return true;};
   const ids={};
-  for(const id of ['about-feedback','about-copy','about-diagnostics','about-diagnostics-details','about-copy-feedback','about-check-form','about-check','about-refresh','about-snapshot','about-installed','about-latest','about-comparison','about-last-check','about-check-state','about-check-reason','about-releases-empty','about-releases'])ids[id]=new Element();
+  for(const id of ['about-feedback','about-copy','about-diagnostics','about-diagnostics-details','about-copy-feedback','about-check-form','about-check','about-refresh','about-snapshot','about-installed','about-latest','about-comparison','about-latest-stale','about-last-check','about-check-state','about-check-reason','about-releases-empty','about-releases'])ids[id]=new Element();
+  const installedDetails=new Element('dd'),latestDetails=new Element('dd');
+  installedDetails.append(ids['about-installed'],ids['about-comparison']);
+  latestDetails.append(ids['about-latest'],ids['about-latest-stale']);
+  ids['about-latest-stale'].textContent='Last known';ids['about-latest-stale'].setAttribute('data-status','neutral');
   ids['about-diagnostics'].value='{"keep_version":"2.25.0"}';
   ids['about-snapshot'].textContent=initialJson===undefined?JSON.stringify(snapshot):initialJson;
   ids['about-feedback'].hidden=ids['about-copy-feedback'].hidden=ids['about-refresh'].hidden=true;
@@ -40,7 +44,7 @@ function fixture({snapshot=baseline(), clipboard=true, fetchAvailable=true, init
   const navigator={clipboard:clipboard?{writeText:async value=>{copies.push(value);if(clipboard==='fail')throw new Error('Denied');}}:undefined};
   vm.runInNewContext(source,{document,window,navigator,CustomEvent:class{constructor(type){this.type=type;}},fetch:fetchAvailable?fetch:undefined,AbortController,FormData,URLSearchParams,Intl,Date:ClockDate,
     setTimeout:(fn,delay)=>{const id=++timeoutId;timers.set(id,{fn,due:now+delay,delay});return id;},clearTimeout:id=>timers.delete(id)});
-  return {ids,document,window,calls,copies,timers,toasts,now:()=>now,
+  return {ids,installedDetails,latestDetails,document,window,calls,copies,timers,toasts,now:()=>now,
     respond(index,status,body,extra={}){calls[index].resolve({ok:status>=200&&status<300,status,redirected:false,json:async()=>body,...extra});},
     fail(index){calls[index].reject(new Error('Network lost'));},
     async advance(ms){now+=ms;const due=[...timers].filter(([,timer])=>timer.due<=now);due.forEach(([id,timer])=>{timers.delete(id);timer.fn();});await settle();},
@@ -55,10 +59,36 @@ test('idle About renders installed/current/latest facts without fetching or exec
 });
 test('a new installed version watches the worker refresh through status GETs without queueing a manual check',async()=>{
   const f=fixture({snapshot:baseline({installed_version:'2.26.0',latest_version:'2.25.0',stale:true,comparison:'unknown',version_refresh_pending:true})});
-  assert.equal(f.ids['about-comparison'].textContent,'Last known');assert.equal(f.calls.length,0);
+  assert.equal(f.ids['about-comparison'].hidden,true);assert.equal(f.ids['about-latest-stale'].hidden,false);assert.equal(f.calls.length,0);
   await f.advance(2000);assert.equal(f.calls[0].url,'/settings/about/status');assert.equal(f.calls[0].options.method,undefined);
   f.respond(0,200,{snapshot:baseline({installed_version:'2.26.0',latest_version:'2.26.0',version_refresh_pending:false})});await settle();
-  assert.equal(f.ids['about-comparison'].textContent,'Up to date');assert.equal(f.timers.size,0);assert.equal(f.calls.length,1);
+  assert.equal(f.ids['about-comparison'].textContent,'Up to date');assert.equal(f.ids['about-latest-stale'].hidden,true);assert.equal(f.timers.size,0);assert.equal(f.calls.length,1);
+});
+test('polling keeps comparison beside Installed and moves stale meaning only to Latest stable',async()=>{
+  const f=fixture({snapshot:baseline({check_state:'running',can_check:false})});
+  const assertPlacement=()=>{
+    assert.equal(f.installedDetails.children[0],f.ids['about-installed']);
+    assert.equal(f.installedDetails.children[1],f.ids['about-comparison']);
+    assert.equal(f.latestDetails.children[0],f.ids['about-latest']);
+    assert.equal(f.latestDetails.children[1],f.ids['about-latest-stale']);
+  };
+  assertPlacement();assert.equal(f.ids['about-comparison'].hidden,false);assert.equal(f.ids['about-latest-stale'].hidden,true);
+  await f.poll(baseline({stale:true,check_state:'running',can_check:false}));
+  assertPlacement();assert.equal(f.ids['about-comparison'].textContent,'');assert.equal(f.ids['about-comparison'].hidden,true);
+  assert.equal(f.ids['about-latest-stale'].hidden,false);assert.equal(f.ids['about-latest-stale'].textContent,'Last known');
+  await f.poll(baseline({installed_version:'2.26.0',comparison:'ahead',check_state:'running',can_check:false}));
+  assertPlacement();assert.equal(f.ids['about-installed'].textContent,'2.26.0');
+  assert.equal(f.ids['about-comparison'].textContent,'Ahead of latest stable');assert.equal(f.ids['about-comparison'].hidden,false);
+  assert.equal(f.ids['about-latest-stale'].hidden,true);
+  await f.poll(baseline({installed_version:'2.26.0',latest_version:'2.27.0',latest_tag:'2.27.0',comparison:'update_available'}));
+  assertPlacement();assert.equal(f.ids['about-comparison'].textContent,'Update available');
+  assert.equal(f.ids['about-comparison'].attrs['data-status'],'warn');assert.equal(f.ids['about-latest'].textContent,'2.27.0');
+  assert.equal(f.ids['about-latest-stale'].hidden,true);assert.equal(f.timers.size,0);
+});
+test('an unchecked snapshot has neither an installed comparison nor a last-known badge',()=>{
+  const f=fixture({snapshot:baseline({status:'never',stale:true,comparison:'unknown',latest_version:null,latest_tag:null,releases:[]})});
+  assert.equal(f.ids['about-latest'].textContent,'Not checked');assert.equal(f.ids['about-comparison'].hidden,true);
+  assert.equal(f.ids['about-latest-stale'].hidden,true);
 });
 test('one CSRF form POST queues work, polling follows recorded status, and completion updates controls',async()=>{
   const f=fixture(),action=f.ids['about-check-form'].fire('submit');await settle();assert.equal(f.calls.length,1);assert.equal(f.calls[0].url,'/settings/about/check');assert.equal(f.calls[0].options.method,'POST');assert.equal(f.calls[0].options.body.get('csrf_token'),'synthetic-csrf');assert.equal(f.calls[0].options.credentials,'same-origin');
@@ -92,7 +122,7 @@ test('queueing a fresh manual retry does not announce an unchanged failure from 
   const writes=f.ids['about-feedback'].textWrites.length;await f.poll(queued);assert.equal(f.ids['about-feedback'].textWrites.length,writes);
 });
 test('failed cached observations show last-known release data and never claim up to date',()=>{
-  const f=fixture({snapshot:baseline({status:'failed',stale:true,comparison:'up_to_date',can_check:false})});assert.equal(f.ids['about-comparison'].textContent,'Last known');assert.match(f.ids['about-releases'].textContent,/Last known/);assert.doesNotMatch(f.ids['about-releases'].textContent,/Latest/);assert.equal(f.ids['about-check-state'].textContent,'Failed');
+  const f=fixture({snapshot:baseline({status:'failed',stale:true,comparison:'up_to_date',can_check:false})});assert.equal(f.ids['about-comparison'].hidden,true);assert.equal(f.ids['about-latest-stale'].hidden,false);assert.match(f.ids['about-releases'].textContent,/Last known/);assert.doesNotMatch(f.ids['about-releases'].textContent,/Latest/);assert.equal(f.ids['about-check-state'].textContent,'Failed');
 });
 test('release links ignore supplied URLs and reject invalid tags without HTML execution',()=>{
   const f=fixture({snapshot:baseline({releases:[{version:'2.25.0',tag:'2.25.0',published_at:'2026-10-11T12:00:00Z',url:'javascript:alert(1)',name:'<img onerror=alert(1)>'},{version:'2.26.0',tag:'javascript:alert(1)',published_at:'invalid'}]})});
@@ -176,10 +206,23 @@ test('missing fetch or malformed initial JSON preserves ordinary form fallback a
 });
 
 
-test('fresh positive badges are green while stale and ongoing checks remain neutral',()=>{
+test('completed successful checks stay green while stale release data and pending checks remain distinct',()=>{
   const ready=fixture();assert.equal(ready.ids['about-comparison'].attrs['data-status'],'ok');assert.equal(ready.ids['about-check-state'].attrs['data-status'],'ok');
-  const stale=fixture({snapshot:baseline({stale:true})});assert.equal(stale.ids['about-comparison'].attrs['data-status'],'neutral');assert.equal(stale.ids['about-check-state'].attrs['data-status'],'neutral');
-  const busy=fixture({snapshot:baseline({check_state:'queued',can_check:false})});assert.equal(busy.ids['about-check-state'].attrs['data-status'],'neutral');
+  for (const [changes,label,tone] of [
+    [{},'Checked','ok'],
+    [{check_state:'queued',can_check:false},'Queued','neutral'],
+    [{check_state:'running',can_check:false},'Checking','neutral'],
+    [{status:'failed'},'Failed','error'],
+    [{status:'rate_limited'},'Rate limited','warn'],
+    [{status:'never'},'Not checked','neutral']
+  ]) {
+    const stale=fixture({snapshot:baseline({stale:true,...changes})});
+    assert.equal(stale.ids['about-comparison'].hidden,true);
+    assert.equal(stale.ids['about-latest-stale'].attrs['data-status'],'neutral');
+    assert.equal(stale.ids['about-latest-stale'].hidden,false);
+    assert.equal(stale.ids['about-check-state'].textContent,label);
+    assert.equal(stale.ids['about-check-state'].attrs['data-status'],tone);
+  }
 });
 test('update-check acknowledgements and completion use shared toast while actionable failures persist',async()=>{
   const f=fixture({toast:true});await f.queue();
