@@ -61,7 +61,8 @@ test('admin search shows a clear button and restores all rows and focus',()=>{
   const wrapper={dataset:{searchRows:'.user-card',searchLabel:'users'},
     querySelector:selector=>selector==='input'?input:selector==='.admin-search-clear'?clear:status};
   const document={body:{},querySelector:selector=>selector==='.admin-list-search'?wrapper:null,
-    querySelectorAll:selector=>selector==='.user-card'?rows:[],getElementById:()=>null,addEventListener(){}};
+    querySelectorAll:selector=>selector==='.user-card'?rows:[],getElementById:()=>null,
+    addEventListener:(type,fn)=>listeners['document-'+type]=fn};
   const window={addEventListener:(type,fn)=>listeners['window-'+type]=fn};
   vm.runInNewContext(fs.readFileSync('static/keep-refinements.js','utf8'),{
     document,window,MutationObserver:class{observe(){}},Event:class{constructor(type){this.type=type;}}});
@@ -87,6 +88,12 @@ test('admin search shows a clear button and restores all rows and focus',()=>{
   assert.equal(rows[0].hidden,true);
   assert.equal(rows[1].hidden,false);
   assert.equal(status.textContent,'1 user');
+  rows.push({textContent:'Bailey New Plex user',hidden:false});
+  listeners['document-keep-users-updated']();
+  assert.equal(input.value,'bailey');
+  assert.equal(status.textContent,'2 users');
+  assert.equal(rows[0].hidden,true);
+  assert.equal(rows[2].hidden,false);
 });
 
 test('email search matches profile names and aliases regardless of case and retains email matches',()=>{

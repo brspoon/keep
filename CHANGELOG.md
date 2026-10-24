@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.29.0 — 2026-10-24
+
+- Discover Plex server users before their first Keep sign-in and link their Seerr requests by Plex ID.
+- Add Sync Plex users to Admin → Users. Preserve custom names and permissions, and use Plex usernames when no display name is set.
+
 ## 2.28.0 — 2026-10-24
 
 - Let the owner set temporary Keep duration to 1–365 days in Admin → General. New Keeps and extensions use the setting; existing expiration dates and extension availability stay unchanged.

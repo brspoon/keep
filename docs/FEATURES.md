@@ -63,6 +63,13 @@ An uncertain delivery stays available for review while other destinations contin
 
 The owner manages accounts, indefinite-Keep and Keep-management permissions, deletion capabilities, library grants, and Seerr account links. Under Admin, the owner also manages selected Maintainerr collections, service connections, email recipients, jobs, and activity records.
 
+Plex account sync discovers users with verified library access to the selected
+server before they sign in to Keep. **Admin → Users → Sync Plex users**
+queues a sync through the worker. Imported users show **Never signed in** and
+receive basic Keep access; extra permissions and notifications remain separate.
+Seerr requester names use the linked user's display name, falling back to their
+Plex username. Custom names and existing access choices are preserved.
+
 **Admin → Jobs** shows each job's schedule, next run, and latest result. **Run now** queues an available job to run shortly. **Edit** changes the frequency of Plex account access checks, Leaving reminders, Seerr request history refreshes, and service connection checks. Lifecycle tasks such as temporary Keep expiry, reminder reconciliation, and cleanup keep their fixed schedules. Running notification delivery still respects recipient preferences and the quiet period; it does not resend completed deliveries.
 
 **Admin → About** shows the installed version, the latest published stable release, recent releases, and project links. Keep checks for updates every six hours; **Check for updates** queues a check through the background worker. Failed or stale checks keep the last known release visible and do not claim Keep is up to date. **Copy diagnostics** includes versions, platform, worker status, and whether connections are configured, without credentials, server addresses, or account details.

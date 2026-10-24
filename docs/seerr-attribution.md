@@ -22,6 +22,30 @@ it does not prove that the request caused a download.
    duplicate or conflicting matches stay unlinked. Changing the Seerr connection
    requires a new refresh and relinking local accounts.
 
+## Plex user discovery
+
+Keep's background worker discovers accepted users with library access to the
+configured Plex server during its account access sync, every 15 minutes by
+default. The owner can change the frequency under **Admin → Jobs**, or choose
+**Sync Plex users** under **Admin → Users**. The button queues the same
+background job; the Users list updates automatically when it finishes.
+A running worker and a configured Plex connection are required.
+
+Users can be linked to Seerr by their exact Plex ID before signing in to Keep.
+Imported profiles show **Never signed in** until their first Keep login. Custom
+Keep display names and full names are preserved; a Plex username supplies the
+public name when no display name has been set. Unlinked requesters remain
+unlinked; Keep does not match names or email addresses or display private Seerr
+labels as requester names.
+
+Discovery gives new profiles basic Keep access. It does not grant indefinite
+Keeps, management of other users' Keeps, deletion or library permissions, API
+keys, or notification subscriptions. Existing permissions and manual account
+disables remain intact. Pending invitations, users shared only with another
+server, and unverified identities are not imported. A failed or incomplete
+Plex check leaves the previous profiles unchanged; existing Plex access leases
+still apply.
+
 ## Request details
 
 Open a title's details from Leaving, Kept, or Manage Library to see request
@@ -29,7 +53,7 @@ history. Requesters do not appear on browsing cards. Keep matches movies by
 TMDB ID and series by TVDB ID, never by title, name, or email. Approved or
 completed requests can identify requesters; pending, declined, failed, missing,
 or ambiguous history does not establish ownership. Keep displays linked Keep
-names rather than private Seerr account labels.
+display names or Plex usernames rather than private Seerr account labels.
 
 Season details distinguish availability from request history. A downloaded
 season without recorded history says **No request recorded**, not **Requester
