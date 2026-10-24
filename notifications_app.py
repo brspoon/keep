@@ -6,7 +6,9 @@ nothing and does not create or change any database tables.
 """
 from collections.abc import Mapping
 from contextlib import closing
+import copy
 from dataclasses import dataclass, field
+import hashlib
 from html import escape
 import math
 from pathlib import Path
@@ -45,6 +47,8 @@ class Helpers:
     send_email: object
     send_push: object = None
     build_event_email: object = None
+    filter_email_items: object = None
+    email_generation: object = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,9 @@ class Message:
     text: str = field(repr=False)
     html: str = field(default='', repr=False)
     url: str = field(default='', repr=False)
+    items: tuple = field(default=(), repr=False)
+    media: bool = False
+    filtered_items: tuple = field(default=(), repr=False)
 
 
 def _email_id(address):
@@ -131,8 +138,18 @@ class Runtime:
 
     def _email_target(self, identity, selected):
         metadata = self.helpers.settings().email_event_preferences(identity)
-        return notifications.Destination('email', identity, metadata['generation'],
-            frozenset(selected), metadata['events'], owner_verified=metadata['owner_verified'])
+        generation = metadata['generation']
+        automatic = False
+        if self.helpers.email_generation is not None:
+            token = self.helpers.email_generation(identity)
+            if not isinstance(token, str) or len(token) > 1024:
+                raise ValueError('Email routing generation is unavailable')
+            automatic = bool(token)
+            if automatic:
+                generation = hashlib.sha256((generation + '\0' + token).encode()).hexdigest()
+        return notifications.Destination('email', identity, generation,
+            frozenset(selected), notifications.MEDIA_EVENTS if automatic else metadata['events'],
+            owner_verified=False if automatic else metadata['owner_verified'])
 
     def destinations(self):
         collections = frozenset(self.helpers.collections())
@@ -147,13 +164,33 @@ class Runtime:
     def _url(self):
         return _link(self.helpers.value('KEEP_URL'))
 
+    def _email_items(self, target, items):
+        originals = tuple(copy.deepcopy(tuple(items)))
+        if self.helpers.filter_email_items is None:
+            return originals
+        filtered = self.helpers.filter_email_items(target, list(copy.deepcopy(originals)))
+        if not isinstance(filtered, (list, tuple)):
+            raise ValueError('Email item scope is unavailable')
+        # A scope filter may remove items, not add or alter private media data.
+        remaining = list(originals)
+        for item in filtered:
+            try:
+                remaining.remove(item)
+            except ValueError:
+                raise ValueError('Email item scope changed the media inventory') from None
+        return tuple(filtered)
+
     def render(self, target, items):
         url = self._url()
         if target.provider == 'email':
             if not url:
                 raise ValueError('Digest needs Keep URL')
-            subject, html, text = self.helpers.build_email(items, url)
-            return Message(subject, text, html, url)
+            originals = tuple(copy.deepcopy(tuple(items)))
+            filtered = self._email_items(target, originals)
+            if not filtered:
+                return Message('', '', url=url, items=originals, media=True)
+            subject, html, text = self.helpers.build_email(list(filtered), url)
+            return Message(subject, text, html, url, originals, True, tuple(copy.deepcopy(filtered)))
         return Message('Keep', pushover.digest_message(items), url=url if len(url) <= 512 else '')
 
     def render_event(self, target, event):
@@ -184,16 +221,47 @@ class Runtime:
             html += '<p><a href="' + escape(url, quote=True) + '">Open Keep</a></p>'
         return Message(subject, text, html, url if target.provider == 'email' or len(url) <= 512 else '')
 
-    def send(self, target, message):
-        if target.provider not in self.enabled_providers():
-            return notifications.Outcome('cancelled', 'preferences_changed')
-        collections = frozenset(self.helpers.collections())
-        if target.provider == 'email':
+    def _send_email(self, target, message):
+        try:
+            if 'email' not in self.enabled_providers():
+                return notifications.Outcome('cancelled', 'preferences_changed')
+            collections = frozenset(self.helpers.collections())
             saved = self._emails(collections).get(target.id)
             if not saved or self._email_target(target.id, saved[1]) != target:
                 return notifications.Outcome('cancelled', 'preferences_changed')
-            self.helpers.send_email([saved[0]], message.subject, message.html, message.text)
-            return notifications.Outcome('accepted')
+            outgoing = message
+            if message.media:
+                filtered = self._email_items(target, message.items)
+                if not filtered:
+                    return notifications.Outcome('cancelled', 'preferences_changed')
+                if filtered != message.filtered_items:
+                    url = self._url()
+                    if not url:
+                        raise ValueError('Digest needs Keep URL')
+                    subject, html, text = self.helpers.build_email(list(filtered), url)
+                    outgoing = Message(subject, text, html, url)
+                # Filtering may perform a live scope lookup. Recheck changes
+                # made during it before entering the transport boundary.
+                saved = self._emails(frozenset(self.helpers.collections())).get(target.id)
+                if not saved or self._email_target(target.id, saved[1]) != target:
+                    return notifications.Outcome('cancelled', 'preferences_changed')
+            if 'email' not in self.enabled_providers():
+                return notifications.Outcome('cancelled', 'preferences_changed')
+        except (ValueError, PermissionError):
+            return notifications.Outcome('cancelled', 'preferences_changed')
+        except Exception:
+            # Nothing has reached SMTP. A transient proof/database failure can
+            # retry safely; it must not become an uncertain SMTP delivery.
+            return notifications.Outcome('retry', 'connect_failed')
+        self.helpers.send_email([saved[0]], outgoing.subject, outgoing.html, outgoing.text)
+        return notifications.Outcome('accepted')
+
+    def send(self, target, message):
+        if target.provider == 'email':
+            return self._send_email(target, message)
+        if target.provider not in self.enabled_providers():
+            return notifications.Outcome('cancelled', 'preferences_changed')
+        collections = frozenset(self.helpers.collections())
         credentials = self.helpers.settings().sending_credentials(target, available_collections=collections)
         if credentials is None:
             return notifications.Outcome('cancelled', 'preferences_changed')

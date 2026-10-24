@@ -387,6 +387,132 @@ class NotificationAppTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.runtime.render_event(target, {'kind': 'UPDATE_AVAILABLE', 'version': '2.26.0'})
 
+    def test_scoped_media_rechecks_original_items_and_rebuilds_only_fresh_subset(self):
+        allowed = {'one', 'two'}
+        scoped = Mock(side_effect=lambda target, items: [item for item in items if item['media_id'] in allowed])
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped,
+            email_generation=lambda address: 'scoped-one'))
+        target = runtime.destinations()[0]
+        originals = [{'collection_id': 1, 'media_id': 'one', 'title': 'Private one'},
+                     {'collection_id': 1, 'media_id': 'two', 'title': 'Private two'}]
+        message = runtime.render(target, originals)
+        self.assertTrue(message.media)
+        self.assertEqual(message.items, tuple(originals))
+        self.assertNotIn('Private', repr(message))
+        allowed.remove('one')
+        self.assertEqual(runtime.send(target, message).state, 'accepted')
+        self.assertEqual(self.send_email.call_args.args[3], 'two')
+        self.assertEqual(scoped.call_count, 2)
+        self.assertEqual(self.build_email.call_count, 2)
+
+    def test_empty_scope_cancels_without_building_or_sending_empty_mail(self):
+        scoped = Mock(return_value=[])
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped))
+        target = runtime.destinations()[0]
+        message = runtime.render(target, [{'collection_id': 1, 'media_id': 'one'}])
+        self.assertEqual(runtime.send(target, message), notifications.Outcome('cancelled', 'preferences_changed'))
+        self.build_email.assert_not_called()
+        self.send_email.assert_not_called()
+
+    def test_lost_item_section_after_render_cancels_at_send_time(self):
+        scoped = Mock(side_effect=lambda target, items: items)
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped))
+        target = runtime.destinations()[0]
+        message = runtime.render(target, [{'collection_id': 1, 'media_id': 'one'}])
+        scoped.side_effect = lambda target, items: []
+        self.assertEqual(runtime.send(target, message).state, 'cancelled')
+        self.send_email.assert_not_called()
+
+    def test_scope_filter_cannot_inject_or_modify_private_items(self):
+        def changed(target, items):
+            items[0]['title'] = 'Different private title'
+            return items
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=changed))
+        with self.assertRaises(ValueError):
+            runtime.render(runtime.destinations()[0], [{'collection_id': 1, 'media_id': 'one', 'title': 'Original'}])
+        self.send_email.assert_not_called()
+
+    def test_pretransport_filter_failure_retries_without_smtp_uncertainty(self):
+        scoped = Mock(side_effect=lambda target, items: items)
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped))
+        target = runtime.destinations()[0]
+        message = runtime.render(target, [{'collection_id': 1, 'media_id': 'one'}])
+        scoped.side_effect = sqlite3.OperationalError('private scope database unavailable')
+        self.assertEqual(runtime.send(target, message), notifications.Outcome('retry', 'connect_failed'))
+        self.send_email.assert_not_called()
+        scoped.side_effect = ValueError('scope changed')
+        self.assertEqual(runtime.send(target, message), notifications.Outcome('cancelled', 'preferences_changed'))
+
+    def test_scope_revocation_during_queued_media_batch_cancels_without_smtp(self):
+        self.queue()
+        calls = []
+        def scoped(target, items):
+            calls.append(items)
+            return items if len(calls) == 1 else []
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped))
+        result = self.store.process(runtime.callbacks(), now=100, quiet_seconds=0)
+        self.assertEqual(result['cancelled'], 1)
+        self.assertEqual(self.store.snapshot()[0]['state'], 'cancelled')
+        self.assertEqual(self.store.snapshot()[0]['error_code'], 'preferences_changed')
+        self.send_email.assert_not_called()
+
+    def test_queued_pretransport_failure_is_retryable_and_never_email_uncertain(self):
+        self.queue()
+        calls = []
+        def scoped(target, items):
+            calls.append(items)
+            if len(calls) > 1:
+                raise sqlite3.OperationalError('private verification failure')
+            return items
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped))
+        result = self.store.process(runtime.callbacks(), now=100, quiet_seconds=0)
+        self.assertEqual(result['retry'], 1)
+        self.assertEqual(result['review'], 0)
+        self.assertEqual(self.store.snapshot()[0]['state'], 'retry')
+        self.assertEqual(self.store.snapshot()[0]['error_code'], 'connect_failed')
+        self.send_email.assert_not_called()
+
+    def test_topic_generation_edit_cancels_prepared_and_queued_old_destination(self):
+        generation = ['map-one']
+        runtime = notifications_app.Runtime(replace(self.helpers,
+            email_generation=lambda address: generation[0]))
+        target = runtime.destinations()[0]
+        message = runtime.render(target, [{'collection_id': 1, 'media_id': 'one'}])
+        generation[0] = 'map-two'
+        self.assertEqual(runtime.send(target, message).state, 'cancelled')
+        self.send_email.assert_not_called()
+        self.queue()
+        self.build_email.side_effect = lambda items, url: (generation.__setitem__(0, 'map-three') or
+                                                          ('Keep digest', '<p>Digest</p>', 'One'))
+        self.store.process(runtime.callbacks(), now=100, quiet_seconds=0)
+        self.store.process(runtime.callbacks(), now=200, quiet_seconds=0)
+        self.assertEqual(self.store.snapshot()[0]['state'], 'cancelled')
+        self.send_email.assert_not_called()
+
+    def test_auto_email_targets_never_receive_owner_operational_events(self):
+        self.enable_owner_alerts()
+        scoped = Mock(side_effect=AssertionError('Operational items must not enter media filtering'))
+        runtime = notifications_app.Runtime(replace(self.helpers, email_generation=lambda address: 'auto-scope',
+                                                    filter_email_items=scoped))
+        target = next(target for target in runtime.destinations() if target.provider == 'email')
+        self.assertEqual(target.events, notifications.MEDIA_EVENTS)
+        self.assertFalse(target.owner_verified)
+        self.store.observe_update('2.30.0', now=200)
+        runtime.process_operational(now=200)
+        self.send_email.assert_not_called()
+        scoped.assert_not_called()
+        self.send_push.assert_called_once()
+
+    def test_manual_owner_operational_email_does_not_use_media_filter(self):
+        self.enable_owner_alerts()
+        scoped = Mock(side_effect=AssertionError('Operational email is not media'))
+        runtime = notifications_app.Runtime(replace(self.helpers, filter_email_items=scoped,
+                                                    email_generation=lambda address: ''))
+        self.store.observe_update('2.30.0', now=200)
+        runtime.process_operational(now=200)
+        self.send_email.assert_called_once()
+        scoped.assert_not_called()
+
 
 class RecordedConnectionTests(unittest.TestCase):
     def test_missing_file_and_schema_are_readonly_and_database_unavailability_raises(self):

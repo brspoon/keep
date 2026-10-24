@@ -53,6 +53,10 @@ class PlexUserDiscoveryTests(unittest.TestCase):
         self.addCleanup(environment.stop)
         self.identity = b'<MediaContainer machineIdentifier="test"/>'
         self.accounts = b'<MediaContainer><Account id="7"/></MediaContainer>'
+        scope_probe = patch.object(keep, 'get_plex_library_access_snapshot',
+            side_effect=lambda snapshot: (None, keep.plex_defaults_scope(), []))
+        scope_probe.start()
+        self.addCleanup(scope_probe.stop)
 
     def profile(self, user_id='8'):
         with closing(keep.attribution_db()) as db:

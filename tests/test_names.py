@@ -153,12 +153,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(response.headers['Location'], '/settings/users')
         first_page = self.client.get('/settings/users').get_data(as_text=True)
         self.assertIn('id="settings-saved-notice"', first_page)
-        self.assertIn('User names saved.', first_page)
+        self.assertIn('User settings saved.', first_page)
         self.assertIn('savedNotice.classList.add("dismissed")', first_page)
         self.assertIn('}, 3500);', first_page)
         refreshed_page = self.client.get('/settings/users').get_data(as_text=True)
         self.assertNotIn('id="settings-saved-notice"', refreshed_page)
-        self.assertNotIn('User names saved.', refreshed_page)
+        self.assertNotIn('User settings saved.', refreshed_page)
 
     def test_owner_can_grant_and_revoke_remove_any_permission(self):
         with closing(keep.attribution_db()) as db, db:

@@ -1,0 +1,27 @@
+<section class="general-panel plex-defaults-panel" aria-labelledby="plex-defaults-heading">
+  <h2 id="plex-defaults-heading">Plex users</h2>
+  <p>Choose defaults for new Plex users, scoped to their verified shared libraries.</p>
+  {% if plex_defaults_error and not error %}<div class="general-feedback is-error" id="plex-defaults-error" role="alert">{{ plex_defaults_error }}</div>{% endif %}
+  <form method="post" action="/settings/general" class="general-form plex-defaults-form" data-save-key="plex-user-defaults">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="plex-defaults">
+    <div class="plex-default-options">
+      <div>
+        <label class="plex-default-choice" for="plex-default-email">
+          <input type="checkbox" id="plex-default-email" name="email_enabled" value="1" aria-describedby="plex-default-email-help"{% if plex_defaults.email_enabled %} checked{% endif %}>
+          <span>Automatically add email recipients</span>
+        </label>
+        <p class="general-help plex-choice-help" id="plex-default-email-help">Send updates only for titles in the user's Plex libraries. Users can turn email off.</p>
+      </div>
+      <div>
+        <label class="plex-default-choice" for="plex-default-library">
+          <input type="checkbox" id="plex-default-library" name="library_enabled" value="1" aria-describedby="plex-default-library-help"{% if plex_defaults.library_enabled %} checked{% endif %}>
+          <span>Automatically enable Manage Library</span>
+        </label>
+        <p class="general-help plex-choice-help" id="plex-default-library-help">Allow deletion only of movies and TV seasons requested exclusively by the user, within their Plex libraries. Kept titles stay protected.</p>
+      </div>
+    </div>
+    <p class="general-help">Existing owner choices and user opt-outs are preserved.</p>
+    <button class="general-save save-button" type="submit">Save changes</button>
+  </form>
+</section>

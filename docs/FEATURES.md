@@ -66,7 +66,20 @@ The owner manages accounts, indefinite-Keep and Keep-management permissions, del
 Plex account sync discovers users with verified library access to the selected
 server before they sign in to Keep. **Admin → Users → Sync Plex users**
 queues a sync through the worker. Imported users show **Never signed in** and
-receive basic Keep access; extra permissions and notifications remain separate.
+receive basic Keep access. **Admin → General → Plex users** controls whether
+new users also receive email and Manage Library access for their verified shared
+libraries. Both defaults start enabled; changing a default affects future users.
+Keep automatically matches verified Plex library paths to Radarr/Sonarr folders
+and uses exact Maintainerr library IDs for email topics. Unverified or ambiguous
+matches do not grant automatic access.
+Automatic access follows Plex sharing changes. Manage Library retains the
+exclusive-request deletion rules and Kept protections; indefinite Keeps,
+management of anyone's Keeps, and Delete any title remain separate permissions.
+Existing permissions and email opt-outs are preserved. Queued automatic emails
+recheck each title's Plex library before sending.
+Manually added recipients that have never used Plex defaults keep their saved
+delivery settings. Once an account uses automatic email, its library scope stays
+attached to that account across preference and email-address changes.
 Seerr requester names use the linked user's display name, falling back to their
 Plex username. Custom names and existing access choices are preserved.
 

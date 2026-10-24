@@ -24,6 +24,9 @@ import pushover
 import email_templates
 import api_v1
 import helper_retirement
+import plex_library_access
+import plex_user_defaults
+import plex_defaults_email
 MASKED_CONNECTION_FIELDS = tuple(name for name in SECRETS if name != 'PUSHOVER_APP_TOKEN') + ("PLEX_MACHINE_IDENTIFIER",)
 from contextvars import ContextVar
 from service_discovery import discover_collections, test_plex
@@ -330,6 +333,13 @@ def remember_plex_user(user, *, access_verified=False):
                 session_version = user_profiles.session_version + ?
         """, (str(user["id"]), user.get("username") or "", user.get("email") or "",
               int(access_verified), int(access_verified), int(access_verified), int(expired)))
+        if profile is None and access_verified and owner_id() and str(user['id']) != owner_id():
+            plex_user_defaults.enroll_new_users(db, [str(user['id'])], owner_id())
+    if profile is None and access_verified and owner_id() and str(user['id']) != owner_id():
+        try:
+            job_store().request_run('plex-access-sync')
+        except sqlite3.Error:
+            app.logger.warning('Plex defaults will refresh at the next scheduled account sync')
 
 
 def mark_plex_access(plex_id, access):
@@ -356,6 +366,56 @@ def _plex_sync_connection(*, fresh=False):
 
 def _plex_sync_scope(connection):
     return hashlib.sha256(json.dumps(connection, sort_keys=True).encode()).hexdigest()
+
+
+def plex_defaults_scope():
+    """Bind derived access to the exact current server and integration settings."""
+    values = connection_settings.snapshot()
+    names = PLEX_FIELDS + ('RADARR_URL', 'RADARR_API_KEY', 'SONARR_URL',
+        'SONARR_API_KEY', 'MAINTAINERR_URL', 'KEEP_COLLECTIONS')
+    configuration = {'owner': owner_id(), **{name: values.get(name, globals().get(name, ''))
+                                           for name in names}}
+    return hashlib.sha256(json.dumps(configuration, sort_keys=True).encode()).hexdigest()
+
+
+def get_plex_library_access_snapshot(snapshot):
+    """Read bounded library proofs without holding a database write transaction."""
+    from service_discovery import read_service
+    connection = _plex_sync_connection(fresh=True)
+    scope = plex_defaults_scope()
+    deadline = min(time.monotonic() + 45, snapshot['started'] + 55)
+    headers = {**plex_headers(), 'Accept': 'application/xml',
+               'X-Plex-Token': connection['PLEX_ADMIN_TOKEN']}
+
+    def read(url):
+        if time.monotonic() >= deadline:
+            raise ValueError('Plex library refresh exceeded its deadline')
+        root = ET.fromstring(read_service(url, headers, deadline=deadline))
+        if time.monotonic() >= deadline:
+            raise ValueError('Plex library refresh exceeded its deadline')
+        return root
+
+    try:
+        proof = plex_library_access.collect({name: connection[name] for name in
+            ('PLEX_SERVER_URL', 'PLEX_MACHINE_IDENTIFIER')}, read,
+            snapshot['authorized'] - {connection['owner']})
+        if connection != _plex_sync_connection(fresh=True) or scope != plex_defaults_scope():
+            return None, None, []
+        rows = []
+        base = connection_value('MAINTAINERR_URL')
+        if base:
+            try:
+                rows = json.loads(read_service(base.rstrip('/') + '/api/collections', deadline=deadline))
+                if not isinstance(rows, list) or len(rows) > 200:
+                    rows = []
+            except (requests.RequestException, ValueError, TypeError):
+                rows = []
+        if scope != plex_defaults_scope() or time.monotonic() >= deadline:
+            return None, None, []
+        return proof, scope, rows
+    except (requests.RequestException, ET.ParseError, ValueError, TypeError):
+        app.logger.warning('Plex library access is unavailable; automatic defaults deferred')
+        return None, scope, []
 
 
 def _plex_sync_id(value):
@@ -494,11 +554,17 @@ def _plex_snapshot_current(snapshot):
 def sync_plex_user_access():
     snapshot = get_plex_user_access_snapshot()
     if snapshot is None:
+        with closing(attribution_db()) as db, db:
+            plex_user_defaults.reconcile(db, proof=None, scope=plex_defaults_scope(),
+                                         owner_id=owner_id())
         return None
-    changes, imported, updated = [], [], set()
+    proof, proof_scope, collection_rows = get_plex_library_access_snapshot(snapshot)
+    changes, imported, updated, new_ids = [], [], set(), []
     with closing(attribution_db()) as db, db:
         db.execute('BEGIN IMMEDIATE')
         if not _plex_snapshot_current(snapshot):
+            plex_user_defaults.reconcile(db, proof=None, scope=plex_defaults_scope(),
+                                         owner_id=owner_id())
             return None
         authorized = snapshot['authorized']
         existing = {user_id: db.execute('SELECT * FROM user_profiles WHERE plex_id=?',
@@ -507,6 +573,8 @@ def sync_plex_user_access():
             # Reject the entire snapshot before any write; never reinterpret a
             # local account or partially import a conflicting set of identities.
             app.logger.error('Plex discovery conflicts with an existing account')
+            plex_user_defaults.reconcile(db, proof=None, scope=plex_defaults_scope(),
+                                         owner_id=owner_id())
             return None
         for user_id, identity in snapshot['profiles'].items():
             user = existing[user_id]
@@ -518,6 +586,7 @@ def sync_plex_user_access():
                     VALUES (?, ?, ?, 'plex', 'active', 'active', CURRENT_TIMESTAMP, 1)""",
                     (user_id, username, email))
                 imported.append(username)
+                new_ids.append(user_id)
                 updated.add(user_id)
             else:
                 next_email = email or user['email']
@@ -541,6 +610,15 @@ def sync_plex_user_access():
             if changed:
                 changes.append((user['display_name'] or user['plex_username'] or user['plex_id'], next_access))
                 updated.add(user['plex_id'])
+        current_scope = plex_defaults_scope()
+        plex_user_defaults.enroll_new_users(db, new_ids, owner_id())
+        plex_user_defaults.reconcile(db,
+            proof=proof if proof_scope == current_scope else None,
+            scope=current_scope, owner_id=owner_id(), new_user_ids=new_ids)
+        plex_defaults_email.seed_collection_mappings(db, collection_rows,
+            scope=current_scope, collection_ids=recipient_collection_ids())
+        plex_defaults_email.reconcile(db, scope=current_scope,
+            collection_ids=recipient_collection_ids())
     for label in imported:
         log_activity('plex-user-discovered', f'Discovered Plex user {label}',
                      actor={'username': 'Keep access sync'})
@@ -692,6 +770,7 @@ def user_capabilities(user=None):
     with closing(attribution_db()) as db:
         profile = db.execute("""SELECT can_keep_indefinitely, can_remove_any,
             can_delete_media, can_delete_any FROM user_profiles WHERE plex_id = ?""", (user_id,)).fetchone()
+        automatic = automatic_plex_library_keys(db, user_id) if profile and not owner else set()
     manage_any = owner or bool(profile and profile["can_remove_any"])
     return {
         "owner": owner,
@@ -699,7 +778,7 @@ def user_capabilities(user=None):
         "manage_any": manage_any,
         # Retained for compatibility with existing templates and callers.
         "remove_any": manage_any,
-        "delete_media": owner or bool(profile and profile["can_delete_media"]),
+        "delete_media": owner or bool(profile and profile["can_delete_media"]) or bool(automatic),
         "delete_any": owner or bool(profile and profile["can_delete_media"] and profile["can_delete_any"]),
     }
 
@@ -723,9 +802,35 @@ def granted_library_keys(user=None):
     with closing(attribution_db()) as db:
         if owner_id() and user_id == owner_id():
             return {row[0] for row in db.execute("SELECT library_key FROM media_libraries")}
-        return {row[0] for row in db.execute(
+        manual = {row[0] for row in db.execute(
             "SELECT library_key FROM user_library_permissions WHERE user_id = ?", (user_id,)
         )}
+        automatic = automatic_plex_library_keys(db, user_id)
+        return manual | automatic
+
+
+def automatic_plex_library_keys(db, user_id):
+    try:
+        if plex_user_defaults.user_modes(db, user_id)['library'] != 'auto':
+            return set()
+        return plex_user_defaults.auto_library_keys(db, user_id, plex_defaults_scope(),
+            libraries=media_libraries())
+    except (ValueError, sqlite3.Error):
+        return set()
+
+
+def plex_user_library_editor_state(db, profile, libraries):
+    user_id = str(profile['plex_id'])
+    mode = plex_user_defaults.user_modes(db, user_id)['library']
+    scope = plex_defaults_scope()
+    manual = {row[0] for row in db.execute(
+        'SELECT library_key FROM user_library_permissions WHERE user_id=?', (user_id,))}
+    automatic = plex_user_defaults.auto_library_keys(db, user_id, scope, libraries=libraries)
+    stamp = hashlib.sha256(json.dumps({'id': user_id, 'mode': mode, 'scope': scope,
+        'manual': sorted(manual), 'automatic': sorted(automatic),
+        'delete_media': profile['can_delete_media'], 'delete_any': profile['can_delete_any']},
+        sort_keys=True).encode()).hexdigest()
+    return {'mode': mode, 'manual': manual, 'automatic': automatic, 'generation': stamp}
 
 
 def refresh_media_libraries(service):
@@ -1453,16 +1558,62 @@ def ensure_recipient_subscriptions(db, email_address):
 
 def get_recipient_delivery_preferences():
     with closing(attribution_db()) as db:
-        rows = db.execute("""SELECT r.email, s.collection_id
-            FROM email_recipients r
-            LEFT JOIN recipient_subscriptions s ON s.email = r.email AND s.enabled = 1
-            WHERE r.enabled = 1 ORDER BY r.email COLLATE NOCASE, s.collection_id""").fetchall()
-    preferences = {}
-    for row in rows:
-        selected = preferences.setdefault(row["email"], set())
-        if row["collection_id"] is not None:
-            selected.add(row["collection_id"])
-    return preferences
+        return plex_defaults_email.delivery_preferences(db, scope=plex_defaults_scope(),
+            collection_ids=recipient_collection_ids())
+
+
+def plex_email_section_for_item(item, *, deadline=None, identity_cache=None):
+    """Resolve the actual Plex item immediately before an automatic email."""
+    from service_discovery import read_service
+    media_id = item.get('media_id')
+    if not isinstance(media_id, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', media_id):
+        return None
+    connection = _plex_sync_connection(fresh=True)
+    deadline = time.monotonic() + 15 if deadline is None else deadline
+    identity_cache = {} if identity_cache is None else identity_cache
+    headers = {**plex_headers(), 'Accept': 'application/xml',
+               'X-Plex-Token': connection['PLEX_ADMIN_TOKEN']}
+    try:
+        if identity_cache.get('connection') != connection:
+            identity = ET.fromstring(read_service(connection['PLEX_SERVER_URL'] + '/identity', headers, deadline=deadline))
+            if identity.tag != 'MediaContainer' or identity.get('machineIdentifier') != connection['PLEX_MACHINE_IDENTIFIER']:
+                return None
+            identity_cache['connection'] = dict(connection)
+        root = ET.fromstring(read_service(connection['PLEX_SERVER_URL'] + '/library/metadata/' + media_id,
+                                          headers, deadline=deadline))
+        if root.tag != 'MediaContainer' or len(root) != 1:
+            return None
+        media = root[0]
+        key = media.get('librarySectionID') or root.get('librarySectionID')
+        title = item.get('title')
+        if (media.tag not in ('Video', 'Directory') or media.get('ratingKey') != media_id
+                or media.get('type') not in ('movie', 'show', 'season', 'episode')
+                or not isinstance(title, str) or media.get('title') != title
+                or (item.get('year') is not None and str(item['year']) != media.get('year'))
+                or not isinstance(key, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', key)
+                or time.monotonic() >= deadline
+                or connection != _plex_sync_connection(fresh=True)):
+            return None
+        return key
+    except (requests.RequestException, ET.ParseError, ValueError, TypeError):
+        return None
+
+
+def filter_plex_email_items(target, items):
+    scope = plex_defaults_scope()
+    deadline, identity_cache = time.monotonic() + 45, {}
+    def section_for_item(item):
+        return plex_email_section_for_item(item, deadline=deadline, identity_cache=identity_cache)
+    with closing(attribution_db()) as db:
+        result = plex_defaults_email.filter_items(db, target.id, items, scope=scope,
+            section_for_item=section_for_item)
+    return result if scope == plex_defaults_scope() else []
+
+
+def plex_email_generation(address):
+    with closing(attribution_db()) as db:
+        return plex_defaults_email.destination_generation(db, address,
+            scope=plex_defaults_scope(), collection_ids=recipient_collection_ids())
 
 
 def send_email(to_addresses, subject, html_body, text_body):
@@ -3991,6 +4142,12 @@ def email_preferences_page():
                     with closing(attribution_db()) as db, db:
                         db.execute('BEGIN IMMEDIATE')
                         settings.validate_actor(actor, db=db)
+                        if valid_email_address(email_address):
+                            plex_defaults_email.manual_override(db, email_address,
+                                user_id=str(user.get('id') or ''))
+                        else:
+                            plex_user_defaults.email_override(db, '',
+                                user_id=str(user.get('id') or ''))
                         db.execute('UPDATE user_profiles SET theme_mode=? WHERE plex_id=?',
                                    (requested_theme, str(user['id'])))
                         if receive_email:
@@ -4099,16 +4256,33 @@ def settings_general():
     denied = require_owner()
     if denied:
         return denied
-    error = ''
+    error, plex_error = '', ''
     value = temporary_keep_days()
     if request.method == 'POST':
         denied = require_form_csrf()
         if denied:
             return denied
-        value = request.form.get('keep_duration_days', '').strip()
-        if not re.fullmatch(r'[0-9]{1,3}', value) or not 1 <= int(value) <= 365:
-            error = 'Enter a whole number between 1 and 365 days.'
+        action = request.form.get('action', 'duration')
+        if action == 'plex-defaults':
+            try:
+                choices = {name: request.form.getlist(name) for name in ('email_enabled', 'library_enabled')}
+                if any(values not in ([], ['1']) for values in choices.values()):
+                    raise ValueError('Choose whether each Plex default is enabled.')
+                with closing(attribution_db()) as db, db:
+                    plex_user_defaults.save_settings(db,
+                        bool(choices['email_enabled']), bool(choices['library_enabled']))
+                log_activity('configuration-updated', 'Updated defaults for new Plex users')
+                session['general_notice'] = 'Plex user defaults saved.'
+                return redirect(url_for('settings_general'))
+            except ValueError as failure:
+                plex_error = str(failure)
+        elif action == 'duration':
+            value = request.form.get('keep_duration_days', '').strip()
+            if not re.fullmatch(r'[0-9]{1,3}', value) or not 1 <= int(value) <= 365:
+                error = 'Enter a whole number between 1 and 365 days.'
         else:
+            plex_error = 'Choose a valid General settings action.'
+        if action == 'duration' and not error:
             days = int(value)
             with closing(attribution_db()) as db, db:
                 db.execute('BEGIN IMMEDIATE')
@@ -4118,8 +4292,11 @@ def settings_general():
                          f"Set temporary Keep duration to {days} {'day' if days == 1 else 'days'}")
             session['general_notice'] = 'Keep duration saved.'
             return redirect(url_for('settings_general'))
+    with closing(attribution_db()) as db:
+        defaults = plex_user_defaults.settings(db)
     response = app.make_response((render_template('general.html', duration_value=value,
-        error=error, notice=session.pop('general_notice', None)), 400 if error else 200))
+        error=error, plex_defaults_error=plex_error, notice=session.pop('general_notice', None),
+        plex_defaults=defaults), 400 if error or plex_error else 200))
     response.headers['Cache-Control'] = 'no-store'
     return response
 
@@ -4971,6 +5148,14 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         user["library_grants"] = ({library["library_key"] for library in libraries}
                                   if user["is_owner"] else
                                   library_grants.get(user["plex_id"], set()))
+        user['plex_library_auto'] = False
+        if user['auth_type'] == 'plex' and not user['is_owner']:
+            with closing(attribution_db()) as db:
+                library_state = plex_user_library_editor_state(db, user, libraries)
+            user['plex_library_auto'] = library_state['mode'] == 'auto'
+            user['plex_library_state'] = library_state['generation']
+            user['library_grants'] |= library_state['automatic']
+            user['can_delete_media'] = bool(user['can_delete_media'] or library_state['automatic'])
     for activity in activities:
         activity["when"] = relative_timestamp(activity["occurred_at"])
     due_text = "No email pending"
@@ -4978,7 +5163,7 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
         seconds = max(0, int(newest + DIGEST_QUIET_SECONDS - time.time()))
         due_text = "Sending soon" if seconds == 0 else f"About {(seconds + 59) // 60} min remaining"
     notices = {
-        "user": "User names saved.",
+        "user": "User settings saved.",
         "recipient": "Recipient settings saved.",
         "local": "Local user created and setup email sent.",
         "invite": "A new password setup link was emailed.",
@@ -5199,6 +5384,11 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
                 <label>Full name<input name="full_name" maxlength="120" value="{{ user.full_name }}" placeholder="Alex Morgan"></label>
                 <label>Display name<input name="display_name" maxlength="60" value="{{ user.display_name }}" placeholder="Alex M"></label>
                 <fieldset class="permissions"><legend>Permissions</legend>
+                {% if user.plex_library_auto %}
+                <input type="hidden" name="plex_library_state" value="{{ user.plex_library_state }}">
+                <label class="permission"><input type="checkbox" name="follow_plex_libraries" value="1" checked data-plex-auto-libraries>
+                    <span>Follow Plex library access<small>Uses verified shared Plex libraries. Turn off to choose access manually.</small></span></label>
+                {% endif %}
                 <label class="permission"><input type="checkbox" name="can_keep_indefinitely" value="1"
                     {% if user.is_owner or user.can_keep_indefinitely %}checked{% endif %}
                     {% if user.is_owner %}disabled{% endif %}>
@@ -5207,13 +5397,13 @@ def render_settings_section(section, *, error=None, expanded_recipient='', new_r
                     {% if user.plex_id == owner_plex_id or user.can_remove_any %}checked{% endif %}
                     {% if user.plex_id == owner_plex_id %}disabled{% endif %}>
                     <span>Can manage anyone’s keeps<small>{% if user.plex_id == owner_plex_id %}Owner permission is permanent{% else %}Includes changing duration and removing the keep{% endif %}</small></span></label>
-                <label class="permission"><input type="checkbox" name="can_delete_media" value="1" data-library-permission-toggle
+                <label class="permission"><input type="checkbox" name="can_delete_media" value="1" data-library-permission-toggle data-plex-manual-permission
                     {% if user.is_owner or user.can_delete_media %}checked{% endif %}
-                    {% if user.is_owner %}disabled{% endif %}>
+                    {% if user.is_owner or user.plex_library_auto %}disabled{% endif %}>
                     <span>Library access<small>{% if user.is_owner %}Owner permission is permanent{% else %}See and delete only movies and TV seasons requested exclusively by this user, within selected libraries{% endif %}</small></span></label>
-                <label class="permission"><input type="checkbox" name="can_delete_any" value="1"
+                <label class="permission"><input type="checkbox" name="can_delete_any" value="1" data-plex-manual-permission
                     {% if user.is_owner or user.can_delete_any %}checked{% endif %}
-                    {% if user.is_owner %}disabled{% endif %}>
+                    {% if user.is_owner or user.plex_library_auto %}disabled{% endif %}>
                     <span>Delete any title<small>{% if user.is_owner %}Owner permission is permanent{% else %}Requires library access. Includes shared or unknown requests and whole series, within selected libraries only{% endif %}</small></span></label>
                 {% if libraries %}<div class="library-permissions" data-library-permissions aria-label="Libraries this user can manage">
                     {% for library in libraries %}<label class="permission library-permission"><input type="checkbox" name="library_key" value="{{ library.library_key }}"
@@ -5421,7 +5611,7 @@ def save_user_settings(plex_id):
     full_name = " ".join(request.form.get("full_name", "").split())
     display_name = " ".join(request.form.get("display_name", "").split())
     with closing(attribution_db()) as db:
-        profile = db.execute("SELECT auth_type, email FROM user_profiles WHERE plex_id = ?",
+        profile = db.execute("SELECT * FROM user_profiles WHERE plex_id = ?",
                              (str(plex_id),)).fetchone()
     if not profile:
         return "Plex user not found", 404
@@ -5448,6 +5638,18 @@ def save_user_settings(plex_id):
         return "Name is too long", 400
     try:
         with closing(attribution_db()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            profile = db.execute('SELECT * FROM user_profiles WHERE plex_id=?', (str(plex_id),)).fetchone()
+            if not profile:
+                return 'User not found', 404
+            library_state = plex_user_library_editor_state(db, profile, media_libraries())
+            expected_state = request.form.get('plex_library_state', '')
+            if ((library_state['mode'] == 'auto' or expected_state)
+                    and not secrets.compare_digest(expected_state, library_state['generation'])):
+                return 'Library access changed. Refresh Users and try again.', 409
+            follow_plex = library_state['mode'] == 'auto' and request.form.get('follow_plex_libraries') == '1'
+            if follow_plex:
+                can_delete, can_delete_any = profile['can_delete_media'], profile['can_delete_any']
             changed = db.execute(
                 """UPDATE user_profiles
                    SET email = ?, full_name = ?, display_name = ?, can_remove_any = ?,
@@ -5456,7 +5658,8 @@ def save_user_settings(plex_id):
                 (email_address, full_name, display_name, can_remove_any,
                  can_keep_forever, can_delete, can_delete_any, str(plex_id)),
             ).rowcount
-            if str(plex_id) != owner_id():
+            if str(plex_id) != owner_id() and not follow_plex:
+                plex_user_defaults.manual_library_override(db, str(plex_id))
                 db.execute("DELETE FROM user_library_permissions WHERE user_id = ?", (str(plex_id),))
                 db.executemany("""INSERT INTO user_library_permissions(user_id, library_key)
                     VALUES (?, ?)""", ((str(plex_id), key) for key in selected_libraries))
@@ -5618,6 +5821,12 @@ def save_recipient_settings():
                     db.execute("DELETE FROM recipient_subscriptions WHERE email = ?", (address,))
         else:
             validation_error = 'Invalid recipient action'
+        if not validation_error:
+            try:
+                plex_defaults_email.manual_override(db, address)
+            except ValueError as failure:
+                db.rollback()
+                validation_error = str(failure)
     if validation_error:
         return recipient_settings_error(validation_error, address, error_status)
     action_words = {"add": "Added", "enable": "Enabled", "disable": "Disabled", "remove": "Removed"}
@@ -5645,6 +5854,11 @@ def save_recipient_preferences():
     with closing(attribution_db()) as db, db:
         if not db.execute("SELECT 1 FROM email_recipients WHERE email = ?", (address,)).fetchone():
             return "Recipient not found", 404
+        try:
+            plex_defaults_email.manual_override(db, address)
+        except ValueError as failure:
+            db.rollback()
+            return recipient_settings_error(str(failure), address)
         ensure_recipient_subscriptions(db, address)
         db.execute("UPDATE recipient_subscriptions SET enabled = 0 WHERE email = ?",
                    (address,))
@@ -6302,6 +6516,8 @@ def notification_runtime():
         value=lambda name: fresh_notification_call(connection_value, name),
         reconcile=lambda: reconcile_reminder_queue(), resolve=lambda events: resolve_digest(events),
         build_email=lambda items, url: build_digest_email(items, url),
+        filter_email_items=lambda target, items: filter_plex_email_items(target, items),
+        email_generation=lambda address: plex_email_generation(address),
         build_event_email=lambda title, message, url: email_templates.notification_email(title, message, url),
         send_email=lambda addresses, subject, body, plain: send_notification_email(addresses, subject, body, plain)))
 
@@ -6694,7 +6910,11 @@ def _initialize_application_schema():
             acknowledged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY(user_id, feature_key)
         )""")
+        plex_defaults_email.init_schema(db)
         for recipient in db.execute("SELECT email FROM email_recipients").fetchall():
+            if db.execute('SELECT 1 FROM plex_defaults_email_links WHERE email=? COLLATE NOCASE',
+                          (recipient['email'],)).fetchone():
+                continue
             db.executemany("""INSERT OR IGNORE INTO recipient_subscriptions
                 (email, collection_id, enabled) VALUES (?, ?, 1)""",
                 ((recipient["email"], collection_id)
@@ -6739,6 +6959,8 @@ def _initialize_application_schema():
         )""")
         db.execute("""CREATE INDEX IF NOT EXISTS notification_pending
                       ON notification_queue(batch_id, received_at)""")
+        plex_user_defaults.init_schema(db)
+        plex_defaults_email.init_schema(db)
     notification_settings_store(initialize=True)
     job_store()
     api_v1.ApiV1(sys.modules[__name__])

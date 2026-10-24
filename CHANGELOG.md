@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.30.0 — 2026-10-24
+
+- Add email and Manage Library defaults for new Plex users in Admin → General, scoped to their verified shared libraries.
+- Match shared Plex libraries automatically and preserve existing permissions and email opt-outs.
+
 ## 2.29.1 — 2026-10-24
 
 - Keep email addresses readable and searchable after the Users list refreshes behind Cloudflare.
