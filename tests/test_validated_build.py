@@ -19,6 +19,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import validated_build as builds
 
 
+class FakeClock:
+    def __init__(self):
+        self.now = 0
+        self.sleeps = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        assert seconds > 0
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
 class NativeWorkflowContractTests(unittest.TestCase):
     @staticmethod
     def workflow_steps():
@@ -212,6 +226,9 @@ class ValidatedBuildTests(unittest.TestCase):
         if route.startswith('/actions/runs/100/attempts/'):
             attempt = int(route.split('/')[5])
             return {'jobs': [job for job in self.native.values() if job['run_attempt'] == attempt]}
+        if route.startswith('/actions/jobs/'):
+            job_id = int(route.split('/')[3])
+            return next(job for job in self.native.values() if job['id'] == job_id)
         if route == '/actions/runs/100/artifacts':
             return {'artifacts': self.artifacts}
         if route.startswith('/actions/artifacts/'):
@@ -516,32 +533,348 @@ class ValidatedBuildTests(unittest.TestCase):
         self.assertEqual(attempt, 3)
         self.assertEqual(selected['id'], 500)
 
-    def test_retention_retries_pending_step_metadata_but_failed_gate_is_terminal(self):
+    def retention_jobs(self):
         ready = copy.deepcopy(self.native['amd64'])
         ready.update(status='in_progress', conclusion=None)
         pending = copy.deepcopy(ready)
         pending['steps'][0].update(status='in_progress', conclusion=None)
-        with patch.object(builds, 'pages', side_effect=[[pending], [ready]]) as provider, \
-             patch.object(builds.time, 'sleep') as sleep:
+        return pending, ready
+
+    def test_retention_ready_metadata_returns_without_sleep(self):
+        _, ready = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            return {'jobs': [ready]} if '/attempts/' in path else ready
+
+        with patch.object(builds, 'api', side_effect=provider) as requests, \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep):
             self.assertEqual(builds.native_job(self.run, 'amd64', 3, completed=False), ready)
-        self.assertEqual(provider.call_count, 2)
-        sleep.assert_called_once_with(2)
-        pending['steps'][0].update(status='completed', conclusion='failure')
-        with patch.object(builds, 'pages', return_value=[pending]) as provider, \
-             patch.object(builds.time, 'sleep') as sleep, self.assertRaises(ValueError):
+        self.assertEqual(clock.sleeps, [])
+        self.assertEqual(clock.now, 0)
+        self.assertEqual(requests.call_count, 2)
+
+    def test_retention_waits_past_the_old_ten_seconds_for_the_pinned_job(self):
+        pending, ready = self.retention_jobs()
+        clock = FakeClock()
+        requests = []
+
+        def provider(path, **options):
+            requests.append((path, options['metadata_deadline']))
+            if '/attempts/' in path:
+                return {'jobs': [pending]}
+            self.assertEqual(path, '/actions/jobs/30')
+            return ready if clock.now >= 75 else pending
+
+        with patch.object(builds, 'api', side_effect=provider), \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep):
+            self.assertEqual(builds.native_job(self.run, 'amd64', 3, completed=False), ready)
+        self.assertEqual(clock.sleeps, [15] * 5)
+        self.assertEqual(len(requests), 7)
+        self.assertTrue(all(deadline == 1800 for _, deadline in requests))
+        self.assertEqual(sum('/attempts/' in path for path, _ in requests), 1)
+
+    def test_retention_queries_canonical_job_even_when_attempt_list_says_ready(self):
+        pending, ready = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            if '/attempts/' in path:
+                return {'jobs': [ready]}
+            return ready if clock.now >= 15 else pending
+
+        with patch.object(builds, 'api', side_effect=provider) as requests, \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep):
+            self.assertEqual(builds.native_job(self.run, 'amd64', 3, completed=False), ready)
+        self.assertEqual(clock.sleeps, [15])
+        self.assertEqual([c.args[0] for c in requests.call_args_list][1:],
+                         ['/actions/jobs/30', '/actions/jobs/30'])
+
+    def test_retention_stops_at_monotonic_deadline_without_an_extra_request(self):
+        pending, _ = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            return {'jobs': [pending]} if '/attempts/' in path else pending
+
+        with patch.object(builds, 'api', side_effect=provider) as requests, \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+             self.assertRaisesRegex(ValueError, 'metadata did not settle before deadline'):
             builds.native_job(self.run, 'amd64', 3, completed=False)
-        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(clock.now, 1800)
+        self.assertEqual(clock.sleeps, [15] * 120)
+        self.assertEqual(requests.call_count, 121)
+
+    def test_retention_honors_longer_provider_interval_inside_deadline(self):
+        pending, ready = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            options['poll_intervals'].append(45)
+            return {'jobs': [pending]} if '/attempts/' in path else (ready if clock.now >= 45 else pending)
+
+        with patch.object(builds, 'api', side_effect=provider), \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep):
+            self.assertEqual(builds.native_job(self.run, 'amd64', 3, completed=False), ready)
+        self.assertEqual(clock.sleeps, [45])
+
+    def test_retention_provider_interval_cannot_extend_deadline(self):
+        pending, _ = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            options['poll_intervals'].append(2700)
+            return {'jobs': [pending]} if '/attempts/' in path else pending
+
+        with patch.object(builds, 'api', side_effect=provider) as requests, \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+             self.assertRaisesRegex(ValueError, 'deadline'):
+            builds.native_job(self.run, 'amd64', 3, completed=False)
+        self.assertEqual(clock.sleeps, [1800])
+        self.assertEqual(clock.now, 1800)
+        self.assertEqual(requests.call_count, 2)
+
+    def test_retention_rejects_success_arriving_at_deadline(self):
+        pending, ready = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            if '/attempts/' in path:
+                return {'jobs': [pending]}
+            clock.now = 1800
+            return ready
+
+        with patch.object(builds, 'api', side_effect=provider), \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+             self.assertRaisesRegex(ValueError, 'deadline'):
+            builds.native_job(self.run, 'amd64', 3, completed=False)
+        self.assertEqual(clock.sleeps, [])
+
+    def test_retention_request_time_reduces_the_remaining_retry_window(self):
+        pending, _ = self.retention_jobs()
+        clock = FakeClock()
+
+        def provider(path, **options):
+            if '/attempts/' in path:
+                clock.now += 600
+                return {'jobs': [pending]}
+            clock.now += 1195
+            return pending
+
+        with patch.object(builds, 'api', side_effect=provider) as requests, \
+             patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+             self.assertRaisesRegex(ValueError, 'deadline'):
+            builds.native_job(self.run, 'amd64', 3, completed=False)
+        self.assertEqual(clock.sleeps, [5])
+        self.assertEqual(clock.now, 1800)
+        self.assertEqual(requests.call_count, 2)
+
+    def test_retention_failed_or_skipped_gate_is_terminal_on_every_poll(self):
+        for conclusion in ('failure', 'skipped', 'cancelled', 'timed_out', 'neutral', 'action_required'):
+            with self.subTest(conclusion=conclusion):
+                pending, ready = self.retention_jobs()
+                failed = copy.deepcopy(ready)
+                failed['steps'][0].update(conclusion=conclusion)
+                clock = FakeClock()
+
+                def provider(path, **options):
+                    if '/attempts/' in path:
+                        return {'jobs': [pending]}
+                    return failed if clock.now >= 15 else pending
+
+                with patch.object(builds, 'api', side_effect=provider) as requests, \
+                     patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+                     patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+                     self.assertRaisesRegex(ValueError, 'failed or was skipped'):
+                    builds.native_job(self.run, 'amd64', 3, completed=False)
+                self.assertEqual(clock.sleeps, [15])
+                self.assertEqual(requests.call_count, 3)
+
+    def test_retention_rejects_failed_attempt_list_before_canonical_lookup(self):
+        pending, _ = self.retention_jobs()
+        pending['steps'][0].update(status='completed', conclusion='failure')
+        with patch.object(builds, 'api', return_value={'jobs': [pending]}) as requests, \
+             patch.object(builds.time, 'sleep') as sleep, \
+             self.assertRaisesRegex(ValueError, 'failed or was skipped'):
+            builds.native_job(self.run, 'amd64', 3, completed=False)
+        self.assertEqual(requests.call_count, 1)
         sleep.assert_not_called()
 
-    def test_retention_stops_after_bounded_metadata_wait(self):
-        pending = copy.deepcopy(self.native['amd64'])
-        pending.update(status='in_progress', conclusion=None)
-        pending['steps'][0].update(status='in_progress', conclusion=None)
-        with patch.object(builds, 'pages', return_value=[pending]) as provider, \
+    def test_retention_rejects_terminal_or_requeued_producer_immediately(self):
+        for status, conclusion in (('completed', 'failure'), ('completed', 'success'),
+                                   ('completed', 'cancelled'), ('queued', None),
+                                   ('in_progress', 'failure')):
+            with self.subTest(status=status, conclusion=conclusion):
+                pending, ready = self.retention_jobs()
+                ready.update(status=status, conclusion=conclusion)
+
+                def provider(path, **options):
+                    return {'jobs': [pending]} if '/attempts/' in path else ready
+
+                with patch.object(builds, 'api', side_effect=provider) as requests, \
+                     patch.object(builds.time, 'sleep') as sleep, \
+                     self.assertRaisesRegex(ValueError, 'original native job'):
+                    builds.native_job(self.run, 'amd64', 3, completed=False)
+                self.assertEqual(requests.call_count, 2)
+                sleep.assert_not_called()
+
+    def test_retention_never_switches_producer_identity_while_waiting(self):
+        for field, value in (('id', 31), ('run_id', 101), ('run_attempt', 2),
+                             ('head_sha', 'b' * 40), ('name', builds.job_name('arm64'))):
+            with self.subTest(field=field):
+                pending, ready = self.retention_jobs()
+                changed = copy.deepcopy(ready)
+                changed[field] = value
+                clock = FakeClock()
+
+                def provider(path, **options):
+                    if '/attempts/' in path:
+                        return {'jobs': [pending]}
+                    self.assertEqual(path, '/actions/jobs/30')
+                    return changed if clock.now >= 15 else pending
+
+                with patch.object(builds, 'api', side_effect=provider), \
+                     patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+                     patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+                     self.assertRaisesRegex(ValueError, 'identity differs'):
+                    builds.native_job(self.run, 'amd64', 3, completed=False)
+                self.assertEqual(clock.sleeps, [15])
+
+    def test_retention_requires_unique_job_and_unambiguous_gate_metadata(self):
+        pending, _ = self.retention_jobs()
+        for jobs in ([], [pending, pending]):
+            with self.subTest(jobs=len(jobs)), \
+                 patch.object(builds, 'api', return_value={'jobs': jobs}), \
+                 patch.object(builds.time, 'sleep') as sleep, \
+                 self.assertRaisesRegex(ValueError, 'one original native producer'):
+                builds.native_job(self.run, 'amd64', 3, completed=False)
+            sleep.assert_not_called()
+        for steps in (None, [None], pending['steps'] + [pending['steps'][0]]):
+            bad = copy.deepcopy(pending)
+            bad['steps'] = steps
+            with self.subTest(steps=steps), \
+                 patch.object(builds, 'api', return_value={'jobs': [bad]}), \
+                 patch.object(builds.time, 'sleep') as sleep, \
+                 self.assertRaises(ValueError):
+                builds.native_job(self.run, 'amd64', 3, completed=False)
+            sleep.assert_not_called()
+
+    def test_completed_native_audits_do_not_wait_or_use_retention_transport(self):
+        job = self.native['amd64']
+        with patch.object(builds, 'pages', return_value=[job]) as pages, \
+             patch.object(builds.time, 'sleep') as sleep:
+            self.assertEqual(builds.native_job(self.run, 'amd64', 3), job)
+        self.assertEqual(pages.call_args.kwargs, {})
+        sleep.assert_not_called()
+        job['steps'][0]['conclusion'] = 'skipped'
+        with patch.object(builds, 'pages', return_value=[job]), \
              patch.object(builds.time, 'sleep') as sleep, self.assertRaises(ValueError):
-            builds.native_job(self.run, 'amd64', 3, completed=False)
-        self.assertEqual(provider.call_count, 6)
-        self.assertEqual(sleep.call_count, 5)
+            builds.native_job(self.run, 'amd64', 3)
+        sleep.assert_not_called()
+
+    def test_retention_cannot_inspect_save_or_upload_before_gate_acceptance(self):
+        for outcome in ('deadline', 'failed', 'identity'):
+            with self.subTest(outcome=outcome):
+                pending, ready = self.retention_jobs()
+                clock = FakeClock()
+                if outcome == 'failed':
+                    ready['steps'][0]['conclusion'] = 'skipped'
+                if outcome == 'identity':
+                    ready['id'] = 31
+
+                def provider(path, **options):
+                    if '/attempts/' in path:
+                        return {'jobs': [pending]}
+                    return pending if outcome == 'deadline' else ready
+
+                with patch.object(builds, 'api', side_effect=provider), \
+                     patch.object(builds, 'push_guard', return_value=self.run), \
+                     patch.object(builds, 'context', return_value=('2.21.4', 'a' * 40)), \
+                     patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+                     patch.object(builds.time, 'sleep', side_effect=clock.sleep), \
+                     patch.object(builds, 'inspect_image') as image, \
+                     patch.object(builds.subprocess, 'run') as save, \
+                     patch.object(builds.materials, 'bundle') as bundle, \
+                     patch.object(builds, 'candidate') as candidate, \
+                     patch.object(builds, 'upload') as upload, self.assertRaises(ValueError):
+                    builds.retain('amd64')
+                for operation in (image, save, bundle, candidate, upload):
+                    operation.assert_not_called()
+
+    def test_retention_get_requests_are_uncached_and_use_remaining_timeout(self):
+        clock = FakeClock()
+        clock.now = 1790
+        intervals = []
+        response = MagicMock()
+        response.read.return_value = b'{"id":30}'
+        response.headers = {'X-Poll-Interval': '45'}
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = response
+        with patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.urllib.request, 'build_opener', return_value=opener):
+            self.assertEqual(builds.api('/actions/jobs/30', metadata_deadline=1800,
+                                       poll_intervals=intervals), {'id': 30})
+        request = opener.open.call_args.args[0]
+        headers = {k.lower(): v for k, v in request.header_items()}
+        self.assertEqual(headers['cache-control'], 'no-cache, no-store')
+        self.assertEqual(headers['pragma'], 'no-cache')
+        self.assertEqual(opener.open.call_args.kwargs['timeout'], 10)
+        self.assertEqual(intervals, [45])
+
+    def test_metadata_transport_preserves_normal_get_and_write_behavior(self):
+        response = MagicMock()
+        response.read.return_value = b'{"id":30}'
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = response
+        with patch.object(builds.urllib.request, 'build_opener', return_value=opener):
+            for method, data in (('GET', None), ('POST', {'draft': True})):
+                builds.api('/releases', method=method, data=data)
+                request = opener.open.call_args.args[0]
+                self.assertEqual(request.get_method(), method)
+                self.assertEqual(request.full_url, 'https://api.github.com/repos/brspoon/keep/releases')
+                self.assertEqual(dict(request.header_items()), {
+                    'Authorization': 'Bearer fake-token', 'Accept': 'application/vnd.github+json',
+                    'Content-type': 'application/json', 'X-github-api-version': '2022-11-28',
+                    'User-agent': 'Keep-validated-build'})
+                self.assertEqual(request.data, json.dumps(data).encode() if data is not None else None)
+                self.assertEqual(opener.open.call_args.kwargs['timeout'], 60)
+            with self.assertRaisesRegex(ValueError, 'read-only'):
+                builds.api('/releases', method='POST', data={}, metadata_deadline=1800)
+        self.assertEqual(opener.open.call_count, 2)
+        failure = urllib.error.HTTPError('https://api.github.com/', 503, 'unavailable', {}, None)
+        opener.open.side_effect = failure
+        with patch.object(builds.urllib.request, 'build_opener', return_value=opener), \
+             patch.object(builds.time, 'sleep') as sleep, self.assertRaises(urllib.error.HTTPError):
+            builds.api('/releases', method='POST', data={})
+        self.assertEqual(opener.open.call_count, 3)
+        sleep.assert_not_called()
+
+    def test_retention_transport_rejects_response_returned_at_deadline(self):
+        clock = FakeClock()
+        response = MagicMock()
+
+        def read(limit):
+            self.assertEqual(limit, builds.JSON_LIMIT + 1)
+            clock.now = 1800
+            return b'{"id":30}'
+
+        response.read.side_effect = read
+        response.headers = {}
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = response
+        with patch.object(builds.time, 'monotonic', side_effect=clock.monotonic), \
+             patch.object(builds.urllib.request, 'build_opener', return_value=opener), \
+             self.assertRaisesRegex(ValueError, 'deadline'):
+            builds.api('/actions/jobs/30', metadata_deadline=1800)
+        self.assertEqual(opener.open.call_count, 1)
 
     def test_retain_archives_exact_bytes_only_after_all_native_gates(self):
         os.environ.update(GITHUB_EVENT_NAME='push', GITHUB_RUN_ID='100', GITHUB_RUN_ATTEMPT='3')
