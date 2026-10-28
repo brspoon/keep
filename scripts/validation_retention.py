@@ -6,7 +6,10 @@ The latest usable native build survives documentation-only main changes. Cleanup
 defaults to a dry run and blocks while validation or publication is active.
 """
 import argparse
+import base64
+import binascii
 import datetime as dt
+import hashlib
 import json
 import os
 from pathlib import PurePosixPath
@@ -27,6 +30,15 @@ CONCLUSIONS = {'success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_o
 LOADER_STEP = 'Verify default Expat and OpenSSL library loading'
 CURRENT_ACCEPTANCE_STEP = 'Accept only reviewed fixed findings and block all others'
 LEGACY_ACCEPTANCE_STEP = 'Accept only the nine verified-fixed findings and block all others'
+RUNTIME_STEP = 'Verify all ten runtime security probe groups in the tested image'
+HISTORICAL_RUNTIME_STEP = 'Verify all nine runtime security fixes in the tested image'
+NATIVE_WORKFLOW = '.github/workflows/native-image.yml'
+# Reviewed original 2.30.0 contract. This is cleanup compatibility, never
+# permission to publish a new image using the earlier runtime checks.
+HISTORICAL_RUNTIME_WORKFLOWS = {
+    '38d10126835f14ddaf2e65605f7c3739398586a6':
+        'e485db0164bfcb7c0cafbe35a3420ab760a0111d33eb9dac38d4f351d1f31fa4',
+}
 MAINTENANCE_STEPS = frozenset((
     'Set up the optional host helper runtime',
     'Preload pinned isolated native maintenance tooling',
@@ -221,6 +233,27 @@ def latest_producer_job(jobs, run, name):
     return newest[0]
 
 
+def historical_runtime_workflow(job):
+    revision = job.get('head_sha')
+    expected = HISTORICAL_RUNTIME_WORKFLOWS.get(revision)
+    if expected is None:
+        raise ValueError('Unreviewed historical native runtime contract')
+    source = api('/contents/' + NATIVE_WORKFLOW + '?ref=' + revision)
+    if (not isinstance(source, dict) or source.get('type') != 'file'
+            or source.get('path') != NATIVE_WORKFLOW or source.get('encoding') != 'base64'
+            or type(source.get('size')) is not int or not 0 < source['size'] <= 64 * 1024
+            or not isinstance(source.get('content'), str) or len(source['content']) > 100 * 1024):
+        raise ValueError('Original historical native workflow is unavailable')
+    try:
+        body = base64.b64decode(source['content'].replace('\n', ''), validate=True)
+    except (ValueError, binascii.Error):
+        raise ValueError('Original historical native workflow encoding differs') from None
+    git_blob = b'blob ' + str(len(body)).encode() + b'\0' + body
+    if (len(body) != source['size'] or hashlib.sha256(body).hexdigest() != expected
+            or hashlib.sha1(git_blob, usedforsecurity=False).hexdigest() != source.get('sha')):
+        raise ValueError('Original historical native workflow hash differs')
+
+
 def native_profile(job):
     """Recognize complete current and historical native validation contracts."""
     steps = job.get('steps')
@@ -242,6 +275,13 @@ def native_profile(job):
         required = builds.LEGACY_NATIVE_STEPS if maintenance else builds.NATIVE_STEPS
     else:
         raise ValueError('Unknown or incomplete native validation profile')
+    if HISTORICAL_RUNTIME_STEP in by_name:
+        if profile != 'pre-maintenance' or RUNTIME_STEP in by_name:
+            raise ValueError('Mixed or unknown native runtime validation profile')
+        historical_runtime_workflow(job)
+        required = tuple(HISTORICAL_RUNTIME_STEP if name == RUNTIME_STEP else name
+                         for name in required)
+        profile = 'pre-http-framing'
     for name in (*required, builds.RETAIN_STEP, builds.INDEX_STEP):
         step = by_name.get(name, {})
         if step.get('status') != 'completed' or step.get('conclusion') != 'success':
@@ -288,8 +328,8 @@ def usable(run, release, artifacts, assets):
                                        'workflow_id': run['workflow_id']} or
                 index.get('candidate') != {'id': release['id'], 'tag_name': release['tag_name']}):
             raise ValueError('Usable validation index source or producer binding differs')
-        if schema == builds.SCHEMA and profiles != {'pre-maintenance'}:
-            raise ValueError('The v2 evidence layout requires the current native validation profile')
+        if schema == builds.SCHEMA and profiles not in ({'pre-maintenance'}, {'pre-http-framing'}):
+            raise ValueError('The v2 evidence layout differs from the native validation profile')
         schemas.add(schema)
         builds.checked_digest(index.get('config_digest'))
         records = index.get('assets')
@@ -321,9 +361,9 @@ def usable(run, release, artifacts, assets):
         raise ValueError('Native indexes disagree on the version')
     if len(schemas) > 1:
         raise ValueError('Native indexes disagree on the evidence layout')
-    # V1 storage remains protected as historical fallback. Only complete v2
-    # indexes are usable for the current publication contract.
-    return available and schemas == {builds.SCHEMA}
+    # Historical storage remains protected as fallback. Neither the v1 layout
+    # nor the earlier runtime contract can qualify current publication storage.
+    return available and schemas == {builds.SCHEMA} and profiles == {'pre-maintenance'}
 
 
 def snapshot(release, run, artifacts, assets):
