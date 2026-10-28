@@ -1,5 +1,6 @@
 """Offline scope, provenance, prompt cleanup and race tests for validation storage."""
 import copy
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -21,6 +22,7 @@ class ValidationRetentionTests(unittest.TestCase):
         self.main = 'f' * 40
         self.runs, self.releases, self.assets, self.artifacts, self.indexes, self.jobs = {}, [], {}, {}, {}, {}
         self.deletes = []
+        self.historical_workflows = {}
         self.env = patch.dict(os.environ, {
             'GITHUB_REPOSITORY': 'brspoon/keep', 'GITHUB_TOKEN': 'fake-token',
             'GITHUB_REF': 'refs/heads/main', 'GITHUB_SHA': self.main,
@@ -138,6 +140,24 @@ class ValidationRetentionTests(unittest.TestCase):
                 'repository': {'id': 11, 'full_name': retention.REPOSITORY},
                 'head_repository': {'id': 11, 'full_name': retention.REPOSITORY}}
 
+    def make_historical_runtime(self, number):
+        revision = self.runs[number]['head_sha']
+        body = b'name: Historical native validation\n# Offline trusted-workflow fixture\n'
+        body += ('- name: ' + retention.HISTORICAL_RUNTIME_STEP + '\n').encode()
+        source = {'type': 'file', 'path': retention.NATIVE_WORKFLOW, 'encoding': 'base64',
+                  'size': len(body), 'content': base64.b64encode(body).decode(),
+                  'sha': hashlib.sha1(b'blob ' + str(len(body)).encode() + b'\0' + body).hexdigest()}
+        self.historical_workflows[revision] = source
+        trusted = patch.dict(retention.HISTORICAL_RUNTIME_WORKFLOWS,
+                             {revision: hashlib.sha256(body).hexdigest()})
+        trusted.start()
+        self.addCleanup(trusted.stop)
+        for job in self.jobs[number]:
+            if job['name'].startswith('image / '):
+                for step in job['steps']:
+                    if step['name'] == retention.RUNTIME_STEP:
+                        step['name'] = retention.HISTORICAL_RUNTIME_STEP
+
     def api(self, path, *, method='GET'):
         route = path.partition('?')[0]
         if method == 'DELETE':
@@ -163,6 +183,9 @@ class ValidationRetentionTests(unittest.TestCase):
             return {'workflow_runs': [run for run in self.runs.values() if run.get('status') == state]}
         if route == '/git/ref/heads/main':
             return {'object': {'sha': self.main}}
+        if route == '/contents/' + retention.NATIVE_WORKFLOW:
+            revision = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)['ref'][0]
+            return copy.deepcopy(self.historical_workflows[revision])
         if route == '/releases':
             return self.releases
         if route.startswith('/releases/'):
@@ -327,6 +350,97 @@ class ValidationRetentionTests(unittest.TestCase):
             self.assertEqual(len(index['assets']), 18)
         for artifact in self.artifacts[200]:
             self.assertEqual(len(self.indexes[artifact['id']]['assets']), 19)
+        self.assertEqual(self.deletes, [])
+
+    def test_reviewed_historical_runtime_authenticates_indexes_without_qualifying_publication(self):
+        self.make_historical_runtime(100)
+        plan = self.inventory()
+        older = next(row for row in plan['candidates'] if row['run_id'] == 100)
+        self.assertFalse(older['usable'])
+        self.assertEqual(older['action'], 'delete')
+        self.assertEqual(plan['protected_release_ids'], [1200])
+        read_ids = {call.args[0]['id'] for call in retention.builds.read_index.call_args_list}
+        self.assertTrue({10000, 10001}.issubset(read_ids))
+        retention.execute(plan)
+        self.assertIn('/releases/1100', self.deletes)
+        self.assertNotIn('/releases/1200', self.deletes)
+        self.assertNotIn('/releases/999', self.deletes)
+
+    def test_historical_runtime_preserves_current_main_and_successful_fallback(self):
+        self.main = 'a' * 40
+        self.make_historical_runtime(100)
+        self.make_historical_runtime(200)
+        plan = self.inventory()
+        self.assertTrue(all(not row['usable'] for row in plan['candidates']))
+        self.assertEqual(plan['protected_release_ids'], [1100, 1200])
+        self.assertTrue(all(row['action'] == 'keep' for row in plan['candidates']
+                            if row['run_id'] in (100, 200)))
+
+    def test_historical_runtime_still_requires_every_successful_gate(self):
+        self.make_historical_runtime(100)
+        job = next(row for row in self.jobs[100] if row['name'].endswith('(amd64)'))
+        original = copy.deepcopy(job['steps'])
+        for name in [step['name'] for step in original]:
+            for mutation in ('missing', 'failure', 'skipped'):
+                job['steps'] = copy.deepcopy(original)
+                step = next(row for row in job['steps'] if row['name'] == name)
+                if mutation == 'missing':
+                    job['steps'].remove(step)
+                else:
+                    step['conclusion'] = mutation
+                with self.subTest(gate=name, mutation=mutation), self.assertRaises(ValueError):
+                    self.inventory()
+                self.assertEqual(self.deletes, [])
+        job['steps'] = original
+
+    def test_historical_runtime_rejects_unreviewed_source_and_tampering(self):
+        self.make_historical_runtime(100)
+        revision = self.runs[100]['head_sha']
+        original = copy.deepcopy(self.historical_workflows[revision])
+        for field, value in (('path', 'other.yml'), ('encoding', 'plain'), ('size', True),
+                             ('size', original['size'] + 1), ('sha', '0' * 40),
+                             ('content', 'not base64!'),
+                             ('content', base64.b64encode(b'different workflow').decode())):
+            self.historical_workflows[revision] = {**original, field: value}
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.inventory()
+            self.assertEqual(self.deletes, [])
+        self.historical_workflows[revision] = original
+        with patch.dict(retention.HISTORICAL_RUNTIME_WORKFLOWS, {}, clear=True):
+            with self.assertRaisesRegex(ValueError, 'Unreviewed historical'):
+                self.inventory()
+
+    def test_historical_runtime_cannot_mix_architectures_or_runtime_contracts(self):
+        self.make_historical_runtime(100)
+        job = next(row for row in self.jobs[100] if row['name'].endswith('(arm64)'))
+        step = next(row for row in job['steps'] if row['name'] == retention.HISTORICAL_RUNTIME_STEP)
+        step['name'] = retention.RUNTIME_STEP
+        with self.assertRaisesRegex(ValueError, 'disagree on the validation profile'):
+            self.inventory()
+        job['steps'].append({'name': retention.HISTORICAL_RUNTIME_STEP,
+                             'status': 'completed', 'conclusion': 'success'})
+        with self.assertRaisesRegex(ValueError, 'Mixed or unknown'):
+            self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_historical_runtime_retains_index_and_asset_identity_checks(self):
+        self.make_historical_runtime(100)
+        index = self.indexes[10000]
+        index['build']['job_id'] += 1
+        with self.assertRaisesRegex(ValueError, 'producer binding differs'):
+            self.inventory()
+        index['build']['job_id'] -= 1
+        self.assets[1100][0]['digest'] = 'sha256:' + '0' * 64
+        with self.assertRaisesRegex(ValueError, 'immutable index'):
+            self.inventory()
+        self.assertEqual(self.deletes, [])
+
+    def test_historical_workflow_is_rechecked_before_any_deletion(self):
+        self.make_historical_runtime(100)
+        plan = self.inventory()
+        self.historical_workflows[self.runs[100]['head_sha']]['sha'] = '0' * 40
+        with self.assertRaisesRegex(ValueError, 'workflow hash differs'):
+            retention.execute(plan)
         self.assertEqual(self.deletes, [])
 
     def test_only_legacy_candidates_preserve_latest_successful_fallback(self):
