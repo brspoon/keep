@@ -1,0 +1,44 @@
+[
+  {
+    "path": "urllib3/response.py",
+    "commit": "5feb993421a48a508bc70c78e745337cc6415265",
+    "hunks": [
+      {
+        "before": "import io\nimport json as _json\nimport logging\nimport socket\nimport sys\nimport typing\n",
+        "after": "import io\nimport json as _json\nimport logging\nimport re\nimport socket\nimport sys\nimport typing\n"
+      },
+      {
+        "before": "# Read in 64 KiB chunks\n_READ_CHUNK_SIZE = 2**16\n\n# Maximum length of a chunk-size line (and the trailing CRLF line) when reading a\n# chunked-transfer-encoded response. Matches ``http.client._MAXLINE`` so urllib3's\n# streaming path bounds these reads exactly like the stdlib ``.read()`` path does,\n",
+        "after": "# Read in 64 KiB chunks\n_READ_CHUNK_SIZE = 2**16\n\n# RFC 9112: Content-Length = 1*DIGIT and chunk-size = 1*HEXDIG.\n# int() is more permissive, so we match against the grammar before calling it.\n_CONTENT_LENGTH_RE = re.compile(r\"[0-9]+\")\n_CHUNK_SIZE_RE = re.compile(rb\"[0-9A-Fa-f]+\")\n\n# Maximum length of a chunk-size line (and the trailing CRLF line) when reading a\n# chunked-transfer-encoded response. Matches ``http.client._MAXLINE`` so urllib3's\n# streaming path bounds these reads exactly like the stdlib ``.read()`` path does,\n"
+      },
+      {
+        "before": "                # (e.g. Content-Length: 42, 42). This line ensures the values\n                # are all valid ints and that as long as the `set` length is 1,\n                # all values are the same. Otherwise, the header is invalid.\n                lengths = {int(val) for val in content_length.split(\",\")}\n                if len(lengths) > 1:\n                    raise InvalidHeader(\n                        \"Content-Length contained multiple \"\n",
+        "after": "                # (e.g. Content-Length: 42, 42). This line ensures the values\n                # are all valid ints and that as long as the `set` length is 1,\n                # all values are the same. Otherwise, the header is invalid.\n                lengths = set()\n                for val in content_length.split(\",\"):\n                    # Only optional whitespace may surround each value; reject\n                    # signs, underscores and unicode digits that int() accepts.\n                    val = val.strip()\n                    if not _CONTENT_LENGTH_RE.fullmatch(val):\n                        raise ValueError(\"invalid Content-Length\")\n                    lengths.add(int(val))\n                if len(lengths) > 1:\n                    raise InvalidHeader(\n                        \"Content-Length contained multiple \"\n"
+      },
+      {
+        "before": "                length = lengths.pop()\n            except ValueError:\n                length = None\n            else:\n                if length < 0:\n                    length = None\n\n        else:  # if content_length is None\n            length = None\n",
+        "after": "                length = lengths.pop()\n            except ValueError:\n                length = None\n\n        else:  # if content_length is None\n            length = None\n"
+      },
+      {
+        "before": "            ) from None\n        line = line.split(b\";\", 1)[0]\n        try:\n            self.chunk_left = int(line, 16)\n        except ValueError:\n            self.close()\n            if line:\n",
+        "after": "            ) from None\n        line = line.split(b\";\", 1)[0]\n        try:\n            chunk_size = line.rstrip()\n            if not _CHUNK_SIZE_RE.fullmatch(chunk_size):\n                raise ValueError(\"invalid chunk size\")\n            self.chunk_left = int(chunk_size, 16)\n        except ValueError:\n            self.close()\n            if line:\n"
+      }
+    ]
+  },
+  {
+    "path": "urllib3/response.py",
+    "source_kind": "keep-local",
+    "source_id": "keep-http-framing-bounds-v1",
+    "commit": null,
+    "hunks": [
+      {
+        "before": "                    val = val.strip()\n",
+        "after": "                    val = val.strip(' \\t')\n"
+      },
+      {
+        "before": "            chunk_size = line.rstrip()\n",
+        "after": "            chunk_size = line.rstrip(b' \\t\\r\\n')\n"
+      }
+    ]
+  }
+]

@@ -216,7 +216,7 @@ def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpa
             'library': {'path': str(library), 'sha256': digest(body)}}
 
 
-def runtime_inventory():
+def runtime_inventory(*, http_framing=False):
     """Read actual installed metadata, without importing the application."""
     distributions = []
     for distribution in importlib.metadata.distributions():
@@ -254,6 +254,10 @@ def runtime_inventory():
                     notices.append(notice(path))
     result = {'python': sorted(distributions, key=lambda row: row['name'].lower()),
               'os_packages': sorted(os_packages, key=lambda row: row['name']), 'notices': notices}
+    if http_framing:
+        from http_framing_checks import verify_sources
+        lock = json.loads(Path(__file__).with_name('http_framing_sources.json').read_text())
+        result['http_framing'] = verify_sources(lock)
     replacement = expat_replacement_inventory()
     if replacement is not None:
         result['expat_replacement'] = replacement
@@ -263,16 +267,20 @@ def runtime_inventory():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime', action='store_true')
+    parser.add_argument('--http-framing', action='store_true',
+                        help='Require the reviewed Keep HTTP parser source identities')
     parser.add_argument('--archive')
     args = parser.parse_args()
     if args.runtime == bool(args.archive):
         parser.error('Select exactly one of --runtime or --archive')
+    if args.http_framing and not args.runtime:
+        parser.error('--http-framing requires --runtime')
     try:
         patterns = image_patterns(load_private_image_markers(required=bool(args.archive)))
     except ValueError as exc:
         parser.error(str(exc))
     try:
-        result = runtime_inventory() if args.runtime else inspect_archive(args.archive, patterns)
+        result = runtime_inventory(http_framing=args.http_framing) if args.runtime else inspect_archive(args.archive, patterns)
     except (OSError, ValueError, KeyError, tarfile.TarError):
         parser.error('Image review failed; inspect the input and configuration')
     print(json.dumps(redacted(result, patterns), indent=2))

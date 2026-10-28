@@ -160,7 +160,7 @@ class HubFalsePositiveReviewTests(unittest.TestCase):
         (self.root / 'docs/image-exceptions.json').write_text(json.dumps(policy))
         self.context = {arch: {
             'root': self.root, 'report': {'matches': []}, 'scout': self.scout_report(),
-            'evidence': {'success': True, 'tests': 9, 'failures': 0, 'errors': 0,
+            'evidence': {'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
                          'skipped': 0, 'arch': arch,
                          'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json']},
             'provenance': {'predicateType': 'https://slsa.dev/provenance/v1',

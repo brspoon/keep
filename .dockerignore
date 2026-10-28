@@ -29,6 +29,9 @@
 !scripts/
 !scripts/patch_python_runtime.py
 !scripts/python_security_patches.json
+!scripts/patch_urllib3_runtime.py
+!scripts/urllib3_security_patches.json
+!scripts/http_framing_sources.json
 !scripts/alpine_expat_sources.py
 !scripts/alpine_zlib_sources.py
 !scripts/alpine_musl_sources.py

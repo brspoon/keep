@@ -854,6 +854,8 @@ class CommittedKeepSourceTests(unittest.TestCase):
         self.files = ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
             'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
             'scripts/patch_python_runtime.py',
+            'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
+            'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
             'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
             'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
             'scripts/certificate_trust_checks.py',

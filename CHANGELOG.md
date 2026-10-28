@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.30.1 — 2026-10-28
+
+- Apply Python and urllib3 security fixes for HTTP response lengths and chunk sizes.
+
 ## 2.30.0 — 2026-10-24
 
 - Add email and Manage Library defaults for new Plex users in Admin → General, scoped to their verified shared libraries.

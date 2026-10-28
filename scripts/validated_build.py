@@ -54,7 +54,7 @@ NATIVE_STEPS = (
     'Capture verified vendor evidence and Scout assessment',
     'Inventory installed notices and inspect every image layer',
     'Scan candidate without suppressions',
-    'Verify all nine runtime security fixes in the tested image',
+    'Verify all ten runtime security probe groups in the tested image',
     'Verify default Expat and OpenSSL library loading',
     'Accept only reviewed fixed findings and block all others',
     'Obtain verified base source materials and license notices',

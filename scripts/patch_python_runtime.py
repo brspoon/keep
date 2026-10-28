@@ -47,16 +47,22 @@ def clear_bytecode(target):
             path.unlink()
 
 
-def apply_patches(root, patches):
+def apply_patches(root, patches, *, final_hashes=None):
     root = Path(root).resolve()
+    final_hashes = final_hashes or {}
     pending, records = {}, []
+    completed = set()
     for patch in patches:
         provenance = patch_provenance(patch)
         target = root / patch['path']
         if target.is_symlink() or not target.is_file() or not target.resolve().is_relative_to(root):
             raise RuntimeError('Security patch target is outside the standard library')
         original = pending.get(target, target.read_text())
-        updated = apply_hunks(original, patch)
+        # Later reviewed corrections can overlap upstream contexts. Recognize
+        # only an exact independently pinned final file on repeat application.
+        if hashlib.sha256(original.encode()).hexdigest() == final_hashes.get(patch['path']):
+            completed.add(target)
+        updated = original if target in completed else apply_hunks(original, patch)
         compile(updated, str(target), 'exec')
         pending[target] = updated
         records.append({'path': patch['path'], **provenance,
@@ -76,7 +82,9 @@ def apply_patches(root, patches):
 def main():
     root = Path(sysconfig.get_path('stdlib'))
     patches = json.loads(Path(__file__).with_name('python_security_patches.json').read_text())
-    for record in apply_patches(root, patches):
+    lock = json.loads(Path(__file__).with_name('http_framing_sources.json').read_text())
+    for record in apply_patches(root, patches, final_hashes={
+            'http/client.py': lock['http.client']['after_sha256']}):
         print(json.dumps(record))
 
 

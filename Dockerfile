@@ -8,6 +8,7 @@ ENV KEEP_EXPAT_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7b
 COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py /opt/runtime-build-tools/
 COPY scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/alpine_expat_sources.py scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py scripts/dhi_python_packages.py /opt/scripts/
 COPY docs/expat-build.json /opt/docs/expat-build.json
+COPY scripts/http_framing_sources.json /opt/runtime-build-tools/
 RUN ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--prepare"]
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
@@ -33,10 +34,12 @@ RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--output", "/opt/ru
 # Keep the original cp314 compiler environment with matching updated libc headers;
 # final native gates verify its wheels, including CFFI and Argon2.
 COPY requirements.txt .
+COPY scripts/patch_python_runtime.py scripts/patch_urllib3_runtime.py scripts/urllib3_security_patches.json /opt/runtime-build-tools/
 RUN python -m venv --without-pip /venv \
     && python -B /opt/runtime-build-tools/bootstrap_build_pip.py --python /venv/bin/python \
     && /venv/bin/python -m pip install --no-cache-dir -r requirements.txt \
     && /venv/bin/python -m pip check \
+    && /venv/bin/python -B /opt/runtime-build-tools/patch_urllib3_runtime.py \
     && /venv/bin/python -m pip uninstall --yes pip \
     && python -c "from pathlib import Path; [p.unlink() for p in Path('/venv').rglob('*.pyc')]" \
     && mkdir -p /app/data && chmod 700 /app/data && chown 10001:10001 /app/data

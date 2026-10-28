@@ -54,6 +54,17 @@ The Dockerfile includes Alpine software, exact CPython security patches identifi
 in scripts/python_security_patches.json, and the signed Alpine zlib 1.3.2-r1
 package. Python's license is retained in docs/PYTHON_LICENSE.txt; zlib's complete
 license is retained with its verified upstream sources and OS notices.
+The pinned urllib3 2.8.0 includes upstream response-framing correction
+`5feb993421a48a508bc70c78e745337cc6415265`. Its original MIT notices and
+source archive remain included, together with the exact patch, patched module
+and a source hash checked against the installed module. Package version metadata
+is unchanged. Python response framing includes upstream `2eb2af8` and the
+`9f52b44` whitespace compatibility follow-up; exact commits and source hashes
+are recorded with the runtime patch inputs.
+The separately attributed Keep correction `keep-http-framing-bounds-v1`
+limits padding to HTTP whitespace and preserves Python's handling of decimal
+lengths exceeding its conversion limit. It is retained with the exact source
+patches and is not attributed to an upstream commit.
 The separately identified Expat build includes the exact upstream security
 patches, the Keep-local literal-markup accounting correction, and the complete
 MIT notice and source-header attributions. The local correction has its own

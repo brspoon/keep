@@ -33,6 +33,37 @@ MAX_DOWNLOAD = 64 * 1024 * 1024
 MAX_NOTICE_INVENTORY = 64 * 1024 * 1024
 
 
+def retain_http_framing_sources(stage, inventory, root):
+    """Replay the urllib3 source patch and bind both loaded parser identities."""
+    from patch_python_runtime import apply_hunks
+    lock = read_json(root, 'scripts/http_framing_sources.json')
+    actual = inventory.get('http_framing')
+    if (not isinstance(actual, dict) or set(actual) != set(lock)
+            or any(actual[name].get('sha256') != row['after_sha256']
+                   for name, row in lock.items())):
+        raise ValueError('Missing or mismatched loaded HTTP parser source evidence')
+    archive = regular(stage, 'python/urllib3-2.8.0/urllib3-2.8.0.tar.gz')
+    with tarfile.open(archive) as package:
+        matches = [m for m in package if m.name == 'urllib3-2.8.0/src/urllib3/response.py']
+        if len(matches) != 1 or not matches[0].isfile() or matches[0].size > 1024 * 1024:
+            raise ValueError('Ambiguous urllib3 response source')
+        body = package.extractfile(matches[0]).read()
+    if hashlib.sha256(body).hexdigest() != lock['urllib3.response']['before_sha256']:
+        raise ValueError('urllib3 source differs from the reviewed patch input')
+    source = body.decode()
+    for patch in read_json(root, 'scripts/urllib3_security_patches.json'):
+        source = apply_hunks(source, patch)
+    if hashlib.sha256(source.encode()).hexdigest() != actual['urllib3.response']['sha256']:
+        raise ValueError('Patched urllib3 source differs from the installed module')
+    destination = stage / 'python/urllib3-2.8.0/patched/urllib3/response.py'
+    destination.parent.mkdir(parents=True)
+    destination.write_text(source)
+    copy_file(root, 'scripts/urllib3_security_patches.json',
+              stage / 'python/urllib3-2.8.0/security-patches.json')
+    copy_file(root, 'scripts/http_framing_sources.json', stage / 'http-framing-sources.json')
+    return actual
+
+
 def fetch_source(url):
     """Fetch locked PyPI/native/patch sources, checking HTTPS redirect hosts."""
     hosts = {'pypi.org', 'files.pythonhosted.org', 'github.com', 'codeload.github.com',
@@ -1016,6 +1047,8 @@ def keep_source(root, destination):
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
                      'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
                      'scripts/patch_python_runtime.py',
+                     'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
+                     'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
                      'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
                      'scripts/dhi_certificate_packages.py', 'scripts/bootstrap_build_pip.py',
                      'scripts/certificate_trust_checks.py',
@@ -1068,6 +1101,7 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         check_generated_notices(root, notice_union, architecture)
         copy_file(inventory_path.parent, inventory_path.name, stage / 'runtime-inventory.json')
         python = collect_sources(root / 'requirements.txt', stage, fetch=source_fetch(lock, fetch))
+        http_framing = retain_http_framing_sources(stage, inventory, root)
         for material in lock['native_wheels']['materials']:
             checked_download(material['url'], material['sha256'], stage / 'native-wheels' / safe_name(material['path']), fetch)
         write_json(stage / 'native-wheels/manifest.json', lock['native_wheels'])
@@ -1083,6 +1117,7 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         provider_bound = [row['origin'] for row in os_coverage if row['provider_oci_binding']]
         public_fallbacks = [row['origin'] for row in os_coverage if not row['provider_oci_binding']]
         coverage = {'runtime': counts, 'runtime_notices': runtime_notices,
+                    'http_framing': http_framing,
                     'source_notice_union': {'notices': len(notice_union['notices']),
                                            'origins_needing_explicit_attribution': notice_union['origins_needing_explicit_attribution']},
                     'original_base': base_coverage, 'os_origins': os_coverage,

@@ -1,7 +1,7 @@
 """Qualify ordinary Expat, OpenSSL, Python and musl loading in the native image.
 
 Run without network or loader overrides. These checks are separate from the
-nine security-patch probes and exercise ordinary dependency behavior.
+ten security-patch probe groups and exercise ordinary dependency behavior.
 """
 import argparse
 import ctypes

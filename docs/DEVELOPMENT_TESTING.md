@@ -35,7 +35,7 @@ publishes an image or authorizes promotion. The final dependency checks require
 the normal loaded SONAME and bounded security/ordinary XML behavior, not merely
 a successful source build or version string.
 
-The nine native security probes include zlib delivery verification. The patched
+The native security probes include zlib delivery verification. The patched
 library must replace `/usr/lib/libz.so.1.3.2` behind the existing `libz.so.1`
 alias. The probe imports ordinary Python consumers and uses default SONAME
 lookup, then checks loaded file identity, SHA-256 and loader candidates, along

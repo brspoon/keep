@@ -85,13 +85,40 @@ def policy_fixture():
 
 def regression_report(policy, arch):
     return {
-        'success': True, 'tests': 9, 'failures': 0, 'errors': 0, 'skipped': 0,
+        'success': True, 'tests': 10, 'failures': 0, 'errors': 0, 'skipped': 0,
         'arch': arch,
         'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json'],
     }
 
 
 class ScoutExceptionPolicyTests(unittest.TestCase):
+    def test_current_joint_review_preserves_three_exact_scopes_and_new_boundary(self):
+        policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
+        self.assertEqual(set(policy['exceptions']), set(RENEWED_FINDINGS))
+        self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID})
+        rules = [*policy['exceptions'].values(), *policy['scout_exceptions'].values()]
+        self.assertTrue(all(rule['review']['reviewed_on'] == '2026-10-28' for rule in rules))
+        self.assertTrue(all(rule['review']['deadline'] == '2026-11-11' for rule in rules))
+        matches = [{'vulnerability': {'id': finding, 'severity': 'Medium'},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
+                   for finding in RENEWED_FINDINGS]
+        for arch in DIRECT:
+            original = scout_report(arch)
+            for day, expired in ((datetime.date(2026, 11, 2), False),
+                                 (datetime.date(2026, 11, 11), False),
+                                 (datetime.date(2026, 11, 12), True)):
+                result = self.assess(copy.deepcopy(original), arch=arch, day=day,
+                                     policy=policy, matches=matches)
+                with self.subTest(arch=arch, day=day):
+                    self.assertEqual(len(result['blocked']) + len(result['scout_blocked']),
+                                     3 if expired else 0)
+                    self.assertEqual(len(result['accepted_fixed']), 0 if expired else 2)
+                    self.assertEqual(len(result['scout_accepted_false_positive']), 0 if expired else 1)
+                    self.assertEqual(original, scout_report(arch))
+            clean = self.assess({'runs': [{'results': []}]}, arch=arch,
+                                day=datetime.date(2026, 11, 12), policy=policy, matches=[])
+            self.assertFalse(clean['blocked'] or clean['scout_blocked'])
+
     def setUp(self):
         self.policy = policy_fixture()
 

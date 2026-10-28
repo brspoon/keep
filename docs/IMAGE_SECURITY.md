@@ -9,13 +9,29 @@ DHI CA bundle `20261020-r0` packages. Package versions change through verified o
 the build never relabels an older package or suppresses a finding.
 
 Every architecture job verifies signed vendor provenance, runs checksum-pinned
-Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runtime
+Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all ten runtime
 regression probes.
+The HTTP framing group exercises both loaded `http.client` and the actual
+Requests/urllib3 response path. Python's upstream correction `2eb2af8` and
+whitespace follow-up `9f52b44` are replayed against the signed Python inputs;
+urllib3's upstream `5feb993` is replayed against pinned 2.8.0. The latter is
+required because urllib3 parses streaming chunk lengths independently. Source
+correction `keep-http-framing-bounds-v1` separately restricts padding to HTTP
+whitespace and preserves unknown-length fallback when Python's decimal
+conversion limit is reached; that limit is not disabled or increased. Source
+hashes in `scripts/http_framing_sources.json` bind the loaded modules to those
+reviewed corrections. Matching-source packaging replays the urllib3 patch from
+its locked original source archive and retains the patched module and MIT
+notices. These runtime changes do not patch the separate CI host interpreter.
+The new group checks malformed numeric framing, connection closure, valid
+length padding, chunk extensions, ordinary body reads and truncation. It adds
+no new scanner scope. The fresh October 28 joint review renews only the same
+three scopes through November 11, 2026 UTC inclusive.
 Zero Scout and Docker Hub findings remain the default requirement. The only
 temporary Scout approval is the verified musl false positive described below,
-through November 1, 2026 UTC inclusive. Grype's complete raw findings remain visible;
+through November 11, 2026 UTC inclusive. Grype's complete raw findings remain visible;
 only the two exact verified-fixed Python `3.14.8-r0` scopes in
-docs/image-exceptions.json may pass through November 1, 2026 UTC inclusive.
+docs/image-exceptions.json may pass through November 11, 2026 UTC inclusive.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
 `1.3.2-r0` scopes are retired and cannot authorize this runtime.
 Source hashes, base identity, complete scans, successful probes and the deadline
@@ -550,16 +566,22 @@ daily and on manual dispatch with read-only repository access, no dependency
 installation, registry credentials, image build or publication. These notices
 allow reviews to begin ahead of a deadline without blocking a clean candidate.
 
-The October 18 review covers only the two remaining Python `3.14.8-r0`
-findings through November 1, 2026 UTC, inclusive. Each entry records its fresh
-review date and evidence. Earlier Python, zlib and tarfile approvals do not
-carry forward or authorize other package versions. A finding that still needs
-one of the current exceptions on November 2 blocks validation and promotion;
-it requires a proven replacement or another explicit security review.
-Correcting deadline handling alone never renews an approval.
-The separate Scout false-positive entry uses the same advisory warning mechanism
-and was renewed by the fresh October 23 review through November 1, 2026 UTC
-inclusive. This aligns the current review dates without extending Python approvals.
+The fresh October 28 joint review covers only the same two Python `3.14.8-r0`
+findings and exact Alpine 3.24 musl `1.2.6-r3` Scout false positive through
+**November 11, 2026 UTC inclusive**. Complete [native qualification](https://github.com/brspoon/keep/actions/runs/40725395019)
+at `37b0b63b034e4685bf45a1a2636ed0b72246a3bf` passed both architectures,
+all ten runtime groups, complete unsuppressed scans, provenance and every
+functional, recovery, matching-source/archive/license gate. Original reports
+still contain exactly these three needed scopes without suppression. The
+original November 1 approval passes on November 1 and blocks on November 2;
+renewal changes only the current exact scopes' inclusive deadline and reviewed
+source bindings. Retired scopes remain retired and every unmatched finding blocks.
+
+Both new deadline boundaries are tested: needed scopes may pass November 11
+and block November 12; unused expired entries do not block clean candidates.
+Earlier review and release evidence retains its original bytes. Promotion always
+rereads current policy against original reports. No automatic future renewal is
+permitted; unchanged vendor announcements alone cannot justify replacement.
 
 ## zlib delivery correction
 

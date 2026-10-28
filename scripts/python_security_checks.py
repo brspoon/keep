@@ -62,6 +62,15 @@ def verify_loaded_zlib(library_path, expected_sha256, maps_text, library_directo
 
 
 class PythonSecurityChecks(unittest.TestCase):
+    def test_CVE_2026_103995_http_response_framing(self):
+        if __package__:
+            from .http_framing_checks import check_framing, verify_sources
+        else:
+            from http_framing_checks import check_framing, verify_sources
+        lock = json.loads(pathlib.Path(__file__).with_name('http_framing_sources.json').read_text())
+        verify_sources(lock)
+        check_framing(self)
+
     def test_CVE_2026_12345_cleanup_keeps_sibling_fixture_intact(self):
         self.assertEqual(platform.system(), 'Linux')
         self.assertFalse(hasattr(os, 'chflags'))

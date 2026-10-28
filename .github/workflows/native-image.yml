@@ -99,7 +99,7 @@ jobs:
         env:
           KEEP_PRIVATE_IMAGE_MARKERS: ${{ secrets.KEEP_PRIVATE_IMAGE_MARKERS }}
         run: |
-          docker run --rm --network none --read-only -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/image_distribution.py --runtime > candidate-notices-${{ matrix.arch }}.json
+          docker run --rm --network none --read-only -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/image_distribution.py --runtime --http-framing > candidate-notices-${{ matrix.arch }}.json
           IMAGE_ARCHIVE=$(mktemp)
           trap 'rm -f "$IMAGE_ARCHIVE"' EXIT
           docker save --output "$IMAGE_ARCHIVE" keep-ci
@@ -107,7 +107,7 @@ jobs:
       - name: Scan candidate without suppressions
         if: ${{ !cancelled() }}
         run: sh scripts/scan_image.sh keep-ci candidate-${{ matrix.arch }}.json --report-only
-      - name: Verify all nine runtime security fixes in the tested image
+      - name: Verify all ten runtime security probe groups in the tested image
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/python_security_checks.py --report > candidate-regression-${{ matrix.arch }}.json
       - name: Verify default Expat and OpenSSL library loading
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/runtime_dependency_checks.py --report > candidate-dependencies-${{ matrix.arch }}.json
