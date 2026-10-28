@@ -9,8 +9,24 @@ DHI CA bundle `20261020-r0` packages. Package versions change through verified o
 the build never relabels an older package or suppresses a finding.
 
 Every architecture job verifies signed vendor provenance, runs checksum-pinned
-Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all nine runtime
+Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all ten runtime
 regression probes.
+The HTTP framing group exercises both loaded `http.client` and the actual
+Requests/urllib3 response path. Python's upstream correction `2eb2af8` and
+whitespace follow-up `9f52b44` are replayed against the signed Python inputs;
+urllib3's upstream `5feb993` is replayed against pinned 2.8.0. The latter is
+required because urllib3 parses streaming chunk lengths independently. Source
+correction `keep-http-framing-bounds-v1` separately restricts padding to HTTP
+whitespace and preserves unknown-length fallback when Python's decimal
+conversion limit is reached; that limit is not disabled or increased. Source
+hashes in `scripts/http_framing_sources.json` bind the loaded modules to those
+reviewed corrections. Matching-source packaging replays the urllib3 patch from
+its locked original source archive and retains the patched module and MIT
+notices. These runtime changes do not patch the separate CI host interpreter.
+The new group checks malformed numeric framing, connection closure, valid
+length padding, chunk extensions, ordinary body reads and truncation. It adds
+no scanner approval and leaves the existing three exception deadlines intact
+pending the fresh joint review.
 Zero Scout and Docker Hub findings remain the default requirement. The only
 temporary Scout approval is the verified musl false positive described below,
 through November 1, 2026 UTC inclusive. Grype's complete raw findings remain visible;

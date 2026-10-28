@@ -85,7 +85,7 @@ def policy_fixture():
 
 def regression_report(policy, arch):
     return {
-        'success': True, 'tests': 9, 'failures': 0, 'errors': 0, 'skipped': 0,
+        'success': True, 'tests': 10, 'failures': 0, 'errors': 0, 'skipped': 0,
         'arch': arch,
         'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json'],
     }

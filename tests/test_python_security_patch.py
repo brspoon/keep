@@ -225,10 +225,10 @@ class TarfileDestinationPatchTests(unittest.TestCase):
         self.assertEqual(result.errors, [])
         self.assertEqual(result.skipped, [])
 
-    def test_loaded_runtime_keeps_nine_probes_and_existing_link_regressions(self):
+    def test_loaded_runtime_keeps_ten_probes_and_existing_link_regressions(self):
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(
             python_security_checks.PythonSecurityChecks)
-        self.assertEqual(suite.countTestCases(), 9)
+        self.assertEqual(suite.countTestCases(), 10)
         methods = unittest.defaultTestLoader.getTestCaseNames(
             python_security_checks.PythonSecurityChecks)
         self.assertIn('test_CVE_2026_4360_hardlink_target_is_filtered', methods)

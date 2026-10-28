@@ -32,7 +32,7 @@ class ImageReviewTests(unittest.TestCase):
         self.policy = historical_review_policy()
         self.report = {'matches': [{'vulnerability': {'id': 'CVE-2026-87910', 'severity': 'Medium'}, 'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}]}
         self.scout = {'runs': [{'results': []}]}
-        self.evidence = {'success': True, 'tests': 9, 'failures': 0, 'errors': 0, 'skipped': 0, 'arch': 'amd64', 'patch_manifest_sha256': self.policy['reviewed_sources']['scripts/python_security_patches.json']}
+        self.evidence = {'success': True, 'tests': 10, 'failures': 0, 'errors': 0, 'skipped': 0, 'arch': 'amd64', 'patch_manifest_sha256': self.policy['reviewed_sources']['scripts/python_security_patches.json']}
 
     def result(self, day=datetime.date(2026, 9, 7)):
         return assess(self.report, self.scout, self.evidence, self.policy, 'amd64', day)
@@ -353,7 +353,7 @@ class RenewedImageReviewTests(unittest.TestCase):
 
     def result(self, arch, day, policy=None):
         policy = self.policy if policy is None else policy
-        evidence = {'success': True, 'tests': 9, 'failures': 0, 'errors': 0,
+        evidence = {'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
                     'skipped': 0, 'arch': arch,
                     'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json']}
         return assess(self.report, self.scout, evidence, policy, arch, day)
@@ -454,7 +454,7 @@ class CandidateReviewTests(unittest.TestCase):
                 'predicateType': 'https://slsa.dev/provenance/v1',
                 'subject': [{'digest': {'sha256': DIRECT[arch][0]}}]})
             self.write(f'candidate-regression-{arch}.json', {
-                'success': True, 'tests': 9, 'failures': 0, 'errors': 0,
+                'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
                 'skipped': 0, 'arch': arch,
                 'patch_manifest_sha256': self.policy['reviewed_sources']['scripts/python_security_patches.json']})
 

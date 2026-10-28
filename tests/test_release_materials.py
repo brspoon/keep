@@ -407,7 +407,7 @@ class ReleaseMaterialsTests(unittest.TestCase):
             f'candidate-{arch}.json': {'matches': matches or []},
             f'candidate-scout-{arch}.json': {'runs': [{'results': []}]},
             f'candidate-regression-{arch}.json': {
-                'success': True, 'tests': 9, 'failures': 0, 'errors': 0,
+                'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
                 'skipped': 0, 'arch': arch,
                 'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json'],
             },

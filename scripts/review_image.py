@@ -80,7 +80,7 @@ def assess(report, scout, evidence, policy, arch, today=None):
     deadlines = exception_deadlines(policy)
     if policy['base'] != BASE.split('@')[1] or arch not in DIRECT:
         raise ValueError('Unreviewed base or architecture')
-    if evidence != {'success': True, 'tests': 9, 'failures': 0, 'errors': 0,
+    if evidence != {'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
                     'skipped': 0, 'arch': arch,
                     'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json']}:
         raise ValueError('Missing or unsuccessful security regression evidence')

@@ -107,7 +107,7 @@ jobs:
       - name: Scan candidate without suppressions
         if: ${{ !cancelled() }}
         run: sh scripts/scan_image.sh keep-ci candidate-${{ matrix.arch }}.json --report-only
-      - name: Verify all nine runtime security fixes in the tested image
+      - name: Verify all ten runtime security probe groups in the tested image
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/python_security_checks.py --report > candidate-regression-${{ matrix.arch }}.json
       - name: Verify default Expat and OpenSSL library loading
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" keep-ci python -B /checks/runtime_dependency_checks.py --report > candidate-dependencies-${{ matrix.arch }}.json

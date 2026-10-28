@@ -254,6 +254,9 @@ def runtime_inventory():
                     notices.append(notice(path))
     result = {'python': sorted(distributions, key=lambda row: row['name'].lower()),
               'os_packages': sorted(os_packages, key=lambda row: row['name']), 'notices': notices}
+    from http_framing_checks import verify_sources
+    lock = json.loads(Path(__file__).with_name('http_framing_sources.json').read_text())
+    result['http_framing'] = verify_sources(lock)
     replacement = expat_replacement_inventory()
     if replacement is not None:
         result['expat_replacement'] = replacement
