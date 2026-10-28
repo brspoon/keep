@@ -107,8 +107,8 @@ and explicitly show truthful Critical, High, Medium, Low and Unspecified counts.
 Zero remains the default. Only an exact, unexpired verified-fixed false-positive
 scope in `scout_exceptions` may pass with nonzero counts; all other findings block.
 The sole current scope is Alpine 3.24 musl `1.2.6-r3`, `CVE-2026-107891`,
-`UNSPECIFIED`, with the erroneous r6 threshold, renewed after the October 23
-review through November 1, 2026 UTC inclusive. No old r2 or certifi finding is approved. Pending, unavailable,
+`UNSPECIFIED`, with the erroneous r6 threshold, renewed after the October 28
+joint review through November 11, 2026 UTC inclusive. No old r2 or certifi finding is approved. Pending, unavailable,
 incomplete or unapproved analysis blocks promotion.
 A local scan or `docker scout cves registry://...` result does not
 establish that Docker Hub's stored analysis completed.

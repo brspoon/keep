@@ -367,8 +367,8 @@ class RenewedImageReviewTests(unittest.TestCase):
                          {finding: ('Medium', 'apk', 'python-3.14', '3.14.8-r0', 'fixed')
                           for finding in RENEWED_FINDINGS})
         for rule in self.policy['exceptions'].values():
-            self.assertEqual(rule['review']['reviewed_on'], '2026-10-18')
-            self.assertEqual(rule['review']['deadline'], '2026-11-01')
+            self.assertEqual(rule['review']['reviewed_on'], '2026-10-28')
+            self.assertEqual(rule['review']['deadline'], '2026-11-11')
             self.assertTrue(rule['evidence'].strip())
             self.assertTrue(rule['review']['approval'].strip())
             self.assertTrue(rule['review']['remove_when'].strip())
@@ -381,15 +381,15 @@ class RenewedImageReviewTests(unittest.TestCase):
                 self.assertEqual([entry['reason'] for entry in result['blocked']],
                                  ['exception_expired', 'exception_expired'])
             for day, expired in ((datetime.date(2026, 10, 21), False),
-                                 (datetime.date(2026, 11, 1), False),
-                                 (datetime.date(2026, 11, 2), True)):
+                                 (datetime.date(2026, 11, 11), False),
+                                 (datetime.date(2026, 11, 12), True)):
                 with self.subTest(arch=arch, day=day):
                     result = self.result(arch, day)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                                      [] if expired else list(RENEWED_FINDINGS))
                     self.assertEqual(len(result['blocked']), 2 if expired else 0)
                     for entry in result['accepted_fixed'] + result['blocked']:
-                        self.assertEqual(entry['deadline'], '2026-11-01')
+                        self.assertEqual(entry['deadline'], '2026-11-11')
                     for entry in result['blocked']:
                         self.assertEqual(entry['reason'], 'exception_expired')
 
@@ -430,7 +430,7 @@ class RenewedImageReviewTests(unittest.TestCase):
         self.report['matches'] = []
         for arch in DIRECT:
             with self.subTest(arch=arch):
-                result = self.result(arch, datetime.date(2026, 11, 2))
+                result = self.result(arch, datetime.date(2026, 11, 12))
                 self.assertFalse(result['blocked'])
                 self.assertFalse(result['scout_blocked'])
 
@@ -589,8 +589,8 @@ class CandidateReviewTests(unittest.TestCase):
         policy_bytes = policy_path.read_bytes()
         for arch in DIRECT:
             for day, status in ((datetime.date(2026, 10, 21), 0),
-                                (datetime.date(2026, 11, 1), 0),
-                                (datetime.date(2026, 11, 2), 1)):
+                                (datetime.date(2026, 11, 11), 0),
+                                (datetime.date(2026, 11, 12), 1)):
                 with self.subTest(arch=arch, day=day), chdir(self.root), \
                      patch.object(review_image, 'current_day', return_value=day), \
                      redirect_stdout(io.StringIO()):
