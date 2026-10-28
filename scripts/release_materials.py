@@ -235,7 +235,7 @@ def fetch(arch):
     original = json.loads(Path(f'candidate-notices-{arch}.json').read_text())
     actual = json.loads(subprocess.check_output(['docker', 'run', '--rm', '--network', 'none',
         '--read-only', '-v', str(Path('scripts').resolve()) + ':/checks:ro', 'keep-ci',
-        'python', '-B', '/checks/image_distribution.py', '--runtime']))
+        'python', '-B', '/checks/image_distribution.py', '--runtime', '--http-framing']))
     if actual != original:
         raise ValueError('Retrieved runtime notice inventory differs from the tested image')
     Path(f'release-image-{arch}.json').write_text(json.dumps({
