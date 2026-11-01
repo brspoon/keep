@@ -49,7 +49,7 @@ FROM dependencies AS socket-preparation
 COPY scripts/build_patched_socket.py scripts/python_socket_patches.json scripts/socket_security_checks.py /opt/runtime-build-tools/
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
-    ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install"]
+    ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-build-python"]
 RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_socket.py", "--preparation", "--output", "/opt/socket-preparation"]
 
 FROM dhi.io/python:3.14-alpine3.24@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7

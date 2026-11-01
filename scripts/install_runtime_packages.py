@@ -188,6 +188,25 @@ def verify_musl(root, architecture, *, build=False):
     subprocess.run(command, check=True)
 
 
+def install_build_python(root=ROOT):
+    """Install only the signed Python cohort in a compiler image, not a runtime."""
+    architecture = arch()
+    packages = installation_inputs(root, architecture)
+    names = {name + '-' + python.VERSION + '.apk' for name in python.PACKAGES}
+    selected = [path for path in packages if path.name in names]
+    if {path.name for path in selected} != names or len(selected) != len(names):
+        raise ValueError('Require the exact reviewed build Python cohort')
+    subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                    '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
+                    *(str(path) for path in selected)], check=True)
+    subprocess.run(['/usr/bin/python3.14', '-B',
+                    str(Path(__file__).with_name('dhi_python_packages.py')),
+                    '--verify-installed', '--architecture', architecture, '--manifest',
+                    str(root / 'python/PYTHON_SECURITY.json')], check=True)
+    verify_musl(root, architecture, build=True)
+    verify_certificates(root, architecture, build=True)
+
+
 def install_build_musl(root=ROOT):
     """Upgrade build libc and its exactly coupled development package offline."""
     architecture = arch()
@@ -226,6 +245,7 @@ def main():
     mode.add_argument('--install', action='store_true')
     mode.add_argument('--install-certificates', action='store_true')
     mode.add_argument('--install-build-musl', action='store_true')
+    mode.add_argument('--install-build-python', action='store_true')
     mode.add_argument('--install-expat', action='store_true')
     mode.add_argument('--clean-stdlib', action='store_true')
     args = parser.parse_args()
@@ -237,6 +257,8 @@ def main():
         install_certificates()
     elif args.install_build_musl:
         install_build_musl()
+    elif args.install_build_python:
+        install_build_python()
     elif args.install_expat:
         install_expat()
     else:
