@@ -52,8 +52,8 @@ DHI Expat 2.8.5, Python 3.14.7-r2, zlib 1.3.2-r0, musl 1.2.6-r2 and CA bundle 20
 native-base material binding and signed package sources separately from the
 installed replacement packages. Alpine's zlib 1.3.2-r1 is verified separately
 against signed APKs, its complete pinned aports context, upstream source,
-security patch and full Zlib notice. DHI Python 3.14.8-r0 has matching signed
-native build/source records verified on both architectures; public recipe and
+security patch and full Zlib notice. The candidate DHI Python 3.14.10-r1 cohort requires matching signed
+native build/source records on both architectures; public recipe and
 archive inspection alone cannot satisfy that gate. Keep's exact Python patches
 are also included. Both architectures' committed notice union is regenerated
 from their checked native inventories and verified in the rebuilt source-archive
@@ -411,3 +411,11 @@ Check every source and notice link as an unauthenticated recipient. An authentic
 maintainer download or a public repository setting alone does not establish that
 all release assets are accessible. See the [release policy](RELEASE_POLICY.md) for
 validation, source delivery and reporting requirements.
+
+The separately built Python `_socket` extension retains the checksum-locked
+upstream 3.14.10 archive, complete preferred source with the socket correction,
+generated `pyconfig.h`, exact build inputs and output hashes, verified compiler
+source records, and the full Python license. Original signed Python package
+sources remain separate. The upstream synthetic distrusted-SPKI test fixture is
+retained in Keep's matching source under the Python license; its public test
+credentials are excluded from the runtime image.

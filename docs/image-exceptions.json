@@ -34,7 +34,7 @@
     "scripts/bootstrap_build_pip.py": "e2f5aec604af9add63fab0f2078f02f794851c7d2ac8d0a19f0c54c5e4b01474",
     "docs/distribution-sources.json": "16d4002d62ef78b772afaa3e3e620fbac0804a0038641116ca6386fe4a02ee2d",
     "scripts/package_provenance_sources.py": "6cf5d353e12a205efea1729f03fcd24c50b985c2d98e1c0aae98b51069d869bd",
-    "docs/aports-source-lock.json": "36341708de7d61a8203b392417c190e7268f13dd13858c2e4df5f3437f3b64fd",
+    "docs/aports-source-lock.json": "9988fc62bc077f07b80f57b6718abe8cb1bc4b29dc0c4a110bef8cb54d1f652d",
     "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
     "scripts/scout_exception_policy.py": "d662274ac8da047c6e62e3d6e5be0f429030cffe025d9d35a94e4cd40093fc0a",
     "scripts/build_patched_expat.py": "e109de2f4dd099d0525f27bddb74e9576d420c58fff655e1845cd3bebc71489b",
