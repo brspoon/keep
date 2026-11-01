@@ -17,6 +17,11 @@ import sysconfig
 import tarfile
 import urllib.request
 
+if __package__:
+    from . import build_patched_expat as compiler_profile
+else:
+    import build_patched_expat as compiler_profile
+
 SOURCE_URL = 'https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz'
 SOURCE_SHA256 = 'c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73'
 PATCH_PATH = Path(__file__).with_name('python_socket_patches.json')
@@ -83,6 +88,20 @@ def preparation(output):
     require(output.is_absolute() and not output.exists() and not WORK.exists(),
             'Socket preparation requires new absolute workspaces')
     output.mkdir(parents=True)
+    import _socket
+    original = Path(_socket.__file__)
+    require(original.is_file() and not original.is_symlink(), 'Original socket is not regular')
+    # Numeric-only flags prohibit DNS even in the deliberately vulnerable control.
+    rows = _socket.getaddrinfo('127.0.0.1\0ignored', '8\0ignored', _socket.AF_INET,
+        _socket.SOCK_STREAM, 0, _socket.AI_NUMERICHOST | _socket.AI_NUMERICSERV)
+    require(rows and all(row[4] == ('127.0.0.1', 8) for row in rows),
+            'Original socket no longer reproduces the reviewed numeric truncation')
+    compiler_profile.fortify.verify_prepared_headers(
+        compiler_profile.WORK / 'fortify/include')
+    hardening = compiler_profile.compiler_hardening(arch)
+    compiler_hash, _ = compiler_profile.compiler_identity(arch)
+    require(compiler_hash == compiler_profile.reviewed_spec()['compiler_sha256'][arch],
+            'Socket compiler differs from reviewed native toolchain')
     with urllib.request.urlopen(SOURCE_URL, timeout=90) as response:
         body = response.read(32 * 1024 * 1024 + 1)
     require(len(body) <= 32 * 1024 * 1024, 'Python source download exceeds bound')
@@ -102,6 +121,7 @@ def preparation(output):
     cflags = ['-Os', '-fPIC', '-fstack-protector-strong', '-fstack-clash-protection',
               '-Wformat', '-Werror=format-security', '-D_FORTIFY_SOURCE=2',
               '-DPy_BUILD_CORE_MODULE', '-I.', '-IInclude', '-IInclude/internal',
+              '-I' + str(compiler_profile.WORK / 'fortify/include'),
               '-ffile-prefix-map=' + str(WORK) + '=.']
     command = ['/usr/bin/gcc', *cflags, '-shared', 'Modules/socketmodule.c',
                '-Wl,--as-needed,-O1,--build-id=sha1,-z,relro,-z,now,-z,noexecstack',
@@ -123,6 +143,9 @@ def preparation(output):
               'source_file_sha256': digest(target.read_bytes()),
               'pyconfig_sha256': digest((source / 'pyconfig.h').read_bytes()),
               'compiler_sha256': digest(compiler.read_bytes()),
+              'effective_hardening': hardening,
+              'original_extension_sha256': digest(original.read_bytes()),
+              'original_numeric_truncation_reproduced': True,
               'compiler_version': subprocess.check_output([str(compiler), '--version']).decode(),
               'configure': configure, 'compile': command,
               'extension': library.name, 'extension_sha256': digest(library.read_bytes()),
