@@ -4,12 +4,12 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.8-r0` and
+installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.10-r1` and
 DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
 The compiled `_socket` extension is separately rebuilt from the exact Python
-3.14.8 source archive with the upstream null-byte rejection correction for
+3.14.10 source archive with the upstream null-byte rejection correction for
 `CVE-2026-116566` / `PSF-2026-48`. The Python 3.14 backport is pinned by source
 head in scripts/python_socket_patches.json; an unmerged backport is not described
 as an upstream release. The interpreter and original APK metadata remain unchanged.
@@ -895,3 +895,26 @@ The narrow scanner rule for this package still requires successful regression
 evidence on both native architectures, the exact reviewed source hashes and, when
 a finding needs the exception, its existing review deadline. A local probe alone
 does not validate a rebuilt release.
+
+## Python 3.14.10 vendor update candidate (November 1)
+
+The candidate uses the complete signed DHI Python `3.14.10-r1` package cohort,
+including the compiled intermediate-SPKI denylist. Native dependency checks
+explicitly trust the synthetic upstream fixture root and require rejection of
+its denylisted key with `X509_V_ERR_CERT_REJECTED`, alongside the ordinary
+verified TLS handshake. The fixture is copied unchanged from
+`Python-3.14.10/Lib/test/certdata/distrusted.zip` in the checksum-pinned Python
+source archive; it is PSF-2.0 test material covered by `docs/PYTHON_LICENSE.txt`.
+Its public test credentials are used offline and excluded from the final image.
+
+The separate native `_socket` overlay applies the reviewed null-byte correction
+to the exact 3.14.10 source. Existing HTTP framing corrections, remaining ZIP
+checks and the descriptor-bound permission-reset guard remain required. Patches
+already present in vendor source are accepted only through their exact reviewed
+after-contexts. Original vendor source and license records remain separate from
+the overlay's complete corresponding source and compiler records.
+
+Preparation is not qualification. Both native output pins, matching source and
+license archives, complete unsuppressed scanner reports and every original
+functional/security gate must pass before this candidate is ready. Existing
+Python exceptions name `3.14.8-r0`; they do not approve `3.14.10-r1` findings.

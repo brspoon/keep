@@ -164,7 +164,7 @@ class DhiPythonPackageTests(unittest.TestCase):
         _, info = self.apk('python-3.14-pyc', 'amd64')
         payload_hash = packages.metadata_fields(info)['datahash'][0]
         for bad in [info + b'depend = additional-risk\n', info + b'provides = unexpected\n',
-                    info.replace(b'install_if = python-3.14=3.14.8-r0',
+                    info.replace(b'install_if = python-3.14=3.14.10-r1',
                                  b'install_if = python-3.14=3.14.7-r2'),
                     info + b'license = PSF-2.0\n']:
             with self.assertRaises(ValueError):
@@ -222,7 +222,7 @@ class DhiPythonPackageTests(unittest.TestCase):
             database = self.runtime(root)
             original = database.read_text()
             manifest = packages.security_manifest(self.spec, 'amd64')
-            for bad in [original.replace('V:3.14.8-r0', 'V:3.14.7-r2', 1),
+            for bad in [original.replace('V:3.14.10-r1', 'V:3.14.7-r2', 1),
                         original.replace('L:PSF-2.0', 'L:unknown', 1),
                         original.replace('c:' + packages.BUILD_COMMIT, 'c:' + 'f' * 40, 1),
                         original.replace('P:pyc-3.14', 'P:unknown', 1),

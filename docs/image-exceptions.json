@@ -53,7 +53,7 @@
     "scripts/build_patched_socket.py": "ca24227dc2785715100c6a2a39fbdea57ea472a4c4a92a5447d71a5e39d48c6a",
     "scripts/python_socket_patches.json": "bc53b1ecd229babd2d983cc7d2c5b4b9c205e547fe78825dd90bfe1b69199b91",
     "scripts/socket_security_checks.py": "9b40b1ca6390090bbc4f6f0b9ff3c327dec6be7775778d0e849fe878ba836429",
-    "docs/python-socket-build.json": "f4b0d23855a432d0905973013d0909c05e3db98f08370ee0386c05ea02c04670",
+    "docs/python-socket-build.json": "a8e5a09c0f41a9560b7cd9f5863c9e820a05a000f3a00d13bd12492c6a0bf90f",
     "scripts/security-fixtures/distrusted.zip": "8a9874e20b8583e80e9d7d6c82ea566c22d50458a93bfef6400d70dde132a053"
   },
   "exceptions": {
