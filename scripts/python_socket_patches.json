@@ -1,0 +1,24 @@
+{
+  "schema": "keep-python-socket-patches-v1",
+  "upstream_version": "3.14.8",
+  "upstream_main_commit": "131a3a66c5f400b588f9fd2732a5ed4e89623ee3",
+  "reviewed_backport_head": "c53e59385eda89fade1531240ef6479341a55b53",
+  "backport_status": "unmerged",
+  "path": "Modules/socketmodule.c",
+  "before_sha256": "cb4f6d1e4357a5a7b882df88ecb071a08c9e5da24f1045829857562e97491ee2",
+  "after_sha256": "5ca0e0b0818ff76be79bdeadeb69341ee9ca3acf6af9a2afc7c8359f692e64fb",
+  "hunks": [
+    {
+      "before": "    PyObject *pobj = (PyObject *)NULL;\n    PyObject *pstr = NULL;\n    const char *hptr, *pptr;\n    int family, socktype, protocol, flags;\n    int error;\n    PyObject *all = (PyObject *)NULL;\n",
+      "after": "    PyObject *pobj = (PyObject *)NULL;\n    PyObject *pstr = NULL;\n    const char *hptr, *pptr;\n    Py_ssize_t hlen = 0, plen = 0;\n    int family, socktype, protocol, flags;\n    int error;\n    PyObject *all = (PyObject *)NULL;\n"
+    },
+    {
+      "before": "            return NULL;\n        assert(PyBytes_Check(idna));\n        hptr = PyBytes_AS_STRING(idna);\n    } else if (PyBytes_Check(hobj)) {\n        hptr = PyBytes_AsString(hobj);\n    } else {\n        PyErr_SetString(PyExc_TypeError,\n                        \"getaddrinfo() argument 1 must be string or None\");\n        return NULL;\n    }\n    if (PyIndex_Check(pobj)) {\n        pstr = PyNumber_Index(pobj);\n        if (pstr == NULL)\n",
+      "after": "            return NULL;\n        assert(PyBytes_Check(idna));\n        hptr = PyBytes_AS_STRING(idna);\n        hlen = PyBytes_GET_SIZE(idna);\n    } else if (PyBytes_Check(hobj)) {\n        hptr = PyBytes_AS_STRING(hobj);\n        hlen = PyBytes_GET_SIZE(hobj);\n    } else {\n        PyErr_SetString(PyExc_TypeError,\n                        \"getaddrinfo() argument 1 must be string or None\");\n        return NULL;\n    }\n    if (hptr != NULL && strlen(hptr) != (size_t)hlen) {\n        PyErr_SetString(PyExc_ValueError,\n                        \"getaddrinfo() host must not contain null characters\");\n        goto err;\n    }\n    if (PyIndex_Check(pobj)) {\n        pstr = PyNumber_Index(pobj);\n        if (pstr == NULL)\n"
+    },
+    {
+      "before": "        if (pstr == NULL)\n            goto err;\n        assert(PyUnicode_Check(pstr));\n        pptr = PyUnicode_AsUTF8(pstr);\n        if (pptr == NULL)\n            goto err;\n    } else if (PyUnicode_Check(pobj)) {\n        pptr = PyUnicode_AsUTF8(pobj);\n        if (pptr == NULL)\n            goto err;\n    } else if (PyBytes_Check(pobj)) {\n        pptr = PyBytes_AS_STRING(pobj);\n    } else if (pobj == Py_None) {\n        pptr = (char *)NULL;\n    } else {\n        PyErr_SetString(PyExc_OSError, \"Int or String expected\");\n        goto err;\n    }\n#if defined(__APPLE__) && defined(AI_NUMERICSERV)\n    if ((flags & AI_NUMERICSERV) && (pptr == NULL || (pptr[0] == '0' && pptr[1] == 0))) {\n        /* On OSX up to at least OSX 10.8 getaddrinfo crashes",
+      "after": "        if (pstr == NULL)\n            goto err;\n        assert(PyUnicode_Check(pstr));\n        pptr = PyUnicode_AsUTF8AndSize(pstr, &plen);\n        if (pptr == NULL)\n            goto err;\n    } else if (PyUnicode_Check(pobj)) {\n        pptr = PyUnicode_AsUTF8AndSize(pobj, &plen);\n        if (pptr == NULL)\n            goto err;\n    } else if (PyBytes_Check(pobj)) {\n        pptr = PyBytes_AS_STRING(pobj);\n        plen = PyBytes_GET_SIZE(pobj);\n    } else if (pobj == Py_None) {\n        pptr = (char *)NULL;\n    } else {\n        PyErr_SetString(PyExc_OSError, \"Int or String expected\");\n        goto err;\n    }\n    if (pptr != NULL && strlen(pptr) != (size_t)plen) {\n        PyErr_SetString(PyExc_ValueError,\n                        \"getaddrinfo() port must not contain null characters\");\n        goto err;\n    }\n#if defined(__APPLE__) && defined(AI_NUMERICSERV)\n    if ((flags & AI_NUMERICSERV) && (pptr == NULL || (pptr[0] == '0' && pptr[1] == 0))) {\n        /* On OSX up to at least OSX 10.8 getaddrinfo crashes"
+    }
+  ]
+}
