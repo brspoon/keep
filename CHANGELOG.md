@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.30.2 — 2026-11-01
+
+- Apply a Python security fix for hostname and service-port handling.
+
 ## 2.30.1 — 2026-10-28
 
 - Apply Python and urllib3 security fixes for HTTP response lengths and chunk sizes.

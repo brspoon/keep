@@ -216,6 +216,29 @@ def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpa
             'library': {'path': str(library), 'sha256': digest(body)}}
 
 
+def socket_replacement_inventory(app=Path('/app')):
+    paths = [app / 'PYTHON_SOCKET_BUILD.json', app / 'SOCKET_SECURITY.json',
+             app / 'PYTHON_SOCKET_PYCONFIG.h']
+    if not any(path.exists() or path.is_symlink() for path in paths):
+        return None
+    bodies = []
+    for path in paths:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 128 * 1024:
+            raise ValueError('Missing bounded regular socket replacement proof')
+        bodies.append(path.read_bytes())
+    lock, manifest = (json.loads(body) for body in bodies[:2])
+    for value, body in zip((lock, manifest), bodies):
+        if body != (json.dumps(value, indent=2, sort_keys=True) + '\n').encode():
+            raise ValueError('Noncanonical socket replacement JSON')
+    path = Path(manifest['library']['path'])
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4 * 1024 * 1024:
+        raise ValueError('Missing bounded regular socket extension')
+    return {'build_lock': lock, 'build_lock_sha256': digest(bodies[0]),
+            'manifest': manifest, 'manifest_sha256': digest(bodies[1]),
+            'pyconfig': bodies[2].decode(), 'pyconfig_sha256': digest(bodies[2]),
+            'library': {'path': str(path), 'sha256': digest(path.read_bytes())}}
+
+
 def runtime_inventory(*, http_framing=False):
     """Read actual installed metadata, without importing the application."""
     distributions = []
@@ -261,6 +284,9 @@ def runtime_inventory(*, http_framing=False):
     replacement = expat_replacement_inventory()
     if replacement is not None:
         result['expat_replacement'] = replacement
+    socket_replacement = socket_replacement_inventory()
+    if socket_replacement is not None:
+        result['socket_replacement'] = socket_replacement
     return result
 
 

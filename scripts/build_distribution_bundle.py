@@ -208,6 +208,9 @@ def check_runtime(inventory, lock, os_lock, arch, *, root=ROOT):
         raise ValueError('Runtime OS packages differ from reviewed source map')
     if any(row.get('source_method') == 'alpine-signed-expat-v1' for row in os_lock['origins']):
         verify_expat_replacement(inventory, arch, root=root)
+    from collect_package_sources import verify_socket_replacement
+    if any(row['origin'] == 'python-3.14' for row in os_lock['origins']):
+        verify_socket_replacement(inventory, arch, root=root)
     check_native_wheels(inventory, lock, arch)
     return {'python_packages': len(expected_python), 'os_packages': len(expected),
             'os_origins': len(os_lock['origins']), 'native_wheels': 2}
@@ -226,6 +229,8 @@ def check_runtime_notices(root, inventory, os_lock, arch):
     if python:
         original_python = read_json(root, 'docs/base-python-sources.json')
         expected['python-3.14-ensurepip'] = original_python['package']['version']
+        if 'socket_replacement' in inventory:
+            expected['python-socket-overlay'] = '3.14.8'
     installed = {row['path']: row for row in inventory.get('notices', [])}
     covered = set()
     seen = set()
@@ -1036,6 +1041,76 @@ def archive_tree(directory, archive, name):
                     raise ValueError('Unsupported source bundle entry')
 
 
+def retain_socket_sources(stage, inventory, arch, *, root=ROOT, fetch=fetch_source):
+    """Retain independently bound preferred sources without relabeling vendor proof."""
+    import build_patched_socket as build
+    from collect_package_sources import verify_socket_replacement, retain_expat_compiler_provenance
+    replacement = verify_socket_replacement(inventory, arch, root=root)
+    output = Path(stage) / 'socket-overlay'
+    if output.exists() or output.is_symlink():
+        raise ValueError('Socket source output must be new')
+    output.mkdir()
+    archive = fetch(build.SOURCE_URL)
+    if not isinstance(archive, bytes) or len(archive) > 32 * 1024 * 1024:
+        raise ValueError('Socket source archive exceeds bound')
+    source = build.extract_source(archive, output / 'preferred-source')
+    patch_body = regular(root, 'scripts/python_socket_patches.json').read_bytes()
+    patch = json.loads(patch_body)
+    target = source / patch['path']
+    target.write_bytes(build.patched_source(target.read_bytes(), patch))
+    (source / 'pyconfig.h').write_bytes(replacement['pyconfig'].encode())
+    (output / 'Python-3.14.8.tar.xz').write_bytes(archive)
+    for name in ('scripts/python_socket_patches.json', 'scripts/build_patched_socket.py',
+                 'scripts/socket_security_checks.py', 'docs/python-socket-build.json'):
+        copy_file(root, name, output / Path(name).name)
+    write_json(output / 'SOCKET_SECURITY.json', replacement['manifest'])
+    compiler_source = Path(stage) / 'os-packages/expat/public-sources/compiler-provenance'
+    compiler = retain_expat_compiler_provenance(compiler_source,
+        output / 'compiler-provenance', arch, root=root)
+    # Expat's independently checked toolchain source collection supplies the
+    # same pinned compiler, C runtime headers and Fortify inputs used here.
+    fortify = Path(stage) / 'os-packages/expat/public-sources/keep-build/fortify'
+    from fortify_header_sources import verify_prepared_headers
+    verify_prepared_headers(fortify / 'include')
+    for path in sorted(fortify.rglob('*')):
+        if path.is_symlink():
+            raise ValueError('Socket Fortify source contains a symlink')
+        if path.is_file():
+            relative = path.relative_to(fortify).as_posix()
+            copy_file(fortify, relative, output / 'fortify' / relative)
+    license_body = regular(source, 'LICENSE').read_bytes()
+    license_hash = build.digest(license_body)
+    notice = output / 'notices' / (license_hash + '.txt')
+    notice.parent.mkdir()
+    notice.write_bytes(license_body)
+    provenance = {'origin': 'python-socket-overlay', 'version': '3.14.8',
+                  'architecture': arch, 'source_image_digest': None,
+                  'provider_oci_binding': False,
+                  'binding_method': 'Reviewed native socket source/build/output hash binding',
+                  'source_url': build.SOURCE_URL,
+                  'upstream_source_sha256': build.SOURCE_SHA256,
+                  'replacement_manifest_sha256': replacement['manifest_sha256']}
+    notice_record = {'path': 'Python-3.14.8/LICENSE',
+        'notice_file': 'notices/' + notice.name, 'sha256': license_hash,
+        'bytes': len(license_body), 'encoding': 'utf-8',
+        'discovery': 'checked-public-standalone-notice', 'provenance': provenance}
+    report = {**provenance, 'schema': 1, 'success': True,
+        'preferred_source_present': True, 'build_inputs_present': True,
+        'notice_inventory_complete': True, 'notices': [notice_record], 'warnings': [],
+        'standalone_notice_count': 1, 'reviewable_comment_count': 0,
+        'requires_runtime_comment_selection': False,
+        'limitations': 'Original signed DHI input proof is separate. The Python license '
+                       'and full source are retained for the independently rebuilt extension.'}
+    write_json(output / 'package-material-inventory.json', report)
+    coverage = {**provenance, 'compiler_provenance': compiler,
+                'build_lock_sha256': replacement['build_lock_sha256'],
+                'library': replacement['library'], 'pyconfig_sha256': replacement['pyconfig_sha256'],
+                'patched_source_sha256': build.digest(target.read_bytes()),
+                'files': file_records(output)}
+    write_json(output / 'SOURCE-REPLAY.json', coverage)
+    return {key: value for key, value in coverage.items() if key != 'files'}
+
+
 def keep_source(root, destination):
     """Archive the exact committed Keep source whose recipes we distribute."""
     if subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=root, check=False).returncode:
@@ -1046,7 +1121,9 @@ def keep_source(root, destination):
         subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=root, stdout=stream, check=True)
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
                      'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
-                     'scripts/patch_python_runtime.py',
+                     'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
+                     'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
+                     'docs/python-socket-build.json',
                      'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
                      'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
                      'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',
@@ -1096,6 +1173,8 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         os_coverage = retain_packages(package_root, stage / 'os-packages', os_lock, architecture,
                                      material_inspector=material_inspector, base_source=source, runtime_inventory=inventory)
         base_coverage = retain_original_base(source, stage / 'original-base', os_lock, architecture, root=root, fetch=fetch)
+        socket_coverage = (retain_socket_sources(stage, inventory, architecture, root=root, fetch=fetch)
+                           if 'socket_replacement' in inventory else None)
         notice_union = consolidate_notices(stage, os_lock, architecture, inventory,
             selected_comment_paths=reviewed_notice_comments(root, architecture))
         check_generated_notices(root, notice_union, architecture)
@@ -1117,7 +1196,7 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         provider_bound = [row['origin'] for row in os_coverage if row['provider_oci_binding']]
         public_fallbacks = [row['origin'] for row in os_coverage if not row['provider_oci_binding']]
         coverage = {'runtime': counts, 'runtime_notices': runtime_notices,
-                    'http_framing': http_framing,
+                    'http_framing': http_framing, 'socket_overlay': socket_coverage,
                     'source_notice_union': {'notices': len(notice_union['notices']),
                                            'origins_needing_explicit_attribution': notice_union['origins_needing_explicit_attribution']},
                     'original_base': base_coverage, 'os_origins': os_coverage,
@@ -1166,10 +1245,13 @@ def prepare_notices(sources, architecture, runtime_inventory, output, *, root=RO
     coverage = retain_packages(package_root, output / 'os-packages', os_lock, architecture,
         material_inspector=material_inspector, base_source=source, runtime_inventory=inventory)
     base = retain_original_base(source, output / 'original-base', os_lock, architecture, root=root, fetch=fetch)
+    socket_coverage = (retain_socket_sources(output, inventory, architecture, root=root, fetch=fetch)
+                       if 'socket_replacement' in inventory else None)
     notices = consolidate_notices(output, os_lock, architecture, inventory, retain_inputs=True)
     notice_inputs = read_json(output / 'notice-inputs', 'index.json')
     report = {'format': 'keep-runtime-notice-preparation-v1', 'architecture': architecture,
         'runtime': counts, 'os_origins': coverage, 'original_base': base,
+        'socket_overlay': socket_coverage,
         'notices': len(notices['notices']), 'notice_directory': 'os-notices',
         'notice_inputs_directory': 'notice-inputs', 'notice_input_bundles': len(notice_inputs['bundles']),
         'notice_input_files': notice_inputs['notice_files'],

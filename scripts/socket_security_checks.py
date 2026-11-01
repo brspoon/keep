@@ -5,6 +5,12 @@ import json
 import sys
 
 
+def expected_report():
+    row = {'schema': 'keep-socket-probes-v1', 'null_cases_rejected': 15,
+           'numeric_controls_passed': 8, 'resolver_audit_after_validation': True}
+    return {'direct': dict(row), 'public': dict(row)}
+
+
 def check_socket(module):
     events = []
     def audit(event, args):

@@ -59,3 +59,8 @@
 !plex_library_access.py
 !plex_user_defaults.py
 !plex_defaults_email.py
+
+!scripts/build_patched_socket.py
+!scripts/python_socket_patches.json
+!scripts/socket_security_checks.py
+!docs/python-socket-build.json

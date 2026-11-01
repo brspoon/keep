@@ -65,6 +65,15 @@ The separately attributed Keep correction `keep-http-framing-bounds-v1`
 limits padding to HTTP whitespace and preserves Python's handling of decimal
 lengths exceeding its conversion limit. It is retained with the exact source
 patches and is not attributed to an upstream commit.
+The native Python `_socket` extension is rebuilt from Python 3.14.8 with the
+null-byte correction from upstream `131a3a66c5f400b588f9fd2732a5ed4e89623ee3`,
+adapted in the reviewed Python 3.14 backport head recorded in
+scripts/python_socket_patches.json. The complete original and patched preferred
+sources, generated configuration header, build recipe, compiler provenance,
+Fortify headers and full Python license accompany the matching-source archive.
+Its independent native build record is docs/python-socket-build.json; the
+original signed DHI package identity is preserved and does not authenticate the
+replacement extension.
 The separately identified Expat build includes the exact upstream security
 patches, the Keep-local literal-markup accounting correction, and the complete
 MIT notice and source-header attributions. The local correction has its own

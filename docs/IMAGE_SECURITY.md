@@ -8,6 +8,22 @@ installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3
 DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
+The compiled `_socket` extension is separately rebuilt from the exact Python
+3.14.8 source archive with the upstream null-byte rejection correction for
+`CVE-2026-116566` / `PSF-2026-48`. The Python 3.14 backport is pinned by source
+head in scripts/python_socket_patches.json; an unmerged backport is not described
+as an upstream release. The interpreter and original APK metadata remain unchanged.
+The independent docs/python-socket-build.json lock binds both native extension
+hashes, original extension hashes, generated configuration headers and compiler
+identities. No Python wrapper substitutes for the compiled correction.
+Native dependency qualification checks both raw `_socket.getaddrinfo` and public
+`socket.getaddrinfo`, rejection before the resolver audit, ordinary numeric
+controls and canonical loaded-extension hashes/inodes. The original numeric-only
+control reproduces the truncation without DNS during preparation. Matching-source
+archives retain the full original and patched preferred source, generated header,
+build inputs, signed compiler-image proof and full Python license. No new scanner
+exception is added, and all existing protections and November 11 limits remain.
+
 Every architecture job verifies signed vendor provenance, runs checksum-pinned
 Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all ten runtime
 regression probes.

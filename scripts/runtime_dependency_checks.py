@@ -476,14 +476,34 @@ def verify_python_files(manifest, maps_text, executable=None, process_executable
             'aliases': dict(manifest['aliases'])}
 
 
-def check_python(arch, manifest_path=PYTHON_MANIFEST_PATH, maps_path=MAPS_PATH):
-    import ssl  # Normal imports must load the reviewed extension before reading maps.
+def check_socket_runtime(arch, maps_path=MAPS_PATH):
+    import socket
+    import _socket
+    if __package__:
+        from . import build_patched_socket as socket_build
+        from .socket_security_checks import check_socket
+    else:
+        import build_patched_socket as socket_build
+        from socket_security_checks import check_socket
+    replacement = socket_build.verify_runtime(arch)
+    probes = {'direct': check_socket(_socket), 'public': check_socket(socket)}
+    library = verify_loaded_library(Path(replacement['library']['path']), '_socket',
+                                    Path(maps_path).read_text(), replacement['library']['sha256'])
+    return {'socket_manifest': replacement,
+            'socket_manifest_sha256': socket_build.digest(socket_build.json_bytes(replacement)),
+            'socket_probes': probes, 'library': library}
 
+
+def check_python(arch, manifest_path=PYTHON_MANIFEST_PATH, maps_path=MAPS_PATH):
+    import ssl
     manifest, install_hash = read_python_manifest(manifest_path, arch)
     python_packages().verify_installed(python_packages().reviewed_spec(), arch, manifest)
     binding = verify_python_files(manifest, Path(maps_path).read_text())
     result = exercise_python()
-    return {**binding, **result, 'source_manifest_sha256': manifest['source_manifest_sha256'],
+    socket = check_socket_runtime(arch, maps_path)
+    binding['libraries']['python_socket'] = socket.pop('library')
+    return {**binding, **result, **socket,
+            'source_manifest_sha256': manifest['source_manifest_sha256'],
             'install_manifest_sha256': install_hash}
 
 
@@ -652,13 +672,14 @@ def check_openssl(arch, maps_path=MAPS_PATH):
 def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     python_manifest_path=PYTHON_MANIFEST_PATH,
                     musl_manifest_path=MUSL_MANIFEST_PATH):
-    report = {'schema': 5, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+    report = {'schema': 6, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
               'expat_build_manifest': None, 'expat_build_manifest_sha256': None,
               'expat_security_probes': {},
               'python_source_manifest_sha256': None, 'python_install_manifest_sha256': None,
               'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {},
+              'socket_manifest': None, 'socket_manifest_sha256': None, 'socket_probes': {},
               'musl_source_manifest_sha256': None, 'musl_install_manifest_sha256': None,
               'musl_aliases': {}, 'musl_probes': {},
               'certificate_trust': None}
@@ -694,6 +715,8 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     report['python_files'] = result['files']
                     report['python_aliases'] = result['aliases']
                     report['python_tls_probes'] = result['tls_probes']
+                    for key in ('socket_manifest', 'socket_manifest_sha256', 'socket_probes'):
+                        report[key] = result[key]
                 elif name == 'musl':
                     report['musl_source_manifest_sha256'] = result['source_manifest_sha256']
                     report['musl_install_manifest_sha256'] = result['install_manifest_sha256']
@@ -724,10 +747,11 @@ def validate_report(report, arch, root=ROOT):
             'python_source_manifest_sha256', 'python_install_manifest_sha256',
             'musl_source_manifest_sha256', 'musl_install_manifest_sha256',
             'musl_aliases', 'musl_probes',
-            'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust'}
+            'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust',
+            'socket_manifest', 'socket_manifest_sha256', 'socket_probes'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 5
+    require(type(report['schema']) is int and report['schema'] == 6
             and report['arch'] == arch and report['success'] is True
             and type(report['tests']) is int and report['tests'] == 4
             and type(report['failures']) is int and report['failures'] == 0
@@ -774,14 +798,25 @@ def validate_report(report, arch, root=ROOT):
     require(isinstance(probes, dict) and set(probes) == set(MUSL_PROBES)
             and all(value is True for value in probes.values()),
             'Missing or failed musl qualification probes')
+    if __package__:
+        from . import build_patched_socket as socket_build
+        from .socket_security_checks import expected_report as socket_probe_report
+    else:
+        import build_patched_socket as socket_build
+        from socket_security_checks import expected_report as socket_probe_report
+    socket_manifest = socket_build.verify_manifest(report['socket_manifest'], arch, root)
+    require(report['socket_manifest_sha256'] == socket_build.digest(socket_build.json_bytes(socket_manifest))
+            and report['socket_probes'] == socket_probe_report(),
+            'Missing or failed socket replacement evidence')
     libraries = report['loaded_libraries']
     require(isinstance(libraries, dict)
-            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'musl'},
+            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'python_socket', 'musl'},
             'Incomplete dependency loaded-library evidence')
     for name, canonical in (('expat', EXPAT_LIBRARY), ('ssl', SSL_LIBRARY),
                             ('crypto', CRYPTO_LIBRARY),
                             ('python', Path(python['library']['path'])),
                             ('python_ssl', Path(python['ssl_extension']['path'])),
+                            ('python_socket', Path(socket_manifest['library']['path'])),
                             ('musl', Path(musl['library']['path']))):
         validate_file_identity(libraries[name], canonical)
     require(libraries['expat']['sha256'] == replacement['library']['sha256'],
@@ -791,6 +826,8 @@ def validate_report(report, arch, root=ROOT):
                 'Dependency report Python loaded-library hash differs from the signed package')
     require(libraries['musl']['sha256'] == musl['library']['sha256'],
             'Dependency report musl loaded-library hash differs from the signed package')
+    require(libraries['python_socket']['sha256'] == socket_manifest['library']['sha256'],
+            'Dependency report socket differs from reviewed replacement')
     files = report['python_files']
     require(isinstance(files, dict) and set(files) == {'executable', 'abi_library'},
             'Incomplete dependency Python file evidence')

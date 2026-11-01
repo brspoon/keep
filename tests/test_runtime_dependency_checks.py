@@ -29,6 +29,7 @@ def write_synthetic_dependency_locks(root):
     """Use explicit temporary output identities without changing reviewed files."""
     root = Path(root)
     (root / 'docs').mkdir(parents=True, exist_ok=True)
+    (root / 'docs/python-socket-build.json').write_bytes((ROOT / 'docs/python-socket-build.json').read_bytes())
     (root / 'docs/os-package-sources.json').write_bytes((ROOT / 'docs/os-package-sources.json').read_bytes())
     spec = copy.deepcopy(build_patched_expat.reviewed_spec(ROOT))
     spec['expected_library_sha256'] = {'amd64': 'a' * 64, 'arm64': 'b' * 64}
@@ -604,6 +605,7 @@ class LoadedPythonIdentityTests(unittest.TestCase):
              patch.object(checks, 'PROC_EXECUTABLE_PATH', self.process), \
              patch.object(_ssl, '__file__', self.manifest['ssl_extension']['path'], create=True), \
              patch.object(packages, 'verify_installed', return_value=self.manifest) as installed, \
+             patch.object(checks, 'check_socket_runtime', return_value={'library': {}}), \
              patch.object(checks, 'exercise_python', return_value={
                  'version': '3.14.8', 'tls_probes': dict(checks.PYTHON_TLS_PROBES)}) as probes:
             result = checks.check_python('amd64', self.root / 'manifest.json', maps)
@@ -751,6 +753,8 @@ class RuntimeReportTests(unittest.TestCase):
                            'python_ssl': library('_ssl.fixture.so')},
              'files': {'executable': library('python3.14'), 'abi_library': library('libpython3.so')},
              'aliases': python['aliases'], 'tls_probes': dict(checks.PYTHON_TLS_PROBES),
+             **{key: dependency_report('arm64')[key] for key in
+                ('socket_manifest', 'socket_manifest_sha256', 'socket_probes')},
              'source_manifest_sha256': 'e' * 64, 'install_manifest_sha256': 'f' * 64},
             {'version': '1.2.6-r3', 'libraries': {'musl': library('ld-musl-aarch64.so.1')},
              'aliases': musl['aliases'], 'probes': dict(checks.MUSL_PROBES),
@@ -767,7 +771,7 @@ class RuntimeReportTests(unittest.TestCase):
              patch.object(checks, 'check_musl', return_value=musl):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 5, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
+            'schema': 6, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8',
                                       'musl': '1.2.6-r3'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
@@ -781,6 +785,7 @@ class RuntimeReportTests(unittest.TestCase):
             'python_install_manifest_sha256': 'f' * 64,
             'python_files': python['files'], 'python_aliases': python['aliases'],
             'python_tls_probes': python['tls_probes'],
+            **{key: python[key] for key in ('socket_manifest', 'socket_manifest_sha256', 'socket_probes')},
             'musl_source_manifest_sha256': 'a' * 64,
             'musl_install_manifest_sha256': 'b' * 64,
             'musl_aliases': musl['aliases'], 'musl_probes': musl['probes'],
@@ -848,6 +853,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
         destination = Path(root) / 'docs/expat-build.json'
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes((self.root / 'docs/expat-build.json').read_bytes())
+        (destination.parent / 'python-socket-build.json').write_bytes((ROOT / 'docs/python-socket-build.json').read_bytes())
 
     def test_original_native_report_replays_without_runtime_filesystem(self):
         with patch.object(checks, 'file_identity', side_effect=AssertionError('runtime access')), \
