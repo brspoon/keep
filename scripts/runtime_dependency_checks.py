@@ -18,6 +18,8 @@ import subprocess
 import sys
 import tempfile
 import weakref
+import zipfile
+import io
 
 if __package__:
     from . import certificate_trust_checks as certificate_trust
@@ -47,10 +49,11 @@ EXPAT_BUILD_PATH = Path('/app/EXPAT_BUILD.json')
 PYTHON_MANIFEST_PATH = Path('/app/PYTHON_SECURITY.json')
 MUSL_MANIFEST_PATH = Path('/app/MUSL_SECURITY.json')
 PROC_EXECUTABLE_PATH = Path('/proc/self/exe')
-PYTHON_VERSION = '3.14.8'
+PYTHON_VERSION = '3.14.10'
 PYTHON_TLS_PROBES = {'wrap_bio_requires_hostname': True,
                      'sni_context_switch_handshake': True,
-                     'tls_memory_bio_handshake': True}
+                     'tls_memory_bio_handshake': True,
+                     'distrusted_spki_rejection': True}
 MUSL_PACKAGE_VERSION = '1.2.6-r3'
 MUSL_PROBES = dict.fromkeys((
     'regex_compile_match', 'regex_no_match', 'regex_invalid_rejected',
@@ -369,6 +372,47 @@ def memory_tls_handshake(client, server, client_in, client_out, server_in, serve
     require(client.read(64) == b'ready', 'In-memory TLS response failed')
 
 
+SPKI_FIXTURE = Path(__file__).with_name('security-fixtures') / 'distrusted.zip'
+SPKI_FIXTURE_SHA256 = '8a9874e20b8583e80e9d7d6c82ea566c22d50458a93bfef6400d70dde132a053'
+
+
+def exercise_python_spki():
+    """Reject the upstream synthetic denylisted key even with its root trusted."""
+    import ssl
+
+    body = SPKI_FIXTURE.read_bytes()
+    require(hashlib.sha256(body).hexdigest() == SPKI_FIXTURE_SHA256,
+            'Distrusted SPKI fixture checksum differs')
+    with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        expected = {'distrusted/': 0, 'distrusted/distrusted_keycert.pem': 5493,
+                    'distrusted/distrusted_intermediate.pem': 1241,
+                    'distrusted/distrusted_root.pem': 810}
+        require(len(archive.infolist()) == len(expected)
+                and {row.filename: row.file_size for row in archive.infolist()} == expected,
+                'Distrusted SPKI fixture members differ')
+        # Upstream's public test password; these synthetic credentials are not secrets.
+        root = archive.read('distrusted/distrusted_root.pem', pwd=b'Brave Sir Robin')
+        keycert = archive.read('distrusted/distrusted_keycert.pem', pwd=b'Brave Sir Robin')
+    client_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    client_context.load_verify_locations(cadata=root.decode('ascii'))
+    server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    with tempfile.TemporaryDirectory(prefix='keep-spki-') as directory:
+        certificate = Path(directory) / 'public-test-keycert.pem'
+        certificate.write_bytes(keycert)
+        certificate.chmod(0o600)
+        server_context.load_cert_chain(certificate)
+    client_in, client_out, server_in, server_out = (ssl.MemoryBIO() for _ in range(4))
+    client = client_context.wrap_bio(client_in, client_out, server_hostname='localhost')
+    server = server_context.wrap_bio(server_in, server_out, server_side=True)
+    try:
+        memory_tls_handshake(client, server, client_in, client_out, server_in, server_out)
+    except ssl.SSLCertVerificationError as error:
+        require(error.verify_code == 28, 'Distrusted SPKI failed for an unrelated reason')
+    else:
+        raise ValueError('Python accepted the distrusted SPKI test certificate')
+    return True
+
+
 def exercise_python_tls():
     """Check hostname enforcement and a legitimate SNI context switch offline."""
     import ssl
@@ -417,12 +461,13 @@ def exercise_python_tls():
                 and selected_reference() is not None
                 and server.context is selected_reference() and bool(client.getpeercert()),
                 'SNI context switch or verified peer handshake failed')
+    require(exercise_python_spki(), 'Distrusted SPKI rejection failed')
     return dict(PYTHON_TLS_PROBES)
 
 
 def exercise_python():
     require(platform.python_implementation() == 'CPython'
-            and sys.version_info[:3] == (3, 14, 8)
+            and sys.version_info[:3] == (3, 14, 10)
             and sys.version_info.releaselevel == 'final' and not sys.abiflags,
             'Unexpected ordinary Python version or ABI')
     return {'version': PYTHON_VERSION, 'tls_probes': exercise_python_tls()}

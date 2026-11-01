@@ -68,7 +68,7 @@ def fetch_source(url):
     """Fetch locked PyPI/native/patch sources, checking HTTPS redirect hosts."""
     hosts = {'pypi.org', 'files.pythonhosted.org', 'github.com', 'codeload.github.com',
              'raw.githubusercontent.com'}
-    if url == 'https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz':
+    if url == 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz':
         hosts = {'www.python.org'}
     public_url(url, hosts)
     request = urllib.request.Request(url, headers={'User-Agent': 'Keep-source-bundle/1'})
@@ -232,7 +232,7 @@ def check_runtime_notices(root, inventory, os_lock, arch):
         original_python = read_json(root, 'docs/base-python-sources.json')
         expected['python-3.14-ensurepip'] = original_python['package']['version']
         if 'socket_replacement' in inventory:
-            expected['python-socket-overlay'] = '3.14.8'
+            expected['python-socket-overlay'] = '3.14.10'
     installed = {row['path']: row for row in inventory.get('notices', [])}
     covered = set()
     seen = set()
@@ -801,7 +801,7 @@ def reviewed_original_base_origins(os_lock):
             expected_originals.add('zlib')
         if origin.get('source_method') == 'alpine-signed-musl-v1':
             expected_originals.add('musl')
-        if origin.get('origin') == 'python-3.14' and origin.get('version') == '3.14.8-r0':
+        if origin.get('origin') == 'python-3.14' and origin.get('version') in {'3.14.8-r0', '3.14.10-r1'}:
             expected_originals.add('python-3.14')
         if origin.get('origin') == 'ca-certificates' and origin.get('version') == '20261020-r0':
             expected_originals.add('ca-certificates')
@@ -1061,7 +1061,7 @@ def retain_socket_sources(stage, inventory, arch, *, root=ROOT, fetch=fetch_sour
     target = source / patch['path']
     target.write_bytes(build.patched_source(target.read_bytes(), patch))
     (source / 'pyconfig.h').write_bytes(replacement['pyconfig'].encode())
-    (output / 'Python-3.14.8.tar.xz').write_bytes(archive)
+    (output / 'Python-3.14.10.tar.xz').write_bytes(archive)
     for name in ('scripts/python_socket_patches.json', 'scripts/build_patched_socket.py',
                  'scripts/socket_security_checks.py', 'docs/python-socket-build.json'):
         copy_file(root, name, output / Path(name).name)
@@ -1085,14 +1085,14 @@ def retain_socket_sources(stage, inventory, arch, *, root=ROOT, fetch=fetch_sour
     notice = output / 'notices' / (license_hash + '.txt')
     notice.parent.mkdir()
     notice.write_bytes(license_body)
-    provenance = {'origin': 'python-socket-overlay', 'version': '3.14.8',
+    provenance = {'origin': 'python-socket-overlay', 'version': '3.14.10',
                   'architecture': arch, 'source_image_digest': None,
                   'provider_oci_binding': False,
                   'binding_method': 'Reviewed native socket source/build/output hash binding',
                   'source_url': build.SOURCE_URL,
                   'upstream_source_sha256': build.SOURCE_SHA256,
                   'replacement_manifest_sha256': replacement['manifest_sha256']}
-    notice_record = {'path': 'Python-3.14.8/LICENSE',
+    notice_record = {'path': 'Python-3.14.10/LICENSE',
         'notice_file': 'notices/' + notice.name, 'sha256': license_hash,
         'bytes': len(license_body), 'encoding': 'utf-8',
         'discovery': 'checked-public-standalone-notice', 'provenance': provenance}
@@ -1126,6 +1126,7 @@ def keep_source(root, destination):
                      'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'docs/python-socket-build.json',
+                     'scripts/security-fixtures/distrusted.zip',
                      'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
                      'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
                      'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',

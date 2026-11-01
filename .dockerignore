@@ -64,3 +64,6 @@
 !scripts/python_socket_patches.json
 !scripts/socket_security_checks.py
 !docs/python-socket-build.json
+
+# Public upstream TLS fixtures are mounted only for qualification.
+scripts/security-fixtures/**

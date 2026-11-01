@@ -1,12 +1,12 @@
 {
   "schema": "keep-python-socket-patches-v1",
-  "upstream_version": "3.14.8",
+  "upstream_version": "3.14.10",
   "upstream_main_commit": "131a3a66c5f400b588f9fd2732a5ed4e89623ee3",
   "reviewed_backport_head": "c53e59385eda89fade1531240ef6479341a55b53",
   "backport_status": "unmerged",
   "path": "Modules/socketmodule.c",
-  "before_sha256": "cb4f6d1e4357a5a7b882df88ecb071a08c9e5da24f1045829857562e97491ee2",
-  "after_sha256": "5ca0e0b0818ff76be79bdeadeb69341ee9ca3acf6af9a2afc7c8359f692e64fb",
+  "before_sha256": "6fe3ba31a34e6237d722c9e50c130b963d7d7f9730a6935a955505069da9a431",
+  "after_sha256": "f7e5da3b34b7f0dd69c2e7c22d2515637af63658143f56e3f95bc48172bdf398",
   "hunks": [
     {
       "before": "    PyObject *pobj = (PyObject *)NULL;\n    PyObject *pstr = NULL;\n    const char *hptr, *pptr;\n    int family, socktype, protocol, flags;\n    int error;\n    PyObject *all = (PyObject *)NULL;\n",

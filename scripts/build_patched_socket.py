@@ -19,13 +19,13 @@ if __package__:
 else:
     import build_patched_expat as compiler_profile
 
-SOURCE_URL = 'https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz'
-SOURCE_SHA256 = 'c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73'
+SOURCE_URL = 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz'
+SOURCE_SHA256 = 'de414a57119abef52784d8993e341d53aed635fc2b05c2607d9f98a2c5b72032'
 PATCH_PATH = Path(__file__).with_name('python_socket_patches.json')
 WORK = Path('/opt/keep-socket-build')
-SOURCE_DIRECTORY = 'Python-3.14.8'
+SOURCE_DIRECTORY = 'Python-3.14.10'
 ROOT = Path(__file__).resolve().parents[1]
-IDENTITY = 'keep-python-3.14.8-socket-nul-v1'
+IDENTITY = 'keep-python-3.14.10-socket-nul-v1'
 ARCH_NAMES = {'amd64': 'x86_64', 'arm64': 'aarch64'}
 
 
@@ -108,7 +108,7 @@ def require(ok, message):
 def patched_source(body, manifest):
     require(manifest.get('schema') == 'keep-python-socket-patches-v1'
             and manifest.get('path') == 'Modules/socketmodule.c'
-            and manifest.get('upstream_version') == '3.14.8', 'Wrong socket patch scope')
+            and manifest.get('upstream_version') == '3.14.10', 'Wrong socket patch scope')
     require(digest(body) == manifest['before_sha256'], 'Socket source input differs')
     for hunk in manifest['hunks']:
         before, after = hunk['before'].encode(), hunk['after'].encode()
@@ -148,8 +148,8 @@ def extract_source(body, destination):
 
 
 def build(output, preparation=False):
-    require(platform.system() == 'Linux' and sys.version_info[:3] == (3, 14, 8),
-            'Socket preparation requires native Linux Python 3.14.8')
+    require(platform.system() == 'Linux' and sys.version_info[:3] == (3, 14, 10),
+            'Socket preparation requires native Linux Python 3.14.10')
     arch = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine())
     require(arch is not None, 'Unsupported native socket architecture')
     require(output.is_absolute() and not output.exists() and not WORK.exists(),

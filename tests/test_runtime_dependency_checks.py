@@ -607,7 +607,7 @@ class LoadedPythonIdentityTests(unittest.TestCase):
              patch.object(packages, 'verify_installed', return_value=self.manifest) as installed, \
              patch.object(checks, 'check_socket_runtime', return_value={'library': {}}), \
              patch.object(checks, 'exercise_python', return_value={
-                 'version': '3.14.8', 'tls_probes': dict(checks.PYTHON_TLS_PROBES)}) as probes:
+                 'version': '3.14.10', 'tls_probes': dict(checks.PYTHON_TLS_PROBES)}) as probes:
             result = checks.check_python('amd64', self.root / 'manifest.json', maps)
             self.assertEqual(result['tls_probes'], checks.PYTHON_TLS_PROBES)
             self.assertEqual(result['install_manifest_sha256'], 'c' * 64)
@@ -675,8 +675,29 @@ class BenignFunctionalChecksTests(unittest.TestCase):
         # rejection while exercising the real certificate, callback and BIOs.
         self.original_wrap_bio = ssl.SSLContext.wrap_bio
         with patch.object(ssl.SSLContext, 'wrap_bio',
-                          lambda context, *args, **kwargs: self.fixed_wrap_bio(context, *args, **kwargs)):
+                          lambda context, *args, **kwargs: self.fixed_wrap_bio(context, *args, **kwargs)), \
+             patch.object(checks, 'exercise_python_spki', return_value=True):
             self.assertEqual(checks.exercise_python_tls(), checks.PYTHON_TLS_PROBES)
+
+    def test_spki_probe_requires_the_exact_rejection_and_fixture(self):
+        for code in (28, 20):
+            error = ssl.SSLCertVerificationError('fixture')
+            error.verify_code = code
+            with patch.object(checks, 'memory_tls_handshake', side_effect=error):
+                if code == 28:
+                    self.assertTrue(checks.exercise_python_spki())
+                else:
+                    with self.assertRaisesRegex(ValueError, 'unrelated reason'):
+                        checks.exercise_python_spki()
+        with patch.object(checks, 'memory_tls_handshake'):
+            with self.assertRaisesRegex(ValueError, 'accepted the distrusted'):
+                checks.exercise_python_spki()
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / 'distrusted.zip'
+            fixture.write_bytes(b'tampered')
+            with patch.object(checks, 'SPKI_FIXTURE', fixture):
+                with self.assertRaisesRegex(ValueError, 'checksum'):
+                    checks.exercise_python_spki()
 
     def test_a_missing_hostname_guard_blocks_before_sni_or_handshake(self):
         original = ssl.SSLContext.wrap_bio
@@ -717,17 +738,17 @@ class BenignFunctionalChecksTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'ordinary Python version'):
                 checks.exercise_python()
             tls.assert_not_called()
-        with patch.object(sys, 'version_info', version(3, 14, 8, 'final', 0)), \
+        with patch.object(sys, 'version_info', version(3, 14, 10, 'final', 0)), \
              patch.object(checks.platform, 'python_implementation', return_value='CPython'), \
              patch.object(sys, 'abiflags', ''), \
              patch.object(checks, 'exercise_python_tls', return_value=dict(checks.PYTHON_TLS_PROBES)):
             self.assertEqual(checks.exercise_python(),
-                             {'version': '3.14.8', 'tls_probes': checks.PYTHON_TLS_PROBES})
+                             {'version': '3.14.10', 'tls_probes': checks.PYTHON_TLS_PROBES})
 
-    @unittest.skipUnless(sys.version_info[:3] == (3, 14, 8), 'Requires the reviewed native Python')
+    @unittest.skipUnless(sys.version_info[:3] == (3, 14, 10), 'Requires the reviewed native Python')
     def test_reviewed_native_python_runs_the_unmodified_tls_probes(self):
         self.assertEqual(checks.exercise_python(),
-                         {'version': '3.14.8', 'tls_probes': checks.PYTHON_TLS_PROBES})
+                         {'version': '3.14.10', 'tls_probes': checks.PYTHON_TLS_PROBES})
 
 
 class RuntimeReportTests(unittest.TestCase):
@@ -748,7 +769,7 @@ class RuntimeReportTests(unittest.TestCase):
             {'version': '3.5.9', 'certificate_trust': trust_report('arm64'),
              'libraries': {'ssl': library('libssl.so.3'),
                                             'crypto': library('libcrypto.so.3')}},
-            {'version': '3.14.8',
+            {'version': '3.14.10',
              'libraries': {'python': library('libpython3.14.so.1.0'),
                            'python_ssl': library('_ssl.fixture.so')},
              'files': {'executable': library('python3.14'), 'abi_library': library('libpython3.so')},
@@ -772,7 +793,7 @@ class RuntimeReportTests(unittest.TestCase):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
             'schema': 6, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
-            'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8',
+            'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.10',
                                       'musl': '1.2.6-r3'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
                                  **musl['libraries']},
@@ -805,7 +826,7 @@ class RuntimeReportTests(unittest.TestCase):
         self.assertEqual(report['tests'], 4)
         self.assertEqual(report['failures'], 1)
         self.assertEqual(report['errors'], [{'check': 'expat', 'message': 'wrong binding'}])
-        self.assertEqual(report['versions'], {'openssl': '3.5.9', 'python': '3.14.8', 'musl': '1.2.6-r3'})
+        self.assertEqual(report['versions'], {'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3'})
         ssl_check.assert_called_once()
         python_check.assert_called_once()
         musl_check.assert_called_once()

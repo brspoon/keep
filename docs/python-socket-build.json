@@ -1,22 +1,22 @@
 {
-  "identity": "keep-python-3.14.8-socket-nul-v1",
+  "identity": "keep-python-3.14.10-socket-nul-v1",
   "native": {
     "amd64": {
-      "compiler_sha256": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
-      "extension_sha256": "ff8dfa12921a71ce2134025e974043e47399595b9cf1cacfa8b13795616617fa",
-      "original_extension_sha256": "f83a15ed6639602c6d4b3d736a87a50018ab007e0770437fc902270deb47cc99",
-      "pyconfig_sha256": "cfe0f1868a4f22b206232b6a847de99cf946be6997c704faffa55b3326d3529f"
+      "compiler_sha256": null,
+      "extension_sha256": null,
+      "original_extension_sha256": null,
+      "pyconfig_sha256": null
     },
     "arm64": {
-      "compiler_sha256": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db",
-      "extension_sha256": "69396580bd371218f80b3178fab3b0196d7864c79284ff64f5191d2b27e07c5e",
-      "original_extension_sha256": "585821a0589d31b5b51df20603c422a16bfe4c54cc577e90d6d732d561f8399c",
-      "pyconfig_sha256": "c8b2f2f264deb96f4956b0740f1210289e4afedd0df51cbeaeede52ec24ae9a8"
+      "compiler_sha256": null,
+      "extension_sha256": null,
+      "original_extension_sha256": null,
+      "pyconfig_sha256": null
     }
   },
-  "patch_sha256": "f9afc436fd52c725cb61548465393e0314d4e91384211ff69ba1eb2a1ca243bc",
-  "patched_source_sha256": "5ca0e0b0818ff76be79bdeadeb69341ee9ca3acf6af9a2afc7c8359f692e64fb",
+  "patch_sha256": "bc53b1ecd229babd2d983cc7d2c5b4b9c205e547fe78825dd90bfe1b69199b91",
+  "patched_source_sha256": "f7e5da3b34b7f0dd69c2e7c22d2515637af63658143f56e3f95bc48172bdf398",
   "schema": "keep-socket-build-v1",
-  "source_sha256": "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73",
-  "source_url": "https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz"
+  "source_sha256": "de414a57119abef52784d8993e341d53aed635fc2b05c2607d9f98a2c5b72032",
+  "source_url": "https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz"
 }
