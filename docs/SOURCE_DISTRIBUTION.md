@@ -241,7 +241,7 @@ version, architecture and source revision. Both architecture archives are
 needed to cover both published images. Full OS notices and their provenance are
 also retained in `docs/licenses/os` and copied to `/app/licenses/os` in the
 container. The reviewed runtime union contains 136 complete notice texts
-(979,530 bytes) and 628 complete native attributions, covering all 24 current and
+(979,530 bytes) and 628 complete native attributions, covering all 25 current and
 earlier-layer origins on both architectures. It retains 21 explicitly selected
 source copyright headers, three patched Expat headers, ten Fortify headers,
 eleven musl subcomponent headers and four timezone headers from the checked
