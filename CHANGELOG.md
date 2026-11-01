@@ -2,7 +2,7 @@
 
 ## 2.30.2 — 2026-11-01
 
-- Update Python and fix hostname and service-port handling.
+- Update Python and fix hostname and service port handling.
 
 ## 2.30.1 — 2026-10-28
 
