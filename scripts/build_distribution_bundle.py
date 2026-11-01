@@ -68,6 +68,8 @@ def fetch_source(url):
     """Fetch locked PyPI/native/patch sources, checking HTTPS redirect hosts."""
     hosts = {'pypi.org', 'files.pythonhosted.org', 'github.com', 'codeload.github.com',
              'raw.githubusercontent.com'}
+    if url == 'https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz':
+        hosts = {'www.python.org'}
     public_url(url, hosts)
     request = urllib.request.Request(url, headers={'User-Agent': 'Keep-source-bundle/1'})
     with urllib.request.urlopen(request, timeout=60) as response:

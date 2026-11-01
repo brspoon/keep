@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import sys
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -14,6 +15,7 @@ from scripts import build_patched_socket as build
 from scripts.collect_package_sources import verify_socket_replacement
 from tests.native_dependency_fixture import dependency_report
 from scripts import runtime_dependency_checks as checks
+import build_distribution_bundle as distribution
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -81,6 +83,33 @@ class SocketBuildTests(unittest.TestCase):
         changed['loaded_libraries']['python_socket']['sha256'] = '0' * 64
         with self.assertRaises(ValueError):
             checks.validate_report(changed, 'amd64', ROOT)
+
+    def test_source_download_allows_only_the_exact_python_archive_and_host(self):
+        class Response:
+            def __init__(self, url):
+                self.url = url
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return self.url
+            def read(self, size):
+                return b'fixture archive; caller must verify locked hash'
+        with patch.object(distribution.urllib.request, 'urlopen',
+                          return_value=Response(build.SOURCE_URL)) as fetch:
+            self.assertTrue(distribution.fetch_source(build.SOURCE_URL))
+            fetch.assert_called_once()
+        for url in ('https://www.python.org/ftp/python/other.tar.xz',
+                    'http://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz'):
+            with self.subTest(url=url), patch.object(distribution.urllib.request, 'urlopen') as fetch:
+                with self.assertRaises(ValueError):
+                    distribution.fetch_source(url)
+                fetch.assert_not_called()
+        with patch.object(distribution.urllib.request, 'urlopen',
+                          return_value=Response('https://example.org/Python.tar.xz')):
+            with self.assertRaises(ValueError):
+                distribution.fetch_source(build.SOURCE_URL)
 
 
 if __name__ == '__main__':

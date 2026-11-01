@@ -7,7 +7,8 @@ import sys
 
 def expected_report():
     row = {'schema': 'keep-socket-probes-v1', 'null_cases_rejected': 15,
-           'numeric_controls_passed': 8, 'resolver_audit_after_validation': True}
+           'numeric_controls_passed': 14, 'socketpair_passed': True,
+           'resolver_audit_after_validation': True}
     return {'direct': dict(row), 'public': dict(row)}
 
 
@@ -45,8 +46,32 @@ def check_socket(module):
             if not rows or any(row[4] != ('127.0.0.1', expected) for row in rows):
                 raise AssertionError('Numeric resolver compatibility differs')
             controls += 1
+    for host in ['::1', b'::1']:
+        for port in [80, '80']:
+            rows = module.getaddrinfo(host, port, module.AF_INET6,
+                                     module.SOCK_STREAM, 0, flags)
+            if not rows or any(row[4][:2] != ('::1', 80) for row in rows):
+                raise AssertionError('Numeric IPv6 compatibility differs')
+            controls += 1
+    for port in [80, '80']:
+        rows = module.getaddrinfo(None, port, module.AF_INET, module.SOCK_STREAM,
+                                 0, module.AI_PASSIVE | module.AI_NUMERICSERV)
+        if not rows or any(row[4] != ('0.0.0.0', 80) for row in rows):
+            raise AssertionError('Passive null-host compatibility differs')
+        controls += 1
+    left, right = module.socketpair()
+    try:
+        left.settimeout(1)
+        right.settimeout(1)
+        left.sendall(b'keep-socket-control')
+        if right.recv(64) != b'keep-socket-control':
+            raise AssertionError('Ordinary local socket I/O differs')
+    finally:
+        left.close()
+        right.close()
     return {'schema': 'keep-socket-probes-v1', 'null_cases_rejected': rejected,
-            'numeric_controls_passed': controls, 'resolver_audit_after_validation': True}
+            'numeric_controls_passed': controls, 'socketpair_passed': True,
+            'resolver_audit_after_validation': True}
 
 
 if __name__ == '__main__':
