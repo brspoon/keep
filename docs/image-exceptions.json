@@ -1,23 +1,23 @@
 {
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
-  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The fresh October 28, 2026 joint review permits only the two unchanged verified-fixed Medium/APK/python-3.14/3.14.8-r0 Grype scopes and the unchanged exact Alpine 3.24 musl 1.2.6-r3 UNSPECIFIED Scout false-positive scope below through November 11, 2026 UTC inclusive. Complete native qualification 40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both architectures with all ten runtime groups, functional/security/recovery, signed provenance, source acquisition, full source archive member integrity and matching-source/license gates. Both original complete unsuppressed reports contain only these three scopes. All existing Python cleanup and descriptor-bound protections remain required. Every changed candidate still requires exact-commit validation, original-byte promotion revalidation and actual completed unfiltered Docker Hub analysis for both exact native digests. Raw reports and truthful counts remain visible. No other finding, retired scope, package, version, severity, PURL or threshold is accepted. No automatic future renewal is permitted.",
+  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 1, 2026 review permits only CVE-2025-15367 at Medium and CVE-2026-103995 at Low for APK python-3.14 version 3.14.10-r1, plus the unchanged exact Alpine 3.24 musl 1.2.6-r3 UNSPECIFIED Scout scope below, through November 11, 2026 UTC inclusive. The older Python scopes are replaced; CVE-2026-12345 and CVE-2026-87910 are retired. Both native runtime suites and signed-source/notice preparation passed in 41329357665 at 33bf107; original unsuppressed reports contain exactly the two Python matches and one musl match per architecture. Complete rebuilt source archives and every existing functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard and existing protections. Raw reports and truthful counts remain visible. No other package, version, severity, finding, PURL or threshold is accepted. No deadline extension or automatic future renewal is permitted.",
   "reviewed_sources": {
-    "Dockerfile": "80fae3dab7241ab222c7cabd1c3f1da64a43ddc4d2249399dacf2f3e81759e77",
+    "Dockerfile": "f63a91318120a2bacca9f554774b84b4d54aca363adbf060673648dc714e6d04",
     "scripts/inspect_candidate.py": "8c1dcc1a7d7895cc1c5e1ab297ee78c28c1ed9ec7fd76bd64083ce646d52073f",
     "requirements.txt": "601cdb57645d6a96ab6f6a7e6acf12485b66f00c3a22d506377d48867239da91",
     "scripts/python_security_patches.json": "2252108f17e74cb4a92a5de3a6829fc09f04244a06913bd26ec188bf126d3ccc",
     "scripts/patch_python_runtime.py": "7e04ab28f407cd4e78b21b31b357c9d93b39fafe1aabd988145673ff34034ac1",
     "scripts/python_security_checks.py": "5db1ed38aa25609898366c353937e151d3763dd0e34b2968fa756d3639f862c4",
     "scripts/alpine_expat_sources.py": "3071513ad18bb712499e494f27fbad596ecebda810072b0e58519c2088e719cb",
-    "scripts/runtime_dependency_checks.py": "50e4cad7d36325724310e944d1b99bbf9b5ad071ebca1b1224219757a5253659",
-    "docs/os-package-sources.json": "b6f9ff4f2f9712500d4b468536ad20c5884704c854b0cacbba650d7056fa5e0b",
-    ".dockerignore": "c6996eb9c857246c311b0da4961ceb2cfb5fd3e41593e6b28a9c3cc7dfad7bab",
+    "scripts/runtime_dependency_checks.py": "281f8fa4f345fbd8e86c0e5ea3d244b64be957d96195504870160bc43b9ede53",
+    "docs/os-package-sources.json": "90e29265b04f46da37f2e42d410e54fec0e7a48fd5440cc29b17cba73a4410d4",
+    ".dockerignore": "81258cb19021c1d8b95eda23fe44a73a315465c8e956bd50636e4f40ce202c09",
     "scripts/review_image.py": "08462decccc84d92f2f820716f7689b888804a9db1bb12b32fe9752b226b0fa3",
     "scripts/alpine_zlib_sources.py": "1d7742f9e8a35048d65bf4642f37efc988635b6452836d71f5575e4876d983ff",
-    "scripts/dhi_python_packages.py": "365374494190fff6879fed735c972ac8053a52a0d3388a207c435ad34a259a6f",
-    "scripts/install_runtime_packages.py": "9339c92b0c43fd3e030fbf670ab99534a3c9693cbd3161f45d97504f4028bcc4",
-    "scripts/build_distribution_bundle.py": "bb1456d829186917633686f0d10269f334a4606da9911f5591d9f93d763d3308",
-    "scripts/collect_package_sources.py": "e3a3c379a397a9860c5002f35d39720583ad0fc749fccbf0f069b0562426dac1",
+    "scripts/dhi_python_packages.py": "edfeca760335cb5539846b15bd0f65beef62ae8526ce5a5c20d10c1f6ff77e74",
+    "scripts/install_runtime_packages.py": "7a8cbfb3c0bbdbd8806730098f50fa4a3a5dd587373e5cd22393c20b85504cfe",
+    "scripts/build_distribution_bundle.py": "d73233e2e94febe63603d94416338f4ebd047483453262443c4914c24cd0ba1b",
+    "scripts/collect_package_sources.py": "a80e9b5d8ebf71bd58dbf0ce1d50d354347b32e93c0dbf4973655714d9fda884",
     "scripts/package_source_notices.py": "2cc8c77ee008739947a14404eaa2a0680bb259aa17c450e8af60c8a77a2add63",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
     "scripts/publish_release.py": "dee91c93a08d8dba96d61ea2fa22e37f195cea3685a0c5bc78e8f339ecfe10ae",
@@ -34,50 +34,56 @@
     "scripts/bootstrap_build_pip.py": "e2f5aec604af9add63fab0f2078f02f794851c7d2ac8d0a19f0c54c5e4b01474",
     "docs/distribution-sources.json": "16d4002d62ef78b772afaa3e3e620fbac0804a0038641116ca6386fe4a02ee2d",
     "scripts/package_provenance_sources.py": "6cf5d353e12a205efea1729f03fcd24c50b985c2d98e1c0aae98b51069d869bd",
-    "docs/aports-source-lock.json": "36341708de7d61a8203b392417c190e7268f13dd13858c2e4df5f3437f3b64fd",
+    "docs/aports-source-lock.json": "9988fc62bc077f07b80f57b6718abe8cb1bc4b29dc0c4a110bef8cb54d1f652d",
     "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
     "scripts/scout_exception_policy.py": "d662274ac8da047c6e62e3d6e5be0f429030cffe025d9d35a94e4cd40093fc0a",
     "scripts/build_patched_expat.py": "e109de2f4dd099d0525f27bddb74e9576d420c58fff655e1845cd3bebc71489b",
     "scripts/expat_security_patches.json": "b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a",
     "scripts/expat_security_checks.py": "f12b75357c3e995294bba154af59b21d46388c1e78de0163f67dc0927244d4c7",
     "docs/expat-build.json": "10d2d607bcc03e49ef51c20c7b85292ff84ffbc66fa9ebdca1ebdcced053f339",
-    "scripts/image_distribution.py": "710251d5bbc83366059d32a95cfcbe5cc9ed20271e184c017cd315ffc6f04c65",
-    ".github/workflows/runtime-base-review.yml": "66783b04882c7d24103000cd4b8d2ce0d936b716abe83d0c0eaec4ebe818a24c",
+    "scripts/image_distribution.py": "cfdea4e250859d0d76cea606e2b020202136b7e2bd788d45068225ba71d2a2a0",
+    ".github/workflows/runtime-base-review.yml": "270f17070f3ad048e20a407709895149d2f9602e0d7d30e7b1ec65bc2fee797a",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
     "scripts/dhi_cpp_packages.py": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb",
     "scripts/expat_build_tools.py": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa",
     "scripts/patch_urllib3_runtime.py": "105fbf36d7ce3f20cd8a15c850db983e22c4406f7eba693dad300cf985ced789",
     "scripts/urllib3_security_patches.json": "399e8e24ab1a00bfbbf87ad99b9b2da473e23594bbc8985d2b1b9ef9c89786c6",
     "scripts/http_framing_checks.py": "374bdd83cf8263f98aab13ee2fc4075252d298597b65e9be17a0f8164e9fb69d",
-    "scripts/http_framing_sources.json": "5d686d7160bcf564dd1e9c242510ac70dab85d3ec02fcf62e5c54295cef522c6"
+    "scripts/http_framing_sources.json": "97b4f2568c9c2e8e062e4bab17a42c5ecb47356ac0ce232a4768fd5c5e4b5ee8",
+    "scripts/build_patched_socket.py": "ca24227dc2785715100c6a2a39fbdea57ea472a4c4a92a5447d71a5e39d48c6a",
+    "scripts/python_socket_patches.json": "bc53b1ecd229babd2d983cc7d2c5b4b9c205e547fe78825dd90bfe1b69199b91",
+    "scripts/socket_security_checks.py": "9b40b1ca6390090bbc4f6f0b9ff3c327dec6be7775778d0e849fe878ba836429",
+    "docs/python-socket-build.json": "a8e5a09c0f41a9560b7cd9f5863c9e820a05a000f3a00d13bd12492c6a0bf90f",
+    "scripts/security-fixtures/distrusted.zip": "8a9874e20b8583e80e9d7d6c82ea566c22d50458a93bfef6400d70dde132a053",
+    "docs/source-archive-fixtures.json": "c2f8a19aa8eaa12eff7c243fcf0d1bc8399fcae61d45b2a8e2d85257ce17cff1"
   },
   "exceptions": {
     "CVE-2025-15367": {
       "severity": "Medium",
       "type": "apk",
       "package": "python-3.14",
-      "version": "3.14.8-r0",
+      "version": "3.14.10-r1",
       "status": "fixed",
-      "evidence": "Fresh readback of both signed DHI Python 3.14.8-r0 APKs verifies identical poplib.py bytes (SHA256 a6ffff188814b56d95b043c31d9e0dfee51ac6d6e92afe74ab070cb6136b076f) containing the complete control-character rejection from upstream b234a2b67539f787e191d2ef19a7cbdce32874e7. The loaded-runtime POP3 regression passes on both native architectures. This source inspection is separate from the cleanup patch manifest. Fresh complete native qualification in https://github.com/brspoon/keep/actions/runs/39150602670 (attempt 1), at source revision 521c3376c058d0e2392e5b7ac2299666f82e5e3f, passed on amd64 and arm64: Scout reported zero, complete unsuppressed Grype reports contained only the two exact approved scopes, all nine runtime probes and all three dependency families passed, and signed provenance, source acquisition, source archive member integrity and complete matching-source/license gates passed. Original reports and prior release evidence remain unchanged. Every new main candidate still requires successful exact-commit validation. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
+      "evidence": "Both exact signed DHI Python 3.14.10-r1 APKs retain identical poplib.py SHA256 a6ffff188814b56d95b043c31d9e0dfee51ac6d6e92afe74ab070cb6136b076f, containing the reviewed control-character rejection from upstream b234a2b67539f787e191d2ef19a7cbdce32874e7. The loaded POP3 controls pass on both native architectures. The generic Python CPE match does not account for this vendor correction. Both native qualification jobs in https://github.com/brspoon/keep/actions/runs/41329357665 at 33bf107 passed the application/install/recovery checks, all ten runtime security groups without skips, four dependency groups, signed provenance, complete source acquisition and matching-source/notice preparation. Original complete Grype reports contain exactly these two Python matches with no ignored matches; Scout contains only the unchanged exact musl false positive. Complete rebuilt source archives and fresh exact-commit validation remain required; preparation is not publication or deployment.",
       "review": {
-        "approval": "Fresh verified-fixed review on October 28, 2026 permits only CVE-2025-15367 at Medium severity for APK python-3.14 version 3.14.8-r0 through November 11, 2026 UTC inclusive. Both native architectures passed complete qualification 40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf, including the existing cleanup/descriptor guards and every source/license/runtime gate. Scope, base and package identity are unchanged. All unmatched findings block; no automatic later renewal is accepted.",
+        "approval": "November 1, 2026 verified-fixed review permits only CVE-2025-15367 at Medium severity for APK python-3.14 version 3.14.10-r1 through November 11, 2026 UTC inclusive. Accept only with all existing native/runtime/source/archive/license gates passing. Other identities, versions and severities block. This does not extend the deadline or approve future renewal.",
         "deadline": "2026-11-11",
-        "remove_when": "Remove only after verified replacement Python sources supply the reviewed fixes for CVE-2025-15367, including any fixes already present in the pinned base, and the corresponding runtime regression passes on native amd64 and arm64. Both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together.",
-        "reviewed_on": "2026-10-28"
+        "remove_when": "Remove after a verified replacement or matcher correction eliminates this finding from complete unsuppressed native scans, with the reviewed POP3 controls and every existing provenance/source/license/runtime/native and hosted-analysis gate passing.",
+        "reviewed_on": "2026-11-01"
       }
     },
-    "CVE-2026-12345": {
-      "severity": "Medium",
+    "CVE-2026-103995": {
+      "severity": "Low",
       "type": "apk",
       "package": "python-3.14",
-      "version": "3.14.8-r0",
+      "version": "3.14.10-r1",
       "status": "fixed",
-      "evidence": "The raw signed DHI Python 3.14.8-r0 APKs still require the seven cleanup correction hunks from 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 plus the separate Keep guard keep-tempfile-bound-permission-reset-v1. Fresh source comparison verifies that the seven production hunks produce byte-identical shutil.py and pre-guard tempfile.py to the merged upstream 3.14 backport 58ed0259cae509a19138795df302fe60b544dc74. The Keep guard remains necessary because upstream still permits pathname permission fallback. Exact patched-source assertions and the ninth loaded-runtime probe verify descriptor-bound cleanup, permission recovery and ordinary cleanup. This approval covers only the corrected Keep Linux runtime with the checked descriptor capabilities and no chflags; unreadable or unbound entries fail closed and may remain unremoved. It does not cover the unpatched vendor package. Fresh complete native qualification in https://github.com/brspoon/keep/actions/runs/39150602670 (attempt 1), at source revision 521c3376c058d0e2392e5b7ac2299666f82e5e3f, passed on amd64 and arm64: Scout reported zero, complete unsuppressed Grype reports contained only the two exact approved scopes, all nine runtime probes and all three dependency families passed, and signed provenance, source acquisition, source archive member integrity and complete matching-source/license gates passed. Original reports and prior release evidence remain unchanged. Every new main candidate still requires successful exact-commit validation. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
+      "evidence": "Both loaded native runtimes contain http.client SHA256 36abe47de47b604ca657de10f46793a7637cec725a3804828c9d3506960e3a96 and independent urllib3.response SHA256 f13e6031fbbdba0bc5d25c7ff0376104fc6f0946b1202efffc55ed04d69ffe9e. They carry upstream CPython 2eb2af805c156ca52b316bb4ced5e0ab3971d0ae and 9f52b443c002cccfb54bda0706a9276b6b4a109d, urllib3 5feb993421a48a508bc70c78e745337cc6415265 and separately attributed keep-http-framing-bounds-v1. Native probes reject malformed Content-Length and chunk-size grammar while preserving allowed whitespace, decimal conversion limits, ordinary bodies and connection handling. Generic package-version matching does not account for these exact source corrections. Both native qualification jobs in https://github.com/brspoon/keep/actions/runs/41329357665 at 33bf107 passed the application/install/recovery checks, all ten runtime security groups without skips, four dependency groups, signed provenance, complete source acquisition and matching-source/notice preparation. Original complete Grype reports contain exactly these two Python matches with no ignored matches; Scout contains only the unchanged exact musl false positive. Complete rebuilt source archives and fresh exact-commit validation remain required; preparation is not publication or deployment.",
       "review": {
-        "approval": "Fresh verified-fixed review on October 28, 2026 permits only CVE-2026-12345 at Medium severity for APK python-3.14 version 3.14.8-r0 through November 11, 2026 UTC inclusive. Both native architectures passed complete qualification 40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf, including the existing cleanup/descriptor guards and every source/license/runtime gate. Scope, base and package identity are unchanged. All unmatched findings block; no automatic later renewal is accepted.",
+        "approval": "November 1, 2026 verified-fixed review permits only CVE-2026-103995 at Low severity for APK python-3.14 version 3.14.10-r1 through November 11, 2026 UTC inclusive. Accept only with all existing native/runtime/source/archive/license gates passing. Other identities, versions and severities block. This does not extend the deadline or approve future renewal.",
         "deadline": "2026-11-11",
-        "remove_when": "Remove only after verified replacement Python sources include 363aec1fd31ecbd92c3c7d0a40af4e90b4613e19 or a proven equivalent and preserve the descriptor-bound permission-reset protections of keep-tempfile-bound-permission-reset-v1. The cleanup regression must pass on native amd64 and arm64 and both unsuppressed scanners must no longer report this finding. Update patch inputs, source materials and evidence together.",
-        "reviewed_on": "2026-10-28"
+        "remove_when": "Remove after a verified replacement or matcher correction eliminates this finding from complete unsuppressed native scans while preserving both HTTP parser corrections, whitespace/decimal-limit behavior and every existing provenance/source/license/runtime/native and hosted-analysis gate.",
+        "reviewed_on": "2026-11-01"
       }
     }
   },
@@ -96,7 +102,7 @@
       "status": "fixed_false_positive",
       "source_bindings": {
         "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
-        "scripts/runtime_dependency_checks.py": "50e4cad7d36325724310e944d1b99bbf9b5ad071ebca1b1224219757a5253659"
+        "scripts/runtime_dependency_checks.py": "281f8fa4f345fbd8e86c0e5ea3d244b64be957d96195504870160bc43b9ede53"
       },
       "evidence": "Alpine stable v3.24 secdb identifies 1.2.6-r3 as fixed; edge separately uses r6. Immutable aports commit 8f79d39391b46d6dbf1800fb68b8212a21d5ee2e and patch SHA256 0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b carry upstream fix 7813e9119eb5fe681b6750b8a033a0490bca0941. Exact signed APKs, loaded default-libc hashes, benign regex and compatibility probes, complete matching-source archives and notices passed on native amd64 and arm64 in qualification 39728273258 at 3437692f4473856e875187cd05a55d129e915219. That run remained failed solely at Scout acceptance and cannot qualify publication. Original Scout 1.27.0 reports incorrectly apply the edge r6 threshold to stable r3. The correction report and original evidence are public at https://github.com/docker/scout-cli/issues/248. Every changed candidate must pass fresh complete qualification and exact-main validation; this scoped policy does not accept missing evidence. Fresh October 23 review reverified the four exact signed Alpine musl/musl-utils APKs, unchanged stable r3 and edge r6 official feeds, immutable recipe and complete patch equivalence to upstream. Qualification https://github.com/brspoon/keep/actions/runs/40017413915 at 996b45565161ad9d71dfcade9956ebfaeff2711d passed both native architectures, including default loaded-libc hashes 095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5 (amd64) and 53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793 (arm64), all bounded musl controls, complete unsuppressed scans and source/license notice preparation. Scout still reports only this exact musl scope; Grype contains only the two unchanged approved Python scopes. Final rebuilt source-archive and installed-notice verification, exact-main validation and original-byte promotion revalidation remain mandatory. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
       "review": {

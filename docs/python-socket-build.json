@@ -1,0 +1,22 @@
+{
+  "identity": "keep-python-3.14.10-socket-nul-v1",
+  "native": {
+    "amd64": {
+      "compiler_sha256": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
+      "extension_sha256": "b427c6b76b324fc3242a92452eda89838010e6e05f96fa1c44d9c7faf15bebdb",
+      "original_extension_sha256": "42076882a30736dc3d29578eac6abd80a0e79d93ad9fb1cd971d9fe6982bb205",
+      "pyconfig_sha256": "a888e91b1d4dd457cd5c4b60593dee99e4ca552579af75c834883f71d363cc19"
+    },
+    "arm64": {
+      "compiler_sha256": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db",
+      "extension_sha256": "b86bee156178e7b72668db888de9a0b1074320f89e01dac238960e0af91e1b06",
+      "original_extension_sha256": "3161894bc039d970e5accfdc12f61bcdddc81474b50f5cd43950dc95524b9b9f",
+      "pyconfig_sha256": "d2b8df6abc95ef2bb4b3eae2b557e9ffb516aff401ac41b2604d1bbaca820bff"
+    }
+  },
+  "patch_sha256": "bc53b1ecd229babd2d983cc7d2c5b4b9c205e547fe78825dd90bfe1b69199b91",
+  "patched_source_sha256": "f7e5da3b34b7f0dd69c2e7c22d2515637af63658143f56e3f95bc48172bdf398",
+  "schema": "keep-socket-build-v1",
+  "source_sha256": "de414a57119abef52784d8993e341d53aed635fc2b05c2607d9f98a2c5b72032",
+  "source_url": "https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz"
+}

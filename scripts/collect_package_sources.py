@@ -646,6 +646,28 @@ def acquire_expat_compiler_provenance(architecture, output, registry, *, root=RO
         return retain_expat_compiler_provenance(source, output, architecture, root=root)
 
 
+def verify_socket_replacement(runtime_inventory, architecture, *, root=ROOT):
+    import build_patched_socket as build
+    replacement = runtime_inventory.get('socket_replacement')
+    if not isinstance(replacement, dict) or set(replacement) != {
+            'build_lock', 'build_lock_sha256', 'manifest', 'manifest_sha256',
+            'pyconfig', 'pyconfig_sha256', 'library'}:
+        raise ValueError('Missing complete socket replacement source binding')
+    spec = build.reviewed_spec(root)
+    manifest = build.expected_manifest(architecture, root)
+    if (replacement['build_lock'] != spec
+            or replacement['build_lock_sha256'] != build.digest(build.json_bytes(spec))
+            or replacement['manifest'] != manifest
+            or replacement['manifest_sha256'] != build.digest(build.json_bytes(manifest))
+            or replacement['library'] != manifest['library']
+            or not isinstance(replacement['pyconfig'], str)
+            or len(replacement['pyconfig']) > 128 * 1024
+            or replacement['pyconfig_sha256'] != manifest['pyconfig_sha256']
+            or build.digest(replacement['pyconfig'].encode()) != manifest['pyconfig_sha256']):
+        raise ValueError('Socket source/runtime binding differs from reviewed native build')
+    return replacement
+
+
 def verify_expat_replacement(runtime_inventory, architecture, *, root=ROOT):
     """Bind independently inventoried library bytes to the reviewed native build.
 

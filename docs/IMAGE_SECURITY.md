@@ -4,9 +4,25 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.8-r0` and
+installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.10-r1` and
 DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
+
+The compiled `_socket` extension is separately rebuilt from the exact Python
+3.14.10 source archive with the upstream null-byte rejection correction for
+`CVE-2026-116566` / `PSF-2026-48`. The Python 3.14 backport is pinned by source
+head in scripts/python_socket_patches.json; an unmerged backport is not described
+as an upstream release. The interpreter and original APK metadata remain unchanged.
+The independent docs/python-socket-build.json lock binds both native extension
+hashes, original extension hashes, generated configuration headers and compiler
+identities. No Python wrapper substitutes for the compiled correction.
+Native dependency qualification checks both raw `_socket.getaddrinfo` and public
+`socket.getaddrinfo`, rejection before the resolver audit, ordinary numeric
+controls and canonical loaded-extension hashes/inodes. The original numeric-only
+control reproduces the truncation without DNS during preparation. Matching-source
+archives retain the full original and patched preferred source, generated header,
+build inputs, signed compiler-image proof and full Python license. All existing protections remain. The two exact verified-fixed Python scopes
+below retain the November 11 deadline; no socket or certificate exception is added.
 
 Every architecture job verifies signed vendor provenance, runs checksum-pinned
 Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all ten runtime
@@ -30,8 +46,9 @@ three scopes through November 11, 2026 UTC inclusive.
 Zero Scout and Docker Hub findings remain the default requirement. The only
 temporary Scout approval is the verified musl false positive described below,
 through November 11, 2026 UTC inclusive. Grype's complete raw findings remain visible;
-only the two exact verified-fixed Python `3.14.8-r0` scopes in
-docs/image-exceptions.json may pass through November 11, 2026 UTC inclusive.
+only CVE-2025-15367 at Medium and CVE-2026-103995 at Low for exact APK
+`python-3.14` version `3.14.10-r1` may pass through November 11, 2026 UTC inclusive.
+The earlier cleanup approval is retired; a returning match blocks.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
 `1.3.2-r0` scopes are retired and cannot authorize this runtime.
 Source hashes, base identity, complete scans, successful probes and the deadline
@@ -531,7 +548,7 @@ candidates still require complete exact-commit native validation before publicat
 
 ## Exception review deadlines
 
-The current policy permits only the two reviewed Python `3.14.8-r0` Grype
+The October 28 policy permitted only the two reviewed Python `3.14.8-r0` Grype
 scopes renewed on October 18. Earlier package approvals are preserved in Git history and original
 release evidence; they are absent from the active exception dictionary.
 
@@ -879,3 +896,43 @@ The narrow scanner rule for this package still requires successful regression
 evidence on both native architectures, the exact reviewed source hashes and, when
 a finding needs the exception, its existing review deadline. A local probe alone
 does not validate a rebuilt release.
+
+## Python 3.14.10 vendor update candidate (November 1)
+
+The candidate uses the complete signed DHI Python `3.14.10-r1` package cohort,
+including the compiled intermediate-SPKI denylist. Native dependency checks
+explicitly trust the synthetic upstream fixture root and require rejection of
+its denylisted key with `X509_V_ERR_CERT_REJECTED`, alongside the ordinary
+verified TLS handshake. The fixture is copied unchanged from
+`Python-3.14.10/Lib/test/certdata/distrusted.zip` in the checksum-pinned Python
+source archive; it is PSF-2.0 test material covered by `docs/PYTHON_LICENSE.txt`.
+Its public test credentials are used offline and excluded from the final image.
+
+The separate native `_socket` overlay applies the reviewed null-byte correction
+to the exact 3.14.10 source. Existing HTTP framing corrections, remaining ZIP
+checks and the descriptor-bound permission-reset guard remain required. Patches
+already present in vendor source are accepted only through their exact reviewed
+after-contexts. Original vendor source and license records remain separate from
+the overlay's complete corresponding source and compiler records.
+
+Preparation is not qualification. Both native output pins, matching source and
+license archives, complete unsuppressed scanner reports and every original
+functional/security gate must pass before this candidate is ready. Existing
+Python exceptions name `3.14.8-r0`; they do not approve `3.14.10-r1` findings.
+
+## Exact Python finding review (November 1)
+
+Both complete new reports still identify POP3 CVE-2025-15367 at Medium and HTTP
+framing CVE-2026-103995 at Low for APK `python-3.14` version `3.14.10-r1`.
+The signed vendor POP3 source contains the reviewed control-character rejection;
+both loaded HTTP parsers retain the exact upstream and Keep corrections. Native
+regressions pass on amd64 and arm64, and all original findings remain visible.
+
+Only those two exact verified-fixed scopes are approved through November 11,
+2026 UTC inclusive. This replaces the old Python package scopes and retires
+CVE-2026-12345, which is absent with the vendor cleanup fix and Keep guard still
+present. CVE-2026-87910 remains retired. Either retired finding blocks if it
+returns. The exact musl approval and its deadline are unchanged. No certificate
+or socket exception is added, and no deadline is extended. Full rebuilt source
+archives, native qualification, exact-main validation and hosted analysis remain
+mandatory before the applicable release stages.

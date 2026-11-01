@@ -20,10 +20,13 @@ def dependency_report(arch, *, root=ROOT):
     replacement = expected_manifest(arch, root=root)
     python = python_security_manifest(arch, root=None)
     musl = musl_security_manifest(arch, root=None)
+    from scripts import build_patched_socket as socket_build
+    from scripts.socket_security_checks import expected_report as socket_probe_report
+    socket_manifest = socket_build.expected_manifest(arch, root=ROOT)
     return {
-        'schema': 5, 'arch': arch, 'success': True, 'tests': 4,
+        'schema': 6, 'arch': arch, 'success': True, 'tests': 4,
         'failures': 0, 'errors': [],
-        'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.8', 'musl': '1.2.6-r3'},
+        'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3'},
         'loaded_libraries': {
             name: {'path': path, 'sha256': digest, 'device': '0:1', 'inode': inode}
             for name, path, digest, inode in (
@@ -33,6 +36,7 @@ def dependency_report(arch, *, root=ROOT):
                 ('python', python['library']['path'], python['library']['sha256'], 104),
                 ('python_ssl', python['ssl_extension']['path'], python['ssl_extension']['sha256'], 105),
                 ('musl', musl['library']['path'], musl['library']['sha256'], 108),
+                ('python_socket', socket_manifest['library']['path'], socket_manifest['library']['sha256'], 109),
             )
         },
         'expat_source_manifest_sha256': manifest['source_manifest_sha256'],
@@ -52,11 +56,15 @@ def dependency_report(arch, *, root=ROOT):
         'python_aliases': python['aliases'],
         'python_tls_probes': {'wrap_bio_requires_hostname': True,
                               'sni_context_switch_handshake': True,
-                              'tls_memory_bio_handshake': True},
+                              'tls_memory_bio_handshake': True,
+                              'distrusted_spki_rejection': True},
         'musl_source_manifest_sha256': musl['source_manifest_sha256'],
         'musl_install_manifest_sha256': hashlib.sha256(
             (json.dumps(musl, sort_keys=True, indent=2) + '\n').encode()).hexdigest(),
         'musl_aliases': musl['aliases'], 'musl_probes': dict(MUSL_PROBES),
+        'socket_manifest': socket_manifest,
+        'socket_manifest_sha256': socket_build.digest(socket_build.json_bytes(socket_manifest)),
+        'socket_probes': socket_probe_report(),
         'certificate_trust': trust_report(arch),
     }
 

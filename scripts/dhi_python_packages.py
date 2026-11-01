@@ -15,45 +15,34 @@ import tempfile
 import urllib.request
 import zlib
 
-VERSION = '3.14.8-r0'
-BUILD_COMMIT = '02047b54ee05f804db953459ce3de1b1923be79a'
-RECIPE_REVISION = 'd65ec8748eef33c1ed9033563e0a0a146ef3c739'
-RECIPE_SHA256 = 'df45a49fbde3cc38d704cb3ce988f3c049f7fa6c30521c6ce241b04b8b710386'
+VERSION = '3.14.10-r1'
+BUILD_COMMIT = '2057d765a36e9e029e58a57fe2e2ad70c69994e7'
+RECIPE_REVISION = 'e74ceb30fa1b1f5ae262f97fbc9b7154b9b68305'
+RECIPE_SHA256 = '6c2e5f57588f6f73ba7b1224582682c6d6d76647d3f29a12ef535a35b0ac517d'
 ARCHES = {'amd64': 'x86_64', 'arm64': 'aarch64'}
 PACKAGES = ('pyc-3.14', 'python-3.14', 'python-3.14-pyc', 'python-3.14-pycache-pyc0')
 KEY_NAME = 'dhi-apk@docker-0F81AD7700D99184.rsa.pub'
 KEY_SHA256 = '0003d0ae2bf20db9669f784d6ccd5d52265cb1b73fdb14f5186b348b3308f0cd'
 ROOT = Path(__file__).resolve().parents[1]
 LIMIT = 64 * 1024 * 1024
-BINARY_SHA256 = {'amd64': {'python-3.14': '2d3a42cfd3e61b6ab8d8dc1700d6388aad35afb8c5907d5f03b551133c60b506',
-           'python-3.14-pyc': '9c38a80d7c0f1039d04350c36a20ec896a3b8f500237a8cfa3af74b835bb485b',
-           'python-3.14-pycache-pyc0': '09126535fd4cc2d0d21ee2f9dbfa6eca363944aafc43bfe846ec85adbbfa75d4',
-           'pyc-3.14': 'fa2849be7f428bb6a8ec71166d9444961b268bf6eeab61b16098cfb624a39b83'},
- 'arm64': {'python-3.14': 'f0f644c37070e604ad67091cac77d86f463beed171771f0e974818199c8efb93',
-           'python-3.14-pyc': '9c38a80d7c0f1039d04350c36a20ec896a3b8f500237a8cfa3af74b835bb485b',
-           'python-3.14-pycache-pyc0': '7506c6cb7ecd86b950653f78ded37bbb50d4434b448626e31f8ef8d4d7f7e5fe',
-           'pyc-3.14': 'fa2849be7f428bb6a8ec71166d9444961b268bf6eeab61b16098cfb624a39b83'}}
-PKGINFO_SHA256 = {'amd64': {'python-3.14': '461076340c76f522a656facb10243fe94c94f5b46bfe52f7f491d34b48dbb8d3',
-           'python-3.14-pyc': '572d09c53e20b32701f94b1f6293ea4018aa1ea07b94134b5adec0f33509cf5d',
-           'python-3.14-pycache-pyc0': '41d59fb30ecb022c4fb209d061215af874146580868733f4aee2ba424df2f9f3',
-           'pyc-3.14': '31169d90281023d4528ec0132740cccfd5391771939b06738b72e24aa4ab27da'},
- 'arm64': {'python-3.14': 'b600e28ad8ba4ffee3eba96882727b48815555b4973ad5445ba8f2797270fdbb',
-           'python-3.14-pyc': '572d09c53e20b32701f94b1f6293ea4018aa1ea07b94134b5adec0f33509cf5d',
-           'python-3.14-pycache-pyc0': '65bd4bfe15ea8c7c93cd49bdae801aedef095f20bd7883d4ee305e7f9567fafb',
-           'pyc-3.14': '31169d90281023d4528ec0132740cccfd5391771939b06738b72e24aa4ab27da'}}
-PKGINFO_FIELDS = {'python-3.14': {'provides': ['python3=3.14.8-r0',
-                              'cmd:idle3.14=3.14.8-r0',
-                              'cmd:idle3=3.14.8-r0',
-                              'cmd:idle=3.14.8-r0',
-                              'cmd:pydoc3.14=3.14.8-r0',
-                              'cmd:pydoc3=3.14.8-r0',
-                              'cmd:pydoc=3.14.8-r0',
-                              'cmd:python3.14=3.14.8-r0',
-                              'cmd:python3=3.14.8-r0',
-                              'cmd:python=3.14.8-r0',
-                              'so:libpython3.14.so.1.0=1.0',
-                              'so:libpython3.so=0'],
-                 'depend': ['python3~3.14',
+BINARY_SHA256 = {'amd64': {'pyc-3.14': '32af44001d15520d2af972ea7649648e3331d0d8944b1741028c45722c1a523e',
+           'python-3.14': 'b6cafd2183d664a9789cd98624d67642599756c296997718556baa3c083de086',
+           'python-3.14-pyc': '4517f5d126e44adc55ac3a837d9d8c0139d7a35ac0af68718673b0a24c3f3817',
+           'python-3.14-pycache-pyc0': '54d713e15e1fa923804393dbb21458eadfd94d1e918d97342e67dbef085faa2f'},
+ 'arm64': {'pyc-3.14': '32af44001d15520d2af972ea7649648e3331d0d8944b1741028c45722c1a523e',
+           'python-3.14': 'f9fc352af6ee077f52bedd53f18585f0f3a72dcd28ef406f8626251923a1d8ad',
+           'python-3.14-pyc': '4517f5d126e44adc55ac3a837d9d8c0139d7a35ac0af68718673b0a24c3f3817',
+           'python-3.14-pycache-pyc0': '4a437079fbbfe51b905be567a5a86ab2f9d66416594a229a2f88ddad8d61341b'}}
+PKGINFO_SHA256 = {'amd64': {'pyc-3.14': 'e508bd0ed055755fe7321da156d885a1f88bd3fdf174c96e23dfdf46b3de9c13',
+           'python-3.14': '36cbd935b41f3a9eeaa800805cdf6d18d9f730f1f7574c75e521887915d17eb3',
+           'python-3.14-pyc': 'dd091d0638620b1b7e01d973bafb81cfa7a0dbadf30d118312e09423271e6903',
+           'python-3.14-pycache-pyc0': '4fc29dfc0a0e314399c87b20b6a570b24506539f549b690a3bec9683454fa6e8'},
+ 'arm64': {'pyc-3.14': 'e508bd0ed055755fe7321da156d885a1f88bd3fdf174c96e23dfdf46b3de9c13',
+           'python-3.14': '834cfcc0d24c01a9adf331674ee4ad78e61de2d696db0a620af8c37b8e08801c',
+           'python-3.14-pyc': 'dd091d0638620b1b7e01d973bafb81cfa7a0dbadf30d118312e09423271e6903',
+           'python-3.14-pycache-pyc0': '97cc9ca76ee5dd567b9e8a35d7beb6302afd1e1298ba9755c833498690737dcb'}}
+PKGINFO_FIELDS = {'pyc-3.14': {'provides': ['pyc=3.14.10-r1']},
+ 'python-3.14': {'depend': ['python3~3.14',
                             'so:libbz2.so.1',
                             'so:libc.musl-x86_64.so.1',
                             'so:libcrypto.so.3',
@@ -68,30 +57,41 @@ PKGINFO_FIELDS = {'python-3.14': {'provides': ['python3=3.14.8-r0',
                             'so:libsqlite3.so.0',
                             'so:libssl.so.3',
                             'so:libuuid.so.1',
-                            'so:libz.so.1']},
- 'python-3.14-pyc': {'depend': ['python-3.14-pycache-pyc0=3.14.8-r0', 'pyc-3.14'],
-                     'provides': ['python3-pyc=3.14.8-r0'],
-                     'install_if': ['python-3.14=3.14.8-r0']},
- 'python-3.14-pycache-pyc0': {'provides': ['python3-pycache-pyc0=3.14.8-r0']},
- 'pyc-3.14': {'provides': ['pyc=3.14.8-r0']}}
+                            'so:libz.so.1'],
+                 'provides': ['python3=3.14.10-r1',
+                              'cmd:idle3.14=3.14.10-r1',
+                              'cmd:idle3=3.14.10-r1',
+                              'cmd:idle=3.14.10-r1',
+                              'cmd:pydoc3.14=3.14.10-r1',
+                              'cmd:pydoc3=3.14.10-r1',
+                              'cmd:pydoc=3.14.10-r1',
+                              'cmd:python3.14=3.14.10-r1',
+                              'cmd:python3=3.14.10-r1',
+                              'cmd:python=3.14.10-r1',
+                              'so:libpython3.14.so.1.0=1.0',
+                              'so:libpython3.so=0']},
+ 'python-3.14-pyc': {'depend': ['python-3.14-pycache-pyc0=3.14.10-r1', 'pyc-3.14'],
+                     'provides': ['python3-pyc=3.14.10-r1'],
+                     'install_if': ['python-3.14=3.14.10-r1']},
+ 'python-3.14-pycache-pyc0': {'provides': ['python3-pycache-pyc0=3.14.10-r1']}}
 RUNTIME_FILES = {'amd64': {'executable': {'path': '/usr/bin/python3.14',
                           'sha256': '40a479011281ea749aff463b96105c1e55b8e91eb94652a097fb64ea3e7c5c10'},
            'library': {'path': '/usr/lib/libpython3.14.so.1.0',
                        'soname': 'libpython3.14.so.1.0',
-                       'sha256': '6bbe53238a625a0431831176e73d3ec8212dccd9a9cb06edf47541243df8d84c'},
+                       'sha256': 'da668f94c32f5f8f085cb0cf86a705c7e214b8ad398340cfc97ee6289aa9e44a'},
            'abi_library': {'path': '/usr/lib/libpython3.so',
                            'sha256': 'b176cf514525d9406fd90259b3c10a1fed308c668df7a11fda8bca2b143a1e0d'},
            'ssl_extension': {'path': '/usr/lib/python3.14/lib-dynload/_ssl.cpython-314-x86_64-linux-musl.so',
-                             'sha256': '66bc08c9570db77d14bd787d487059da9dcca4b7c413983b8dde6278e6937631'}},
+                             'sha256': 'fb3c55514bb59ad8c8ed0499f66c3e7eef81b8a0d21dbf3f8c12ce84f0d00bab'}},
  'arm64': {'executable': {'path': '/usr/bin/python3.14',
                           'sha256': 'a6779dd68626ee4d1741609b59b45c40433fd9afd0f8a4183a544359ad47e629'},
            'library': {'path': '/usr/lib/libpython3.14.so.1.0',
                        'soname': 'libpython3.14.so.1.0',
-                       'sha256': '64146883c796c332a7e8fe492c718dee9564db81bc7ca25990df4e221e7e8852'},
+                       'sha256': 'ead775886e9b8497ab9a09257475e123df1386fd52c1d00db44adf471a593866'},
            'abi_library': {'path': '/usr/lib/libpython3.so',
                            'sha256': '2f3ffcd3570a1e39b52c0fee4b6083143a5acd0b262de1147078b0bbde8d9d7f'},
            'ssl_extension': {'path': '/usr/lib/python3.14/lib-dynload/_ssl.cpython-314-aarch64-linux-musl.so',
-                             'sha256': 'ee571df1d822a8161c74539737ce0f563ce443e55dc37b555a9d16c7024f8454'}}}
+                             'sha256': '38603ae8d849c474935e0fe12e74f2463c12a954c84ecd7adde6f150439a0cfd'}}}
 ALIASES = {'/usr/bin/python': 'python3', '/usr/bin/python3': 'python3.14'}
 
 
@@ -121,7 +121,7 @@ def reviewed_spec(root=None):
                    'url': 'https://raw.githubusercontent.com/docker-hardened-images/catalog/'
                           + RECIPE_REVISION + '/' + recipe_path,
                    'upstream_commit': None},
-        'declared_tags': ['3.14.8-apk-alpine3.24', VERSION + '-apk-alpine3.24'],
+        'declared_tags': ['3.14.10-apk-alpine3.24', VERSION + '-apk-alpine3.24'],
         'mutable_tag_reused_across_upstream_versions': False,
         'signing_keys': {arch: {'name': KEY_NAME,
                                'url': 'https://dhi.io/keyring/' + KEY_NAME,
@@ -278,7 +278,7 @@ def security_manifest(spec, architecture):
     if architecture not in ARCHES:
         raise ValueError('Unsupported Python architecture')
     return {'schema': 'keep-python-security-v1', 'architecture': architecture,
-            'version': '3.14.8', 'package_version': VERSION, 'build_commit': BUILD_COMMIT,
+            'version': '3.14.10', 'package_version': VERSION, 'build_commit': BUILD_COMMIT,
             'source_manifest_sha256': hashlib.sha256(lock).hexdigest(),
             **{key: dict(value) for key, value in RUNTIME_FILES[architecture].items()},
             'aliases': dict(ALIASES),

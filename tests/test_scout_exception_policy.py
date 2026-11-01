@@ -94,14 +94,17 @@ def regression_report(policy, arch):
 class ScoutExceptionPolicyTests(unittest.TestCase):
     def test_current_joint_review_preserves_three_exact_scopes_and_new_boundary(self):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
-        self.assertEqual(set(policy['exceptions']), set(RENEWED_FINDINGS))
+        self.assertEqual(set(policy['exceptions']), {'CVE-2025-15367', 'CVE-2026-103995'})
         self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID})
         rules = [*policy['exceptions'].values(), *policy['scout_exceptions'].values()]
-        self.assertTrue(all(rule['review']['reviewed_on'] == '2026-10-28' for rule in rules))
+        self.assertTrue(all(rule['review']['reviewed_on'] == '2026-11-01'
+                            for rule in policy['exceptions'].values()))
+        self.assertEqual(policy['scout_exceptions'][FINDING_ID]['review']['reviewed_on'],
+                         '2026-10-28')
         self.assertTrue(all(rule['review']['deadline'] == '2026-11-11' for rule in rules))
-        matches = [{'vulnerability': {'id': finding, 'severity': 'Medium'},
-                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.8-r0'}}
-                   for finding in RENEWED_FINDINGS]
+        matches = [{'vulnerability': {'id': finding, 'severity': {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low'}[finding]},
+                    'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.10-r1'}}
+                   for finding in ('CVE-2025-15367', 'CVE-2026-103995')]
         for arch in DIRECT:
             original = scout_report(arch)
             for day, expired in ((datetime.date(2026, 11, 2), False),

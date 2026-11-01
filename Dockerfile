@@ -44,6 +44,21 @@ RUN python -m venv --without-pip /venv \
     && python -c "from pathlib import Path; [p.unlink() for p in Path('/venv').rglob('*.pyc')]" \
     && mkdir -p /app/data && chmod 700 /app/data && chown 10001:10001 /app/data
 
+# Rebuild only the native socket extension; the interpreter remains vendor-signed.
+FROM dependencies AS socket-build-inputs
+COPY scripts/build_patched_socket.py scripts/python_socket_patches.json scripts/socket_security_checks.py /opt/runtime-build-tools/
+COPY docs/python-socket-build.json /opt/docs/python-socket-build.json
+RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
+    --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
+    ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-build-python"]
+
+# Preparatory artifacts never qualify a runtime.
+FROM socket-build-inputs AS socket-preparation
+RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_socket.py", "--preparation", "--output", "/opt/socket-preparation"]
+
+FROM socket-build-inputs AS socket-builder
+RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_socket.py", "--build", "--output", "/opt/runtime-packages/socket-patched"]
+
 FROM dhi.io/python:3.14-alpine3.24@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7
 USER 0
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH="/venv/bin:$PATH"
@@ -52,11 +67,14 @@ WORKDIR /app
 # Install and remove new ensurepip/cache bytes before the layer is captured.
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
-    --mount=from=dependencies,source=/opt/runtime-packages,target=/opt/runtime-packages \
-    --mount=from=dependencies,source=/opt/runtime-build-tools,target=/opt/runtime-build-tools \
-    --mount=from=dependencies,source=/opt/scripts,target=/opt/scripts \
-    --mount=from=dependencies,source=/opt/docs,target=/opt/docs \
+    --mount=from=socket-builder,source=/opt/runtime-packages,target=/opt/runtime-packages \
+    --mount=from=socket-builder,source=/opt/runtime-build-tools,target=/opt/runtime-build-tools \
+    --mount=from=socket-builder,source=/opt/scripts,target=/opt/scripts \
+    --mount=from=socket-builder,source=/opt/docs,target=/opt/docs \
     ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install"]
+COPY --from=socket-builder /opt/runtime-packages/socket-patched/SOCKET_SECURITY.json /app/SOCKET_SECURITY.json
+COPY --from=socket-builder /opt/runtime-packages/socket-patched/PYTHON_SOCKET_BUILD.json /app/PYTHON_SOCKET_BUILD.json
+COPY --from=socket-builder /opt/runtime-packages/socket-patched/pyconfig.h /app/PYTHON_SOCKET_PYCONFIG.h
 COPY --from=dependencies /opt/runtime-packages/expat/EXPAT_SECURITY.json /app/EXPAT_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/expat-patched/EXPAT_PATCHED_SECURITY.json /app/EXPAT_PATCHED_SECURITY.json
 COPY docs/expat-build.json /app/EXPAT_BUILD.json

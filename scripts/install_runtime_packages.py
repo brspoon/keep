@@ -118,7 +118,40 @@ def install(root=ROOT):
                     '--install-expat'], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('patch_python_runtime.py'))], check=True)
+    subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),
+                    '--install-socket'], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)), '--clean-stdlib'], check=True)
+
+
+def install_socket(root=ROOT, architecture=None):
+    """Apply the separately authenticated overlay after original vendor checks."""
+    if __package__:
+        from . import build_patched_socket as socket_build
+    else:
+        import build_patched_socket as socket_build
+    architecture = architecture or arch()
+    output = root / 'socket-patched'
+    manifest = json.loads((output / 'SOCKET_SECURITY.json').read_bytes())
+    socket_build.verify_manifest(manifest, architecture)
+    spec = socket_build.reviewed_spec()
+    library = Path(socket_build.extension_path(architecture))
+    if library.is_symlink() or library.resolve(strict=True) != library:
+        raise ValueError('Original socket extension must be canonical')
+    checked_file(library, spec['native'][architecture]['original_extension_sha256'])
+    replacement = checked_file(output / library.name, manifest['library']['sha256']).read_bytes()
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=library.parent, prefix='.keep-socket-', delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(replacement)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o755)
+        os.replace(temporary, library)
+        checked_file(library, manifest['library']['sha256'])
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def install_expat(root=ROOT, architecture=None, library=None, alias=None):
@@ -188,6 +221,25 @@ def verify_musl(root, architecture, *, build=False):
     subprocess.run(command, check=True)
 
 
+def install_build_python(root=ROOT):
+    """Install only the signed Python cohort in a compiler image, not a runtime."""
+    architecture = arch()
+    packages = installation_inputs(root, architecture)
+    names = {name + '-' + python.VERSION + '.apk' for name in python.PACKAGES}
+    selected = [path for path in packages if path.name in names]
+    if {path.name for path in selected} != names or len(selected) != len(names):
+        raise ValueError('Require the exact reviewed build Python cohort')
+    subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                    '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
+                    *(str(path) for path in selected)], check=True)
+    subprocess.run(['/usr/bin/python3.14', '-B',
+                    str(Path(__file__).with_name('dhi_python_packages.py')),
+                    '--verify-installed', '--architecture', architecture, '--manifest',
+                    str(root / 'python/PYTHON_SECURITY.json')], check=True)
+    verify_musl(root, architecture, build=True)
+    verify_certificates(root, architecture, build=True)
+
+
 def install_build_musl(root=ROOT):
     """Upgrade build libc and its exactly coupled development package offline."""
     architecture = arch()
@@ -226,7 +278,9 @@ def main():
     mode.add_argument('--install', action='store_true')
     mode.add_argument('--install-certificates', action='store_true')
     mode.add_argument('--install-build-musl', action='store_true')
+    mode.add_argument('--install-build-python', action='store_true')
     mode.add_argument('--install-expat', action='store_true')
+    mode.add_argument('--install-socket', action='store_true')
     mode.add_argument('--clean-stdlib', action='store_true')
     args = parser.parse_args()
     if args.prepare:
@@ -237,8 +291,12 @@ def main():
         install_certificates()
     elif args.install_build_musl:
         install_build_musl()
+    elif args.install_build_python:
+        install_build_python()
     elif args.install_expat:
         install_expat()
+    elif args.install_socket:
+        install_socket()
     else:
         clean_stdlib()
 
