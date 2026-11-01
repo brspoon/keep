@@ -21,8 +21,8 @@ Native dependency qualification checks both raw `_socket.getaddrinfo` and public
 controls and canonical loaded-extension hashes/inodes. The original numeric-only
 control reproduces the truncation without DNS during preparation. Matching-source
 archives retain the full original and patched preferred source, generated header,
-build inputs, signed compiler-image proof and full Python license. No new scanner
-exception is added, and all existing protections and November 11 limits remain.
+build inputs, signed compiler-image proof and full Python license. All existing protections remain. The two exact verified-fixed Python scopes
+below retain the November 11 deadline; no socket or certificate exception is added.
 
 Every architecture job verifies signed vendor provenance, runs checksum-pinned
 Docker Scout `1.27.0` and an unsuppressed Grype scan, and executes all ten runtime
@@ -46,8 +46,9 @@ three scopes through November 11, 2026 UTC inclusive.
 Zero Scout and Docker Hub findings remain the default requirement. The only
 temporary Scout approval is the verified musl false positive described below,
 through November 11, 2026 UTC inclusive. Grype's complete raw findings remain visible;
-only the two exact verified-fixed Python `3.14.8-r0` scopes in
-docs/image-exceptions.json may pass through November 11, 2026 UTC inclusive.
+only CVE-2025-15367 at Medium and CVE-2026-103995 at Low for exact APK
+`python-3.14` version `3.14.10-r1` may pass through November 11, 2026 UTC inclusive.
+The earlier cleanup approval is retired; a returning match blocks.
 Every other Grype finding blocks. Historical Python `3.14.7-r2` and zlib
 `1.3.2-r0` scopes are retired and cannot authorize this runtime.
 Source hashes, base identity, complete scans, successful probes and the deadline
@@ -547,7 +548,7 @@ candidates still require complete exact-commit native validation before publicat
 
 ## Exception review deadlines
 
-The current policy permits only the two reviewed Python `3.14.8-r0` Grype
+The October 28 policy permitted only the two reviewed Python `3.14.8-r0` Grype
 scopes renewed on October 18. Earlier package approvals are preserved in Git history and original
 release evidence; they are absent from the active exception dictionary.
 
@@ -918,3 +919,20 @@ Preparation is not qualification. Both native output pins, matching source and
 license archives, complete unsuppressed scanner reports and every original
 functional/security gate must pass before this candidate is ready. Existing
 Python exceptions name `3.14.8-r0`; they do not approve `3.14.10-r1` findings.
+
+## Exact Python finding review (November 1)
+
+Both complete new reports still identify POP3 CVE-2025-15367 at Medium and HTTP
+framing CVE-2026-103995 at Low for APK `python-3.14` version `3.14.10-r1`.
+The signed vendor POP3 source contains the reviewed control-character rejection;
+both loaded HTTP parsers retain the exact upstream and Keep corrections. Native
+regressions pass on amd64 and arm64, and all original findings remain visible.
+
+Only those two exact verified-fixed scopes are approved through November 11,
+2026 UTC inclusive. This replaces the old Python package scopes and retires
+CVE-2026-12345, which is absent with the vendor cleanup fix and Keep guard still
+present. CVE-2026-87910 remains retired. Either retired finding blocks if it
+returns. The exact musl approval and its deadline are unchanged. No certificate
+or socket exception is added, and no deadline is extended. Full rebuilt source
+archives, native qualification, exact-main validation and hosted analysis remain
+mandatory before the applicable release stages.
