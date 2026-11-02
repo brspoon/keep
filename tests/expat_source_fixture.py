@@ -100,7 +100,7 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
         output = Path(output)
         output.mkdir(parents=True)
         rows = [
-            ('expat-2.9.0.tar.xz', vendor.SOURCE_URL, 'upstream-source'),
+            ('expat-2.10.0.tar.xz', vendor.SOURCE_URL, 'upstream-source'),
             ('context/main/expat/APKBUILD', vendor.APKBUILD_URL, 'matching-apk-build-script'),
             ('aports.tar.gz', vendor.APORTS_URL, 'complete-alpine-build-recipes'),
             ('source.asc', vendor.SOURCE_URL + '.asc', 'upstream-detached-signature'),

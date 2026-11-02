@@ -29,7 +29,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
         definitions = (
             ('musl', ('musl',), '1.2.6-r3', 'MUSL_SECURITY.json'),
             ('certificates', ('ca-certificates-bundle',), '20261020-r0', 'CA_CERTIFICATES_SECURITY.json'),
-            ('expat', ('expat', 'libexpat'), '2.9.0-r0', 'EXPAT_SECURITY.json'),
+            ('expat', ('expat', 'libexpat'), '2.10.0-r0', 'EXPAT_SECURITY.json'),
             ('zlib', ('zlib',), '1.3.2-r1', 'ZLIB_SECURITY.json'),
             ('python', ('pyc-3.14', 'python-3.14', 'python-3.14-pyc',
                         'python-3.14-pycache-pyc0'), '3.14.8-r0', 'PYTHON_SECURITY.json'),
@@ -502,6 +502,15 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
         self.assertFalse(self.vendor_library.exists())
         self.assertEqual(self.alias.readlink(), Path(self.library.name))
         self.verify.assert_called_once_with(self.manifest, 'amd64')
+        self.assertEqual(list(self.root.glob('.keep-expat-*')), [])
+
+    def test_same_release_vendor_filename_is_replaced_without_unlinking_output(self):
+        self.library = self.vendor_library
+        self.manifest['library']['path'] = str(self.library)
+        self.write_manifest()
+        self.install()
+        self.assertEqual(self.library.read_bytes(), self.replacement)
+        self.assertEqual(self.alias.resolve(strict=True), self.library)
         self.assertEqual(list(self.root.glob('.keep-expat-*')), [])
 
     def test_modified_input_output_manifest_or_alias_holds_replacement(self):

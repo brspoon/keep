@@ -83,7 +83,7 @@
     ]
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "937a9b3e5db3427e63a6628aedb064fd97c74eb706dbc1437c0ab604ec809284",
+  "build_script_sha256": "ced7bfe8348fca041e35ad58bf4f79cc3616265a4b8572e0c105614307090642",
   "build_tools": {
     "installation": "build-only-offline-apk",
     "packages": {
@@ -703,9 +703,9 @@
     "url": "https://github.com/libexpat/libexpat/releases/tag/R_2_10_0"
   },
   "upstream_version": "2.10.0",
-  "vendor_package_version": "2.9.0-r0",
+  "vendor_package_version": "2.10.0-r0",
   "vendor_recipe": {
-    "sha256": "40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5",
-    "url": "https://raw.githubusercontent.com/alpinelinux/aports/46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD"
+    "sha256": "8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed",
+    "url": "https://gitlab.alpinelinux.org/alpine/aports/-/raw/e18a81f6461517119d85f2650a4f3e5e01861d28/main/expat/APKBUILD"
   }
 }

@@ -175,7 +175,7 @@ def install_expat(root=ROOT, architecture=None, library=None, alias=None, vendor
     if (vendor_library.is_symlink() or not vendor_library.is_file()
             or not alias.is_symlink() or alias.resolve(strict=True) != vendor_library
             or library.parent != vendor_library.parent
-            or library == vendor_library or library.exists() or library.is_symlink()):
+            or library != vendor_library and (library.exists() or library.is_symlink())):
         raise ValueError('Expat canonical vendor library, replacement path or SONAME alias differs')
     checked_file(vendor_library, vendor['library']['sha256'])
     replacement = patched_expat.regular_bytes(output / patched_expat.LIBRARY,
@@ -206,8 +206,9 @@ def install_expat(root=ROOT, architecture=None, library=None, alias=None, vendor
         os.replace(temporary_alias, alias)
         if alias.resolve(strict=True) != library:
             raise ValueError('Expat replacement SONAME alias differs')
-        checked_file(vendor_library, vendor['library']['sha256'])
-        vendor_library.unlink()
+        if vendor_library != library:
+            checked_file(vendor_library, vendor['library']['sha256'])
+            vendor_library.unlink()
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()

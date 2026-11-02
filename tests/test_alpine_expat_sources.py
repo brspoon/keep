@@ -70,15 +70,15 @@ class AlpineExpatSourceTests(unittest.TestCase):
         self.stack.enter_context(patch.object(sources, 'PKGINFO_SHA256', metadata_hashes))
         self.stack.enter_context(patch.object(sources, 'LIBRARY_SHA256', libraries))
         self.copying = b'MIT copyright and complete permission conditions'
-        upstream = archive([('expat-2.9.0/COPYING', self.copying),
-                            ('expat-2.9.0/lib/xmlparse.c', b'ordinary preferred source')])
+        upstream = archive([('expat-2.10.0/COPYING', self.copying),
+                            ('expat-2.10.0/lib/xmlparse.c', b'ordinary preferred source')])
         checksum = hashlib.sha512(upstream).hexdigest()
         self.stack.enter_context(patch.object(sources, 'SOURCE_SHA256', hashlib.sha256(upstream).hexdigest()))
         self.stack.enter_context(patch.object(sources, 'SOURCE_SHA512', checksum))
         self.stack.enter_context(patch.object(sources, 'COPYING_SHA256', hashlib.sha256(self.copying).hexdigest()))
-        recipe = ('pkgname=expat\npkgver=2.9.0\npkgrel=0\nlicense="MIT"\n'
+        recipe = ('pkgname=expat\npkgver=2.10.0\npkgrel=0\nlicense="MIT"\n'
                   'source="https://github.com/libexpat/libexpat/releases/download/$_tagver/expat-$pkgver.tar.xz"\n'
-                  f'sha512sums="\n{checksum}  expat-2.9.0.tar.xz\n"\n'
+                  f'sha512sums="\n{checksum}  expat-2.10.0.tar.xz\n"\n'
                   'build() { ./configure --prefix=/usr; make; }\ncheck() { make check; }\n').encode()
         self.recipes = archive([(f'aports-{sources.BUILD_COMMIT}/main/expat/APKBUILD', recipe),
                                 (f'aports-{sources.BUILD_COMMIT}/README.md', b'whole pinned context')])
@@ -92,9 +92,9 @@ class AlpineExpatSourceTests(unittest.TestCase):
 
     @staticmethod
     def url(name, arch):
-        return f'https://dl-cdn.alpinelinux.org/alpine/edge/main/{sources.ARCHES[arch]}/{name}-2.9.0-r0.apk'
+        return f'https://dl-cdn.alpinelinux.org/alpine/edge/main/{sources.ARCHES[arch]}/{name}-2.10.0-r0.apk'
 
-    def apk(self, name, arch, *, changes=None, library=None, alias='libexpat.so.1.13.0', signer=None):
+    def apk(self, name, arch, *, changes=None, library=None, alias='libexpat.so.1.13.1', signer=None):
         if name == 'libexpat':
             library = library if library is not None else ('ordinary test library ' + arch).encode()
             payload = archive([(sources.LIBRARY_PATH, library)],
@@ -103,15 +103,15 @@ class AlpineExpatSourceTests(unittest.TestCase):
             payload = archive([('usr/bin/xmlwf', b'ordinary test tool bytes')])
         data = gzip.compress(payload, mtime=0)
         native = sources.ARCHES[arch]
-        fields = {'pkgname': name, 'pkgver': '2.9.0-r0', 'origin': 'expat', 'arch': native,
+        fields = {'pkgname': name, 'pkgver': '2.10.0-r0', 'origin': 'expat', 'arch': native,
                   'commit': sources.BUILD_COMMIT, 'license': 'MIT', 'url': 'https://libexpat.github.io/',
                   'datahash': hashlib.sha256(data).hexdigest()}
         fields.update(changes or {})
         dependencies = ['so:libc.musl-' + native + '.so.1']
-        provides = 'so:libexpat.so.1=1.13.0'
+        provides = 'so:libexpat.so.1=1.13.1'
         if name == 'expat':
             dependencies.append('so:libexpat.so.1')
-            provides = 'cmd:xmlwf=2.9.0-r0'
+            provides = 'cmd:xmlwf=2.10.0-r0'
         metadata = (''.join(key + ' = ' + value + '\n' for key, value in fields.items())
                     + ''.join('depend = ' + value + '\n' for value in dependencies)
                     + 'provides = ' + provides + '\n').encode()
@@ -124,7 +124,7 @@ class AlpineExpatSourceTests(unittest.TestCase):
         return signed + control + data, metadata
 
     def inventory(self):
-        return {'os_packages': [{'name': name, 'version': '2.9.0-r0', 'origin': 'expat',
+        return {'os_packages': [{'name': name, 'version': '2.10.0-r0', 'origin': 'expat',
                                  'license': 'MIT', 'build_commit': sources.BUILD_COMMIT,
                                  'url': 'https://libexpat.github.io/'} for name in ('expat', 'libexpat')]}
 

@@ -130,7 +130,7 @@ The replacement uses the complete official [Expat 2.10.0 release](https://github
 It includes the earlier entity-expansion, parser-reset and literal-markup fixes,
 plus CVE-2026-117610 (initial empty external-parser feed) and CVE-2026-118370
 (attribute counter overflow). The Keep-local literal correction is retired in
-favor of upstream handling. Signed Alpine 2.9.0-r0 input records remain separate
+favor of upstream handling. Signed Alpine 2.10.0-r0 input records remain separate
 from the rebuilt 2.10.0 runtime library; no APK version or signature is relabeled.
 
 The runtime gate preserves all earlier controls and adds the 36 adjacent literal

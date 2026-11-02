@@ -761,7 +761,7 @@ class RuntimeReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             replacement = build_patched_expat.expected_manifest('arm64', write_synthetic_dependency_locks(directory))
         return (
-            {'version': '2.9.0', 'libraries': {'expat': library('libexpat.so.1.13.1')},
+            {'version': '2.10.0', 'libraries': {'expat': library('libexpat.so.1.13.1')},
              'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64,
              'build_manifest': replacement,
              'build_manifest_sha256': hashlib.sha256(build_patched_expat.json_bytes(replacement)).hexdigest(),

@@ -53,9 +53,8 @@ SOURCE_SHA256 = 'c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7
 SOURCE_SHA512 = 'bd61f361d823f67586dad246fa4d4abbe3d22f5a0f9a28401e7a2fc96753d5bae33fbe4068fae72f016998d0da9d8c92edc4abd2fe8a8e4aafc775a8ab547c44'
 COPYING_SHA256 = '31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87'
 PATCH_SHA256 = 'bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae'
-RECIPE_URL = ('https://raw.githubusercontent.com/alpinelinux/aports/'
-              '46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD')
-RECIPE_SHA256 = '40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5'
+RECIPE_URL = 'https://gitlab.alpinelinux.org/alpine/aports/-/raw/e18a81f6461517119d85f2650a4f3e5e01861d28/main/expat/APKBUILD'
+RECIPE_SHA256 = '8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed'
 COMMITS = ()
 LOCAL_PATCHES = ()
 ORIGINAL_FILES = {'lib/xmlparse.c': '9443794afe78dfab5cccf27e803b30359a55dbf9eaadbd54297522b72356833c', 'lib/xcs.c': 'ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8', 'lib/internal.h': '2a2821fc7a2982978a8630e26cf3b8158ab21a2c2f2d06354f8c0c6547dded44', 'lib/entities.h': 'ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92', 'tests/acc_tests.c': 'b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b', 'tests/alloc_tests.c': '0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9', 'tests/misc_tests.c': 'a2e4bd074fbd83a87ab298e79a13599e5a4afe65f542d6026a314b98a4ddfd9b'}
@@ -138,7 +137,7 @@ def immutable_spec():
     return {
         'schema': 'keep-expat-build-v1', 'identity': BUILD_IDENTITY,
         'upstream_release': dict(UPSTREAM_RELEASE),
-        'upstream_version': UPSTREAM_VERSION, 'vendor_package_version': '2.9.0-r0',
+        'upstream_version': UPSTREAM_VERSION, 'vendor_package_version': '2.10.0-r0',
         'source': {'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'sha512': SOURCE_SHA512,
                    'directory': SOURCE_DIRECTORY, 'copying_sha256': COPYING_SHA256},
         'vendor_recipe': {'url': RECIPE_URL, 'sha256': RECIPE_SHA256},
@@ -229,7 +228,7 @@ def _manifest(spec, arch, library_hash, compiler_hash, *, qualified):
         'schema': 'keep-expat-patched-security-v1', 'architecture': arch,
         'qualified': qualified, 'purpose': 'reviewed-build' if qualified else 'preparation-only',
         'identity': BUILD_IDENTITY, 'upstream_version': UPSTREAM_VERSION,
-        'vendor_package_version': '2.9.0-r0',
+        'vendor_package_version': '2.10.0-r0',
         'vendor_apk_signature_applies_to_replacement': False,
         'build_lock_sha256': digest(json_bytes(spec)),
         'build_script_sha256': spec['build_script_sha256'],

@@ -151,7 +151,7 @@ and checksum-verified OpenSSL source. Its report explicitly records the absence
 of a signed package build or source-image binding. This method does not rescue
 a signature failure or an unrelated missing package.
 
-The original Expat inputs use Alpine's signed `2.9.0-r0` APKs, independently
+The original Expat inputs use Alpine's signed `2.10.0-r0` APKs, independently
 pinned for amd64 and arm64. The installer checks each APK and official key hash,
 its RSA signature, signed metadata and payload hash, exact library bytes and
 SONAME alias. It installs only these files with networking disabled and the
@@ -160,7 +160,9 @@ without entering a final image layer. Source collection retains the original
 APKs and key, complete immutable aports context, checksum-matching upstream
 source and full MIT notice. It records Alpine package verification without a
 Docker package-build or source-image attestation claim. The upstream detached
-signature is retained without claiming separate OpenPGP verification.
+signature is retained without claiming separate OpenPGP verification. The exact
+new package recipe and complete aports context are pinned to Alpine's primary
+GitLab repository, because the GitHub mirror had not yet received that commit.
 
 The runtime then replaces the canonical library with the separately identified
 Keep build in `docs/expat-build.json`. Its source set contains the complete
@@ -171,7 +173,7 @@ parser-reset fixes, upstream literal-markup handling, the external-parser
 empty-feed fix and attribute-counter overflow guards. The former Keep-local
 literal accounting patch is no longer applied. Source replay pins the release
 tag, commit, archive and individual reviewed source hashes. The runtime reports
-2.10.0 and uses `libexpat.so.1.13.1`; original APK version records remain 2.9.0-r0.
+2.10.0 and uses `libexpat.so.1.13.1`; original APK version records remain 2.10.0-r0.
 Original signed materials and manifests remain unchanged
 under `alpine-expat-sources/vendor-inputs/`; the additional source set is under
 `keep-build/`. The combined proof records

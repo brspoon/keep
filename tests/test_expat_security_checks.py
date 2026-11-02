@@ -201,7 +201,9 @@ class ExpatSecurityChecksTests(unittest.TestCase):
             "XML_ParserCreate", "XML_ParserFree", "XML_ParserReset", "XML_Parse",
             "XML_GetErrorCode", "XML_SetCharacterDataHandler", "XML_SetPropertyDouble",
             "XML_SetPropertyUInt64", "XML_GetPropertyDouble", "XML_GetPropertyUInt64",
-            "XML_SetParamEntityParsing",
+            "XML_SetParamEntityParsing", "XML_ParserCreateNS",
+            "XML_ExternalEntityParserCreate", "XML_SetProcessingInstructionHandler",
+            "XML_SetStartElementHandler",
         )
         for name in names:
             setattr(library, name, mock.Mock())

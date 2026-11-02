@@ -32,11 +32,11 @@ else:
 
 
 EXPAT_VERSION = '2.10.0'
-EXPAT_VENDOR_VERSION = '2.9.0'
-EXPAT_PACKAGE_VERSION = '2.9.0-r0'
+EXPAT_VENDOR_VERSION = '2.10.0'
+EXPAT_PACKAGE_VERSION = '2.10.0-r0'
 EXPAT_BUILD_COMMIT = '46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88'
 EXPAT_LIBRARY = Path('/usr/lib/libexpat.so.1.13.1')
-EXPAT_VENDOR_LIBRARY = Path('/usr/lib/libexpat.so.1.13.0')
+EXPAT_VENDOR_LIBRARY = Path('/usr/lib/libexpat.so.1.13.1')
 EXPAT_ALIAS = Path('/usr/lib/libexpat.so.1')
 EXPAT_LIBRARY_SHA256 = {
     'amd64': '0aa9093ce225c2f5d38a9083a4c203a6133ed9c592366f58e51a6a987f461f44',
