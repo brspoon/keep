@@ -10,14 +10,14 @@ path, including original Expat and bundled pip/wheel notices from earlier layers
 The inventory explicitly records reviewed source copyright headers, including
 CA certificates, SQLite, GCC runtime libraries, libuuid and musl subcomponents,
 plus IANA's BSD exceptions and the POSIXtz build source's LGPL attribution.
-The patched Expat build retains its three modified source-header attributions,
+The Expat 2.10.0 build retains its seven reviewed source-header attributions,
 the full Fortify 0BSD license and all ten header attributions from its verified
 build-only input.
 It also retains the complete GNU Make and Bash licenses and bundled component
 attributions with their verified build-only sources and recipes.
-The runtime union contains 135 complete notice texts (919,491 bytes) and 626
-native source attributions. All 124 earlier notice texts retain their original
-bytes; the current Expat attribution identifies the separate Keep build.
+The runtime union contains 140 complete notice texts (988,467 bytes) and 636
+native source attributions. The Expat entries identify the official 2.10.0
+release and the separate Keep build.
 Standalone upstream license texts remain complete. The native image copies this
 directory to `/app/licenses/os`. See
 [source distribution](../SOURCE_DISTRIBUTION.md) for the versioned source,
