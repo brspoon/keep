@@ -151,6 +151,13 @@ and checksum-verified OpenSSL source. Its report explicitly records the absence
 of a signed package build or source-image binding. This method does not rescue
 a signature failure or an unrelated missing package.
 
+For an unchanged package cohort, source acquisition selects the exact signed
+build statements already recorded in the reviewed runtime notices. Alternate
+valid attestations cannot silently change its source attribution. Selection
+still requires matching native APK bytes, signature and subject verification,
+and the exact source-manifest hash. Missing or conflicting reviewed proof
+blocks; a new cohort uses source and notice preparation before qualification.
+
 The original Expat inputs use Alpine's signed `2.10.0-r0` APKs, independently
 pinned for amd64 and arm64. The installer checks each APK and official key hash,
 its RSA signature, signed metadata and payload hash, exact library bytes and

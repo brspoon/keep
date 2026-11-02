@@ -17,7 +17,7 @@
     "scripts/dhi_python_packages.py": "edfeca760335cb5539846b15bd0f65beef62ae8526ce5a5c20d10c1f6ff77e74",
     "scripts/install_runtime_packages.py": "4e39b2656c41dca22220516139fd394574f04a88312c5e9a73ce1e523c68443f",
     "scripts/build_distribution_bundle.py": "d73233e2e94febe63603d94416338f4ebd047483453262443c4914c24cd0ba1b",
-    "scripts/collect_package_sources.py": "2892ece68b91fb593e52f6a3805adb4074054118c2a6fdea5de8172396ab5c88",
+    "scripts/collect_package_sources.py": "280a859c9051c88553ecbcb2bc5144f8370285c2db0193058b8afa44a80b50f4",
     "scripts/package_source_notices.py": "2cc8c77ee008739947a14404eaa2a0680bb259aa17c450e8af60c8a77a2add63",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
     "scripts/publish_release.py": "dee91c93a08d8dba96d61ea2fa22e37f195cea3685a0c5bc78e8f339ecfe10ae",
