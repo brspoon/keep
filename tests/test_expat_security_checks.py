@@ -61,6 +61,7 @@ class ExpatSecurityChecksTests(unittest.TestCase):
             mock.patch.object(checks, "_capture", side_effect=capture_results or captures()),
             mock.patch.object(checks, "_parse", side_effect=results or parse_results()) as parse,
             mock.patch.object(checks, "_exercise_literal_contexts"),
+            mock.patch.object(checks, "_exercise_release_controls"),
         ):
             result = checks._exercise(api)
         return result, api, parse
@@ -200,7 +201,9 @@ class ExpatSecurityChecksTests(unittest.TestCase):
             "XML_ParserCreate", "XML_ParserFree", "XML_ParserReset", "XML_Parse",
             "XML_GetErrorCode", "XML_SetCharacterDataHandler", "XML_SetPropertyDouble",
             "XML_SetPropertyUInt64", "XML_GetPropertyDouble", "XML_GetPropertyUInt64",
-            "XML_SetParamEntityParsing",
+            "XML_SetParamEntityParsing", "XML_ParserCreateNS",
+            "XML_ExternalEntityParserCreate", "XML_SetProcessingInstructionHandler",
+            "XML_SetStartElementHandler",
         )
         for name in names:
             setattr(library, name, mock.Mock())

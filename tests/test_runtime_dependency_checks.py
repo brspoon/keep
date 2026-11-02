@@ -284,7 +284,7 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
-        self.library = self.root / 'libexpat.so.1.13.0'
+        self.library = self.root / 'libexpat.so.1.13.1'
         self.library.write_bytes(b'reviewed signed package library fixture')
         self.digest = hashlib.sha256(self.library.read_bytes()).hexdigest()
 
@@ -342,7 +342,7 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         probes = checks.expat_security.expected_report()
         with patch.object(checks, 'EXPAT_LIBRARY', self.library), \
              patch.object(checks, 'EXPAT_ALIAS', alias), \
-             patch.object(checks, 'exercise_expat', return_value='2.9.0'), \
+             patch.object(checks, 'exercise_expat', return_value='2.10.0'), \
              patch.object(checks, 'read_expat_manifest', return_value=(manifest, 'b' * 64)), \
              patch.object(checks, 'read_expat_replacement', return_value=(replacement, 'c' * 64)) as proof, \
              patch.object(checks.expat_security, 'exercise_expat_security', return_value=probes) as security:
@@ -379,7 +379,7 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         replacement = {'library': {'sha256': self.digest}}
         with patch.object(checks, 'EXPAT_LIBRARY', self.library), \
              patch.object(checks, 'EXPAT_ALIAS', alias), \
-             patch.object(checks, 'exercise_expat', return_value='2.9.0'), \
+             patch.object(checks, 'exercise_expat', return_value='2.10.0'), \
              patch.object(checks, 'read_expat_manifest', return_value=(manifest, 'b' * 64)), \
              patch.object(checks, 'read_expat_replacement', return_value=(replacement, 'c' * 64)), \
              patch.object(checks.expat_security, 'exercise_expat_security',
@@ -642,9 +642,9 @@ class BenignFunctionalChecksTests(unittest.TestCase):
         self.assertEqual(report['probes'], checks.MUSL_PROBES)
 
     def test_normal_and_malformed_xml_are_checked_with_the_real_parser(self):
-        with patch.object(pyexpat, 'EXPAT_VERSION', 'expat_2.9.0'), \
-             patch.object(pyexpat, 'version_info', (2, 9, 0)):
-            self.assertEqual(checks.exercise_expat(), '2.9.0')
+        with patch.object(pyexpat, 'EXPAT_VERSION', 'expat_2.10.0'), \
+             patch.object(pyexpat, 'version_info', (2, 10, 0)):
+            self.assertEqual(checks.exercise_expat(), '2.10.0')
         with patch.object(pyexpat, 'EXPAT_VERSION', 'expat_2.8.5'):
             with self.assertRaisesRegex(ValueError, 'pyexpat version'):
                 checks.exercise_expat()
@@ -761,7 +761,7 @@ class RuntimeReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             replacement = build_patched_expat.expected_manifest('arm64', write_synthetic_dependency_locks(directory))
         return (
-            {'version': '2.9.0', 'libraries': {'expat': library('libexpat.so.1.13.0')},
+            {'version': '2.10.0', 'libraries': {'expat': library('libexpat.so.1.13.1')},
              'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64,
              'build_manifest': replacement,
              'build_manifest_sha256': hashlib.sha256(build_patched_expat.json_bytes(replacement)).hexdigest(),
@@ -793,7 +793,7 @@ class RuntimeReportTests(unittest.TestCase):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
             'schema': 6, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
-            'errors': [], 'versions': {'expat': '2.9.0', 'openssl': '3.5.9', 'python': '3.14.10',
+            'errors': [], 'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10',
                                       'musl': '1.2.6-r3'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
                                  **musl['libraries']},
@@ -975,7 +975,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
         invalid = [None, {}, {**self.report, 'unexpected': True}]
         for key, value in (('schema', True), ('schema', 1), ('schema', 3), ('arch', 'arm64'), ('success', 1),
                            ('tests', True), ('tests', 2), ('tests', 3), ('failures', False), ('failures', 1),
-                           ('errors', [{}]), ('versions', {'expat': '2.9.0', 'openssl': '3.5.8'}),
+                           ('errors', [{}]), ('versions', {'expat': '2.10.0', 'openssl': '3.5.8'}),
                            ('expat_source_manifest_sha256', 'b' * 64),
                            ('expat_install_manifest_sha256', 'b' * 64),
                            ('python_source_manifest_sha256', 'b' * 64),

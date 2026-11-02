@@ -33,8 +33,8 @@ else:
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = Path('/opt/keep-expat-build')
-SOURCE_DIRECTORY = 'expat-2.9.0'
-LIBRARY = 'libexpat.so.1.13.0'
+SOURCE_DIRECTORY = 'expat-2.10.0'
+LIBRARY = 'libexpat.so.1.13.1'
 PATCH_PATH = 'scripts/expat_security_patches.json'
 BUILD_SCRIPT = 'scripts/build_patched_expat.py'
 FORTIFY_HELPER = 'scripts/fortify_header_sources.py'
@@ -43,37 +43,26 @@ CPP_HELPER = 'scripts/dhi_cpp_packages.py'
 CPP_HELPER_SHA256 = '3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb'
 BUILD_TOOLS_HELPER = 'scripts/expat_build_tools.py'
 BUILD_TOOLS_HELPER_SHA256 = '648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa'
-BUILD_IDENTITY = 'keep-expat-2.9.0-c30145b-d8f31e6-literal-v2'
+BUILD_IDENTITY = 'keep-expat-2.10.0-release-v1'
+UPSTREAM_VERSION = '2.10.0'
+UPSTREAM_RELEASE = {'tag': 'R_2_10_0', 'commit': 'a70841d9ffa64ddde29ab824ed6305035ebe4c47', 'url': 'https://github.com/libexpat/libexpat/releases/tag/R_2_10_0'}
 BUILD_IMAGE = ('dhi.io/python:3.14-alpine3.24-dev@sha256:'
                'b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d')
-SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz'
-SOURCE_SHA256 = '1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051'
-SOURCE_SHA512 = ('677b5a39ea47aa238813412061eefba0ff2e819597efee69452eab7fd63b138753'
-                 '7eda0dfd4e5891b938be202dc87df4b5115bdae75c6b81643ac2363bb99b34')
+SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz'
+SOURCE_SHA256 = 'c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f'
+SOURCE_SHA512 = 'bd61f361d823f67586dad246fa4d4abbe3d22f5a0f9a28401e7a2fc96753d5bae33fbe4068fae72f016998d0da9d8c92edc4abd2fe8a8e4aafc775a8ab547c44'
 COPYING_SHA256 = '31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87'
-PATCH_SHA256 = 'b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a'
-RECIPE_URL = ('https://raw.githubusercontent.com/alpinelinux/aports/'
-              '46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88/main/expat/APKBUILD')
-RECIPE_SHA256 = '40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5'
-COMMITS = (
-    'd545081f6a90792208e0d274888a352e2e5d894d',
-    'da504c0c111086072172431c76867800673fbc34',
-    'c30145b28632b31f805d57f9838ba36b8db99367',
-    'd8f31e647a4d1eda088e89354f4769b0dad303d3',
-)
-LOCAL_PATCHES = ('keep-expat-literal-markup-accounting-v1',)
-ORIGINAL_FILES = {
-    'lib/xmlparse.c': '899afeaddf424a6f4bf9a0a77159248b485bf5c072475d547ef16c2942a86dd5',
-    'tests/acc_tests.c': 'd10a7cf72862400cd03e52686d037d2f07cd80a4a2153853ae2ccd09d7d7820d',
-    'tests/alloc_tests.c': '1f8277ba331b043898f1048332ed4314d4b1ead4473171702dda3cf163fb574d',
-}
-PATCHED_FILES = {
-    'lib/xmlparse.c': '6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082',
-    'tests/acc_tests.c': 'b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b',
-    'tests/alloc_tests.c': '0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9',
-}
+PATCH_SHA256 = 'bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae'
+RECIPE_URL = 'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=e18a81f6461517119d85f2650a4f3e5e01861d28'
+RECIPE_SHA256 = '8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed'
+COMMITS = ()
+LOCAL_PATCHES = ()
+ORIGINAL_FILES = {'lib/xmlparse.c': '9443794afe78dfab5cccf27e803b30359a55dbf9eaadbd54297522b72356833c', 'lib/xcs.c': 'ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8', 'lib/internal.h': '2a2821fc7a2982978a8630e26cf3b8158ab21a2c2f2d06354f8c0c6547dded44', 'lib/entities.h': 'ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92', 'tests/acc_tests.c': 'b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b', 'tests/alloc_tests.c': '0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9', 'tests/misc_tests.c': 'a2e4bd074fbd83a87ab298e79a13599e5a4afe65f542d6026a314b98a4ddfd9b'}
+PATCHED_FILES = dict(ORIGINAL_FILES)
+
 TARGETS = {'amd64': 'x86_64-alpine-linux-musl', 'arm64': 'aarch64-alpine-linux-musl'}
-SOURCE_DATE_EPOCH = '1792762956'
+# Commit timestamp of the reviewed R_2_10_0 release.
+SOURCE_DATE_EPOCH = '1793609693'
 CONFIGURE_OPTIONS = ('--prefix=/usr', '--mandir=/usr/share/man', '--enable-static')
 ENVIRONMENT = {
     'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
@@ -147,7 +136,8 @@ def immutable_spec():
     """Source facts remain compiled into the checker, including runtime use."""
     return {
         'schema': 'keep-expat-build-v1', 'identity': BUILD_IDENTITY,
-        'upstream_version': '2.9.0', 'vendor_package_version': '2.9.0-r0',
+        'upstream_release': dict(UPSTREAM_RELEASE),
+        'upstream_version': UPSTREAM_VERSION, 'vendor_package_version': '2.10.0-r0',
         'source': {'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'sha512': SOURCE_SHA512,
                    'directory': SOURCE_DIRECTORY, 'copying_sha256': COPYING_SHA256},
         'vendor_recipe': {'url': RECIPE_URL, 'sha256': RECIPE_SHA256},
@@ -212,6 +202,7 @@ def require_output_pins(spec):
 
 def source_replay_record():
     return {'schema': 'keep-expat-source-replay-v4', 'identity': BUILD_IDENTITY,
+            'upstream_release': dict(UPSTREAM_RELEASE),
             'source_sha256': SOURCE_SHA256, 'vendor_recipe_sha256': RECIPE_SHA256,
             'patch_manifest_sha256': PATCH_SHA256, 'commits': list(COMMITS),
             'local_patches': list(LOCAL_PATCHES),
@@ -223,7 +214,7 @@ def source_replay_record():
 def source_download_records():
     """Actual original downloads retained below the common Expat replay root."""
     return [
-        {'path': 'expat-2.9.0.tar.xz', 'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'role': 'upstream-source'},
+        {'path': SOURCE_DIRECTORY + '.tar.xz', 'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'role': 'upstream-source'},
         {'path': 'APKBUILD', 'url': RECIPE_URL, 'sha256': RECIPE_SHA256, 'role': 'matching-apk-build-script'},
         *[{**record, 'path': 'fortify/' + record['path']} for record in fortify.source_download_records()],
         *[{**record, 'path': 'cpp/' + record['path']} for record in cpp.source_download_records()],
@@ -236,8 +227,8 @@ def _manifest(spec, arch, library_hash, compiler_hash, *, qualified):
     return {
         'schema': 'keep-expat-patched-security-v1', 'architecture': arch,
         'qualified': qualified, 'purpose': 'reviewed-build' if qualified else 'preparation-only',
-        'identity': BUILD_IDENTITY, 'upstream_version': '2.9.0',
-        'vendor_package_version': '2.9.0-r0',
+        'identity': BUILD_IDENTITY, 'upstream_version': UPSTREAM_VERSION,
+        'vendor_package_version': '2.10.0-r0',
         'vendor_apk_signature_applies_to_replacement': False,
         'build_lock_sha256': digest(json_bytes(spec)),
         'build_script_sha256': spec['build_script_sha256'],
@@ -312,7 +303,8 @@ def source_members(body):
 
 def apply_source_patches(files, manifest):
     require(isinstance(manifest, dict) and manifest.get('schema') == 'keep-expat-patches-v1'
-            and manifest.get('upstream_version') == '2.9.0'
+            and manifest.get('upstream_version') == UPSTREAM_VERSION
+            and manifest.get('upstream_release') == UPSTREAM_RELEASE
             and manifest.get('patched_files') == PATCHED_FILES,
             'Invalid Expat patch manifest')
     require([row['commit'] for row in manifest.get('patches', [])] == list(COMMITS),
@@ -368,7 +360,7 @@ def replay_sources(output, *, root=ROOT, lock_path=None, fetch=download):
         path.chmod(mode)
         os.utime(path, (int(SOURCE_DATE_EPOCH), int(SOURCE_DATE_EPOCH)))
     retained = {
-        'expat-2.9.0.tar.xz': archive, 'expat_security_patches.json': patch_body,
+        SOURCE_DIRECTORY + '.tar.xz': archive, 'expat_security_patches.json': patch_body,
         'APKBUILD': recipe, 'build_patched_expat.py': regular_bytes(Path(__file__), 'Expat build script'),
         'fortify_header_sources.py': regular_bytes(Path(fortify.__file__), 'Fortify source helper'),
         'dhi_cpp_packages.py': regular_bytes(Path(cpp.__file__), 'C++ package helper'),
@@ -589,7 +581,7 @@ def elf_protections(body, arch):
     export_hash = digest(('\n'.join(exports) + '\n').encode())
     require(len(exports) == EXPECTED_ABI['export_count']
             and export_hash == EXPECTED_ABI['exports_sha256'],
-            'Expat exported API differs from the complete 2.9.0 ABI')
+            'Expat exported API differs from the reviewed vendor-compatible ABI')
     return {'hardening': {key: value for key, value in EXPECTED_HARDENING.items()
                           if key != 'fortify_source'},
             'exports_sha256': export_hash, 'export_count': len(exports)}
@@ -669,7 +661,7 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     (destination / LIBRARY).write_bytes(library)
     (destination / LIBRARY).chmod(0o755)
     (destination / 'COPYING').write_bytes(regular_bytes(source / 'COPYING', 'Expat COPYING'))
-    for name in ('expat-2.9.0.tar.xz', 'expat_security_patches.json', 'APKBUILD',
+    for name in (SOURCE_DIRECTORY + '.tar.xz', 'expat_security_patches.json', 'APKBUILD',
                  'build_patched_expat.py', 'fortify_header_sources.py',
                  'dhi_cpp_packages.py',
                  'expat_build_tools.py',

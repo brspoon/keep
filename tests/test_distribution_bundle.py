@@ -683,7 +683,7 @@ class RuntimeNoticeBundleTests(unittest.TestCase):
 
     def test_generated_attribution_mismatch_reports_bounded_exact_evidence(self):
         proof = self.manifest['notices'][0]['provenance'][0]
-        proof.update(source_path='keep-build/expat-2.9.0/lib/xmlparse.c',
+        proof.update(source_path='keep-build/expat-2.10.0/lib/xmlparse.c',
                      source_manifest_sha256='a' * 64)
         self.write_manifest(self.manifest)
         actual = copy.deepcopy(self.manifest)
@@ -949,7 +949,7 @@ class PatchedExpatBundleTests(unittest.TestCase):
         self.assertTrue(coverage['vendor_apk_signature_verified'])
         self.assertEqual(coverage['replacement_library'], inventory['expat_replacement']['library'])
         self.assertTrue((self.root / 'retained/vendor-inputs/EXPAT_SECURITY.json').is_file())
-        self.assertTrue((self.root / 'retained/keep-build/expat-2.9.0/lib/xmlparse.c').is_file())
+        self.assertTrue((self.root / 'retained/keep-build/expat-2.10.0/lib/xmlparse.c').is_file())
 
     def test_alpine_binary_match_claim_and_missing_build_proof_are_rejected(self):
         origin, inventory, result = self.fixture()

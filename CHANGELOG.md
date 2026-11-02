@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.30.3 — 2026-11-02
+
+- Update Expat to 2.10.0 to fix XML parser edge cases and use upstream CDATA handling.
+
 ## 2.30.2 — 2026-11-01
 
 - Update Python and fix hostname and service port handling.

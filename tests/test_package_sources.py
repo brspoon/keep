@@ -2,7 +2,7 @@
 import hashlib
 import gzip
 import copy
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 import importlib.util
 import io
 import json
@@ -989,6 +989,215 @@ class PackageSourceTests(unittest.TestCase):
         helper.assert_not_called()
 
 
+class ReviewedBuildProvenanceTests(unittest.TestCase):
+    """Reviewed notice hashes select original proofs without weakening replay."""
+    def setUp(self):
+        from tests.test_source_proof import SourceProofTests
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.fixture = SourceProofTests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.origin = {'origin': 'sample', 'version': '1.2-r0', 'image': 'dhi.io/pkg-sample',
+            'predicate_image_name': 'dhi/pkg-sample', 'packages': [
+                {'name': 'sample-libs', 'version': '1.2-r0', 'binaries': {
+                    arch: {'sha256': 'a' * 64} for arch in ('amd64', 'arm64')}}]}
+        self.group = {'native_image_digest': self.fixture.native, 'architecture': 'amd64',
+            'image_index_digest': self.fixture.base_digest, 'index_is_native_manifest': False,
+            'apk_matches': [{'name': 'sample-libs', 'version': '1.2-r0', 'sha256': 'a' * 64}]}
+        self.raw_index = (self.fixture.root / 'pinned-base-index.json').read_bytes()
+        self.artifacts = {}
+        self.artifact_count = 0
+        self.descriptors = []
+        self.copies = []
+        self.copy_failures = set()
+        self.source_reads = []
+        self.source_manifest = b'{"files":[{"sha256":"reviewed source hash"}]}\n'
+        self.reviewed_slsa = self.add_attestation(collection.SLSA_PREDICATES[1])
+        self.alternative_slsa = self.add_attestation(collection.SLSA_PREDICATES[0])
+        self.scout = self.add_attestation(collection.SCOUT_PROVENANCE)
+        self.provenance = {'schema': 1, 'origin': 'sample', 'version': '1.2-r0',
+            # Runtime and proof architectures may differ for a noarch cohort.
+            'architecture': 'arm64', 'proof_architecture': 'amd64',
+            'native_image_digest': self.fixture.native, 'for_packages': ['sample-libs'],
+            'binding_method': 'signed-build-provenance', 'provider_oci_binding': True,
+            'source_image_digest': None, 'signed_statement_sha256': {
+                'slsa': self.statement_hash(self.reviewed_slsa), 'scout': self.statement_hash(self.scout)},
+            'source_manifest_sha256': hashlib.sha256(self.source_manifest).hexdigest()}
+        self.write_notices([self.provenance, copy.deepcopy(self.provenance)])
+        test = self
+
+        class SignedRegistry:
+            key = test.fixture.root / 'dhi-verification-key.pem'
+
+            def referrers(self, reference):
+                return {'manifests': test.descriptors}
+
+            def verify(self, reference):
+                return json.dumps([{'critical': {'image': {
+                    'docker-manifest-digest': reference.split('@')[1]}}}]).encode()
+
+            def statement(self, reference):
+                return test.artifacts[reference.split('@')[1]]['statement']
+
+            def copy(self, reference, destination, **kwargs):
+                value = reference.split('@')[1]
+                test.copies.append(value)
+                test.assertFalse(Path(destination).exists())
+                if value in test.copy_failures:
+                    Path(destination).mkdir()
+                    (Path(destination) / 'failed-copy-marker').write_text('incomplete')
+                    raise OSError('partial registry copy')
+                shutil.copytree(test.artifacts[value]['layout'], destination)
+
+        self.registry = SignedRegistry()
+        helper = types.ModuleType('package_provenance_sources')
+
+        def collect(origin, architecture, slsa, scout, output):
+            self.source_reads.append((slsa, scout))
+            output.mkdir()
+            (output / 'manifest.json').write_bytes(self.source_manifest)
+            return {'source_materials': []}
+
+        helper.collect_sources = collect
+        verifier = collection.verify_attestation_proof
+        context = ExitStack()
+        self.addCleanup(context.close)
+        context.enter_context(patch.object(collection, 'ROOT', self.root))
+        context.enter_context(patch.object(collection, 'KEY_SHA256', self.fixture.key_sha))
+        context.enter_context(patch.object(collection, 'verify_attestation_proof',
+            side_effect=lambda *args, **kwargs: verifier(*args,
+                expected_key_sha256=self.fixture.key_sha, **kwargs)))
+        context.enter_context(patch.dict(sys.modules, {'package_provenance_sources': helper}))
+
+    def add_attestation(self, predicate, *, include_signature=True, wrong_subject=False):
+        self.fixture.statement = {'_type': 'https://in-toto.io/Statement/v0.1',
+            'predicateType': predicate, 'subject': [{'digest': {'sha256':
+                '9' * 64 if wrong_subject else self.fixture.native.split(':')[1]}}],
+            'predicate': {'materials': [{'uri': 'https://example.test/source.tar.gz',
+                                        'digest': {'sha256': 'b' * 64}}]}}
+        self.fixture.build(repository=self.origin['image'], source_name=self.origin['predicate_image_name'],
+                           include_signature=include_signature)
+        descriptor = {**self.fixture.attestation,
+                      'annotations': {'in-toto.io/predicate-type': predicate}}
+        value = descriptor['digest']
+        target = self.root / ('artifact-' + str(self.artifact_count))
+        self.artifact_count += 1
+        shutil.copytree(self.fixture.layout, target)
+        self.artifacts[value] = {'layout': target,
+            'statement': (self.fixture.root / 'dhi-source-statement-amd64.json').read_bytes()}
+        self.descriptors.append(descriptor)
+        return value
+
+    def statement_hash(self, value):
+        return hashlib.sha256(json.dumps(json.loads(self.artifacts[value]['statement']),
+                                         sort_keys=True).encode()).hexdigest()
+
+    def write_notices(self, rows):
+        path = self.root / 'docs/licenses/os/manifest.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({'schema': 1, 'notices': [{'provenance': rows}]}))
+
+    def acquire(self, name='acquired'):
+        output = self.root / name
+        output.mkdir()
+        return collection.acquire_signed_sources(self.origin, self.group, self.raw_index,
+                                                 output, self.registry)
+
+    def test_reviewed_v1_beats_valid_v02_regardless_of_referrer_order_and_runtime_architecture(self):
+        for index, descriptors in enumerate((list(self.descriptors), list(reversed(self.descriptors)))):
+            self.descriptors = descriptors
+            results, failures = self.acquire('order-' + str(index))
+            self.assertEqual(results[0]['attestations'][0]['attestation_digest'], self.reviewed_slsa)
+            self.assertEqual(results[0]['attestations'][1]['attestation_digest'], self.scout)
+            self.assertTrue(any('reviewed notice provenance' in row['error'] for row in failures))
+        self.assertNotIn(self.alternative_slsa, self.copies)
+        self.assertEqual(len(self.source_reads), 2)
+
+    def test_known_build_cohort_stays_on_reviewed_binding_when_source_image_referrer_appears(self):
+        self.descriptors.insert(0, {'digest': 'sha256:' + 'f' * 64,
+            'annotations': {'in-toto.io/predicate-type': collection.PREDICATE}})
+        results, _ = self.acquire()
+        self.assertEqual(results[0]['binding_method'], 'signed-build-provenance')
+
+    def test_missing_reviewed_statement_cannot_fall_back_to_another_valid_signed_statement(self):
+        self.descriptors = [row for row in self.descriptors if row['digest'] != self.reviewed_slsa]
+        with self.assertRaisesRegex(ValueError, 'reviewed notice provenance'):
+            self.acquire()
+        self.assertEqual(self.source_reads, [])
+        self.assertFalse(any((self.root / 'acquired').rglob('statement.json')))
+
+    def test_reviewed_hash_cannot_replace_original_signature_or_exact_native_subject(self):
+        for index, mutation in enumerate(('signature', 'subject')):
+            with self.subTest(mutation=mutation):
+                value = self.add_attestation(collection.SLSA_PREDICATES[1],
+                    include_signature=mutation != 'signature', wrong_subject=mutation == 'subject')
+                self.descriptors = [row for row in self.descriptors
+                                    if row['digest'] in {value, self.scout}]
+                row = copy.deepcopy(self.provenance)
+                row['signed_statement_sha256']['slsa'] = self.statement_hash(value)
+                self.write_notices([row])
+                with self.assertRaisesRegex(ValueError, 'original Docker signature|exact reviewed native output'):
+                    self.acquire('invalid-' + str(index))
+        self.assertEqual(self.source_reads, [])
+
+    def test_partial_copy_from_failed_candidate_cannot_mix_into_selected_proof(self):
+        unavailable = 'sha256:' + '0' * 64
+        self.artifacts[unavailable] = self.artifacts[self.reviewed_slsa]
+        self.copy_failures.add(unavailable)
+        self.descriptors.insert(0, {'digest': unavailable,
+            'annotations': {'in-toto.io/predicate-type': collection.SLSA_PREDICATES[1]}})
+        results, failures = self.acquire()
+        self.assertEqual(results[0]['attestations'][0]['attestation_digest'], self.reviewed_slsa)
+        self.assertTrue(any('partial registry copy' in row['error'] for row in failures))
+        self.assertFalse(any((self.root / 'acquired').rglob('failed-copy-marker')))
+        self.assertFalse(any((self.root / 'acquired').rglob('.slsa-proof-*')))
+
+    def test_conflicting_or_incomplete_reviewed_pins_fail_before_fetching_sources(self):
+        for mutation in ('conflict', 'missing-scout', 'missing-source-hash'):
+            with self.subTest(mutation=mutation):
+                row = copy.deepcopy(self.provenance)
+                if mutation == 'conflict':
+                    row['signed_statement_sha256']['slsa'] = self.statement_hash(self.alternative_slsa)
+                elif mutation == 'missing-scout':
+                    del row['signed_statement_sha256']['scout']
+                else:
+                    del row['source_manifest_sha256']
+                self.write_notices([self.provenance, row])
+                with self.assertRaisesRegex(ValueError, 'Conflicting|Incomplete'):
+                    collection.reviewed_build_provenance(self.origin, self.group)
+        self.assertEqual(self.source_reads, [])
+
+    def test_exact_origin_version_proof_platform_native_and_package_set_define_cohort(self):
+        for field, changed in (('origin', 'other'), ('version', '1.3-r0'),
+                               ('proof_architecture', 'arm64'),
+                               ('native_image_digest', 'sha256:' + '9' * 64),
+                               ('for_packages', ['sample-libs', 'extra-build-only'])):
+            with self.subTest(field=field):
+                row = {**self.provenance, field: changed}
+                self.write_notices([row])
+                self.assertIsNone(collection.reviewed_build_provenance(self.origin, self.group))
+        self.write_notices([self.provenance])
+        for field, changed in (('version', '1.2-r1'), ('sha256', '9' * 64)):
+            with self.subTest(apk_field=field):
+                group = copy.deepcopy(self.group)
+                group['apk_matches'][0][field] = changed
+                with self.assertRaisesRegex(ValueError, 'exact reviewed APK identities'):
+                    collection.reviewed_build_provenance(self.origin, group)
+
+    def test_unseen_cohort_keeps_preparation_discovery_path(self):
+        self.write_notices([])
+        results, _ = self.acquire()
+        self.assertEqual(results[0]['attestations'][0]['attestation_digest'], self.alternative_slsa)
+        self.assertEqual(len(self.source_reads), 1)
+
+    def test_reviewed_statements_do_not_accept_an_altered_source_manifest(self):
+        self.source_manifest = b'{"files":[{"sha256":"changed source hash"}]}\n'
+        with self.assertRaisesRegex(ValueError, 'source manifest differs from reviewed notice provenance'):
+            self.acquire()
+
+
 class ExpatCppSourceBindingTests(unittest.TestCase):
     def fixture(self):
         origin = next(row for row in json.loads((ROOT / 'docs/os-package-sources.json').read_bytes())['origins']
@@ -1248,7 +1457,7 @@ class PatchedExpatSourceTests(unittest.TestCase):
             self.assertTrue(manifest['runtime_build_verified'])
             self.assertTrue(manifest['vendor_apk_signature_verified'])
             self.assertTrue((output / 'vendor-inputs/EXPAT_SECURITY.json').is_file())
-            self.assertTrue((output / 'keep-build/expat-2.9.0/lib/xmlparse.c').is_file())
+            self.assertTrue((output / 'keep-build/expat-2.10.0/lib/xmlparse.c').is_file())
             self.assertTrue((output / 'keep-build/SOURCE_REPLAY.json').is_file())
             for arch in ('amd64', 'arm64'):
                 name = 'keep-build/fortify/packages/' + arch + '/fortify-headers.apk'
@@ -1287,7 +1496,7 @@ class PatchedExpatSourceTests(unittest.TestCase):
                 source = self.root / mutation
                 manifest = collection.collect_patched_expat_sources(origin, 'amd64', inventory,
                     source, fetch=downloads.__getitem__)
-                target = source / 'keep-build/expat-2.9.0/lib/xmlparse.c'
+                target = source / 'keep-build/expat-2.10.0/lib/xmlparse.c'
                 if mutation in {'changed', 'forged-hash'}:
                     target.write_bytes(b'changed preferred source')
                 elif mutation == 'missing':

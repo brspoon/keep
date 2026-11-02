@@ -305,7 +305,7 @@ def acquire_signed_sources(origin, group, raw_index, root, registry):
     (root / ('package-native-referrers-' + architecture + '.json')).write_text(json.dumps(referrers, indent=2) + '\n')
     descriptors = [row for row in referrers.get('manifests', [])
                    if PREDICATE in row.get('annotations', {}).values()]
-    if not descriptors:
+    if not descriptors or reviewed_build_provenance(origin, group) is not None:
         return acquire_build_provenance_sources(origin, group, raw_index, root, registry, referrers)
     source_results, source_failures = [], []
     for descriptor in descriptors:
@@ -353,8 +353,58 @@ def acquire_signed_sources(origin, group, raw_index, root, registry):
     return source_results, source_failures
 
 
-def acquire_build_attestation(origin, group, raw_index, directory, registry, descriptors, predicates):
+def reviewed_build_provenance(origin, group, *, manifest_path=None):
+    """Reuse unambiguous notice pins only for the exact already-matched APK cohort.
+
+    The notice manifest records package names, not APK hashes. Its cohort is
+    therefore usable only after matching the group's exact versions and hashes
+    against the reviewed source map. Unseen cohorts retain the preparation path.
+    """
+    path = Path(manifest_path) if manifest_path is not None else ROOT / 'docs/licenses/os/manifest.json'
+    manifest = json.loads(read_regular(path, 32 * 1024 * 1024))
+    if manifest.get('schema') != 1 or not isinstance(manifest.get('notices'), list):
+        raise ValueError('Malformed reviewed OS notice manifest')
+    names = [package['name'] for package in group['apk_matches']]
+    pins = []
+    for notice in manifest['notices']:
+        for row in notice.get('provenance', []):
+            if (row.get('binding_method') != 'signed-build-provenance'
+                    or row.get('origin') != origin.get('origin')
+                    or row.get('version') != origin.get('version')
+                    or row.get('proof_architecture') != group['architecture']
+                    or row.get('native_image_digest') != group['native_image_digest']):
+                continue
+            packages = row.get('for_packages')
+            if not isinstance(packages, list) or sorted(packages) != sorted(names):
+                continue
+            hashes = row.get('signed_statement_sha256')
+            source_hash = row.get('source_manifest_sha256')
+            if (row.get('schema') != 1 or row.get('provider_oci_binding') is not True
+                    or row.get('source_image_digest') is not None
+                    or not isinstance(hashes, dict) or set(hashes) != {'slsa', 'scout'}
+                    or any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value)
+                           for value in [*hashes.values(), source_hash])):
+                raise ValueError('Incomplete reviewed package build-provenance pins')
+            pins.append({'signed_statement_sha256': hashes, 'source_manifest_sha256': source_hash})
+    if not pins:
+        return None
+    if any(pin != pins[0] for pin in pins[1:]):
+        raise ValueError('Conflicting reviewed package build-provenance pins')
+    expected = {row['name']: row for row in expected_packages(origin, group['architecture'])}
+    if (len(names) != len(set(names)) or any(
+            {key: row.get(key) for key in ('name', 'version', 'sha256')} != expected.get(row['name'])
+            for row in group['apk_matches'])):
+        raise ValueError('Reviewed provenance cohort differs from exact reviewed APK identities')
+    return pins[0]
+
+
+def acquire_build_attestation(origin, group, raw_index, directory, registry, descriptors, predicates,
+                              *, expected_statement_sha256=None):
     """Retain and replay an original signed build attestation before reading it."""
+    directory = Path(directory)
+    if directory.is_symlink() or directory.exists() and any(directory.iterdir()):
+        raise ValueError('Build-provenance output must be empty without symlinks')
+    directory.parent.mkdir(parents=True, exist_ok=True)
     failures = []
     for predicate in predicates:
         for descriptor in descriptors:
@@ -371,22 +421,32 @@ def acquire_build_attestation(origin, group, raw_index, directory, registry, des
                                          == value for row in claims):
                     raise ValueError('Cosign claims do not cover package build provenance')
                 raw_statement = registry.statement(reference)
-                directory.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(registry.key, directory / 'dhi-verification-key.pem')
-                (directory / 'pinned-base-index.json').write_bytes(raw_index)
-                (directory / 'statement.json').write_bytes(raw_statement)
-                (directory / 'verification-claims.json').write_bytes(claims_bytes)
-                (directory / 'attestation-reference.json').write_text(json.dumps({
-                    'attestation': reference, 'native_subject': group['native_image_digest'],
-                    'predicate_type': predicate, 'key_sha256': KEY_SHA256}, indent=2) + '\n')
-                registry.copy(reference, directory / 'proof-oci', referrers=True)
-                proof = verify_attestation_proof(directory, group['architecture'],
-                    expected_base_digest=group['image_index_digest'], expected_repository=origin['image'],
-                    expected_source_name=origin['predicate_image_name'],
-                    expected_native_digest=group['native_image_digest'], expected_predicate_type=predicate,
-                    index_is_native_manifest=group['index_is_native_manifest'])
-                (directory / 'proof-verification.json').write_text(json.dumps(proof, indent=2) + '\n')
-                return json.loads(raw_statement), {'directory': directory.name,
+                statement = json.loads(raw_statement)
+                if (expected_statement_sha256 is not None
+                        and hashlib.sha256(json.dumps(statement, sort_keys=True).encode()).hexdigest()
+                        != expected_statement_sha256):
+                    raise ValueError('Package build statement differs from reviewed notice provenance')
+                with tempfile.TemporaryDirectory(prefix='.' + directory.name + '-', dir=directory.parent) as temporary:
+                    attempt = Path(temporary) / 'verified-proof'
+                    attempt.mkdir()
+                    shutil.copy2(registry.key, attempt / 'dhi-verification-key.pem')
+                    (attempt / 'pinned-base-index.json').write_bytes(raw_index)
+                    (attempt / 'statement.json').write_bytes(raw_statement)
+                    (attempt / 'verification-claims.json').write_bytes(claims_bytes)
+                    (attempt / 'attestation-reference.json').write_text(json.dumps({
+                        'attestation': reference, 'native_subject': group['native_image_digest'],
+                        'predicate_type': predicate, 'key_sha256': KEY_SHA256}, indent=2) + '\n')
+                    registry.copy(reference, attempt / 'proof-oci', referrers=True)
+                    proof = verify_attestation_proof(attempt, group['architecture'],
+                        expected_base_digest=group['image_index_digest'], expected_repository=origin['image'],
+                        expected_source_name=origin['predicate_image_name'],
+                        expected_native_digest=group['native_image_digest'], expected_predicate_type=predicate,
+                        index_is_native_manifest=group['index_is_native_manifest'])
+                    (attempt / 'proof-verification.json').write_text(json.dumps(proof, indent=2) + '\n')
+                    if directory.exists():
+                        directory.rmdir()
+                    attempt.rename(directory)
+                return statement, {'directory': directory.name,
                     'predicate_type': predicate, 'attestation_digest': value}, failures
             except ACQUISITION_ERRORS as error:
                 failures.append({'attestation_digest': value, 'predicate_type': predicate,
@@ -397,17 +457,24 @@ def acquire_build_attestation(origin, group, raw_index, directory, registry, des
 
 def acquire_build_provenance_sources(origin, group, raw_index, root, registry, referrers):
     """Acquire sources named by signed build inputs; no source-image claim."""
+    reviewed = reviewed_build_provenance(origin, group)
+    hashes = reviewed['signed_statement_sha256'] if reviewed is not None else {}
     descriptors = referrers.get('manifests', [])
     directory = root / 'build-provenance' / group['native_image_digest'].split(':', 1)[1]
     directory.mkdir(parents=True, exist_ok=True)
     (directory / 'pinned-base-index.json').write_bytes(raw_index)
     slsa, slsa_proof, slsa_failures = acquire_build_attestation(origin, group, raw_index,
-        directory / 'slsa-proof', registry, descriptors, SLSA_PREDICATES)
+        directory / 'slsa-proof', registry, descriptors, SLSA_PREDICATES,
+        expected_statement_sha256=hashes.get('slsa'))
     scout, scout_proof, scout_failures = acquire_build_attestation(origin, group, raw_index,
-        directory / 'scout-proof', registry, descriptors, (SCOUT_PROVENANCE,))
+        directory / 'scout-proof', registry, descriptors, (SCOUT_PROVENANCE,),
+        expected_statement_sha256=hashes.get('scout'))
     from package_provenance_sources import collect_sources as collect_provenance_sources
     manifest = collect_provenance_sources(origin, group['architecture'], slsa, scout,
                                           directory / 'upstream-sources')
+    if (reviewed is not None and hashlib.sha256(read_regular(
+            directory / 'upstream-sources/manifest.json')).hexdigest() != reviewed['source_manifest_sha256']):
+        raise ValueError('Acquired source manifest differs from reviewed notice provenance')
     result = {'directory': str(directory.relative_to(root)),
               'binding_method': 'signed-build-provenance', 'signature_verified': True,
               'provider_oci_binding': True, 'source_image_attestation': False,
@@ -682,7 +749,7 @@ def verify_expat_replacement(runtime_inventory, architecture, *, root=ROOT):
         raise ValueError('Require the actual candidate Expat replacement inventory')
     spec = reviewed_spec(root)
     manifest = verify_build_manifest(replacement.get('manifest'), architecture, root)
-    expected_library = {'path': '/usr/lib/libexpat.so.1.13.0',
+    expected_library = {'path': '/usr/lib/libexpat.so.1.13.1',
                         'sha256': manifest['library']['sha256']}
     if (replacement['build_lock'] != spec
             or replacement['build_lock_sha256'] != hashlib.sha256(json_bytes(spec)).hexdigest()
@@ -909,7 +976,7 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         'coverage': 'Original Alpine-signed packages, signatures, complete recipes and sources '
                     'are retained as vendor input proof. Keep replaces the Expat library using '
                     'the separately reviewed build lock, native output hashes, exact upstream '
-                    'patches and explicitly identified Keep-local changes, all retained in the '
+                    'release and explicitly recorded downstream patch inventory, all retained in the '
                     'patch manifest, source replay record and full replayed source tree, '
                     'including verified Fortify headers '
                     'and verified make and bash inputs with their complete matching sources and notices. '

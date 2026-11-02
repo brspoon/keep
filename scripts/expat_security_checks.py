@@ -98,10 +98,31 @@ MALFORMED_LITERAL_CONTROLS = tuple(
     for prefix in (b'<?keep ', b'<![CDATA[', b'<!-- ')
 )
 
+
+def adjacent_literal_controls():
+    """The 36 adjacent-section cases from the reported upstream regression."""
+    forms = ((b'<![CDATA[', b']]>', True), (b'<!-- ', b' -->', False),
+             (b'<?keep ', b'?>', False))
+    controls = []
+    for opening, closing, text in forms:
+        for second_open, second_close, second_text in forms:
+            document = (b'<!DOCTYPE r [<!ENTITY word "' + b'a' * 16384
+                        + b'"><!ENTITY literal "' + opening + b'x' + closing
+                        + second_open + DEFAULT_LITERAL_TEXT + second_close
+                        + b'">]><r>&literal;</r>')
+            expected = (b'x' if text else b'') + (DEFAULT_LITERAL_TEXT if second_text else b'')
+            for encoding in ('utf-8', 'utf-16'):
+                encoded = document.decode().encode(encoding)
+                controls.extend(((encoded, expected, len(encoded)), (encoded, expected, 7)))
+    return tuple(controls)
+
+
+ADJACENT_LITERAL_CONTROLS = adjacent_literal_controls()
+
 EXPECTED_RESULT = {
     "schema": "keep-expat-security-probes-v1",
     "soname": SONAME,
-    "tests": 10,
+    "tests": 14,
     "passed": True,
     "ordinary_xml": True,
     "bounded_entity_control": True,
@@ -113,6 +134,11 @@ EXPECTED_RESULT = {
     "literal_contexts": True,
     "active_reference_preflight": True,
     "malformed_literal_rejection": True,
+    "adjacent_literal_matrix": True,
+    "adjacent_literal_cases": 36,
+    "external_entity_empty_feed": True,
+    "bounded_attribute_controls": True,
+    "repeated_literal_control": True,
     "preflight_emitted_characters": 0,
     "reset_rejections": 2,
     "allocation_reset_cycles": ALLOCATION_RESET_CYCLES,
@@ -122,6 +148,9 @@ EXPECTED_RESULT = {
 _CHARACTER_HANDLER = ctypes.CFUNCTYPE(
     None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int
 )
+_PI_HANDLER = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p)
+_START_HANDLER = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_char_p,
+                                ctypes.POINTER(ctypes.c_char_p))
 
 
 def _require(condition: bool, message: str) -> None:
@@ -137,6 +166,10 @@ class _Expat:
         pointer = ctypes.c_void_p
         signatures = {
             "XML_ParserCreate": ([ctypes.c_char_p], pointer),
+            "XML_ParserCreateNS": ([ctypes.c_char_p, ctypes.c_char], pointer),
+            "XML_ExternalEntityParserCreate": ([pointer, ctypes.c_char_p, ctypes.c_char_p], pointer),
+            "XML_SetProcessingInstructionHandler": ([pointer, _PI_HANDLER], None),
+            "XML_SetStartElementHandler": ([pointer, _START_HANDLER], None),
             "XML_ParserFree": ([pointer], None),
             "XML_ParserReset": ([pointer, ctypes.c_char_p], ctypes.c_ubyte),
             "XML_SetParamEntityParsing": ([pointer, ctypes.c_int], ctypes.c_int),
@@ -173,8 +206,9 @@ class _Expat:
             setattr(self, name, function)
 
     @contextmanager
-    def parser(self):
-        parser = self.XML_ParserCreate(None)
+    def parser(self, *, namespaces=False):
+        parser = (self.XML_ParserCreateNS(None, b'|') if namespaces
+                  else self.XML_ParserCreate(None))
         _require(bool(parser), "Expat could not create a security-probe parser")
         try:
             yield parser
@@ -302,6 +336,91 @@ def _exercise_literal_contexts(api, deadline):
                      'Expat accepted malformed literal markup')
 
 
+def _exercise_release_controls(api, deadline):
+    for document, expected, chunk in ADJACENT_LITERAL_CONTROLS:
+        with api.parser() as parser:
+            api.require_limits(parser, allocation=False, factor=100.0, threshold=8388608)
+            api.require_limits(parser, allocation=True, factor=100.0, threshold=67108864)
+            data, callback, invalid = _capture(api, parser)
+            result = _parse(api, parser, document, deadline, chunk_size=chunk)
+            _require(result == (1, 0) and bytes(data) == expected and not invalid[0],
+                     'Expat adjacent literal matrix failed')
+            api.require_limits(parser, allocation=False, factor=100.0, threshold=8388608)
+            api.require_limits(parser, allocation=True, factor=100.0, threshold=67108864)
+
+    # CVE-2026-117610: the first external-parser feed is empty and non-final.
+    # Keep the callback alive through every child parser's lifetime.
+    for initial, encoding in ((empty, enc) for empty in (None, b'')
+                              for enc in ('utf-8', 'utf-16')):
+        events = []
+        callback = _PI_HANDLER(lambda _context, target, data: events.append((target, data)))
+        with api.parser() as parent:
+            api.XML_SetProcessingInstructionHandler(parent, callback)
+            child = api.XML_ExternalEntityParserCreate(parent, b'', None)
+            _require(bool(child), 'Expat external parser creation failed')
+            try:
+                _require(api.XML_Parse(child, initial, 0, 0) == 1,
+                         'Expat external parser rejected an initial non-final empty feed')
+                document = '<?target data?>'.encode(encoding)
+                _require(_parse(api, child, document, deadline, chunk_size=1) == (1, 0)
+                         and events == [(b'target', b'data')],
+                         'Expat external parser empty-feed continuation failed')
+            finally:
+                api.XML_ParserFree(child)
+            child = api.XML_ExternalEntityParserCreate(parent, b'', None)
+            _require(bool(child), 'Expat empty final external parser creation failed')
+            try:
+                _require(api.XML_Parse(child, initial, 0, 1) == 1,
+                         'Expat empty final external parser control failed')
+            finally:
+                api.XML_ParserFree(child)
+
+    # Practical attribute paths complement exact source verification of the
+    # size_t counters and INT_MAX narrowing guards. These bounded inputs do not
+    # reproduce the billion-attribute overflow in CVE-2026-118370.
+    attributes = {('a%d' % i).encode(): str(i).encode() for i in range(256)}
+    explicit = b'<r ' + b' '.join(k + b'="' + v + b'"' for k, v in attributes.items()) + b'/>'
+    defaults = (b'<!DOCTYPE r [<!ATTLIST r '
+                + b' '.join(k + b' CDATA "' + v + b'"' for k, v in attributes.items())
+                + b'>]><r/>')
+    for document, namespaces, expected, valid in (
+        (explicit, False, attributes, True), (defaults, False, attributes, True),
+        (b'<r xmlns:p="urn:p" p:a="value"/>', True, {b'urn:p|a': b'value'}, True),
+        (b'<!DOCTYPE r [<!ATTLIST r xmlns:p CDATA "urn:p" p:a CDATA "value">]><r/>',
+         True, {b'urn:p|a': b'value'}, True),
+        (b'<r a="1" a="2"/>', False, {}, False),
+        (b'<r p:a="value"/>', True, {}, False),
+    ):
+        observed, invalid = [], [False]
+        def start(_context, _name, values):
+            row = {}
+            for index in range(258):
+                key = values[2 * index]
+                if key is None:
+                    observed.append(row)
+                    return
+                value = values[2 * index + 1]
+                if value is None:
+                    break
+                row[key] = value
+            invalid[0] = True
+        callback = _START_HANDLER(start)
+        with api.parser(namespaces=namespaces) as parser:
+            api.XML_SetStartElementHandler(parser, callback)
+            status, error = _parse(api, parser, document, deadline, chunk_size=7)
+            _require((status == 1 and error == 0 and observed == [expected] and not invalid[0])
+                     if valid else (status == 0 and error != 0),
+                     'Expat bounded attribute control failed')
+
+    # Bounded repeated sections exercise the former quadratic scanning path.
+    document = b'<!DOCTYPE r [<!ENTITY e "' + b'<![CDATA[]]>c' * 4096 + b'">]><r>&e;</r>'
+    with api.parser() as parser:
+        data, callback, invalid = _capture(api, parser)
+        _require(_parse(api, parser, document, deadline, chunk_size=len(document)) == (1, 0)
+                 and data == b'c' * 4096 and not invalid[0],
+                 'Expat bounded repeated literal control failed')
+
+
 def _exercise(api) -> dict:
     deadline = time.monotonic() + MAXIMUM_SECONDS
     with api.parser() as parser:
@@ -415,6 +534,7 @@ def _exercise(api) -> dict:
             f"(status={status}, error={error}, output_bytes={len(data)})",
         )
     _exercise_literal_contexts(api, deadline)
+    _exercise_release_controls(api, deadline)
     _check_deadline(deadline)
     return expected_report()
 

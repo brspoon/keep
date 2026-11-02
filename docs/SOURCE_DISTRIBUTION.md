@@ -151,7 +151,14 @@ and checksum-verified OpenSSL source. Its report explicitly records the absence
 of a signed package build or source-image binding. This method does not rescue
 a signature failure or an unrelated missing package.
 
-The original Expat inputs use Alpine's signed `2.9.0-r0` APKs, independently
+For an unchanged package cohort, source acquisition selects the exact signed
+build statements already recorded in the reviewed runtime notices. Alternate
+valid attestations cannot silently change its source attribution. Selection
+still requires matching native APK bytes, signature and subject verification,
+and the exact source-manifest hash. Missing or conflicting reviewed proof
+blocks; a new cohort uses source and notice preparation before qualification.
+
+The original Expat inputs use Alpine's signed `2.10.0-r0` APKs, independently
 pinned for amd64 and arm64. The installer checks each APK and official key hash,
 its RSA signature, signed metadata and payload hash, exact library bytes and
 SONAME alias. It installs only these files with networking disabled and the
@@ -160,17 +167,20 @@ without entering a final image layer. Source collection retains the original
 APKs and key, complete immutable aports context, checksum-matching upstream
 source and full MIT notice. It records Alpine package verification without a
 Docker package-build or source-image attestation claim. The upstream detached
-signature is retained without claiming separate OpenPGP verification.
+signature is retained without claiming separate OpenPGP verification. The exact
+new package recipe and complete aports context are pinned to Alpine's primary
+GitLab repository, because the GitHub mirror had not yet received that commit.
 
 The runtime then replaces the canonical library with the separately identified
 Keep build in `docs/expat-build.json`. Its source set contains the complete
-Expat 2.9.0 release, both merged security corrections and their prerequisites,
-the Keep-local literal-markup accounting correction, the exact patch manifest
-and builder, native compiler/output hashes and full replayed sources. The local
-correction is identified as `keep-expat-literal-markup-accounting-v1`, with
-`source_kind: keep-local` and no upstream commit claim. Its exact hunks and
-before/after hashes remain in `expat_security_patches.json`; the source replay
-record lists the local identity separately from the merged upstream commits.
+[Expat 2.10.0 release](https://github.com/libexpat/libexpat/releases/tag/R_2_10_0),
+the empty downstream-patch inventory, builder, native compiler/output hashes
+and full replayed sources. The release includes the entity-accounting and
+parser-reset fixes, upstream literal-markup handling, the external-parser
+empty-feed fix and attribute-counter overflow guards. The former Keep-local
+literal accounting patch is no longer applied. Source replay pins the release
+tag, commit, archive and individual reviewed source hashes. The runtime reports
+2.10.0 and uses `libexpat.so.1.13.1`; original APK version records remain 2.10.0-r0.
 Original signed materials and manifests remain unchanged
 under `alpine-expat-sources/vendor-inputs/`; the additional source set is under
 `keep-build/`. The combined proof records
@@ -180,8 +190,8 @@ It verifies the independently inventoried loaded-library hash against the
 reviewed build rather than attributing modified bytes to Alpine's signature.
 Offline archive replay rejects missing, altered or extra source outputs.
 New source-header attribution is retained alongside the complete MIT notice.
-The current local correction still requires fresh native qualification; source
-replay alone does not qualify its output or pass source-delivery verification.
+Source replay alone does not qualify a replacement output or pass source-delivery
+verification; both complete native suites remain required.
 The build-only Fortify input retains both signed `fortify-headers 3.0.1-r2`
 APKs and keys, the complete matching upstream source and Alpine recipe/patch,
 all ten headers and their copyright notices, and the full 0BSD license. Its
