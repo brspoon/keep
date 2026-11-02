@@ -1,5 +1,6 @@
 """A preparation receipt cannot become reviewed Expat runtime evidence."""
 import copy
+from contextlib import ExitStack
 import hashlib
 import io
 import json
@@ -22,6 +23,8 @@ class PatchedExpatBuildTests(unittest.TestCase):
         self.root = Path(self.directory.name).resolve()
         (self.root / 'docs').mkdir()
         self.lock = copy.deepcopy(build.reviewed_spec())
+        self.synthetic_stack = ExitStack()
+        self.addCleanup(self.synthetic_stack.close)
 
     def write_lock(self, *, pinned=False):
         spec = copy.deepcopy(self.lock)
@@ -130,10 +133,9 @@ class PatchedExpatBuildTests(unittest.TestCase):
         path, before, after = 'lib/xmlparse.c', b'ordinary before source\n', b'ordinary after source\n'
         originals = {path: build.digest(before)}
         patched = {path: build.digest(after)}
-        patch.stopall()
-        self.addCleanup(patch.stopall)
-        patch.object(build, 'COMMITS', ('reviewed-test-commit',)).start()
-        patch.object(build, 'LOCAL_PATCHES', ('reviewed-test-local',)).start()
+        self.synthetic_stack.close()
+        self.synthetic_stack.enter_context(patch.object(build, 'COMMITS', ('reviewed-test-commit',)))
+        self.synthetic_stack.enter_context(patch.object(build, 'LOCAL_PATCHES', ('reviewed-test-local',)))
         rows = [{'commit': commit, 'files': []} for commit in build.COMMITS]
         rows[0]['files'] = [{'path': path, 'before_sha256': originals[path],
                              'after_sha256': patched[path],

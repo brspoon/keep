@@ -565,8 +565,8 @@
     "version": "15.2.0-r7"
   },
   "expected_library_sha256": {
-    "amd64": null,
-    "arm64": null
+    "amd64": "6f5711c59b5f9e456030afdf8ce06db2f7280df7f6d5ab24cd774d1261fa1dec",
+    "arm64": "651a2f62c437fe2ce86b6c90e209d5516ddea4c038d6aa66f40ee4cd20f6ac55"
   },
   "fortify_headers": {
     "build_commit": "363be18be4b1f33af5a058990ba9b297e8fb547b",

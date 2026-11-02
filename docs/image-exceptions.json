@@ -9,7 +9,7 @@
     "scripts/patch_python_runtime.py": "7e04ab28f407cd4e78b21b31b357c9d93b39fafe1aabd988145673ff34034ac1",
     "scripts/python_security_checks.py": "5db1ed38aa25609898366c353937e151d3763dd0e34b2968fa756d3639f862c4",
     "scripts/alpine_expat_sources.py": "7327688551567acf58b3ce5b0ea042320dc64dc8e3f4a3a3c07039634db3c7b0",
-    "scripts/runtime_dependency_checks.py": "a5036b46751cfc4d06dc5913dbece85bf6bb5b1df66d00ced7580d06d6979953",
+    "scripts/runtime_dependency_checks.py": "d8b12ee29f3d0dcb6adc8d181c10a72618d277f15b9ae3cbe18607dacf869003",
     "docs/os-package-sources.json": "be33e8ebf3fe7cdfc237a1d3631d794db6de99e4d0eaf3611b3d6f6c89202c48",
     ".dockerignore": "81258cb19021c1d8b95eda23fe44a73a315465c8e956bd50636e4f40ce202c09",
     "scripts/review_image.py": "08462decccc84d92f2f820716f7689b888804a9db1bb12b32fe9752b226b0fa3",
@@ -39,8 +39,8 @@
     "scripts/scout_exception_policy.py": "d662274ac8da047c6e62e3d6e5be0f429030cffe025d9d35a94e4cd40093fc0a",
     "scripts/build_patched_expat.py": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
     "scripts/expat_security_patches.json": "bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae",
-    "scripts/expat_security_checks.py": "2655f48cc82412ab1d230dcdbf9368681a3daaa36b32c4ea9c5fef063d66e35f",
-    "docs/expat-build.json": "4e7d1af04decf73d9dde76d6492094df848153882cfdd833de0400a0a5aed999",
+    "scripts/expat_security_checks.py": "293e15b76deb820aacc27a33f7d3f9c08f3f2669882a90b6c6e2a65aa30b786d",
+    "docs/expat-build.json": "96ddf778a3bb1ae837bca4e9c7692be899c6c8fb73fe89f87d10edf891323cc7",
     "scripts/image_distribution.py": "9132170ea1ebb14e34aa98c817878cb845b3da936fd66bbc19796f5249a0257b",
     ".github/workflows/runtime-base-review.yml": "dad18f8b5fd96cb049d59d44b9547c4c047da7d40453d37463511204d909682b",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
@@ -102,7 +102,7 @@
       "status": "fixed_false_positive",
       "source_bindings": {
         "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
-        "scripts/runtime_dependency_checks.py": "a5036b46751cfc4d06dc5913dbece85bf6bb5b1df66d00ced7580d06d6979953"
+        "scripts/runtime_dependency_checks.py": "d8b12ee29f3d0dcb6adc8d181c10a72618d277f15b9ae3cbe18607dacf869003"
       },
       "evidence": "Alpine stable v3.24 secdb identifies 1.2.6-r3 as fixed; edge separately uses r6. Immutable aports commit 8f79d39391b46d6dbf1800fb68b8212a21d5ee2e and patch SHA256 0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b carry upstream fix 7813e9119eb5fe681b6750b8a033a0490bca0941. Exact signed APKs, loaded default-libc hashes, benign regex and compatibility probes, complete matching-source archives and notices passed on native amd64 and arm64 in qualification 39728273258 at 3437692f4473856e875187cd05a55d129e915219. That run remained failed solely at Scout acceptance and cannot qualify publication. Original Scout 1.27.0 reports incorrectly apply the edge r6 threshold to stable r3. The correction report and original evidence are public at https://github.com/docker/scout-cli/issues/248. Every changed candidate must pass fresh complete qualification and exact-main validation; this scoped policy does not accept missing evidence. Fresh October 23 review reverified the four exact signed Alpine musl/musl-utils APKs, unchanged stable r3 and edge r6 official feeds, immutable recipe and complete patch equivalence to upstream. Qualification https://github.com/brspoon/keep/actions/runs/40017413915 at 996b45565161ad9d71dfcade9956ebfaeff2711d passed both native architectures, including default loaded-libc hashes 095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5 (amd64) and 53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793 (arm64), all bounded musl controls, complete unsuppressed scans and source/license notice preparation. Scout still reports only this exact musl scope; Grype contains only the two unchanged approved Python scopes. Final rebuilt source-archive and installed-notice verification, exact-main validation and original-byte promotion revalidation remain mandatory. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
       "review": {

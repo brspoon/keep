@@ -350,7 +350,8 @@ def _exercise_release_controls(api, deadline):
 
     # CVE-2026-117610: the first external-parser feed is empty and non-final.
     # Keep the callback alive through every child parser's lifetime.
-    for encoding in ('utf-8', 'utf-16'):
+    for initial, encoding in ((empty, enc) for empty in (None, b'')
+                              for enc in ('utf-8', 'utf-16')):
         events = []
         callback = _PI_HANDLER(lambda _context, target, data: events.append((target, data)))
         with api.parser() as parent:
@@ -358,7 +359,7 @@ def _exercise_release_controls(api, deadline):
             child = api.XML_ExternalEntityParserCreate(parent, b'', None)
             _require(bool(child), 'Expat external parser creation failed')
             try:
-                _require(api.XML_Parse(child, b'', 0, 0) == 1,
+                _require(api.XML_Parse(child, initial, 0, 0) == 1,
                          'Expat external parser rejected an initial non-final empty feed')
                 document = '<?target data?>'.encode(encoding)
                 _require(_parse(api, child, document, deadline, chunk_size=1) == (1, 0)
@@ -369,7 +370,7 @@ def _exercise_release_controls(api, deadline):
             child = api.XML_ExternalEntityParserCreate(parent, b'', None)
             _require(bool(child), 'Expat empty final external parser creation failed')
             try:
-                _require(api.XML_Parse(child, b'', 0, 1) == 1,
+                _require(api.XML_Parse(child, initial, 0, 1) == 1,
                          'Expat empty final external parser control failed')
             finally:
                 api.XML_ParserFree(child)
