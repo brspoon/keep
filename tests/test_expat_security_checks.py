@@ -61,6 +61,7 @@ class ExpatSecurityChecksTests(unittest.TestCase):
             mock.patch.object(checks, "_capture", side_effect=capture_results or captures()),
             mock.patch.object(checks, "_parse", side_effect=results or parse_results()) as parse,
             mock.patch.object(checks, "_exercise_literal_contexts"),
+            mock.patch.object(checks, "_exercise_release_controls"),
         ):
             result = checks._exercise(api)
         return result, api, parse

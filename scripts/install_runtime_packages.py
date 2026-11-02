@@ -154,7 +154,7 @@ def install_socket(root=ROOT, architecture=None):
             temporary.unlink()
 
 
-def install_expat(root=ROOT, architecture=None, library=None, alias=None):
+def install_expat(root=ROOT, architecture=None, library=None, alias=None, vendor_library=None):
     """Replace the canonical vendor library with the separately reviewed build.
 
     The signed APK manifest still describes the original installed input. It
@@ -170,11 +170,14 @@ def install_expat(root=ROOT, architecture=None, library=None, alias=None):
     patched_expat.verify_build_manifest(manifest, architecture)
     library = Path(library or manifest['library']['path'])
     alias = Path(alias or library.with_name(manifest['library']['soname']))
-    if library.is_symlink() or not library.is_file() or not alias.is_symlink() \
-            or alias.resolve(strict=True) != library:
-        raise ValueError('Expat canonical vendor library or SONAME alias differs')
     vendor = expat.build_security_manifest(architecture, root=None)
-    checked_file(library, vendor['library']['sha256'])
+    vendor_library = Path(vendor_library or vendor['library']['path'])
+    if (vendor_library.is_symlink() or not vendor_library.is_file()
+            or not alias.is_symlink() or alias.resolve(strict=True) != vendor_library
+            or library.parent != vendor_library.parent
+            or library == vendor_library or library.exists() or library.is_symlink()):
+        raise ValueError('Expat canonical vendor library, replacement path or SONAME alias differs')
+    checked_file(vendor_library, vendor['library']['sha256'])
     replacement = patched_expat.regular_bytes(output / patched_expat.LIBRARY,
                                                'Expat replacement library')
     patched_expat.checked(replacement, manifest['library']['sha256'],
@@ -182,6 +185,7 @@ def install_expat(root=ROOT, architecture=None, library=None, alias=None):
     # Never truncate a library an existing interpreter may still map. A fresh
     # interpreter in native qualification verifies the canonical new inode.
     temporary = None
+    temporary_alias = None
     try:
         with tempfile.NamedTemporaryFile(dir=library.parent, prefix='.keep-expat-',
                                          delete=False) as stream:
@@ -192,9 +196,23 @@ def install_expat(root=ROOT, architecture=None, library=None, alias=None):
         temporary.chmod(0o755)
         os.replace(temporary, library)
         checked_file(library, manifest['library']['sha256'])
+        # Publish the new upstream library name only after verifying its bytes.
+        # The old vendor input remains represented by its signed source record.
+        with tempfile.NamedTemporaryFile(dir=alias.parent, prefix='.keep-expat-link-',
+                                         delete=False) as stream:
+            temporary_alias = Path(stream.name)
+        temporary_alias.unlink()
+        temporary_alias.symlink_to(library.name)
+        os.replace(temporary_alias, alias)
+        if alias.resolve(strict=True) != library:
+            raise ValueError('Expat replacement SONAME alias differs')
+        checked_file(vendor_library, vendor['library']['sha256'])
+        vendor_library.unlink()
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
+        if temporary_alias is not None and (temporary_alias.exists() or temporary_alias.is_symlink()):
+            temporary_alias.unlink()
 
 
 def verify_certificates(root, architecture, *, build=False):

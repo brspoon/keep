@@ -35,7 +35,7 @@
       "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
       "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       "SHELL": "/bin/sh",
-      "SOURCE_DATE_EPOCH": "1792762956",
+      "SOURCE_DATE_EPOCH": "1793609693",
       "TZ": "UTC"
     },
     "image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d",
@@ -83,7 +83,7 @@
     ]
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "e109de2f4dd099d0525f27bddb74e9576d420c58fff655e1845cd3bebc71489b",
+  "build_script_sha256": "937a9b3e5db3427e63a6628aedb064fd97c74eb706dbc1437c0ab604ec809284",
   "build_tools": {
     "installation": "build-only-offline-apk",
     "packages": {
@@ -426,12 +426,7 @@
     "path": "scripts/expat_build_tools.py",
     "sha256": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa"
   },
-  "commits": [
-    "d545081f6a90792208e0d274888a352e2e5d894d",
-    "da504c0c111086072172431c76867800673fbc34",
-    "c30145b28632b31f805d57f9838ba36b8db99367",
-    "d8f31e647a4d1eda088e89354f4769b0dad303d3"
-  ],
+  "commits": [],
   "compiler_sha256": {
     "amd64": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
     "arm64": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db"
@@ -570,8 +565,8 @@
     "version": "15.2.0-r7"
   },
   "expected_library_sha256": {
-    "amd64": "a0085a9bdc0f79fc13e42ace607df940a6da9814ed6f77135059aa753538d460",
-    "arm64": "e8522311a437d411d269f98abdd53ca1eb87cbe684a8276245b886e9ac812b78"
+    "amd64": null,
+    "arm64": null
   },
   "fortify_headers": {
     "build_commit": "363be18be4b1f33af5a058990ba9b297e8fb547b",
@@ -643,27 +638,33 @@
     "path": "scripts/fortify_header_sources.py",
     "sha256": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0"
   },
-  "identity": "keep-expat-2.9.0-c30145b-d8f31e6-literal-v2",
+  "identity": "keep-expat-2.10.0-release-v1",
   "library": {
-    "path": "/usr/lib/libexpat.so.1.13.0",
+    "path": "/usr/lib/libexpat.so.1.13.1",
     "soname": "libexpat.so.1"
   },
-  "local_patches": [
-    "keep-expat-literal-markup-accounting-v1"
-  ],
+  "local_patches": [],
   "original_files": {
-    "lib/xmlparse.c": "899afeaddf424a6f4bf9a0a77159248b485bf5c072475d547ef16c2942a86dd5",
-    "tests/acc_tests.c": "d10a7cf72862400cd03e52686d037d2f07cd80a4a2153853ae2ccd09d7d7820d",
-    "tests/alloc_tests.c": "1f8277ba331b043898f1048332ed4314d4b1ead4473171702dda3cf163fb574d"
+    "lib/entities.h": "ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92",
+    "lib/internal.h": "2a2821fc7a2982978a8630e26cf3b8158ab21a2c2f2d06354f8c0c6547dded44",
+    "lib/xcs.c": "ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8",
+    "lib/xmlparse.c": "9443794afe78dfab5cccf27e803b30359a55dbf9eaadbd54297522b72356833c",
+    "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
+    "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9",
+    "tests/misc_tests.c": "a2e4bd074fbd83a87ab298e79a13599e5a4afe65f542d6026a314b98a4ddfd9b"
   },
   "patch_manifest": {
     "path": "scripts/expat_security_patches.json",
-    "sha256": "b1b134d740f6fca0ad29c0c3b486991cc5ce6b32b71afef8052361f7eb4bc09a"
+    "sha256": "bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae"
   },
   "patched_files": {
-    "lib/xmlparse.c": "6270801b50afad876ce6f0a5bb6216eda6ef8d3002fe09f138c6552870292082",
+    "lib/entities.h": "ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92",
+    "lib/internal.h": "2a2821fc7a2982978a8630e26cf3b8158ab21a2c2f2d06354f8c0c6547dded44",
+    "lib/xcs.c": "ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8",
+    "lib/xmlparse.c": "9443794afe78dfab5cccf27e803b30359a55dbf9eaadbd54297522b72356833c",
     "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
-    "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9"
+    "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9",
+    "tests/misc_tests.c": "a2e4bd074fbd83a87ab298e79a13599e5a4afe65f542d6026a314b98a4ddfd9b"
   },
   "required_abi": {
     "export_count": 83,
@@ -691,12 +692,17 @@
   "schema": "keep-expat-build-v1",
   "source": {
     "copying_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
-    "directory": "expat-2.9.0",
-    "sha256": "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051",
-    "sha512": "677b5a39ea47aa238813412061eefba0ff2e819597efee69452eab7fd63b1387537eda0dfd4e5891b938be202dc87df4b5115bdae75c6b81643ac2363bb99b34",
-    "url": "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz"
+    "directory": "expat-2.10.0",
+    "sha256": "c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f",
+    "sha512": "bd61f361d823f67586dad246fa4d4abbe3d22f5a0f9a28401e7a2fc96753d5bae33fbe4068fae72f016998d0da9d8c92edc4abd2fe8a8e4aafc775a8ab547c44",
+    "url": "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz"
   },
-  "upstream_version": "2.9.0",
+  "upstream_release": {
+    "commit": "a70841d9ffa64ddde29ab824ed6305035ebe4c47",
+    "tag": "R_2_10_0",
+    "url": "https://github.com/libexpat/libexpat/releases/tag/R_2_10_0"
+  },
+  "upstream_version": "2.10.0",
   "vendor_package_version": "2.9.0-r0",
   "vendor_recipe": {
     "sha256": "40c194d5e234244805b965384fa6d47557aceb344e1cd92095695b17acc326f5",

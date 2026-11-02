@@ -682,7 +682,7 @@ def verify_expat_replacement(runtime_inventory, architecture, *, root=ROOT):
         raise ValueError('Require the actual candidate Expat replacement inventory')
     spec = reviewed_spec(root)
     manifest = verify_build_manifest(replacement.get('manifest'), architecture, root)
-    expected_library = {'path': '/usr/lib/libexpat.so.1.13.0',
+    expected_library = {'path': '/usr/lib/libexpat.so.1.13.1',
                         'sha256': manifest['library']['sha256']}
     if (replacement['build_lock'] != spec
             or replacement['build_lock_sha256'] != hashlib.sha256(json_bytes(spec)).hexdigest()
@@ -909,7 +909,7 @@ def collect_patched_expat_sources(origin, architecture, runtime_inventory, outpu
         'coverage': 'Original Alpine-signed packages, signatures, complete recipes and sources '
                     'are retained as vendor input proof. Keep replaces the Expat library using '
                     'the separately reviewed build lock, native output hashes, exact upstream '
-                    'patches and explicitly identified Keep-local changes, all retained in the '
+                    'release and explicitly recorded downstream patch inventory, all retained in the '
                     'patch manifest, source replay record and full replayed source tree, '
                     'including verified Fortify headers '
                     'and verified make and bash inputs with their complete matching sources and notices. '

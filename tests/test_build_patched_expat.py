@@ -130,11 +130,16 @@ class PatchedExpatBuildTests(unittest.TestCase):
         path, before, after = 'lib/xmlparse.c', b'ordinary before source\n', b'ordinary after source\n'
         originals = {path: build.digest(before)}
         patched = {path: build.digest(after)}
+        patch.stopall()
+        self.addCleanup(patch.stopall)
+        patch.object(build, 'COMMITS', ('reviewed-test-commit',)).start()
+        patch.object(build, 'LOCAL_PATCHES', ('reviewed-test-local',)).start()
         rows = [{'commit': commit, 'files': []} for commit in build.COMMITS]
         rows[0]['files'] = [{'path': path, 'before_sha256': originals[path],
                              'after_sha256': patched[path],
                              'hunks': [{'before': before.decode(), 'after': after.decode()}]}]
-        manifest = {'schema': 'keep-expat-patches-v1', 'upstream_version': '2.9.0',
+        manifest = {'schema': 'keep-expat-patches-v1', 'upstream_version': build.UPSTREAM_VERSION,
+                    'upstream_release': dict(build.UPSTREAM_RELEASE),
                     'patched_files': patched, 'patches': rows,
                     'local_patches': [{'source_id': source_id, 'source_kind': 'keep-local',
                                        'commit': None, 'files': []}

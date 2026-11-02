@@ -704,8 +704,8 @@ class PatchedExpatNoticeTests(unittest.TestCase):
                          {'keep-build/build-tools/make/AUTHORS', 'keep-build/build-tools/bash/AUTHORS'})
         headers = [notice for notice in report['notices']
                    if notice['discovery'] == 'reviewed-public-source-copyright']
-        self.assertEqual(len(headers), 13)
-        self.assertEqual(sum(notice['path'].startswith('keep-build/expat-2.9.0/') for notice in headers), 3)
+        self.assertEqual(len(headers), 17)
+        self.assertEqual(sum(notice['path'].startswith('keep-build/expat-2.10.0/') for notice in headers), 7)
         fortify = [notice for notice in headers if notice['path'].startswith('keep-build/fortify/include/')]
         self.assertEqual(len(fortify), 10)
 

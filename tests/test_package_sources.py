@@ -1248,7 +1248,7 @@ class PatchedExpatSourceTests(unittest.TestCase):
             self.assertTrue(manifest['runtime_build_verified'])
             self.assertTrue(manifest['vendor_apk_signature_verified'])
             self.assertTrue((output / 'vendor-inputs/EXPAT_SECURITY.json').is_file())
-            self.assertTrue((output / 'keep-build/expat-2.9.0/lib/xmlparse.c').is_file())
+            self.assertTrue((output / 'keep-build/expat-2.10.0/lib/xmlparse.c').is_file())
             self.assertTrue((output / 'keep-build/SOURCE_REPLAY.json').is_file())
             for arch in ('amd64', 'arm64'):
                 name = 'keep-build/fortify/packages/' + arch + '/fortify-headers.apk'
@@ -1287,7 +1287,7 @@ class PatchedExpatSourceTests(unittest.TestCase):
                 source = self.root / mutation
                 manifest = collection.collect_patched_expat_sources(origin, 'amd64', inventory,
                     source, fetch=downloads.__getitem__)
-                target = source / 'keep-build/expat-2.9.0/lib/xmlparse.c'
+                target = source / 'keep-build/expat-2.10.0/lib/xmlparse.c'
                 if mutation in {'changed', 'forged-hash'}:
                     target.write_bytes(b'changed preferred source')
                 elif mutation == 'missing':

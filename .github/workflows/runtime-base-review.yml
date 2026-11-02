@@ -207,7 +207,7 @@ jobs:
             -v "$PWD/scripts/expat_security_checks.py:/checks.py:ro" \
             keep-expat-preparation -B -c '
           import ctypes, hashlib, importlib.util, json, pathlib
-          library = pathlib.Path("/opt/expat-preparation/libexpat.so.1.13.0")
+          library = pathlib.Path("/opt/expat-preparation/libexpat.so.1.13.1")
           manifest = json.loads(library.with_name("EXPAT_PATCHED_SECURITY.json").read_bytes())
           assert hashlib.sha256(library.read_bytes()).hexdigest() == manifest["library"]["sha256"]
           spec = importlib.util.spec_from_file_location("checks", "/checks.py")
@@ -222,7 +222,7 @@ jobs:
           name: expat-preparation-${{ matrix.arch }}-${{ github.run_id }}
           path: |
             expat-preparation/${{ matrix.arch }}/compiler-provenance/
-            expat-preparation/${{ matrix.arch }}/libexpat.so.1.13.0
+            expat-preparation/${{ matrix.arch }}/libexpat.so.1.13.1
             expat-preparation/${{ matrix.arch }}/EXPAT_PATCHED_SECURITY.json
             expat-preparation/${{ matrix.arch }}/BUILD_ENVIRONMENT.json
             expat-preparation/${{ matrix.arch }}/CPP_BUILD_SECURITY.json

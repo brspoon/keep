@@ -31,7 +31,7 @@ def qualified_inventory(architecture='amd64'):
                    'build_lock_sha256': hashlib.sha256(build.json_bytes(spec)).hexdigest(),
                    'manifest': manifest,
                    'manifest_sha256': hashlib.sha256(build.json_bytes(manifest)).hexdigest(),
-                   'library': {'path': '/usr/lib/libexpat.so.1.13.0',
+                   'library': {'path': '/usr/lib/libexpat.so.1.13.1',
                                'sha256': spec['expected_library_sha256'][architecture]}}
     inventory = {'os_packages': [{
         'name': name, 'version': vendor.VERSION, 'origin': 'expat', 'license': 'MIT',
@@ -49,6 +49,7 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
               vendor.SOURCE_URL + '.asc': b'checked detached signature',
               'https://example.test/vendor.apk': b'checked signed vendor APK',
               'https://example.test/key': b'checked vendor signing key'}
+    inputs[build.SOURCE_URL] = b'checked official 2.10.0 release archive'
     fortify_downloads = [
         ('packages/amd64/fortify-headers.apk', 'https://example.test/amd64/fortify.apk', 'signed-alpine-binary-evidence'),
         ('packages/arm64/fortify-headers.apk', 'https://example.test/arm64/fortify.apk', 'signed-alpine-binary-evidence'),
@@ -81,7 +82,7 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
     download_records = [
         {'path': name, 'url': url, 'sha256': hashlib.sha256(inputs[url]).hexdigest(), 'role': role}
         for name, url, role in (
-            [('expat-2.9.0.tar.xz', vendor.SOURCE_URL, 'upstream-source'),
+            [(build.SOURCE_DIRECTORY + '.tar.xz', build.SOURCE_URL, 'upstream-source'),
              ('APKBUILD', vendor.APKBUILD_URL, 'matching-apk-build-script')]
             + [('fortify/' + name, url, role) for name, url, role in fortify_downloads]
             + [('cpp/' + name, url, role) for name, url, role in cpp_downloads]
@@ -129,14 +130,14 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
         return manifest
 
     def replay(output, *, root, fetch):
-        assert fetch(build.SOURCE_URL) == inputs[vendor.SOURCE_URL]
+        assert fetch(build.SOURCE_URL) == inputs[build.SOURCE_URL]
         assert fetch(build.RECIPE_URL) == inputs[vendor.APKBUILD_URL]
         output = Path(output)
         output.mkdir(parents=True)
         files = {build.SOURCE_DIRECTORY + '/' + name: HEADER + b'\nint source;\n'
                  for name in build.PATCHED_FILES}
         files.update({build.SOURCE_DIRECTORY + '/COPYING': COPYING,
-                      'expat-2.9.0.tar.xz': inputs[vendor.SOURCE_URL],
+                      build.SOURCE_DIRECTORY + '.tar.xz': inputs[build.SOURCE_URL],
                       'APKBUILD': inputs[vendor.APKBUILD_URL],
                       'expat-build.json': build.json_bytes(spec),
                       'expat_security_patches.json': b'checked patch manifest',

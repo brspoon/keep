@@ -124,6 +124,30 @@ and image digests. The exception policy, patch inputs and regression checks are
 tracked in this repository; results for an older image do not validate a newer
 candidate.
 
+## Expat 2.10.0 maintenance (November 2)
+
+The replacement uses the complete official [Expat 2.10.0 release](https://github.com/libexpat/libexpat/releases/tag/R_2_10_0).
+It includes the earlier entity-expansion, parser-reset and literal-markup fixes,
+plus CVE-2026-117610 (initial empty external-parser feed) and CVE-2026-118370
+(attribute counter overflow). The Keep-local literal correction is retired in
+favor of upstream handling. Signed Alpine 2.9.0-r0 input records remain separate
+from the rebuilt 2.10.0 runtime library; no APK version or signature is relabeled.
+
+The runtime gate preserves all earlier controls and adds the 36 adjacent literal
+cases in UTF-8/UTF-16 with whole and seven-byte feeds, empty external-parser
+feeds followed by processing instructions, ordinary/defaulted/namespaced
+attributes, duplicate/unbound-prefix rejection and bounded repeated sections.
+All probes retain fixed input and time bounds. The attribute cases exercise
+compatibility paths, not the billion-attribute overflow itself: exact release
+source hashes and reviewed `size_t` counters/`INT_MAX` narrowing checks provide
+the overflow-fix evidence without unbounded memory allocation. Keep's bounded
+XML responses and lack of an external-entity callback reduce app exposure but
+do not justify shipping the older parser source.
+
+Expat has no scanner exception. This update does not retire the Python or musl
+exceptions or change their November 11 deadline. The complete matching-source,
+license, provenance, native and unfiltered hosted-analysis gates still apply.
+
 ## Python, Expat and certificate maintenance (October 23)
 
 The candidate adds CPython's complete [tarfile destination-boundary correction](https://github.com/python/cpython/commit/0901ad4ffb22605f12b705d1c1197f0a01f0ba0b)

@@ -31,10 +31,12 @@ else:
     import expat_security_checks as expat_security
 
 
-EXPAT_VERSION = '2.9.0'
+EXPAT_VERSION = '2.10.0'
+EXPAT_VENDOR_VERSION = '2.9.0'
 EXPAT_PACKAGE_VERSION = '2.9.0-r0'
 EXPAT_BUILD_COMMIT = '46440e4654dc1e4e7d3a69b8a0a9e22fdeda4a88'
-EXPAT_LIBRARY = Path('/usr/lib/libexpat.so.1.13.0')
+EXPAT_LIBRARY = Path('/usr/lib/libexpat.so.1.13.1')
+EXPAT_VENDOR_LIBRARY = Path('/usr/lib/libexpat.so.1.13.0')
 EXPAT_ALIAS = Path('/usr/lib/libexpat.so.1')
 EXPAT_LIBRARY_SHA256 = {
     'amd64': '0aa9093ce225c2f5d38a9083a4c203a6133ed9c592366f58e51a6a987f461f44',
@@ -132,13 +134,13 @@ def validate_expat_manifest(manifest, arch):
     require(isinstance(manifest, dict), 'Invalid Expat install manifest')
     expected = {
         'schema': 'keep-expat-security-v1', 'architecture': arch,
-        'version': EXPAT_VERSION, 'package_version': EXPAT_PACKAGE_VERSION,
+        'version': EXPAT_VENDOR_VERSION, 'package_version': EXPAT_PACKAGE_VERSION,
         'build_commit': EXPAT_BUILD_COMMIT,
     }
     require(all(manifest.get(key) == value for key, value in expected.items()),
             'Expat install identity differs from the reviewed packages')
     require(manifest.get('library') == {
-        'path': str(EXPAT_LIBRARY), 'soname': 'libexpat.so.1',
+        'path': str(EXPAT_VENDOR_LIBRARY), 'soname': 'libexpat.so.1',
         'sha256': EXPAT_LIBRARY_SHA256[arch],
     }, 'Expat installed library differs from the reviewed signed package')
     source_hash = manifest.get('source_manifest_sha256')
@@ -302,7 +304,7 @@ def exercise_expat():
     import pyexpat
 
     require(pyexpat.EXPAT_VERSION == 'expat_' + EXPAT_VERSION
-            and pyexpat.version_info == (2, 9, 0), 'Unexpected ordinary pyexpat version')
+            and pyexpat.version_info == (2, 10, 0), 'Unexpected ordinary pyexpat version')
     events = []
     parser = pyexpat.ParserCreate()
     parser.StartElementHandler = lambda name, attrs: events.append(('start', name, attrs))
@@ -692,7 +694,7 @@ def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
     manifest, install_hash = read_expat_manifest(manifest_path, arch)
     replacement, replacement_hash = read_expat_replacement(arch)
     require(EXPAT_ALIAS.is_symlink() and EXPAT_ALIAS.resolve(strict=True) == EXPAT_LIBRARY,
-            'Expat SONAME alias does not resolve to libexpat.so.1.13.0')
+            'Expat SONAME alias does not resolve to the reviewed 2.10.0 library')
     library = verify_loaded_library(EXPAT_LIBRARY, 'libexpat.so', Path(maps_path).read_text(),
                                     replacement['library']['sha256'])
     probes = expat_security.exercise_expat_security()

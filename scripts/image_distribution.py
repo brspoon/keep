@@ -190,7 +190,7 @@ def notice(path):
             'text': body.decode('utf-8', errors='replace')}
 
 
-def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpat.so.1.13.0')):
+def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpat.so.1.13.1')):
     """Capture actual bytes; acquisition separately replays the reviewed build."""
     paths = [app / 'EXPAT_BUILD.json', app / 'EXPAT_PATCHED_SECURITY.json']
     if not any(path.exists() or path.is_symlink() for path in paths):

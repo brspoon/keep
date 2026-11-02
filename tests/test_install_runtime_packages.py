@@ -471,10 +471,11 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
         self.root = Path(self.temporary.name).resolve()
         self.output = self.root / 'expat-patched'
         self.output.mkdir()
-        self.library = self.root / 'libexpat.so.1.13.0'
-        self.library.write_bytes(b'original signed library')
+        self.library = self.root / 'libexpat.so.1.13.1'
+        self.vendor_library = self.root / 'libexpat.so.1.13.0'
+        self.vendor_library.write_bytes(b'original signed library')
         self.alias = self.root / 'libexpat.so.1'
-        self.alias.symlink_to(self.library.name)
+        self.alias.symlink_to(self.vendor_library.name)
         self.replacement = b'reviewed replacement library'
         self.manifest = {'qualified': True, 'purpose': 'reviewed-build',
                          'library': {'path': str(self.library), 'soname': self.alias.name,
@@ -486,7 +487,7 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
         self.verify = self.stack.enter_context(patch.object(
             installer.patched_expat, 'verify_build_manifest', return_value=self.manifest))
         self.stack.enter_context(patch.object(installer.expat, 'build_security_manifest',
-            return_value={'library': {'sha256': hashlib.sha256(self.library.read_bytes()).hexdigest()}}))
+            return_value={'library': {'path': str(self.vendor_library), 'sha256': hashlib.sha256(self.vendor_library.read_bytes()).hexdigest()}}))
 
     def write_manifest(self):
         (self.output / 'EXPAT_PATCHED_SECURITY.json').write_bytes(
@@ -495,11 +496,10 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
     def install(self):
         installer.install_expat(self.root, 'amd64', self.library, self.alias)
 
-    def test_replaces_canonical_inode_without_changing_the_soname_alias(self):
-        inode = self.library.stat().st_ino
+    def test_installs_new_release_filename_and_atomically_retargets_soname(self):
         self.install()
         self.assertEqual(self.library.read_bytes(), self.replacement)
-        self.assertNotEqual(self.library.stat().st_ino, inode)
+        self.assertFalse(self.vendor_library.exists())
         self.assertEqual(self.alias.readlink(), Path(self.library.name))
         self.verify.assert_called_once_with(self.manifest, 'amd64')
         self.assertEqual(list(self.root.glob('.keep-expat-*')), [])
@@ -507,9 +507,9 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
     def test_modified_input_output_manifest_or_alias_holds_replacement(self):
         for failure in ('vendor', 'replacement', 'alias', 'manifest'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as _:
-                original = self.library.read_bytes()
+                original = self.vendor_library.read_bytes()
                 if failure == 'vendor':
-                    self.library.write_bytes(b'changed original')
+                    self.vendor_library.write_bytes(b'changed original')
                 elif failure == 'replacement':
                     (self.output / installer.patched_expat.LIBRARY).write_bytes(b'changed replacement')
                 elif failure == 'alias':
@@ -519,11 +519,11 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
                     (self.output / 'EXPAT_PATCHED_SECURITY.json').write_text(json.dumps(self.manifest))
                 with self.assertRaises(ValueError):
                     self.install()
-                self.assertNotEqual(self.library.read_bytes(), self.replacement)
-                self.library.write_bytes(original)
+                self.assertFalse(self.library.exists())
+                self.vendor_library.write_bytes(original)
                 (self.output / installer.patched_expat.LIBRARY).write_bytes(self.replacement)
                 self.alias.unlink()
-                self.alias.symlink_to(self.library.name)
+                self.alias.symlink_to(self.vendor_library.name)
                 self.write_manifest()
 
     def test_preparation_receipt_is_rejected_by_the_real_gate(self):
