@@ -162,30 +162,6 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: Check exact Alpine source endpoint availability
-        run: |
-          python3 -u - <<'PY'
-          import concurrent.futures, hashlib, urllib.request
-          commit = 'e18a81f6461517119d85f2650a4f3e5e01861d28'
-          raw = f'https://gitlab.alpinelinux.org/alpine/aports/-/raw/{commit}/main/expat/APKBUILD'
-          archive = f'https://gitlab.alpinelinux.org/alpine/aports/-/archive/{commit}/aports-{commit}.tar.gz'
-          plain = f'https://git.alpinelinux.org/aports/plain/main/expat/APKBUILD?id={commit}'
-          def check(item):
-              url, identify = item
-              headers = {'User-Agent': 'Keep-source-review/1.0 (+https://github.com/brspoon/keep)'} if identify else {}
-              try:
-                  request = urllib.request.Request(url, headers=headers)
-                  with urllib.request.urlopen(request, timeout=30) as response:
-                      body = response.read(32 * 1024 * 1024 + 1)
-                  if len(body) > 32 * 1024 * 1024:
-                      raise ValueError('source endpoint exceeded bound')
-                  return url, identify, len(body), hashlib.sha256(body).hexdigest()
-              except Exception as error:
-                  return url, identify, str(error)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-              for result in pool.map(check, ((raw, False), (raw, True), (archive, False), (archive, True), (plain, False))):
-                  print(result, flush=True)
-          PY
       - name: Build exact Expat source-review output without qualifying an image
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}

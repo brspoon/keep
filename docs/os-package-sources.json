@@ -179,10 +179,11 @@
       "recipe": {
         "path": "main/expat/APKBUILD",
         "revision": "e18a81f6461517119d85f2650a4f3e5e01861d28",
-        "url": "https://gitlab.alpinelinux.org/alpine/aports/-/raw/e18a81f6461517119d85f2650a4f3e5e01861d28/main/expat/APKBUILD",
+        "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=e18a81f6461517119d85f2650a4f3e5e01861d28",
         "sha256": "8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed",
-        "archive_url": "https://gitlab.alpinelinux.org/alpine/aports/-/archive/e18a81f6461517119d85f2650a4f3e5e01861d28/aports-e18a81f6461517119d85f2650a4f3e5e01861d28.tar.gz",
-        "archive_sha256": "9b47670f0f1dcdb746e9ebe9cba294c444e9874385f646f6ca0840a21f78bf39"
+        "archive_url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/archive.tar.gz?sha=e18a81f6461517119d85f2650a4f3e5e01861d28",
+        "archive_sha256": "bad26ef1fe33691152dbb1c7e1bfbf7155083fc51fcc50faa2f32f5d416636d4",
+        "archive_prefix": "aports-e18a81f6461517119d85f2650a4f3e5e01861d28-e18a81f6461517119d85f2650a4f3e5e01861d28"
       },
       "source": {
         "url": "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz",

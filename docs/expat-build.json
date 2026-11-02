@@ -83,7 +83,7 @@
     ]
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "ced7bfe8348fca041e35ad58bf4f79cc3616265a4b8572e0c105614307090642",
+  "build_script_sha256": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
   "build_tools": {
     "installation": "build-only-offline-apk",
     "packages": {
@@ -706,6 +706,6 @@
   "vendor_package_version": "2.10.0-r0",
   "vendor_recipe": {
     "sha256": "8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed",
-    "url": "https://gitlab.alpinelinux.org/alpine/aports/-/raw/e18a81f6461517119d85f2650a4f3e5e01861d28/main/expat/APKBUILD"
+    "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=e18a81f6461517119d85f2650a4f3e5e01861d28"
   }
 }

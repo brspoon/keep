@@ -20,9 +20,10 @@ import zlib
 
 VERSION = '2.10.0-r0'
 BUILD_COMMIT = 'e18a81f6461517119d85f2650a4f3e5e01861d28'
-APORTS_URL = f'https://gitlab.alpinelinux.org/alpine/aports/-/archive/{BUILD_COMMIT}/aports-{BUILD_COMMIT}.tar.gz'
-APORTS_SHA256 = '9b47670f0f1dcdb746e9ebe9cba294c444e9874385f646f6ca0840a21f78bf39'
-APKBUILD_URL = f'https://gitlab.alpinelinux.org/alpine/aports/-/raw/{BUILD_COMMIT}/main/expat/APKBUILD'
+APORTS_URL = f'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/archive.tar.gz?sha={BUILD_COMMIT}'
+APORTS_PREFIX = f'aports-{BUILD_COMMIT}-{BUILD_COMMIT}'
+APORTS_SHA256 = 'bad26ef1fe33691152dbb1c7e1bfbf7155083fc51fcc50faa2f32f5d416636d4'
+APKBUILD_URL = f'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref={BUILD_COMMIT}'
 APKBUILD_SHA256 = '8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed'
 SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz'
 SOURCE_SHA256 = 'c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f'
@@ -78,7 +79,8 @@ def reviewed_spec(root=None):
         'origin': 'expat', 'version': VERSION, 'source_method': 'alpine-signed-expat-v1',
         'recipe': {'path': 'main/expat/APKBUILD', 'revision': BUILD_COMMIT,
                    'url': APKBUILD_URL, 'sha256': APKBUILD_SHA256,
-                   'archive_url': APORTS_URL, 'archive_sha256': APORTS_SHA256},
+                   'archive_url': APORTS_URL, 'archive_sha256': APORTS_SHA256,
+                   'archive_prefix': APORTS_PREFIX},
         'source': {'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'sha512': SOURCE_SHA512,
                    'signature_url': SOURCE_URL + '.asc', 'signature_sha256': SIGNATURE_SHA256,
                    'license_path': 'expat-2.10.0/COPYING', 'license_sha256': COPYING_SHA256},
@@ -333,7 +335,7 @@ def collect_sources(package_spec, architecture, runtime_inventory, output_root, 
     root, records = empty_output(output_root), []
     installation, packages = prepare(root, package_spec, architecture, fetch, records)
     recipes = checked(fetch(APORTS_URL), 'sha256', APORTS_SHA256, 'Complete Expat aports context')
-    recipe_path = f'aports-{BUILD_COMMIT}/main/expat/APKBUILD'
+    recipe_path = f'{APORTS_PREFIX}/main/expat/APKBUILD'
     recipe = checked(read_member(recipes, recipe_path), 'sha256', APKBUILD_SHA256, 'Expat APKBUILD')
     recipe_identity(recipe)
     retain(root, records, f'aports-{BUILD_COMMIT}.tar.gz', recipes, APORTS_URL, 'complete-alpine-build-recipes')

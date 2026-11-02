@@ -80,8 +80,8 @@ class AlpineExpatSourceTests(unittest.TestCase):
                   'source="https://github.com/libexpat/libexpat/releases/download/$_tagver/expat-$pkgver.tar.xz"\n'
                   f'sha512sums="\n{checksum}  expat-2.10.0.tar.xz\n"\n'
                   'build() { ./configure --prefix=/usr; make; }\ncheck() { make check; }\n').encode()
-        self.recipes = archive([(f'aports-{sources.BUILD_COMMIT}/main/expat/APKBUILD', recipe),
-                                (f'aports-{sources.BUILD_COMMIT}/README.md', b'whole pinned context')])
+        self.recipes = archive([(f'{sources.APORTS_PREFIX}/main/expat/APKBUILD', recipe),
+                                (f'{sources.APORTS_PREFIX}/README.md', b'whole pinned context')])
         self.stack.enter_context(patch.object(sources, 'APKBUILD_SHA256', hashlib.sha256(recipe).hexdigest()))
         self.stack.enter_context(patch.object(sources, 'APORTS_SHA256', hashlib.sha256(self.recipes).hexdigest()))
         signature = b'retained upstream detached signature'
@@ -270,7 +270,7 @@ class AlpineExpatSourceTests(unittest.TestCase):
                 self.collect(directory)
 
     def test_recipe_checksum_and_source_declaration_cannot_be_substituted_or_executed(self):
-        recipe = sources.read_member(self.recipes, f'aports-{sources.BUILD_COMMIT}/main/expat/APKBUILD')
+        recipe = sources.read_member(self.recipes, f'{sources.APORTS_PREFIX}/main/expat/APKBUILD')
         for bad in (recipe.replace(sources.SOURCE_SHA512.encode(), b'f' * 128),
                     recipe.replace(b'expat-$pkgver.tar.xz', b'other-$pkgver.tar.xz')):
             with self.assertRaisesRegex(ValueError, 'source checksum|source declaration'):
