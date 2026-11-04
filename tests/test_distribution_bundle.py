@@ -862,6 +862,8 @@ class MatchingSourceDownloadTests(unittest.TestCase):
     def test_unexpected_hosts_credentials_and_redirects_are_rejected(self):
         with patch.object(bundle.urllib.request, 'urlopen') as opener:
             for url in ('http://github.com/libffi.tar.gz', 'https://private.example/source.tar.gz',
+                        'https://github.com.attacker.invalid/source.tar.gz',
+                        'https://attacker.invalid/github.com/source.tar.gz',
                         'https://secret:token@github.com/libffi.tar.gz'):
                 with self.subTest(url=url), self.assertRaisesRegex(ValueError, 'download URL'):
                     bundle.fetch_source(url)
