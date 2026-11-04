@@ -323,7 +323,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
                 name: ('report ' + name).encode()
                 for name in [*materials.evidence_names(arch), f'portable-recovery-{arch}.json',
                              f'installer-trial-{arch}.json', f'source-bundle-{arch}.json']}
-            reports = self.security_reports(arch, policy, matches)
+            reports = self.security_reports(arch, policy, matches,
+                config_digest=(config_digests or {}).get(arch, 'sha256:' + 'd' * 64))
             if review_changes:
                 for name, changes in review_changes.items():
                     if name in reports:
@@ -401,10 +402,14 @@ class ReleaseMaterialsTests(unittest.TestCase):
             path.write_bytes((repository / name).read_bytes())
         return policy
 
-    def security_reports(self, arch, policy, matches=None):
+    def security_reports(self, arch, policy, matches=None, config_digest='sha256:' + 'd' * 64):
         return {
             f'candidate-dependencies-{arch}.json': dependency_report(arch),
-            f'candidate-{arch}.json': {'matches': matches or []},
+            f'candidate-{arch}.json': {'matches': matches or [], 'source': {'type': 'image',
+                'target': {'os': 'linux', 'architecture': arch, 'imageID': config_digest}}},
+            f'candidate-layers-{arch}.json': {'architecture': arch,
+                'config_sha256': config_digest.removeprefix('sha256:'), 'success': True, 'findings': []},
+            f'candidate-notices-{arch}.json': {},
             f'candidate-scout-{arch}.json': {'runs': [{'results': []}]},
             f'candidate-regression-{arch}.json': {
                 'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
@@ -1647,7 +1652,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
 
     def current_review_runner(self, day):
         def run(command, *, check):
-            self.assertEqual(command, ['python3', 'scripts/review_image.py', 'amd64', '--check-only'])
+            self.assertEqual(command, ['python3', 'scripts/review_image.py', 'amd64', '--check-only',
+                                      '--expected-image-config', 'sha256:' + 'd' * 64])
             self.assertTrue(check)
             with patch.object(review_image, 'current_day', return_value=day), redirect_stdout(io.StringIO()):
                 status = review_image.main(command[2:])
@@ -1759,7 +1765,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
              patch.object(materials.subprocess, 'run') as revalidation:
             materials.archive('amd64', native_digest=self.DIGEST)
         revalidation.assert_called_once_with(
-            ['python3', 'scripts/review_image.py', 'amd64', '--check-only'], check=True)
+            ['python3', 'scripts/review_image.py', 'amd64', '--check-only',
+             '--expected-image-config', 'sha256:' + 'd' * 64], check=True)
         origin.assert_called_once_with(proof, 'amd64', 'sha256:' + 'd' * 64)
         self.assertEqual(review.read_bytes(), original)
         self.assertEqual(captured['review'], original)
@@ -1790,7 +1797,8 @@ class ReleaseMaterialsTests(unittest.TestCase):
         original = review.read_bytes()
 
         def blocked(*args, **kwargs):
-            self.assertEqual(args[0], ['python3', 'scripts/review_image.py', 'amd64', '--check-only'])
+            self.assertEqual(args[0], ['python3', 'scripts/review_image.py', 'amd64', '--check-only',
+                                       '--expected-image-config', 'sha256:' + 'd' * 64])
             raise subprocess.CalledProcessError(1, args[0])
 
         with chdir(self.root), patch.object(materials, 'guard', return_value=self.VERSION), \

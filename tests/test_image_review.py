@@ -469,6 +469,8 @@ class CandidateReviewTests(unittest.TestCase):
             destination.write_bytes((ROOT / name).read_bytes())
         for arch in DIRECT:
             self.write(f'candidate-dependencies-{arch}.json', dependency_report(arch))
+            self.write(f'candidate-notices-{arch}.json', {})
+            self.write(f'candidate-layers-{arch}.json', {})
             self.write(f'candidate-{arch}.json', {'matches': []})
             self.write(f'candidate-scout-{arch}.json', {'runs': [{'results': []}]})
             self.write(f'candidate-provenance-{arch}.json', {

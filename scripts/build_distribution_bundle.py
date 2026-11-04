@@ -213,6 +213,9 @@ def check_runtime(inventory, lock, os_lock, arch, *, root=ROOT):
     from collect_package_sources import verify_socket_replacement
     if any(row['origin'] == 'python-3.14' for row in os_lock['origins']):
         verify_socket_replacement(inventory, arch, root=root)
+    if any(row['origin'] == 'sqlite' for row in os_lock['origins']):
+        from collect_package_sources import verify_sqlite_replacement
+        verify_sqlite_replacement(inventory, arch, root=root)
     check_native_wheels(inventory, lock, arch)
     return {'python_packages': len(expected_python), 'os_packages': len(expected),
             'os_origins': len(os_lock['origins']), 'native_wheels': 2}
@@ -233,6 +236,8 @@ def check_runtime_notices(root, inventory, os_lock, arch):
         expected['python-3.14-ensurepip'] = original_python['package']['version']
         if 'socket_replacement' in inventory:
             expected['python-socket-overlay'] = '3.14.10'
+    if 'sqlite_replacement' in inventory:
+        expected['sqlite-overlay'] = '3.54.1'
     installed = {row['path']: row for row in inventory.get('notices', [])}
     covered = set()
     seen = set()
@@ -1043,6 +1048,60 @@ def archive_tree(directory, archive, name):
                     raise ValueError('Unsupported source bundle entry')
 
 
+def retain_sqlite_sources(stage, inventory, arch, *, root=ROOT, fetch=fetch_source):
+    """Retain the corrected library's preferred sources and independent build proof.
+
+    The unchanged sqlite origin continues to cover the signed vendor APK and
+    its lower-layer bytes. This separate component makes no vendor APK claim.
+    """
+    import build_patched_sqlite as build
+    import build_patched_expat as expat_build
+    from collect_package_sources import (
+        expat_cpp_source_binding, retain_expat_compiler_provenance,
+        verify_sqlite_replacement,
+    )
+    from package_source_notices import inspect_sqlite_overlay_sources
+    replacement = verify_sqlite_replacement(inventory, arch, root=root)
+    spec = build.reviewed_spec(root)
+    expat_spec = expat_build.reviewed_spec(root)
+    if (spec['build']['image'] != expat_spec['build']['image']
+            or any(spec[key] != expat_spec[key]
+                   for key in ('fortify_headers', 'cpp_packages', 'build_tools'))):
+        raise ValueError('SQLite toolchain differs from the independently retained source inputs')
+    output = Path(stage) / 'sqlite-overlay'
+    if output.exists() or output.is_symlink():
+        raise ValueError('SQLite source output must be new')
+    output.mkdir()
+    replay = build.replay_sources((output / 'preferred-source').resolve(), root=root, fetch=fetch)
+    for name in ('scripts/build_patched_sqlite.py', 'scripts/sqlite_security_patches.json',
+                 'scripts/sqlite_security_checks.py', 'docs/sqlite-build.json'):
+        copy_file(root, name, output / Path(name).name)
+    write_json(output / 'SQLITE_PATCHED_SECURITY.json', replacement['manifest'])
+    compiler_source = Path(stage) / 'os-packages/expat/public-sources/compiler-provenance'
+    compiler = retain_expat_compiler_provenance(compiler_source,
+        output / 'compiler-provenance', arch, root=root)
+    downloads = {row['path']: row for row in build.source_download_records()}
+    cpp = expat_cpp_source_binding(downloads, root=root)
+    report = inspect_sqlite_overlay_sources(output / 'preferred-source', output / 'source-notices',
+        architecture=arch, replacement_manifest_sha256=replacement['manifest_sha256'], root=root)
+    if report['success'] is not True:
+        raise ValueError('SQLite overlay source and notice inventory is incomplete')
+    # The ordinary notice-union traversal discovers this complete checked report
+    # under source-notices, beside the exact notice bytes it inventories.
+    coverage = {
+        'origin': 'sqlite-overlay', 'version': build.UPSTREAM_VERSION,
+        'architecture': arch, 'provider_oci_binding': False,
+        'vendor_apk_signature_applies_to_replacement': False,
+        'build_lock_sha256': replacement['build_lock_sha256'],
+        'replacement_manifest_sha256': replacement['manifest_sha256'],
+        'library': replacement['library'], 'source_replay': replay,
+        'compiler_provenance': compiler, 'cpp_source_binding': cpp,
+        'files': file_records(output),
+    }
+    write_json(output / 'SOURCE-REPLAY.json', coverage)
+    return {key: value for key, value in coverage.items() if key != 'files'}
+
+
 def retain_socket_sources(stage, inventory, arch, *, root=ROOT, fetch=fetch_source):
     """Retain independently bound preferred sources without relabeling vendor proof."""
     import build_patched_socket as build
@@ -1126,6 +1185,8 @@ def keep_source(root, destination):
                      'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'docs/python-socket-build.json',
+                     'scripts/build_patched_sqlite.py', 'scripts/sqlite_security_patches.json',
+                     'scripts/sqlite_security_checks.py', 'docs/sqlite-build.json',
                      'scripts/security-fixtures/distrusted.zip',
                      'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
                      'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
@@ -1178,6 +1239,8 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         base_coverage = retain_original_base(source, stage / 'original-base', os_lock, architecture, root=root, fetch=fetch)
         socket_coverage = (retain_socket_sources(stage, inventory, architecture, root=root, fetch=fetch)
                            if 'socket_replacement' in inventory else None)
+        sqlite_coverage = (retain_sqlite_sources(stage, inventory, architecture, root=root, fetch=fetch)
+                           if 'sqlite_replacement' in inventory else None)
         notice_union = consolidate_notices(stage, os_lock, architecture, inventory,
             selected_comment_paths=reviewed_notice_comments(root, architecture))
         check_generated_notices(root, notice_union, architecture)
@@ -1200,6 +1263,7 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         public_fallbacks = [row['origin'] for row in os_coverage if not row['provider_oci_binding']]
         coverage = {'runtime': counts, 'runtime_notices': runtime_notices,
                     'http_framing': http_framing, 'socket_overlay': socket_coverage,
+                    'sqlite_overlay': sqlite_coverage,
                     'source_notice_union': {'notices': len(notice_union['notices']),
                                            'origins_needing_explicit_attribution': notice_union['origins_needing_explicit_attribution']},
                     'original_base': base_coverage, 'os_origins': os_coverage,
@@ -1250,11 +1314,14 @@ def prepare_notices(sources, architecture, runtime_inventory, output, *, root=RO
     base = retain_original_base(source, output / 'original-base', os_lock, architecture, root=root, fetch=fetch)
     socket_coverage = (retain_socket_sources(output, inventory, architecture, root=root, fetch=fetch)
                        if 'socket_replacement' in inventory else None)
+    sqlite_coverage = (retain_sqlite_sources(output, inventory, architecture, root=root, fetch=fetch)
+                       if 'sqlite_replacement' in inventory else None)
     notices = consolidate_notices(output, os_lock, architecture, inventory, retain_inputs=True)
     notice_inputs = read_json(output / 'notice-inputs', 'index.json')
     report = {'format': 'keep-runtime-notice-preparation-v1', 'architecture': architecture,
         'runtime': counts, 'os_origins': coverage, 'original_base': base,
         'socket_overlay': socket_coverage,
+        'sqlite_overlay': sqlite_coverage,
         'notices': len(notices['notices']), 'notice_directory': 'os-notices',
         'notice_inputs_directory': 'notice-inputs', 'notice_input_bundles': len(notice_inputs['bundles']),
         'notice_input_files': notice_inputs['notice_files'],

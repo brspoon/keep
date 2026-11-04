@@ -856,6 +856,8 @@ class CommittedKeepSourceTests(unittest.TestCase):
             'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'docs/python-socket-build.json', 'scripts/security-fixtures/distrusted.zip',
+            'scripts/build_patched_sqlite.py', 'scripts/sqlite_security_patches.json',
+            'scripts/sqlite_security_checks.py', 'docs/sqlite-build.json',
             'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
             'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
             'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',

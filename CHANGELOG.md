@@ -3,6 +3,7 @@
 ## 2.30.4 — 2026-11-03
 
 - Avoid failure and recovery alerts for short-lived background job interruptions. Persistent failures still alert.
+- Update SQLite to 3.54.1 to enforce expression-depth limits.
 
 ## 2.30.3 — 2026-11-02
 

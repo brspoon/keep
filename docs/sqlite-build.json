@@ -393,8 +393,8 @@
     "sha256": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa"
   },
   "compiler_sha256": {
-    "amd64": null,
-    "arm64": null
+    "amd64": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
+    "arm64": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db"
   },
   "cpp_helper": {
     "path": "scripts/dhi_cpp_packages.py",
@@ -530,8 +530,8 @@
     "version": "15.2.0-r7"
   },
   "expected_library_sha256": {
-    "amd64": null,
-    "arm64": null
+    "amd64": "fc6c37e23add6306f115683bb5de6a0f520262ba175644bdb10cad04a33cca60",
+    "arm64": "0348c199766d12d8ae87b5407bb4b9e2bd4eeff946b89fb21e0f1af8e2915500"
   },
   "expected_vendor_library_sha256": {
     "amd64": "828785f82a615e0cdb902bc5bc6f56bc2f2cc52f9d5f5f3df3ddf1a60e0ba7cb",

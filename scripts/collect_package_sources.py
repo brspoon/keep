@@ -735,6 +735,24 @@ def verify_socket_replacement(runtime_inventory, architecture, *, root=ROOT):
     return replacement
 
 
+def verify_sqlite_replacement(runtime_inventory, architecture, *, root=ROOT):
+    """Bind the library overlay separately from the unchanged vendor APK input."""
+    import build_patched_sqlite as build
+    replacement = runtime_inventory.get('sqlite_replacement') if isinstance(runtime_inventory, dict) else None
+    if not isinstance(replacement, dict) or set(replacement) != {
+            'build_lock', 'build_lock_sha256', 'manifest', 'manifest_sha256', 'library'}:
+        raise ValueError('Missing complete SQLite replacement source binding')
+    spec = build.reviewed_spec(root)
+    manifest = build.verify_build_manifest(replacement['manifest'], architecture, root)
+    if (replacement['build_lock'] != spec
+            or replacement['build_lock_sha256'] != build.digest(build.json_bytes(spec))
+            or replacement['manifest_sha256'] != build.digest(build.json_bytes(manifest))
+            or replacement['library'] != {'path': '/usr/lib/' + build.LIBRARY,
+                                          'sha256': manifest['library']['sha256']}):
+        raise ValueError('SQLite source/runtime binding differs from reviewed native build')
+    return replacement
+
+
 def verify_expat_replacement(runtime_inventory, architecture, *, root=ROOT):
     """Bind independently inventoried library bytes to the reviewed native build.
 

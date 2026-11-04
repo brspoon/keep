@@ -22,9 +22,11 @@ class HttpFramingTests(unittest.TestCase):
     def test_original_base_inventory_does_not_require_candidate_parser_helpers(self):
         from scripts import image_distribution
         with patch.object(image_distribution.importlib.metadata, 'distributions', return_value=[]), \
-                patch.object(Path, 'read_text', return_value=''), \
+                patch.object(Path, 'read_bytes', return_value=b''), \
                 patch.object(Path, 'is_dir', return_value=False), \
                 patch.object(image_distribution, 'expat_replacement_inventory', return_value=None), \
+                patch.object(image_distribution, 'sqlite_replacement_inventory', return_value=None), \
+                patch.object(image_distribution, 'sqlite_cli_runtime_inventory', return_value={'success': True}), \
                 patch.dict(sys.modules, {'http_framing_checks': None}):
             result = image_distribution.runtime_inventory()
             with self.assertRaises(ModuleNotFoundError):

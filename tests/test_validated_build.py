@@ -56,10 +56,13 @@ class NativeWorkflowContractTests(unittest.TestCase):
         name = 'Verify default Expat and OpenSSL library loading'
         blocks = [block for step, block in self.workflow_steps() if step == name]
         self.assertEqual(len(blocks), 1)
-        self.assertEqual(re.findall(r'^        run: ([^\r\n]+)$', blocks[0], re.M), [
+        self.assertEqual(re.findall(r'^          (docker run[^\r\n]+)$', blocks[0], re.M), [
             'docker run --rm --network none --read-only '
             '--tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" '
-            'keep-ci python -B /checks/runtime_dependency_checks.py --report '
+            'keep-ci /usr/bin/python3.14 -B /checks/runtime_dependency_checks.py --sqlite-only',
+            'docker run --rm --network none --read-only '
+            '--tmpfs /tmp:rw,noexec,nosuid,size=64m -v "$PWD/scripts:/checks:ro" '
+            'keep-ci /venv/bin/python -B /checks/runtime_dependency_checks.py --report '
             '> candidate-dependencies-${{ matrix.arch }}.json'])
         self.assertNotRegex(blocks[0], r'(?m)^        (?:if|continue-on-error):')
 
@@ -906,11 +909,14 @@ class ValidatedBuildTests(unittest.TestCase):
 
         with patch.object(builds, 'api', side_effect=self.api), \
              patch.object(builds, 'inspect_image', return_value='sha256:' + 'b' * 64), \
+             patch.object(builds.materials.review_image, 'review_candidate',
+                          return_value={'blocked': [], 'scout_blocked': []}) as security, \
              patch.object(builds.subprocess, 'run', side_effect=docker), \
              patch.object(builds.materials, 'bundle', return_value=(Path('source'), proof)), \
              patch.object(builds.materials, 'portable_evidence'), patch.object(builds.materials, 'installer_evidence'), \
              patch.object(builds, 'upload', side_effect=upload):
             builds.retain('amd64')
+        security.assert_called_once_with('amd64', expected_image_config='sha256:' + 'b' * 64)
         index = json.loads(Path('validated-build/amd64/index.json').read_text())
         self.assertEqual(index['build']['run_id'], 100)
         self.assertEqual(index['build']['run_attempt'], 3)
@@ -919,6 +925,22 @@ class ValidatedBuildTests(unittest.TestCase):
             self.assertEqual(Path(path).read_bytes(), body)
             row = next(row for row in index['assets'] if row['path'] == path)
             self.assertEqual(row['sha256'], hashlib.sha256(body).hexdigest())
+
+    def test_retention_rejects_security_reports_for_a_different_image_before_upload(self):
+        with patch.object(builds, 'push_guard', return_value=self.run), \
+             patch.object(builds, 'context', return_value=('2.21.4', self.run['head_sha'])), \
+             patch.object(builds, 'native_job', return_value=self.native['amd64']), \
+             patch.object(builds, 'inspect_image', return_value='sha256:' + 'b' * 64), \
+             patch.object(builds.materials.review_image, 'review_candidate',
+                          side_effect=ValueError('Reports cover a different image')) as security, \
+             patch.object(builds.materials, 'bundle') as source, \
+             patch.object(builds, 'candidate') as candidate, patch.object(builds, 'upload') as upload:
+            with self.assertRaisesRegex(ValueError, 'different image'):
+                builds.retain('amd64')
+        security.assert_called_once_with('amd64', expected_image_config='sha256:' + 'b' * 64)
+        source.assert_not_called()
+        candidate.assert_not_called()
+        upload.assert_not_called()
 
 
 if __name__ == '__main__':

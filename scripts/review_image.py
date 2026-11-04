@@ -14,6 +14,31 @@ def current_day():
     return datetime.datetime.now(datetime.timezone.utc).date()
 
 
+def image_config_sha256(report, arch):
+    """Read the original Grype image-config identity; never infer it from layers."""
+    source = report.get('source') if isinstance(report, dict) else None
+    target = source.get('target') if isinstance(source, dict) else None
+    if (not isinstance(target, dict) or source.get('type') != 'image'
+            or target.get('os') != 'linux' or target.get('architecture') != arch):
+        return None
+    identity = target.get('imageID')
+    if not isinstance(identity, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', identity):
+        return None
+    return identity.removeprefix('sha256:')
+
+
+def verify_image_binding(report, layers, arch, expected_image_config):
+    """Bind both original reports to an independently supplied image config."""
+    if (arch not in DIRECT or not isinstance(expected_image_config, str)
+            or not re.fullmatch(r'sha256:[0-9a-f]{64}', expected_image_config)):
+        raise ValueError('An exact expected image-config identity is required')
+    expected = expected_image_config.removeprefix('sha256:')
+    if (image_config_sha256(report, arch) != expected or not isinstance(layers, dict)
+            or layers.get('architecture') != arch or layers.get('config_sha256') != expected):
+        raise ValueError('Original Grype and layer reports differ from the expected image config')
+    return expected
+
+
 def exception_deadlines(policy):
     if (not isinstance(policy, dict)
             or not isinstance(policy.get('base'), str)
@@ -64,7 +89,7 @@ def deadline_warnings(policy, today=None, warning_days=14):
     warnings = []
     exception_deadlines(policy)
     reviews = [(finding, rule, datetime.date.fromisoformat(rule['review']['deadline']))
-               for section in ('exceptions', 'scout_exceptions')
+               for section in ('exceptions', 'scout_exceptions', 'scout_component_reviews')
                for finding, rule in policy.get(section, {}).items()]
     for finding, rule, deadline in sorted(reviews, key=lambda item: item[0]):
         remaining = (deadline - today).days
@@ -75,11 +100,14 @@ def deadline_warnings(policy, today=None, warning_days=14):
     return warnings
 
 
-def assess(report, scout, evidence, policy, arch, today=None):
+def assess(report, scout, evidence, policy, arch, today=None, *, inventory=None,
+           layers=None, root=Path('.'), expected_image_config=None):
     today = today or current_day()
     deadlines = exception_deadlines(policy)
     if policy['base'] != BASE.split('@')[1] or arch not in DIRECT:
         raise ValueError('Unreviewed base or architecture')
+    image_config = (verify_image_binding(report, layers, arch, expected_image_config)
+                    if expected_image_config is not None else None)
     if evidence != {'success': True, 'tests': 10, 'failures': 0, 'errors': 0,
                     'skipped': 0, 'arch': arch,
                     'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json']}:
@@ -125,20 +153,29 @@ def assess(report, scout, evidence, policy, arch, today=None):
                 blocked.append(entry)
             else:
                 accepted.append(entry)
-    scout_accepted, scout_blocked, seen = [], [], set()
+    scout_accepted, scout_not_affected, scout_blocked, seen = [], [], [], set()
     for run in scout['runs']:
         for result in run['results']:
             finding = canonical_scout_finding(run, result)
             identity = tuple(sorted(finding.items())) if finding else None
-            reason = finding_decision(finding, policy, today)
+            reason = finding_decision(finding, policy, today, inventory=inventory,
+                                      layers=layers, arch=arch, root=root,
+                                      image_config_sha256=image_config)
             if reason or identity in seen:
                 scout_blocked.append(result)
             else:
                 seen.add(identity)
-                scout_accepted.append({**finding,
-                                       'deadline': policy['scout_exceptions'][finding['id']]['review']['deadline']})
+                component = policy.get('scout_component_reviews', {}).get(finding['id'])
+                if component is None:
+                    scout_accepted.append({**finding,
+                        'deadline': policy['scout_exceptions'][finding['id']]['review']['deadline']})
+                else:
+                    scout_not_affected.append({**finding, 'status': component['status'],
+                        'justification': component['justification'], 'component': component['component'],
+                        'deadline': component['review']['deadline']})
     return {'accepted_fixed': accepted, 'blocked': blocked,
             'scout_accepted_false_positive': scout_accepted,
+            'scout_not_affected': scout_not_affected,
             'scout_blocked': scout_blocked,
             'raw_matches': len(report['matches']), 'review_date': today.isoformat()}
 
@@ -153,7 +190,7 @@ def reviewed_policy(root=Path('.')):
 
 
 def review_reports(arch, report, scout, evidence, provenance, root=Path('.'), today=None,
-                   *, dependencies=None):
+                   *, dependencies=None, inventory=None, layers=None, expected_image_config=None):
     """Reassess original report objects without modifying retained evidence."""
     policy = reviewed_policy(root)
     if arch not in DIRECT:
@@ -167,10 +204,12 @@ def review_reports(arch, report, scout, evidence, provenance, root=Path('.'), to
         raise ValueError('Base provenance does not cover the reviewed native image')
     from runtime_dependency_checks import validate_report
     validate_report(dependencies, arch, root=root)
-    return assess(report, scout, evidence, policy, arch, today)
+    return assess(report, scout, evidence, policy, arch, today,
+                  inventory=inventory, layers=layers, root=root,
+                  expected_image_config=expected_image_config)
 
 
-def review_candidate(arch, root=Path('.'), today=None):
+def review_candidate(arch, root=Path('.'), today=None, *, expected_image_config=None):
     return review_reports(
         arch,
         json.loads((root / f'candidate-{arch}.json').read_text()),
@@ -179,6 +218,9 @@ def review_candidate(arch, root=Path('.'), today=None):
         json.loads((root / f'candidate-provenance-{arch}.json').read_text()),
         root, today,
         dependencies=json.loads((root / f'candidate-dependencies-{arch}.json').read_bytes()),
+        inventory=json.loads((root / f'candidate-notices-{arch}.json').read_bytes()),
+        layers=json.loads((root / f'candidate-layers-{arch}.json').read_bytes()),
+        expected_image_config=expected_image_config,
     )
 
 
@@ -189,6 +231,8 @@ def main(argv=None):
     mode.add_argument('--check-only', action='store_true', help='Revalidate without writing any evidence files')
     mode.add_argument('--check-deadlines', action='store_true', help='Warn about reviews due soon; expiry alone never fails this check')
     parser.add_argument('--warning-days', type=int, default=14)
+    parser.add_argument('--expected-image-config',
+                        help='independently obtained sha256 image-config identity')
     args = parser.parse_args(argv)
     if (args.check_deadlines and args.arch) or (not args.check_deadlines and not args.arch):
         parser.error('Specify an architecture for image review, or --check-deadlines alone')
@@ -211,10 +255,10 @@ def main(argv=None):
                     output.write('### Image exception review deadlines\n\n' + summary + '\n')
             print(f'{len(warnings)} image exception reviews due within {args.warning_days} days or overdue. Deadlines unchanged.')
             return 0
-        result = review_candidate(args.arch)
+        result = review_candidate(args.arch, expected_image_config=args.expected_image_config)
         if not args.check_only:
             Path(f'candidate-review-{args.arch}.json').write_text(json.dumps(result, indent=2) + '\n')
-        print(f"Accepted {len(result['accepted_fixed'])} verified-fixed Grype matches and {len(result['scout_accepted_false_positive'])} reviewed Scout false positives; blocked {len(result['blocked'])} Grype and {len(result['scout_blocked'])} Scout findings. Raw reports retained.")
+        print(f"Accepted {len(result['accepted_fixed'])} verified-fixed Grype matches, {len(result['scout_accepted_false_positive'])} reviewed Scout false positives and {len(result['scout_not_affected'])} absent-code Scout findings; blocked {len(result['blocked'])} Grype and {len(result['scout_blocked'])} Scout findings. Raw reports retained.")
         for entry in result['blocked']:
             print(f"{entry['id']} ({entry['package']} {entry['version']}): {entry['reason']}" +
                   (f"; review deadline {entry['deadline']}" if 'deadline' in entry else ''))

@@ -420,7 +420,8 @@ def archive(arch, native_digest=None):
         raise ValueError('Require all twelve original native security reports')
     # Reassess the original unsuppressed reports against today's per-finding
     # deadlines without writing to any retained evidence, even on failure.
-    subprocess.run(['python3', 'scripts/review_image.py', arch, '--check-only'], check=True)
+    subprocess.run(['python3', 'scripts/review_image.py', arch, '--check-only',
+                    '--expected-image-config', identity['config_digest']], check=True)
     portable = Path(f'portable-recovery-{arch}.json')
     if not portable.is_file() or portable.is_symlink():
         raise ValueError('Native portable recovery evidence is required')
@@ -581,6 +582,8 @@ def verify_identities(version, release, digests=None, *, security_reviews=None, 
                     f'candidate-regression-{arch}.json': 'evidence',
                     f'candidate-provenance-{arch}.json': 'provenance',
                     f'candidate-dependencies-{arch}.json': 'dependencies',
+                    f'candidate-notices-{arch}.json': 'inventory',
+                    f'candidate-layers-{arch}.json': 'layers',
                 }
                 original_reviews[arch] = {}
                 for record in identity['evidence']:
@@ -591,6 +594,7 @@ def verify_identities(version, release, digests=None, *, security_reviews=None, 
                         original_reviews[arch][review_members[record['path']]] = json.loads(data)
                     if record['path'] == f'maintenance-native-{arch}.json':
                         legacy_maintenance_evidence(data, arch, identity)
+                original_reviews[arch]['expected_image_config'] = identity['config_digest']
                 if f'validation-provenance-{arch}.json' in required:
                     proof = json.load(package.extractfile(prefix + f'validation-provenance-{arch}.json'))
                     verify_durable_validation(identity, proof, arch, allow_legacy=allow_legacy)

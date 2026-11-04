@@ -68,7 +68,8 @@ def revalidate_candidate(arch):
     index = validated_build.verify_provenance(proof, arch, config)
     validated_build.verify_files(index, arch)
     validated_build.inspect_image(arch, config)
-    subprocess.run(['python3', 'scripts/review_image.py', arch, '--check-only'], check=True)
+    subprocess.run(['python3', 'scripts/review_image.py', arch, '--check-only',
+                    '--expected-image-config', config], check=True)
 
 
 def execute(mode, arch=None):
