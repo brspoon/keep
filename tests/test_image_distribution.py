@@ -285,7 +285,7 @@ class ExpatReplacementInventoryTests(unittest.TestCase):
 class SQLiteReplacementInventoryTests(unittest.TestCase):
     def test_untouched_base_returns_none_and_overlay_binds_actual_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             library = root / 'libsqlite3.so.3.54.1'
             self.assertIsNone(review.sqlite_replacement_inventory(root, library))
             values = ({'source': 'reviewed upstream'}, {'library': {'path': '/usr/lib/' + library.name}})
@@ -303,7 +303,7 @@ class SQLiteReplacementInventoryTests(unittest.TestCase):
 
     def test_partial_noncanonical_symlink_and_oversized_inputs_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             library = root / 'libsqlite3.so.3.54.1'
             first, second = root / 'SQLITE_BUILD.json', root / 'SQLITE_PATCHED_SECURITY.json'
             first.write_bytes(b'{}\n')

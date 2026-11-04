@@ -92,19 +92,21 @@ def regression_report(policy, arch):
 
 
 class ScoutExceptionPolicyTests(unittest.TestCase):
-    def test_current_joint_review_preserves_three_exact_scopes_and_new_boundary(self):
+    def test_current_joint_review_preserves_the_previously_reviewed_scopes(self):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
-        self.assertEqual(set(policy['exceptions']), {'CVE-2025-15367', 'CVE-2026-103995'})
+        python_findings = ('CVE-2025-15367', 'CVE-2026-103995')
+        self.assertEqual(set(policy['exceptions']), {*python_findings, 'CVE-2026-119376'})
         self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID})
-        rules = [*policy['exceptions'].values(), *policy['scout_exceptions'].values()]
-        self.assertTrue(all(rule['review']['reviewed_on'] == '2026-11-01'
-                            for rule in policy['exceptions'].values()))
+        rules = [*policy['exceptions'].values(), *policy['scout_exceptions'].values(),
+                 *policy['scout_component_reviews'].values()]
+        self.assertTrue(all(policy['exceptions'][finding]['review']['reviewed_on'] == '2026-11-01'
+                            for finding in python_findings))
         self.assertEqual(policy['scout_exceptions'][FINDING_ID]['review']['reviewed_on'],
                          '2026-10-28')
         self.assertTrue(all(rule['review']['deadline'] == '2026-11-11' for rule in rules))
         matches = [{'vulnerability': {'id': finding, 'severity': {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low'}[finding]},
                     'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.10-r1'}}
-                   for finding in ('CVE-2025-15367', 'CVE-2026-103995')]
+                   for finding in python_findings]
         for arch in DIRECT:
             original = scout_report(arch)
             for day, expired in ((datetime.date(2026, 11, 2), False),

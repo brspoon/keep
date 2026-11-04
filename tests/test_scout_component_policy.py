@@ -1,4 +1,4 @@
-"""Synthetic absent-code approval; no checked-in SQLite approval is created."""
+"""Verify SQLite component reviews and their evidence requirements."""
 import copy
 import datetime
 import hashlib
@@ -105,11 +105,13 @@ class ScoutComponentPolicyTests(unittest.TestCase):
             {arch: row['digest'] for arch, row in value['architectures'].items()}, security_reviews=contexts,
             now=datetime.datetime(2026, 11, 4, 12, tzinfo=datetime.timezone.utc))
 
-    def test_real_policy_has_no_active_sqlite_component_or_grype_rule(self):
+    def test_repository_component_review_requires_proof_and_expires(self):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_bytes())
-        self.assertEqual(policy.get('scout_component_reviews', {}), {})
         self.assertNotIn(FINDING['id'], policy['exceptions'])
-        self.assertEqual(finding_decision(FINDING, policy, DAY), 'unmatched_finding')
+        deadline = component_deadlines(policy)[FINDING['id']]
+        self.assertEqual(finding_decision(FINDING, policy, DAY), 'missing_component_proof')
+        self.assertEqual(finding_decision(FINDING, policy, deadline + datetime.timedelta(days=1)),
+                         'exception_expired')
 
     def test_complete_same_arch_original_proof_passes_without_changing_reports_or_counts(self):
         for arch in ('amd64', 'arm64'):
