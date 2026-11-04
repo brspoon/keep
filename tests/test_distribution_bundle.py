@@ -819,12 +819,12 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
 
 
 class MatchingSourceDownloadTests(unittest.TestCase):
-    def test_reviewed_sqlite_archives_use_official_host(self):
+    def test_every_pinned_sqlite_input_uses_its_reviewed_host(self):
         import build_patched_sqlite as sqlite_build
-        for url in (sqlite_build.SOURCE_URL, sqlite_build.PREFERRED_SOURCE_URL):
+        for url in sorted({row['url'] for row in sqlite_build.source_download_records()}):
             class Response(io.BytesIO):
                 def geturl(self):
-                    return url
+                    return url.replace('https://github.com/', 'https://codeload.github.com/')
             with self.subTest(url=url), patch.object(bundle.urllib.request, 'urlopen',
                     return_value=Response(b'locked SQLite source archive')) as opener:
                 self.assertEqual(bundle.fetch_source(url), b'locked SQLite source archive')
@@ -836,6 +836,10 @@ class MatchingSourceDownloadTests(unittest.TestCase):
             for url in ('https://www.sqlite.org/2026/sqlite-src-3540000.zip',
                         'https://sqlite.org/2026/sqlite-src-3540100.zip',
                         'http://www.sqlite.org/2026/sqlite-src-3540100.zip',
+                        'https://dhi.io/apk/alpine/v3.24/main/x86_64/other.apk',
+                        'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/other.apk',
+                        'https://alpinelinux.org/keys/other.rsa.pub',
+                        'https://ftp.gnu.org/gnu/make/other.tar.gz',
                         'https://secret:token@www.sqlite.org/2026/sqlite-src-3540100.zip'):
                 with self.subTest(url=url), self.assertRaisesRegex(ValueError, 'download URL'):
                     bundle.fetch_source(url)

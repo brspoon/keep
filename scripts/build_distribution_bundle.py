@@ -71,8 +71,10 @@ def fetch_source(url):
              'raw.githubusercontent.com'}
     if url == 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz':
         hosts = {'www.python.org'}
-    elif url in {sqlite_build.SOURCE_URL, sqlite_build.PREFERRED_SOURCE_URL}:
-        hosts = {'www.sqlite.org'}
+    elif url in {row['url'] for row in sqlite_build.source_download_records()}:
+        hosts = {urlsplit(url).hostname}
+        if 'github.com' in hosts:
+            hosts.add('codeload.github.com')
     public_url(url, hosts)
     request = urllib.request.Request(url, headers={'User-Agent': 'Keep-source-bundle/1'})
     with urllib.request.urlopen(request, timeout=60) as response:
