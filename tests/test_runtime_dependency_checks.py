@@ -1253,6 +1253,11 @@ class RetainedDependencyReportTests(unittest.TestCase):
 
 
 class SystemSQLiteQualificationTests(unittest.TestCase):
+    def setUp(self):
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in {'LD_LIBRARY_PATH', 'LD_PRELOAD'}}
+        self.enterContext(patch.dict(os.environ, environment, clear=True))
+
     def test_system_sqlite_mode_checks_the_library_without_requiring_venv_packages(self):
         result = {'version': '3.54.1', 'libraries': {'sqlite': {'sha256': 'a' * 64}}}
         output = io.StringIO()

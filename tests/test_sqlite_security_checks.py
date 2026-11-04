@@ -14,6 +14,14 @@ from scripts import sqlite_security_checks as checks
 
 
 class SQLiteSecurityTests(unittest.TestCase):
+    def setUp(self):
+        # Hosted Python may use LD_LIBRARY_PATH for its own interpreter. The
+        # fixture exercises a clean container environment; dedicated cases
+        # below add overrides and verify that the runtime guard rejects them.
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in {'LD_LIBRARY_PATH', 'LD_PRELOAD'}}
+        self.enterContext(patch.dict(os.environ, environment, clear=True))
+
     def identity(self):
         with closing(sqlite3.connect(':memory:')) as database:
             return database.execute('SELECT sqlite_version(), sqlite_source_id()').fetchone()
