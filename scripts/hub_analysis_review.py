@@ -41,7 +41,7 @@ def reviewed_findings(results, security_reviews, today):
         context = security_reviews[arch]
         required = {'report', 'scout', 'evidence', 'provenance', 'dependencies'}
         if (not isinstance(context, dict) or not required <= set(context)
-                or set(context) - required - {'root'}):
+                or set(context) - required - {'root', 'inventory', 'layers', 'expected_image_config'}):
             raise ValueError('Docker Hub findings require original native security evidence for ' + arch)
         # Always use the current UTC day, including immediately before a push.
         # Neither the receipt timestamp nor an earlier caller review extends approval.
@@ -51,16 +51,23 @@ def reviewed_findings(results, security_reviews, today):
         policy = review_image.reviewed_policy(context.get('root', Path('.')))
         original = [canonical_scout_finding(run, finding)
                     for run in context['scout']['runs'] for finding in run['results']]
+        expected = context.get('expected_image_config')
+        config = (review_image.verify_image_binding(context['report'], context.get('layers'), arch, expected)
+                  if expected is not None else None)
         for finding in results[arch]['findings']:
-            reason = finding_decision(finding, policy, today)
+            reason = finding_decision(finding, policy, today,
+                inventory=context.get('inventory'), layers=context.get('layers'),
+                arch=arch, root=context.get('root', Path('.')),
+                image_config_sha256=config)
             if reason:
                 raise ValueError('Docker Hub finding blocks ' + arch + ': ' + finding['id'] + ': ' + reason)
-            if original and finding not in original:
+            component = finding['id'] in policy.get('scout_component_reviews', {})
+            if finding not in original and (original or component):
                 raise ValueError('Docker Hub finding differs from original native Scout evidence for ' + arch)
 
 
 def validate_review(body, image, revision, digests, *, now=None, security_reviews=None):
-    """Require complete exact-image counts; v2 permits only reviewed false positives."""
+    """Require complete exact-image counts; v2 requires exact reviewed findings."""
     if not isinstance(body, bytes) or not body or len(body) > MAX_BYTES:
         raise ValueError('A bounded Docker Hub hosted-analysis review receipt is required')
     try:

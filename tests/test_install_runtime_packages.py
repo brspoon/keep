@@ -255,6 +255,8 @@ class InstallRuntimePackageTests(unittest.TestCase):
                   str(self.root / 'certificates/CA_CERTIFICATES_SECURITY.json')], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
                   '--install-expat'], check=True),
+            call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
+                  '--install-sqlite'], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'patch_python_runtime.py')], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
                   '--install-socket'], check=True),
@@ -265,7 +267,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
 
     def test_failure_at_each_native_step_prevents_all_later_steps(self):
         self.prepared()
-        for failing_step in range(8):
+        for failing_step in range(9):
             def fail(command, *, check):
                 if run.call_count == failing_step + 1:
                     raise subprocess.CalledProcessError(1, command)
@@ -282,7 +284,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
                 patch.object(installer, 'installation_inputs', return_value=packages), \
                 patch.object(installer.subprocess, 'run') as run:
             installer.main()
-        self.assertEqual(run.call_count, 8)
+        self.assertEqual(run.call_count, 9)
         verification = run.call_args_list[1].args[0]
         self.assertEqual(verification[0:2], ['/usr/bin/python3.14', '-B'])
         self.assertIn('--verify-installed', verification)
@@ -291,8 +293,9 @@ class InstallRuntimePackageTests(unittest.TestCase):
         self.assertIn('--verify-installed', run.call_args_list[2].args[0])
         self.assertEqual(Path(run.call_args_list[3].args[0][2]).name, 'dhi_certificate_packages.py')
         self.assertEqual(run.call_args_list[4].args[0][-1], '--install-expat')
-        self.assertEqual(Path(run.call_args_list[5].args[0][2]).name, 'patch_python_runtime.py')
-        self.assertEqual(run.call_args_list[7].args[0][-1], '--clean-stdlib')
+        self.assertEqual(run.call_args_list[5].args[0][-1], '--install-sqlite')
+        self.assertEqual(Path(run.call_args_list[6].args[0][2]).name, 'patch_python_runtime.py')
+        self.assertEqual(run.call_args_list[8].args[0][-1], '--clean-stdlib')
 
     def test_build_musl_requires_matching_development_package_and_fresh_verification(self):
         self.prepared()

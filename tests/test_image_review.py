@@ -361,16 +361,18 @@ class CurrentImageReviewTests(unittest.TestCase):
                     'patch_manifest_sha256': policy['reviewed_sources']['scripts/python_security_patches.json']}
         return assess(self.report if report is None else report, self.scout, evidence, policy, arch, day)
 
-    def test_active_renewal_is_limited_to_two_exact_fixed_scopes_and_dates(self):
+    def test_active_grype_reviews_are_limited_to_exact_fixed_scopes_and_dates(self):
         self.assertNotIn('expires', self.policy)
         self.assertFalse(self.policy['require_zero_findings'])
+        expected = {finding: (severity, 'apk', 'python-3.14', '3.14.10-r1', 'fixed')
+                    for finding, severity in CURRENT_FINDINGS.items()}
+        expected['CVE-2026-119376'] = ('Medium', 'apk', 'sqlite-libs', '3.53.4-r0', 'fixed')
         self.assertEqual({finding: tuple(rule[field] for field in
                                         ('severity', 'type', 'package', 'version', 'status'))
-                          for finding, rule in self.policy['exceptions'].items()},
-                         {finding: (severity, 'apk', 'python-3.14', '3.14.10-r1', 'fixed')
-                          for finding, severity in CURRENT_FINDINGS.items()})
-        for rule in self.policy['exceptions'].values():
-            self.assertEqual(rule['review']['reviewed_on'], '2026-11-01')
+                          for finding, rule in self.policy['exceptions'].items()}, expected)
+        for finding, rule in self.policy['exceptions'].items():
+            reviewed_on = '2026-11-04' if finding == 'CVE-2026-119376' else '2026-11-01'
+            self.assertEqual(rule['review']['reviewed_on'], reviewed_on)
             self.assertEqual(rule['review']['deadline'], '2026-11-11')
             self.assertTrue(rule['evidence'].strip())
             self.assertTrue(rule['review']['approval'].strip())
@@ -469,6 +471,8 @@ class CandidateReviewTests(unittest.TestCase):
             destination.write_bytes((ROOT / name).read_bytes())
         for arch in DIRECT:
             self.write(f'candidate-dependencies-{arch}.json', dependency_report(arch))
+            self.write(f'candidate-notices-{arch}.json', {})
+            self.write(f'candidate-layers-{arch}.json', {})
             self.write(f'candidate-{arch}.json', {'matches': []})
             self.write(f'candidate-scout-{arch}.json', {'runs': [{'results': []}]})
             self.write(f'candidate-provenance-{arch}.json', {

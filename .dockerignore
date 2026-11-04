@@ -48,6 +48,10 @@
 !docs/
 !docs/PYTHON_LICENSE.txt
 !docs/expat-build.json
+!scripts/build_patched_sqlite.py
+!scripts/sqlite_security_patches.json
+!docs/sqlite-build.json
+!docs/os-package-sources.json
 !docs/licenses/**
 !templates/
 !templates/**

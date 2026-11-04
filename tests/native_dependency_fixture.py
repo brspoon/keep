@@ -8,6 +8,7 @@ from scripts.build_patched_expat import expected_manifest, json_bytes
 from scripts.dhi_python_packages import build_security_manifest as python_security_manifest
 from scripts.alpine_musl_sources import build_security_manifest as musl_security_manifest
 from scripts.expat_security_checks import expected_report as expat_probe_report
+from scripts.sqlite_security_checks import expected_report as sqlite_probe_report
 from scripts.runtime_dependency_checks import MUSL_PROBES
 from tests.certificate_trust_fixture import trust_report
 
@@ -23,10 +24,13 @@ def dependency_report(arch, *, root=ROOT):
     from scripts import build_patched_socket as socket_build
     from scripts.socket_security_checks import expected_report as socket_probe_report
     socket_manifest = socket_build.expected_manifest(arch, root=ROOT)
+    from scripts import build_patched_sqlite as sqlite_build
+    sqlite_manifest = sqlite_build.expected_manifest(arch, root=root)
     return {
-        'schema': 6, 'arch': arch, 'success': True, 'tests': 4,
+        'schema': 7, 'arch': arch, 'success': True, 'tests': 5,
         'failures': 0, 'errors': [],
-        'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3'},
+        'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3',
+                     'sqlite': '3.54.1'},
         'loaded_libraries': {
             name: {'path': path, 'sha256': digest, 'device': '0:1', 'inode': inode}
             for name, path, digest, inode in (
@@ -37,6 +41,7 @@ def dependency_report(arch, *, root=ROOT):
                 ('python_ssl', python['ssl_extension']['path'], python['ssl_extension']['sha256'], 105),
                 ('musl', musl['library']['path'], musl['library']['sha256'], 108),
                 ('python_socket', socket_manifest['library']['path'], socket_manifest['library']['sha256'], 109),
+                ('sqlite', sqlite_manifest['library']['path'], sqlite_manifest['library']['sha256'], 110),
             )
         },
         'expat_source_manifest_sha256': manifest['source_manifest_sha256'],
@@ -66,6 +71,12 @@ def dependency_report(arch, *, root=ROOT):
         'socket_manifest_sha256': socket_build.digest(socket_build.json_bytes(socket_manifest)),
         'socket_probes': socket_probe_report(),
         'certificate_trust': trust_report(arch),
+        'sqlite_source_id': sqlite_manifest['source_id'],
+        'sqlite_compile_options': sqlite_manifest['required_compile_options'],
+        'sqlite_limit_defaults': sqlite_manifest['required_limit_defaults'],
+        'sqlite_build_manifest': sqlite_manifest,
+        'sqlite_build_manifest_sha256': hashlib.sha256(sqlite_build.json_bytes(sqlite_manifest)).hexdigest(),
+        'sqlite_security_probes': sqlite_probe_report(),
     }
 
 

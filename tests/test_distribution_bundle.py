@@ -819,6 +819,38 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
 
 
 class MatchingSourceDownloadTests(unittest.TestCase):
+    def test_every_pinned_sqlite_input_uses_its_reviewed_host(self):
+        import build_patched_sqlite as sqlite_build
+        for url in sorted({row['url'] for row in sqlite_build.source_download_records()}):
+            class Response(io.BytesIO):
+                def geturl(self):
+                    return url.replace('https://github.com/', 'https://codeload.github.com/')
+            with self.subTest(url=url), patch.object(bundle.urllib.request, 'urlopen',
+                    return_value=Response(b'locked SQLite source archive')) as opener:
+                self.assertEqual(bundle.fetch_source(url), b'locked SQLite source archive')
+                self.assertEqual(opener.call_args.args[0].full_url, url)
+
+    def test_sqlite_allowlist_rejects_other_archives_and_redirect_hosts(self):
+        import build_patched_sqlite as sqlite_build
+        with patch.object(bundle.urllib.request, 'urlopen') as opener:
+            for url in ('https://www.sqlite.org/2026/sqlite-src-3540000.zip',
+                        'https://sqlite.org/2026/sqlite-src-3540100.zip',
+                        'http://www.sqlite.org/2026/sqlite-src-3540100.zip',
+                        'https://dhi.io/apk/alpine/v3.24/main/x86_64/other.apk',
+                        'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/other.apk',
+                        'https://alpinelinux.org/keys/other.rsa.pub',
+                        'https://ftp.gnu.org/gnu/make/other.tar.gz',
+                        'https://secret:token@www.sqlite.org/2026/sqlite-src-3540100.zip'):
+                with self.subTest(url=url), self.assertRaisesRegex(ValueError, 'download URL'):
+                    bundle.fetch_source(url)
+            opener.assert_not_called()
+        class Response(io.BytesIO):
+            def geturl(self):
+                return 'https://github.com/other/source.zip'
+        with patch.object(bundle.urllib.request, 'urlopen', return_value=Response(b'bytes')):
+            with self.assertRaisesRegex(ValueError, 'download URL'):
+                bundle.fetch_source(sqlite_build.PREFERRED_SOURCE_URL)
+
     def test_pinned_native_github_source_can_redirect_to_official_archive_host(self):
         class Response(io.BytesIO):
             def geturl(self):
@@ -830,6 +862,8 @@ class MatchingSourceDownloadTests(unittest.TestCase):
     def test_unexpected_hosts_credentials_and_redirects_are_rejected(self):
         with patch.object(bundle.urllib.request, 'urlopen') as opener:
             for url in ('http://github.com/libffi.tar.gz', 'https://private.example/source.tar.gz',
+                        'https://github.com.attacker.invalid/source.tar.gz',
+                        'https://attacker.invalid/github.com/source.tar.gz',
                         'https://secret:token@github.com/libffi.tar.gz'):
                 with self.subTest(url=url), self.assertRaisesRegex(ValueError, 'download URL'):
                     bundle.fetch_source(url)
@@ -856,6 +890,8 @@ class CommittedKeepSourceTests(unittest.TestCase):
             'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'docs/python-socket-build.json', 'scripts/security-fixtures/distrusted.zip',
+            'scripts/build_patched_sqlite.py', 'scripts/sqlite_security_patches.json',
+            'scripts/sqlite_security_checks.py', 'docs/sqlite-build.json',
             'scripts/patch_urllib3_runtime.py', 'scripts/urllib3_security_patches.json',
             'scripts/http_framing_sources.json', 'scripts/http_framing_checks.py',
             'scripts/dhi_python_packages.py', 'scripts/install_runtime_packages.py',

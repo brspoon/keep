@@ -116,6 +116,8 @@ def install(root=ROOT):
     verify_certificates(root, architecture)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),
                     '--install-expat'], check=True)
+    subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),
+                    '--install-sqlite'], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('patch_python_runtime.py'))], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),
@@ -216,6 +218,59 @@ def install_expat(root=ROOT, architecture=None, library=None, alias=None, vendor
             temporary_alias.unlink()
 
 
+def install_sqlite(root=ROOT, architecture=None, *, directory=Path('/usr/lib')):
+    """Install the independently authenticated library without relabeling its APK."""
+    if __package__:
+        from . import build_patched_sqlite as build
+    else:
+        import build_patched_sqlite as build
+    architecture = architecture or arch()
+    output = root / 'sqlite-patched'
+    manifest_path = output / 'SQLITE_PATCHED_SECURITY.json'
+    manifest = build.read_build_manifest(manifest_path, architecture)
+    spec = build.reviewed_spec()
+    vendor = directory / 'libsqlite3.so.3.53.4'
+    library = directory / build.LIBRARY
+    alias = directory / build.ALIAS
+    vendor_hash = spec['expected_vendor_library_sha256'][architecture]
+    if (directory.is_symlink() or not directory.is_dir()
+            or vendor.is_symlink() or not vendor.is_file()
+            or not alias.is_symlink() or alias.resolve(strict=True) != vendor
+            or library.exists() or library.is_symlink()
+            or {path.name for path in directory.glob('libsqlite3.so*')}
+               != {vendor.name, alias.name}):
+        raise ValueError('SQLite vendor library family or canonical SONAME differs')
+    checked_file(vendor, vendor_hash)
+    replacement = checked_file(output / build.LIBRARY,
+                               manifest['library']['sha256']).read_bytes()
+    temporary = temporary_alias = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=directory, prefix='.keep-sqlite-',
+                                         delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(replacement)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o755)
+        os.replace(temporary, library)
+        checked_file(library, manifest['library']['sha256'])
+        with tempfile.NamedTemporaryFile(dir=directory, prefix='.keep-sqlite-link-',
+                                         delete=False) as stream:
+            temporary_alias = Path(stream.name)
+        temporary_alias.unlink()
+        temporary_alias.symlink_to(library.name)
+        os.replace(temporary_alias, alias)
+        if alias.resolve(strict=True) != library:
+            raise ValueError('SQLite replacement SONAME alias differs')
+        checked_file(vendor, vendor_hash)
+        vendor.unlink()
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+        if temporary_alias is not None and (temporary_alias.exists() or temporary_alias.is_symlink()):
+            temporary_alias.unlink()
+
+
 def verify_certificates(root, architecture, *, build=False):
     command = ['/usr/bin/python3.14', '-B',
                     str(Path(__file__).with_name('dhi_certificate_packages.py')),
@@ -300,6 +355,7 @@ def main():
     mode.add_argument('--install-build-python', action='store_true')
     mode.add_argument('--install-expat', action='store_true')
     mode.add_argument('--install-socket', action='store_true')
+    mode.add_argument('--install-sqlite', action='store_true')
     mode.add_argument('--clean-stdlib', action='store_true')
     args = parser.parse_args()
     if args.prepare:
@@ -316,6 +372,8 @@ def main():
         install_expat()
     elif args.install_socket:
         install_socket()
+    elif args.install_sqlite:
+        install_sqlite()
     else:
         clean_stdlib()
 

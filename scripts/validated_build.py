@@ -426,6 +426,9 @@ def retain(arch):
     attempt = run['run_attempt']
     job = native_job(run, arch, attempt, completed=False)
     config = inspect_image(arch)
+    security = materials.review_image.review_candidate(arch, expected_image_config=config)
+    if security['blocked'] or security['scout_blocked']:
+        raise ValueError('Original native security evidence does not qualify the retained image')
     identity = {'version': version, 'revision': revision, 'architecture': arch, 'config_digest': config}
     source, source_proof = materials.bundle(arch, verify_files=True)
     summary = Path(f'distribution/source-bundle-{arch}.json')

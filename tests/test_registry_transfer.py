@@ -149,7 +149,8 @@ class RegistryTransferTests(unittest.TestCase):
                 provenance.assert_called_once_with(proof, 'amd64', config)
                 files.assert_called_once_with({'original': 'index'}, 'amd64')
                 image.assert_called_once_with('amd64', config)
-                review.assert_called_once_with(['python3', 'scripts/review_image.py', 'amd64', '--check-only'], check=True)
+                review.assert_called_once_with(['python3', 'scripts/review_image.py', 'amd64', '--check-only',
+                                                '--expected-image-config', config], check=True)
             with patch.object(validated_build, 'verify_provenance', side_effect=ValueError('changed hash')), \
                  patch.object(transfer.subprocess, 'run') as review:
                 with self.assertRaisesRegex(ValueError, 'changed hash'):

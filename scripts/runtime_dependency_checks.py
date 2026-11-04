@@ -1,4 +1,4 @@
-"""Qualify ordinary Expat, OpenSSL, Python and musl loading in the native image.
+"""Qualify ordinary Expat, OpenSSL, Python, musl and SQLite native loading.
 
 Run without network or loader overrides. These checks are separate from the
 ten security-patch probe groups and exercise ordinary dependency behavior.
@@ -25,10 +25,12 @@ if __package__:
     from . import certificate_trust_checks as certificate_trust
     from . import build_patched_expat as patched_expat
     from . import expat_security_checks as expat_security
+    from . import sqlite_security_checks as sqlite_security
 else:
     import certificate_trust_checks as certificate_trust
     import build_patched_expat as patched_expat
     import expat_security_checks as expat_security
+    import sqlite_security_checks as sqlite_security
 
 
 EXPAT_VERSION = '2.10.0'
@@ -50,6 +52,9 @@ EXPAT_PATCHED_MANIFEST_PATH = Path('/app/EXPAT_PATCHED_SECURITY.json')
 EXPAT_BUILD_PATH = Path('/app/EXPAT_BUILD.json')
 PYTHON_MANIFEST_PATH = Path('/app/PYTHON_SECURITY.json')
 MUSL_MANIFEST_PATH = Path('/app/MUSL_SECURITY.json')
+SQLITE_MANIFEST_PATH = Path('/app/SQLITE_PATCHED_SECURITY.json')
+SQLITE_BUILD_PATH = Path('/app/SQLITE_BUILD.json')
+SQLITE_VERSION = '3.54.1'
 PROC_EXECUTABLE_PATH = Path('/proc/self/exe')
 PYTHON_VERSION = '3.14.10'
 PYTHON_TLS_PROBES = {'wrap_bio_requires_hostname': True,
@@ -716,10 +721,68 @@ def check_openssl(arch, maps_path=MAPS_PATH):
     }}
 
 
+def sqlite_builder():
+    if __package__:
+        from . import build_patched_sqlite
+    else:
+        import build_patched_sqlite
+    return build_patched_sqlite
+
+
+def verify_sqlite_files(manifest, maps_text):
+    """Reject obsolete siblings and bind the default SONAME to one exact inode."""
+    canonical = Path(manifest['library']['path'])
+    alias = canonical.with_name(manifest['library']['soname'])
+    require(not canonical.is_symlink() and canonical.resolve(strict=True) == canonical,
+            'SQLite replacement library is not canonical')
+    require(alias.is_symlink() and alias.readlink().as_posix() == canonical.name
+            and alias.resolve(strict=True) == canonical,
+            'SQLite SONAME alias differs from the reviewed replacement')
+    family = set(canonical.parent.glob('libsqlite3*'))
+    require(family == {canonical, alias},
+            'SQLite runtime contains an obsolete or unreviewed library sibling')
+    return verify_loaded_library(canonical, 'libsqlite3', maps_text,
+                                 manifest['library']['sha256'])
+
+
+def sqlite_limit_defaults(database):
+    # The signed Python extension predates these SQLite 3.54 categories and
+    # need not expose their names; sqlite3_limit's public numeric IDs are stable.
+    return {'schema': database.getlimit(13), 'trigger_steps': database.getlimit(14)}
+
+
+def check_sqlite(arch, manifest_path=SQLITE_MANIFEST_PATH, maps_path=MAPS_PATH,
+                 lock_path=SQLITE_BUILD_PATH):
+    require(not any(name in os.environ for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD')),
+            'SQLite qualification requires ordinary loading without loader overrides')
+    import sqlite3
+    build = sqlite_builder()
+    manifest = build.read_build_manifest(arch, manifest_path=manifest_path, lock_path=lock_path)
+    with closing(sqlite3.connect(':memory:')) as database:
+        version, source_id = database.execute('SELECT sqlite_version(), sqlite_source_id()').fetchone()
+        require(version == sqlite3.sqlite_version == SQLITE_VERSION == manifest['upstream_version']
+                and source_id == manifest['source_id'],
+                'Default SQLite version or source ID differs from the reviewed release')
+        options = [row[0] for row in database.execute('PRAGMA compile_options')]
+        limits = sqlite_limit_defaults(database)
+    require(options == sorted(set(options)) == manifest['required_compile_options'],
+            'Default SQLite compile options differ from the reviewed compatibility baseline')
+    require(limits == manifest['required_limit_defaults'],
+            'Default SQLite limits differ from the reviewed release')
+    library = verify_sqlite_files(manifest, Path(maps_path).read_text())
+    probes = sqlite_security.exercise_sqlite_security(expected_version=version, expected_source_id=source_id)
+    return {'version': version, 'source_id': source_id, 'compile_options': options, 'limit_defaults': limits,
+            'libraries': {'sqlite': library}, 'build_manifest': manifest,
+            'build_manifest_sha256': hashlib.sha256(build.json_bytes(manifest)).hexdigest(),
+            'security_probes': probes}
+
+
 def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     python_manifest_path=PYTHON_MANIFEST_PATH,
-                    musl_manifest_path=MUSL_MANIFEST_PATH):
-    report = {'schema': 6, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+                    musl_manifest_path=MUSL_MANIFEST_PATH,
+                    sqlite_manifest_path=SQLITE_MANIFEST_PATH,
+                    sqlite_lock_path=SQLITE_BUILD_PATH):
+    report = {'schema': 7, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
               'expat_build_manifest': None, 'expat_build_manifest_sha256': None,
@@ -729,7 +792,10 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
               'socket_manifest': None, 'socket_manifest_sha256': None, 'socket_probes': {},
               'musl_source_manifest_sha256': None, 'musl_install_manifest_sha256': None,
               'musl_aliases': {}, 'musl_probes': {},
-              'certificate_trust': None}
+              'certificate_trust': None,
+              'sqlite_source_id': None, 'sqlite_compile_options': [], 'sqlite_limit_defaults': {},
+              'sqlite_build_manifest': None, 'sqlite_build_manifest_sha256': None,
+              'sqlite_security_probes': {}}
     try:
         report['arch'] = architecture()
         require(not any(name in os.environ for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD')),
@@ -742,6 +808,8 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
             ('openssl', lambda: check_openssl(report['arch'], maps_path)),
             ('python', lambda: check_python(report['arch'], python_manifest_path, maps_path)),
             ('musl', lambda: check_musl(report['arch'], musl_manifest_path, maps_path)),
+            ('sqlite', lambda: check_sqlite(report['arch'], sqlite_manifest_path, maps_path,
+                                           sqlite_lock_path)),
         ):
             report['tests'] += 1
             try:
@@ -769,10 +837,17 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     report['musl_install_manifest_sha256'] = result['install_manifest_sha256']
                     report['musl_aliases'] = result['aliases']
                     report['musl_probes'] = result['probes']
+                elif name == 'sqlite':
+                    report['sqlite_source_id'] = result['source_id']
+                    report['sqlite_compile_options'] = result['compile_options']
+                    report['sqlite_limit_defaults'] = result['limit_defaults']
+                    report['sqlite_build_manifest'] = result['build_manifest']
+                    report['sqlite_build_manifest_sha256'] = result['build_manifest_sha256']
+                    report['sqlite_security_probes'] = result['security_probes']
             except Exception as error:
                 report['errors'].append({'check': name, 'message': str(error)})
     report['failures'] = len(report['errors'])
-    report['success'] = report['tests'] == 4 and report['failures'] == 0
+    report['success'] = report['tests'] == 5 and report['failures'] == 0
     return report
 
 
@@ -795,16 +870,19 @@ def validate_report(report, arch, root=ROOT):
             'musl_source_manifest_sha256', 'musl_install_manifest_sha256',
             'musl_aliases', 'musl_probes',
             'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust',
-            'socket_manifest', 'socket_manifest_sha256', 'socket_probes'}
+            'socket_manifest', 'socket_manifest_sha256', 'socket_probes',
+            'sqlite_source_id', 'sqlite_compile_options', 'sqlite_limit_defaults', 'sqlite_build_manifest',
+            'sqlite_build_manifest_sha256', 'sqlite_security_probes'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 6
+    require(type(report['schema']) is int and report['schema'] == 7
             and report['arch'] == arch and report['success'] is True
-            and type(report['tests']) is int and report['tests'] == 4
+            and type(report['tests']) is int and report['tests'] == 5
             and type(report['failures']) is int and report['failures'] == 0
             and report['errors'] == [], 'Missing or failed native dependency qualification')
     require(report['versions'] == {'expat': EXPAT_VERSION, 'openssl': OPENSSL_VERSION,
-                                   'python': PYTHON_VERSION, 'musl': MUSL_PACKAGE_VERSION},
+                                   'python': PYTHON_VERSION, 'musl': MUSL_PACKAGE_VERSION,
+                                   'sqlite': SQLITE_VERSION},
             'Dependency report versions differ from the reviewed runtime')
     certificate_trust.validate_trust_report(report['certificate_trust'], arch, root=root)
     expected = validate_expat_manifest(expected_expat_manifest(arch, root), arch)
@@ -855,16 +933,26 @@ def validate_report(report, arch, root=ROOT):
     require(report['socket_manifest_sha256'] == socket_build.digest(socket_build.json_bytes(socket_manifest))
             and report['socket_probes'] == socket_probe_report(),
             'Missing or failed socket replacement evidence')
+    sqlite_build = sqlite_builder()
+    sqlite_manifest = sqlite_build.verify_build_manifest(report['sqlite_build_manifest'], arch, root)
+    require(report['sqlite_build_manifest_sha256'] == hashlib.sha256(
+                sqlite_build.json_bytes(sqlite_manifest)).hexdigest()
+            and report['sqlite_source_id'] == sqlite_manifest['source_id']
+            and report['sqlite_compile_options'] == sqlite_manifest['required_compile_options']
+            and report['sqlite_limit_defaults'] == sqlite_manifest['required_limit_defaults'],
+            'Dependency report SQLite build, source ID or compile options differ')
+    sqlite_security.validate_report(report['sqlite_security_probes'])
     libraries = report['loaded_libraries']
     require(isinstance(libraries, dict)
-            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'python_socket', 'musl'},
+            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'python_socket', 'musl', 'sqlite'},
             'Incomplete dependency loaded-library evidence')
     for name, canonical in (('expat', EXPAT_LIBRARY), ('ssl', SSL_LIBRARY),
                             ('crypto', CRYPTO_LIBRARY),
                             ('python', Path(python['library']['path'])),
                             ('python_ssl', Path(python['ssl_extension']['path'])),
                             ('python_socket', Path(socket_manifest['library']['path'])),
-                            ('musl', Path(musl['library']['path']))):
+                            ('musl', Path(musl['library']['path'])),
+                            ('sqlite', Path(sqlite_manifest['library']['path']))):
         validate_file_identity(libraries[name], canonical)
     require(libraries['expat']['sha256'] == replacement['library']['sha256'],
             'Dependency report Expat hash differs from the reviewed replacement')
@@ -875,6 +963,8 @@ def validate_report(report, arch, root=ROOT):
             'Dependency report musl loaded-library hash differs from the signed package')
     require(libraries['python_socket']['sha256'] == socket_manifest['library']['sha256'],
             'Dependency report socket differs from reviewed replacement')
+    require(libraries['sqlite']['sha256'] == sqlite_manifest['library']['sha256'],
+            'Dependency report SQLite loaded-library hash differs from reviewed replacement')
     files = report['python_files']
     require(isinstance(files, dict) and set(files) == {'executable', 'abi_library'},
             'Incomplete dependency Python file evidence')
@@ -900,8 +990,23 @@ def validate_file_identity(identity, canonical):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--report', action='store_true', help='Print the JSON qualification report')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--report', action='store_true', help='Print the JSON qualification report')
+    mode.add_argument('--sqlite-only', action='store_true',
+                      help='Check SQLite through the system interpreter without application packages')
     args = parser.parse_args(argv)
+    if args.sqlite_only:
+        try:
+            require(not any(name in os.environ for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD')),
+                    'SQLite qualification requires ordinary loading without loader overrides')
+            arch = architecture()
+            result = check_sqlite(arch)
+        except Exception as error:
+            print(json.dumps({'success': False, 'error': str(error)}, sort_keys=True))
+            return 1
+        print(json.dumps({'schema': 'keep-sqlite-standalone-v1', 'arch': arch,
+                          'success': True, 'sqlite': result}, sort_keys=True))
+        return 0
     report = qualify_runtime()
     if args.report:
         print(json.dumps(report, sort_keys=True))

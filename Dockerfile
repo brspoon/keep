@@ -5,9 +5,14 @@ FROM dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9
 USER 0
 WORKDIR /app
 ENV KEEP_EXPAT_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
+ENV KEEP_SQLITE_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
 COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py /opt/runtime-build-tools/
 COPY scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/alpine_expat_sources.py scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py scripts/dhi_python_packages.py /opt/scripts/
 COPY docs/expat-build.json /opt/docs/expat-build.json
+COPY scripts/build_patched_sqlite.py scripts/sqlite_security_patches.json /opt/runtime-build-tools/
+COPY scripts/build_patched_sqlite.py scripts/sqlite_security_patches.json /opt/scripts/
+COPY docs/sqlite-build.json /opt/docs/sqlite-build.json
+COPY docs/os-package-sources.json /opt/docs/os-package-sources.json
 COPY scripts/http_framing_sources.json /opt/runtime-build-tools/
 RUN ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--prepare"]
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
@@ -29,8 +34,13 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
 FROM runtime-inputs AS expat-preparation
 RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--preparation", "--output", "/opt/expat-preparation"]
 
+# Source-review outputs have no authority to qualify a final runtime.
+FROM runtime-inputs AS sqlite-preparation
+RUN ["python", "-B", "/opt/scripts/build_patched_sqlite.py", "--preparation", "--output", "/opt/sqlite-preparation"]
+
 FROM runtime-inputs AS dependencies
 RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--output", "/opt/runtime-packages/expat-patched"]
+RUN ["python", "-B", "/opt/scripts/build_patched_sqlite.py", "--output", "/opt/runtime-packages/sqlite-patched"]
 # Keep the original cp314 compiler environment with matching updated libc headers;
 # final native gates verify its wheels, including CFFI and Argon2.
 COPY requirements.txt .
@@ -78,6 +88,8 @@ COPY --from=socket-builder /opt/runtime-packages/socket-patched/pyconfig.h /app/
 COPY --from=dependencies /opt/runtime-packages/expat/EXPAT_SECURITY.json /app/EXPAT_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/expat-patched/EXPAT_PATCHED_SECURITY.json /app/EXPAT_PATCHED_SECURITY.json
 COPY docs/expat-build.json /app/EXPAT_BUILD.json
+COPY --from=dependencies /opt/runtime-packages/sqlite-patched/SQLITE_PATCHED_SECURITY.json /app/SQLITE_PATCHED_SECURITY.json
+COPY docs/sqlite-build.json /app/SQLITE_BUILD.json
 COPY --from=dependencies /opt/runtime-packages/zlib/ZLIB_SECURITY.json /app/ZLIB_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/python/PYTHON_SECURITY.json /app/PYTHON_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/certificates/CA_CERTIFICATES_SECURITY.json /app/CA_CERTIFICATES_SECURITY.json

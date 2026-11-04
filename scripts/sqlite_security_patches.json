@@ -1,0 +1,21 @@
+{
+  "schema": "keep-sqlite-patches-v1",
+  "upstream_version": "3.54.1",
+  "upstream_release": {
+    "tag": "version-3.54.1",
+    "commit": "57520227c95396ce39ba6ecaac8d475b78dd3964",
+    "fossil_source_id": "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
+  },
+  "fixes_in_upstream_release": [
+    {
+      "id": "CVE-2026-119376",
+      "commit": "d54522a5b832422ab893a1e9fa7a99ab314ea4e2",
+      "fossil_commit": "252c0b7bf5a727d29605672bb58e06c758173c276671df3e388a68294998b4d3"
+    }
+  ],
+  "patches": [],
+  "local_patches": [],
+  "patched_files": {
+    "sqlite3.c": "0c657666d819f261cc4007526ad57e1669de9949df7a8ea847aa284a2bf0ee52"
+  }
+}

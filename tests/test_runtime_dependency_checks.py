@@ -6,11 +6,14 @@ import os
 from pathlib import Path
 import pyexpat
 import ssl
+import sqlite3
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from unittest.mock import patch
+from contextlib import closing
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from scripts import alpine_expat_sources
 from scripts import alpine_musl_sources
@@ -35,6 +38,15 @@ def write_synthetic_dependency_locks(root):
     spec['expected_library_sha256'] = {'amd64': 'a' * 64, 'arm64': 'b' * 64}
     spec['compiler_sha256'] = {'amd64': 'c' * 64, 'arm64': 'd' * 64}
     (root / 'docs/expat-build.json').write_bytes(build_patched_expat.json_bytes(spec))
+    build_sqlite = checks.sqlite_builder()
+    spec = copy.deepcopy(build_sqlite.immutable_spec())
+    spec['build_script_sha256'] = hashlib.sha256(Path(build_sqlite.__file__).read_bytes()).hexdigest()
+    for field, values in (
+            ('expected_library_sha256', {'amd64': '1' * 64, 'arm64': '2' * 64}),
+            ('compiler_sha256', {'amd64': '3' * 64, 'arm64': '4' * 64}),
+            ('expected_vendor_library_sha256', {'amd64': '5' * 64, 'arm64': '6' * 64})):
+        spec[field] = values
+    (root / 'docs/sqlite-build.json').write_bytes(build_sqlite.json_bytes(spec))
     return root
 
 
@@ -165,6 +177,10 @@ class ExpatReplacementManifestTests(unittest.TestCase):
         spec = build_patched_expat.reviewed_spec(ROOT)
         unqualified = any(value is None for field in ('expected_library_sha256', 'compiler_sha256')
                           for value in spec[field].values())
+        sqlite_spec = checks.sqlite_builder().reviewed_spec(ROOT)
+        unqualified = unqualified or any(value is None for field in
+            ('expected_library_sha256', 'compiler_sha256', 'expected_vendor_library_sha256')
+            for value in sqlite_spec[field].values())
         for arch in ('amd64', 'arm64'):
             with self.subTest(arch=arch):
                 if unqualified:
@@ -175,6 +191,8 @@ class ExpatReplacementManifestTests(unittest.TestCase):
                     self.assertEqual(checks.validate_report(report, arch, ROOT), report)
                     self.assertEqual(report['expat_build_manifest'],
                                      build_patched_expat.expected_manifest(arch, ROOT))
+                    self.assertEqual(report['sqlite_build_manifest'],
+                                     checks.sqlite_builder().expected_manifest(arch, ROOT))
 
 
 class PythonInstallManifestTests(unittest.TestCase):
@@ -751,6 +769,100 @@ class BenignFunctionalChecksTests(unittest.TestCase):
                          {'version': '3.14.10', 'tls_probes': checks.PYTHON_TLS_PROBES})
 
 
+class LoadedSQLiteIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.library = self.root / 'libsqlite3.so.3.54.1'
+        self.library.write_bytes(b'reviewed SQLite native library fixture')
+        self.alias = self.root / 'libsqlite3.so.0'
+        self.alias.symlink_to(self.library.name)
+        self.manifest = {'library': {'path': str(self.library), 'soname': self.alias.name,
+                                    'sha256': hashlib.sha256(self.library.read_bytes()).hexdigest()}}
+
+    def mapping(self, path=None, inode=None):
+        path = path or self.library
+        entry = path.stat()
+        return (f'7f100000-7f101000 r-xp 00000000 {os.major(entry.st_dev):02x}:'
+                f'{os.minor(entry.st_dev):02x} {entry.st_ino if inode is None else inode} {path}\n')
+
+    def test_only_reviewed_alias_canonical_file_and_mapped_inode_are_accepted(self):
+        result = checks.verify_sqlite_files(self.manifest, self.mapping() + self.mapping(self.alias))
+        self.assertEqual(result['sha256'], self.manifest['library']['sha256'])
+        self.assertEqual(result['inode'], self.library.stat().st_ino)
+        for maps in ('', self.mapping(inode=self.library.stat().st_ino + 1),
+                     self.mapping().rstrip() + ' (deleted)\n'):
+            with self.subTest(maps=maps), self.assertRaises(ValueError):
+                checks.verify_sqlite_files(self.manifest, maps)
+
+    def test_obsolete_siblings_wrong_alias_and_a_second_mapped_library_fail(self):
+        old = self.root / 'libsqlite3.so.3.53.4'; old.write_bytes(b'obsolete vendor library')
+        with self.assertRaisesRegex(ValueError, 'obsolete or unreviewed'):
+            checks.verify_sqlite_files(self.manifest, self.mapping())
+        old.unlink()
+        outside = self.root / 'outside'; outside.mkdir()
+        alternate = outside / 'libsqlite3.so.0'; alternate.write_bytes(b'alternate')
+        with self.assertRaisesRegex(ValueError, 'unexpected library'):
+            checks.verify_sqlite_files(self.manifest, self.mapping() + self.mapping(alternate))
+        self.alias.unlink(); self.alias.symlink_to(alternate)
+        with self.assertRaisesRegex(ValueError, 'SONAME alias'):
+            checks.verify_sqlite_files(self.manifest, self.mapping())
+
+    def test_changed_bytes_or_regular_alias_cannot_pass(self):
+        changed = copy.deepcopy(self.manifest); changed['library']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'package hash'):
+            checks.verify_sqlite_files(changed, self.mapping())
+        self.alias.unlink(); self.alias.write_bytes(self.library.read_bytes())
+        with self.assertRaisesRegex(ValueError, 'SONAME alias'):
+            checks.verify_sqlite_files(self.manifest, self.mapping())
+
+    def test_runtime_binding_requires_actual_source_id_options_and_successful_probes(self):
+        with closing(sqlite3.connect(':memory:')) as database:
+            version, source_id = database.execute('SELECT sqlite_version(), sqlite_source_id()').fetchone()
+            options = [row[0] for row in database.execute('PRAGMA compile_options')]
+        limits = {'schema': 10000000, 'trigger_steps': 65000}
+        self.manifest.update(upstream_version=version, source_id=source_id, required_compile_options=options,
+                             required_limit_defaults=limits)
+        build = SimpleNamespace(read_build_manifest=Mock(return_value=self.manifest),
+            json_bytes=lambda value: (json.dumps(value, sort_keys=True) + '\n').encode())
+        maps = self.root / 'maps'; maps.write_text(self.mapping())
+        with patch.object(checks, 'sqlite_builder', return_value=build), \
+                patch.object(checks, 'SQLITE_VERSION', version), patch.dict(os.environ, {}, clear=True), \
+                patch.object(checks, 'sqlite_limit_defaults', return_value=limits), \
+                patch.object(checks.sqlite_security, 'exercise_sqlite_security',
+                             return_value=checks.sqlite_security.expected_report()) as probes:
+            result = checks.check_sqlite('amd64', self.root / 'manifest.json', maps, self.root / 'lock.json')
+            self.assertEqual(result['source_id'], source_id)
+            self.assertEqual(result['compile_options'], options)
+            self.assertEqual(result['limit_defaults'], limits)
+            self.assertEqual(result['libraries']['sqlite']['sha256'], self.manifest['library']['sha256'])
+            probes.assert_called_once_with(expected_version=version, expected_source_id=source_id)
+            probes.reset_mock()
+            for field, value in (('source_id', 'unreviewed'), ('upstream_version', '3.53.4'),
+                                 ('required_compile_options', options[:-1]), ('required_limit_defaults', {})):
+                original = self.manifest[field]; self.manifest[field] = value
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    checks.check_sqlite('amd64', self.root / 'manifest.json', maps, self.root / 'lock.json')
+                probes.assert_not_called(); self.manifest[field] = original
+            probes.side_effect = ValueError('SQLite probe failed')
+            with self.assertRaisesRegex(ValueError, 'SQLite probe failed'):
+                checks.check_sqlite('amd64', self.root / 'manifest.json', maps, self.root / 'lock.json')
+
+    def test_loader_override_blocks_direct_check_before_reading_a_manifest(self):
+        for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD'):
+            with patch.dict(os.environ, {name: ''}, clear=True), \
+                    patch.object(checks, 'sqlite_builder') as build, self.assertRaises(ValueError):
+                checks.check_sqlite('amd64')
+            build.assert_not_called()
+
+    def test_new_public_limit_categories_are_read_from_the_connection(self):
+        database = Mock()
+        database.getlimit.side_effect = {13: 10000000, 14: 65000}.__getitem__
+        self.assertEqual(checks.sqlite_limit_defaults(database), {'schema': 10000000, 'trigger_steps': 65000})
+        self.assertEqual([call.args[0] for call in database.getlimit.call_args_list], [13, 14])
+
+
 class RuntimeReportTests(unittest.TestCase):
     def results(self):
         def library(name):
@@ -759,7 +871,9 @@ class RuntimeReportTests(unittest.TestCase):
         python = dhi_python_packages.build_security_manifest('arm64', root=None)
         musl = alpine_musl_sources.build_security_manifest('arm64', root=None)
         with tempfile.TemporaryDirectory() as directory:
-            replacement = build_patched_expat.expected_manifest('arm64', write_synthetic_dependency_locks(directory))
+            root = write_synthetic_dependency_locks(directory)
+            replacement = build_patched_expat.expected_manifest('arm64', root)
+            valid = dependency_report('arm64', root=root)
         return (
             {'version': '2.10.0', 'libraries': {'expat': library('libexpat.so.1.13.1')},
              'source_manifest_sha256': 'c' * 64, 'install_manifest_sha256': 'd' * 64,
@@ -774,29 +888,37 @@ class RuntimeReportTests(unittest.TestCase):
                            'python_ssl': library('_ssl.fixture.so')},
              'files': {'executable': library('python3.14'), 'abi_library': library('libpython3.so')},
              'aliases': python['aliases'], 'tls_probes': dict(checks.PYTHON_TLS_PROBES),
-             **{key: dependency_report('arm64')[key] for key in
+             **{key: valid[key] for key in
                 ('socket_manifest', 'socket_manifest_sha256', 'socket_probes')},
              'source_manifest_sha256': 'e' * 64, 'install_manifest_sha256': 'f' * 64},
             {'version': '1.2.6-r3', 'libraries': {'musl': library('ld-musl-aarch64.so.1')},
              'aliases': musl['aliases'], 'probes': dict(checks.MUSL_PROBES),
              'source_manifest_sha256': 'a' * 64, 'install_manifest_sha256': 'b' * 64},
+            {'version': '3.54.1', 'source_id': valid['sqlite_source_id'],
+             'compile_options': valid['sqlite_compile_options'],
+             'limit_defaults': valid['sqlite_limit_defaults'],
+             'libraries': {'sqlite': valid['loaded_libraries']['sqlite']},
+             'build_manifest': valid['sqlite_build_manifest'],
+             'build_manifest_sha256': valid['sqlite_build_manifest_sha256'],
+             'security_probes': valid['sqlite_security_probes']},
         )
 
     def test_report_binds_both_versions_loaded_hashes_and_source_install_manifests(self):
-        expat, openssl, python, musl = self.results()
+        expat, openssl, python, musl, sqlite = self.results()
         with patch.object(checks, 'architecture', return_value='arm64'), \
              patch.dict(os.environ, {}, clear=True), \
              patch.object(checks, 'check_expat', return_value=expat), \
              patch.object(checks, 'check_openssl', return_value=openssl), \
              patch.object(checks, 'check_python', return_value=python), \
-             patch.object(checks, 'check_musl', return_value=musl):
+             patch.object(checks, 'check_musl', return_value=musl), \
+             patch.object(checks, 'check_sqlite', return_value=sqlite):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 6, 'arch': 'arm64', 'success': True, 'tests': 4, 'failures': 0,
+            'schema': 7, 'arch': 'arm64', 'success': True, 'tests': 5, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10',
-                                      'musl': '1.2.6-r3'},
+                                      'musl': '1.2.6-r3', 'sqlite': '3.54.1'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
-                                 **musl['libraries']},
+                                 **musl['libraries'], **sqlite['libraries']},
             'expat_source_manifest_sha256': 'c' * 64,
             'expat_install_manifest_sha256': 'd' * 64,
             'expat_build_manifest': expat['build_manifest'],
@@ -811,25 +933,33 @@ class RuntimeReportTests(unittest.TestCase):
             'musl_install_manifest_sha256': 'b' * 64,
             'musl_aliases': musl['aliases'], 'musl_probes': musl['probes'],
             'certificate_trust': openssl['certificate_trust'],
+            'sqlite_source_id': sqlite['source_id'], 'sqlite_compile_options': sqlite['compile_options'],
+            'sqlite_limit_defaults': sqlite['limit_defaults'],
+            'sqlite_build_manifest': sqlite['build_manifest'],
+            'sqlite_build_manifest_sha256': sqlite['build_manifest_sha256'],
+            'sqlite_security_probes': sqlite['security_probes'],
         })
 
     def test_dependency_failure_is_reported_and_the_other_check_still_runs(self):
-        _, openssl, python, musl = self.results()
+        _, openssl, python, musl, sqlite = self.results()
         with patch.object(checks, 'architecture', return_value='amd64'), \
              patch.dict(os.environ, {}, clear=True), \
              patch.object(checks, 'check_expat', side_effect=ValueError('wrong binding')), \
              patch.object(checks, 'check_openssl', return_value=openssl) as ssl_check, \
              patch.object(checks, 'check_python', return_value=python) as python_check, \
-             patch.object(checks, 'check_musl', return_value=musl) as musl_check:
+             patch.object(checks, 'check_musl', return_value=musl) as musl_check, \
+             patch.object(checks, 'check_sqlite', return_value=sqlite) as sqlite_check:
             report = checks.qualify_runtime()
         self.assertFalse(report['success'])
-        self.assertEqual(report['tests'], 4)
+        self.assertEqual(report['tests'], 5)
         self.assertEqual(report['failures'], 1)
         self.assertEqual(report['errors'], [{'check': 'expat', 'message': 'wrong binding'}])
-        self.assertEqual(report['versions'], {'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3'})
+        self.assertEqual(report['versions'], {'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3',
+                                            'sqlite': '3.54.1'})
         ssl_check.assert_called_once()
         python_check.assert_called_once()
         musl_check.assert_called_once()
+        sqlite_check.assert_called_once()
 
     def test_loader_overrides_block_qualification_before_importing_dependencies(self):
         for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD'):
@@ -839,7 +969,8 @@ class RuntimeReportTests(unittest.TestCase):
                  patch.object(checks, 'check_expat') as expat, \
                  patch.object(checks, 'check_openssl') as openssl, \
                  patch.object(checks, 'check_python') as python, \
-                 patch.object(checks, 'check_musl') as musl:
+                 patch.object(checks, 'check_musl') as musl, \
+                 patch.object(checks, 'check_sqlite') as sqlite:
                 report = checks.qualify_runtime()
                 self.assertFalse(report['success'])
                 self.assertEqual(report['tests'], 0)
@@ -848,6 +979,7 @@ class RuntimeReportTests(unittest.TestCase):
                 openssl.assert_not_called()
                 python.assert_not_called()
                 musl.assert_not_called()
+                sqlite.assert_not_called()
 
     def test_report_cli_emits_failure_json_and_returns_nonzero(self):
         report = {'success': False, 'errors': [{'check': 'expat', 'message': 'wrong binding'}]}
@@ -875,13 +1007,15 @@ class RetainedDependencyReportTests(unittest.TestCase):
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes((self.root / 'docs/expat-build.json').read_bytes())
         (destination.parent / 'python-socket-build.json').write_bytes((ROOT / 'docs/python-socket-build.json').read_bytes())
+        (destination.parent / 'sqlite-build.json').write_bytes((self.root / 'docs/sqlite-build.json').read_bytes())
 
     def test_original_native_report_replays_without_runtime_filesystem(self):
         with patch.object(checks, 'file_identity', side_effect=AssertionError('runtime access')), \
              patch.object(checks, 'check_expat', side_effect=AssertionError('runtime import')), \
              patch.object(checks, 'check_openssl', side_effect=AssertionError('runtime import')), \
              patch.object(checks, 'check_python', side_effect=AssertionError('runtime import')), \
-             patch.object(checks, 'check_musl', side_effect=AssertionError('runtime import')):
+             patch.object(checks, 'check_musl', side_effect=AssertionError('runtime import')), \
+             patch.object(checks, 'check_sqlite', side_effect=AssertionError('runtime import')):
             for arch in ('amd64', 'arm64'):
                 report = dependency_report(arch, root=self.root)
                 with self.subTest(arch=arch):
@@ -922,6 +1056,46 @@ class RetainedDependencyReportTests(unittest.TestCase):
             build_patched_expat.json_bytes(report['expat_build_manifest'])).hexdigest()
         with self.assertRaisesRegex(ValueError, 'preparation or unqualified'):
             self.validate(report)
+
+    def test_sqlite_build_source_options_loaded_bytes_and_each_probe_are_separate_obligations(self):
+        for field in ('sqlite_source_id', 'sqlite_compile_options', 'sqlite_limit_defaults', 'sqlite_build_manifest',
+                      'sqlite_build_manifest_sha256', 'sqlite_security_probes'):
+            report = copy.deepcopy(self.report); del report[field]
+            with self.subTest(missing=field), self.assertRaisesRegex(ValueError, 'report schema'):
+                self.validate(report)
+        mutations = [('sqlite_source_id', 'unreviewed'), ('sqlite_compile_options', []),
+                     ('sqlite_limit_defaults', {}),
+                     ('sqlite_build_manifest_sha256', '0' * 64), ('sqlite_security_probes', {})]
+        for field in checks.sqlite_security.PROBES:
+            mutations.append(('sqlite_security_probes', {**checks.sqlite_security.expected_report(), field: False}))
+            mutations.append(('sqlite_security_probes', {**checks.sqlite_security.expected_report(), field: 1}))
+        for field, value in mutations:
+            report = copy.deepcopy(self.report); report[field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.validate(report)
+        report = copy.deepcopy(self.report); report['loaded_libraries']['sqlite']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'SQLite loaded-library hash'):
+            self.validate(report)
+        report = copy.deepcopy(self.report)
+        report['sqlite_build_manifest']['library']['sha256'] = '0' * 64
+        report['sqlite_build_manifest_sha256'] = hashlib.sha256(
+            checks.sqlite_builder().json_bytes(report['sqlite_build_manifest'])).hexdigest()
+        report['loaded_libraries']['sqlite']['sha256'] = '0' * 64
+        with self.assertRaises(ValueError): self.validate(report)
+
+    def test_sqlite_preparation_cannot_qualify_and_nullable_native_pin_stays_blocked(self):
+        report = copy.deepcopy(self.report)
+        report['sqlite_build_manifest'].update(qualified=False, purpose='preparation-only')
+        report['sqlite_build_manifest_sha256'] = hashlib.sha256(
+            checks.sqlite_builder().json_bytes(report['sqlite_build_manifest'])).hexdigest()
+        with self.assertRaises(ValueError): self.validate(report)
+        path = self.root / 'docs/sqlite-build.json'
+        original = path.read_bytes()
+        for field in ('expected_library_sha256', 'compiler_sha256', 'expected_vendor_library_sha256'):
+            spec = json.loads(original); spec[field]['arm64'] = None
+            path.write_bytes(checks.sqlite_builder().json_bytes(spec))
+            with self.subTest(field=field), self.assertRaises(ValueError): self.validate(self.report)
+        path.write_bytes(original)
 
     def test_missing_failed_or_mistyped_expat_probes_block_the_complete_retained_validator(self):
         invalid = [None, {}, {**self.report['expat_security_probes'], 'unexpected': True}]
@@ -1035,7 +1209,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
 
     def test_vendor_substitution_missing_libraries_and_invalid_identities_are_rejected(self):
         invalid = []
-        for name in ('expat', 'ssl', 'crypto', 'python', 'python_ssl', 'musl'):
+        for name in ('expat', 'ssl', 'crypto', 'python', 'python_ssl', 'musl', 'sqlite'):
             report = copy.deepcopy(self.report)
             del report['loaded_libraries'][name]
             invalid.append(report)
@@ -1076,6 +1250,32 @@ class RetainedDependencyReportTests(unittest.TestCase):
                                                    alpine_musl_sources.reviewed_spec()]}))
             with self.assertRaisesRegex(ValueError, 'exact reviewed DHI origin'):
                 checks.validate_report(self.report, 'amd64', root)
+
+
+class SystemSQLiteQualificationTests(unittest.TestCase):
+    def setUp(self):
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in {'LD_LIBRARY_PATH', 'LD_PRELOAD'}}
+        self.enterContext(patch.dict(os.environ, environment, clear=True))
+
+    def test_system_sqlite_mode_checks_the_library_without_requiring_venv_packages(self):
+        result = {'version': '3.54.1', 'libraries': {'sqlite': {'sha256': 'a' * 64}}}
+        output = io.StringIO()
+        with patch.object(checks, 'architecture', return_value='amd64'), \
+             patch.object(checks, 'check_sqlite', return_value=result) as sqlite, \
+             patch.object(checks, 'qualify_runtime') as complete, redirect_stdout(output):
+            self.assertEqual(checks.main(['--sqlite-only']), 0)
+        sqlite.assert_called_once_with('amd64')
+        complete.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())['sqlite'], result)
+
+    def test_system_sqlite_mode_cannot_pass_with_a_failed_binding_or_loader_override(self):
+        for overrides in ({}, {'LD_PRELOAD': '/alternate'}):
+            with self.subTest(overrides=overrides), patch.dict(os.environ, overrides), \
+                 patch.object(checks, 'architecture', return_value='amd64'), \
+                 patch.object(checks, 'check_sqlite', side_effect=ValueError('wrong library')), \
+                 redirect_stdout(io.StringIO()):
+                self.assertEqual(checks.main(['--sqlite-only']), 1)
 
 
 if __name__ == '__main__':

@@ -369,6 +369,34 @@ every file. It makes no package source-image claim.
                  'signed_statement_sha256': statements}, **limits)
 
 
+def inspect_sqlite_overlay_sources(source_dir, output_dir, *, architecture,
+                                   replacement_manifest_sha256, root=ROOT, **limits):
+    """Inspect exact upstream archives without claiming a vendor signature."""
+    import build_patched_sqlite as build
+    build.require_output_pins(build.reviewed_spec(root))
+    manifest = build.expected_manifest(architecture, root)
+    if replacement_manifest_sha256 != build.digest(build.json_bytes(manifest)):
+        raise ValueError('SQLite notice binding differs from the reviewed native replacement')
+    records = []
+    for row in build.source_download_records():
+        if row['role'] == 'upstream-source' and '/' not in row['path']:
+            path = checked_path(source_dir, row['path'])
+            if hashlib.sha256(path.read_bytes()).hexdigest() != row['sha256']:
+                raise ValueError('SQLite notice source archive differs from reviewed inputs')
+            records.append({**row, 'source_path': row['path'], 'type': 'file',
+                            'bytes': path.stat().st_size})
+    if len(records) != 2:
+        raise ValueError('Both official SQLite source archives are required for notices')
+    binding = {'origin': 'sqlite-overlay', 'version': build.UPSTREAM_VERSION,
+               'architecture': architecture, 'provider_oci_binding': False,
+               'source_image_digest': None,
+               'binding_method': 'Reviewed upstream SQLite source and native library build',
+               'replacement_manifest_sha256': replacement_manifest_sha256}
+    return _inspect_records(source_dir, output_dir, origin='sqlite-overlay',
+        version=build.UPSTREAM_VERSION, architecture=architecture,
+        manifest={'files': records}, binding=binding, **limits)
+
+
 def inspect_provenance_materials(source_dir, output_dir, *, origin, version,
                                 architecture, native_image_digest=None,
                                 source_manifest_sha256=None, **limits):
