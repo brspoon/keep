@@ -1,5 +1,7 @@
 from dataclasses import replace
+from contextlib import closing
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import sqlite3
 import tempfile
 import unittest
@@ -14,7 +16,7 @@ class NotificationTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / 'notifications.sqlite3'
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.executescript('''
                 CREATE TABLE notification_queue(id INTEGER PRIMARY KEY AUTOINCREMENT,
                     collection_id INTEGER,media_id TEXT,kind TEXT,received_at REAL,batch_id TEXT);
@@ -41,11 +43,11 @@ class NotificationTests(unittest.TestCase):
             self.resolve, self.render, self.send)
 
     def query(self, sql, args=()):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             return db.execute(sql, args).fetchall()
 
     def queue(self, media_id='1', collection=1, kind=notifications.ADDED, now=100, batch=None):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             return db.execute('INSERT INTO notification_queue(collection_id,media_id,kind,received_at,batch_id) VALUES (?,?,?,?,?)',
                               (collection, media_id, kind, now, batch)).lastrowid
 
@@ -118,7 +120,7 @@ class NotificationTests(unittest.TestCase):
     def test_email_disabled_still_delivers_push_and_retains_reminder_claims(self):
         self.enabled = {'pushover'}
         row_id = self.queue(kind=notifications.REMINDER)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO notification_reminders VALUES (1,'1','episode-1',?,100)", (row_id,))
         self.assertEqual(self.process()['accepted'], 1)
         self.assertEqual(self.send.call_args.args[0].provider, 'pushover')
@@ -141,7 +143,7 @@ class NotificationTests(unittest.TestCase):
 
     def test_disabled_provider_legacy_review_import_preserves_original_rows_and_detail(self):
         self.enabled = set()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO notification_batches VALUES ('held','review',100,'Original SMTP review detail')")
             db.execute("INSERT INTO notification_deliveries VALUES ('held','a@example.test',100)")
         self.queue(batch='held')
@@ -217,7 +219,7 @@ class NotificationTests(unittest.TestCase):
         self.queue('kept')
         self.queue('remaining')
         def render(target, items):
-            with sqlite3.connect(self.path) as db:
+            with closing(sqlite3.connect(self.path)) as db, db:
                 db.execute("DELETE FROM notification_queue WHERE media_id='kept'")
             return [item['media_id'] for item in items]
         self.render.side_effect = render
@@ -321,10 +323,10 @@ class NotificationTests(unittest.TestCase):
 
     def test_legacy_migration_never_resends_sent_or_uncertain_and_imports_partial_receipts(self):
         for batch, state in (('sent', 'sent'), ('uncertain', 'sending'), ('partial', 'building')):
-            with sqlite3.connect(self.path) as db:
+            with closing(sqlite3.connect(self.path)) as db, db:
                 db.execute('INSERT INTO notification_batches VALUES (?,?,100,NULL)', (batch, state))
             self.queue(batch, batch=batch)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO notification_deliveries VALUES ('partial','a@example.test',200)")
         other = replace(self.email, id='b@example.test')
         self.destinations = [self.email, other, self.push]
@@ -348,7 +350,7 @@ class NotificationTests(unittest.TestCase):
             self.assertEqual(self.query('SELECT * FROM ' + table), before[table])
 
     def test_disabled_email_preserves_a_safe_legacy_batch_and_does_not_block_new_push(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO notification_batches VALUES ('legacy','building',100,NULL)")
         self.queue('old-email', batch='legacy')
         self.enabled = {'pushover'}
@@ -476,6 +478,320 @@ class NotificationTests(unittest.TestCase):
                 self.destinations.append(replace(target, events=notifications.EVENTS, owner_verified=True))
         self.callbacks = replace(self.callbacks, render_event=Mock(side_effect=lambda target, event: event))
 
+    def job(self, state, *, at, token=None, scope='', observed_at=None):
+        return self.store.observe_job('keep-expiry', state, allowed_job_ids={'keep-expiry'},
+            run_token=token or 'run-' + str(at), finished_at=at, scope=scope,
+            now=at if observed_at is None else observed_at)
+
+    def failed_job(self, *, start=200, scope=''):
+        self.assertFalse(self.job('failed', at=start, scope=scope))
+        self.assertTrue(self.job('failed', at=start + 300, scope=scope))
+
+    def legacy_job(self, state='failed', *, scope='', target=None, dispatch_state=None):
+        self.store._observe_transition('job', 'keep-expiry', 'failed', scope, 200)
+        if state == 'healthy':
+            self.store._observe_transition('job', 'keep-expiry', 'healthy', scope, 300)
+        if dispatch_state is not None:
+            target = target or self.destinations[0]
+            key = self.store._job_key('keep-expiry', scope, 1, 'failed')
+            with closing(sqlite3.connect(self.path)) as db, db:
+                db.execute("INSERT INTO notification_batches VALUES ('legacy-job','building',200,NULL)")
+                db.execute("INSERT INTO notification_runs(batch_id) VALUES ('legacy-job')")
+                db.execute("UPDATE notification_operational_events SET batch_id='legacy-job' WHERE event_key=?", (key,))
+                self.store._seed(db, 'legacy-job', target, dispatch_state, 200,
+                    accepted_at=200 if dispatch_state == 'accepted' else None)
+
+    def test_brief_job_failure_and_recovery_never_queue_alert_or_recovery(self):
+        self.owner_destinations()
+        self.assertFalse(self.job('failed', at=200))
+        self.assertFalse(self.job('healthy', at=380))
+        self.assertEqual(self.query('SELECT * FROM notification_operational_events'), [])
+        self.process(now=500)
+        self.send.assert_not_called()
+
+    def test_job_grace_needs_distinct_ordered_completions_and_survives_restart(self):
+        self.assertFalse(self.job('failed', at=200))
+        self.store = notifications.Store(self.path)
+        self.assertFalse(self.job('failed', at=200, observed_at=1000))
+        self.assertFalse(self.job('failed', at=199, observed_at=1000))
+        self.assertFalse(self.job('healthy', at=199, observed_at=1000))
+        self.assertFalse(self.job('failed', at=499))
+        self.assertEqual(self.query('SELECT * FROM notification_operational_events'), [])
+        self.assertTrue(self.job('failed', at=500))
+        self.assertFalse(self.job('failed', at=500, observed_at=1000))
+        self.assertEqual(self.query('SELECT failed_runs,first_failed_at FROM notification_job_observations'), [(3, 200)])
+        self.assertEqual(self.query('SELECT kind FROM notification_operational_events'), [('JOB_FAILED',)])
+
+    def test_job_grace_uses_actual_finish_time_instead_of_observation_time(self):
+        self.assertFalse(self.job('failed', at=200, observed_at=1000))
+        self.assertFalse(self.job('failed', at=499, observed_at=1000))
+        self.assertTrue(self.job('failed', at=500, observed_at=1000))
+
+    def test_completed_job_observations_reject_missing_malformed_and_future_evidence(self):
+        for kwargs in ({'run_token': ''}, {'run_token': 'private\nvalue'}, {'run_token': 'x' * 129},
+                       {'finished_at': None}, {'finished_at': float('nan')}, {'finished_at': True},
+                       {'finished_at': -1}, {'finished_at': 131}, {'now': float('inf')}):
+            values = dict(allowed_job_ids={'keep-expiry'}, run_token='run', finished_at=100, now=100)
+            values.update(kwargs)
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                self.store.observe_job('keep-expiry', 'failed', **values)
+        self.assertEqual(self.query('SELECT * FROM notification_job_observations'), [])
+
+    def test_a_repeated_run_token_cannot_advance_grace_even_with_a_changed_timestamp(self):
+        self.assertFalse(self.job('failed', at=200, token='same-run'))
+        self.assertFalse(self.job('failed', at=600, token='same-run'))
+        self.assertEqual(self.query('SELECT failed_runs,finished_at FROM notification_job_observations'), [(1, 200)])
+        self.assertEqual(self.query('SELECT * FROM notification_operational_events'), [])
+
+    def test_success_resets_pending_failure_time_and_recovery_is_queued_once(self):
+        self.owner_destinations(email=False)
+        self.job('failed', at=200)
+        self.job('healthy', at=250)
+        self.assertFalse(self.job('failed', at=300))
+        self.assertFalse(self.job('failed', at=500))
+        self.assertTrue(self.job('failed', at=600))
+        self.process(now=600)
+        self.assertTrue(self.job('healthy', at=700))
+        self.assertFalse(self.job('healthy', at=800))
+        self.process(now=800)
+        self.assertEqual([call.args[1]['kind'] for call in self.send.call_args_list], ['JOB_FAILED', 'JOB_RESTORED'])
+
+    def test_concurrent_legacy_store_initialization_adds_the_job_schema_once(self):
+        path = Path(self.directory.name) / 'legacy-notifications.sqlite3'
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute('''CREATE TABLE notification_operational_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT UNIQUE NOT NULL,
+                kind TEXT NOT NULL,payload_json TEXT NOT NULL,created_at REAL NOT NULL,batch_id TEXT UNIQUE)''')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(lambda _: notifications.Store(path), range(2)))
+        with closing(sqlite3.connect(path)) as db, db:
+            columns = [row[1] for row in db.execute('PRAGMA table_info(notification_operational_events)')]
+            self.assertEqual(columns.count('invalidated_at'), 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM sqlite_master WHERE name='notification_job_observations'").fetchone()[0], 1)
+
+    def test_job_scopes_do_not_share_grace_or_accepted_failure_proof(self):
+        self.owner_destinations(email=False)
+        self.failed_job(scope='scope-a')
+        self.assertEqual(self.process(now=500)['accepted'], 1)
+        self.failed_job(start=250, scope='scope-b')
+        self.assertFalse(self.job('healthy', at=560, scope='scope-b'))
+        self.assertTrue(self.job('healthy', at=600, scope='scope-a'))
+        self.assertEqual(self.process(now=600)['accepted'], 1)
+        self.assertEqual([c.args[1]['kind'] for c in self.send.call_args_list], ['JOB_FAILED', 'JOB_RESTORED'])
+        self.assertEqual(self.query("SELECT episode FROM notification_transitions WHERE scope='scope-b'"), [(1,)])
+
+    def test_recovery_only_targets_exact_accepted_failure_provider_and_destination(self):
+        self.owner_destinations()
+        self.failed_job()
+        self.send.side_effect = lambda target, event: notifications.Outcome('review', 'email_uncertain') if target.provider == 'email' else notifications.Outcome('accepted')
+        self.process(now=500)
+        self.assertTrue(self.job('healthy', at=600))
+        self.send.side_effect = None
+        self.assertEqual(self.process(now=600)['accepted'], 1)
+        self.assertEqual(self.send.call_args.args[0].provider, 'pushover')
+        self.assertEqual(self.send.call_args.args[1]['kind'], 'JOB_RESTORED')
+        self.assertEqual(self.query("SELECT state,error_code FROM notification_dispatches WHERE provider='email'"), [('review', 'email_uncertain')])
+
+    def test_recovery_cancels_disabled_provider_retries_without_orphan_recovery(self):
+        self.owner_destinations()
+        self.failed_job()
+        self.send.return_value = notifications.Outcome('retry', 'connect_failed')
+        self.process(now=500)
+        self.enabled = set()
+        self.assertFalse(self.job('healthy', at=600))
+        self.assertEqual(self.query('SELECT state,error_code FROM notification_dispatches'), [('cancelled', None), ('cancelled', None)])
+        self.assertEqual(self.query('SELECT kind FROM notification_operational_events'), [('JOB_FAILED',)])
+        self.enabled = {'email', 'pushover'}
+        self.process(now=1000)
+        self.assertEqual(self.send.call_count, 2)
+
+    def test_unclaimed_job_failure_is_invalidated_when_job_recovers(self):
+        self.owner_destinations()
+        self.failed_job()
+        self.assertFalse(self.job('healthy', at=600))
+        self.process(now=600)
+        self.send.assert_not_called()
+        self.assertEqual(self.query('SELECT * FROM notification_dispatches'), [])
+
+    def test_sending_review_and_rejected_failures_are_preserved_on_recovery(self):
+        self.owner_destinations()
+        self.failed_job()
+        self.send.return_value = notifications.Outcome('review', 'response_uncertain')
+        self.process(now=500)
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute("UPDATE notification_dispatches SET state='sending' WHERE provider='email'")
+        before = self.query('SELECT provider,state,error_code FROM notification_dispatches ORDER BY provider')
+        self.assertFalse(self.job('healthy', at=600))
+        self.assertEqual(self.query('SELECT provider,state,error_code FROM notification_dispatches ORDER BY provider'), before)
+        self.assertEqual(self.query('SELECT kind FROM notification_operational_events'), [('JOB_FAILED',)])
+
+    def test_job_recovery_cannot_join_a_new_destination_or_rekeyed_generation(self):
+        self.owner_destinations(email=False)
+        self.failed_job(); self.process(now=500)
+        original = self.destinations[0]
+        other = replace(original, id='new-owner-profile')
+        rekeyed = replace(original, generation='new-pref', provider_generation='new-app')
+        for target in (other, rekeyed):
+            self.store.activate_destination(target.provider, target.id, target.generation, now=550)
+        self.destinations = [other, rekeyed]
+        self.job('healthy', at=600)
+        self.process(now=600)
+        self.assertEqual(self.send.call_count, 1)
+
+    def test_recovery_during_failure_render_cancels_before_transport_reservation(self):
+        self.owner_destinations(email=False); self.failed_job()
+        def recover(target, event):
+            self.job('healthy', at=600)
+            return event
+        self.callbacks = replace(self.callbacks, render_event=recover)
+        self.process(now=500)
+        self.send.assert_not_called()
+        self.assertEqual(self.query('SELECT state,error_code FROM notification_dispatches'), [('cancelled', None)])
+
+    def test_new_job_episode_cancels_old_recovery_retry_before_reservation(self):
+        self.owner_destinations(email=False); self.failed_job(); self.process(now=500)
+        self.job('healthy', at=600)
+        self.send.return_value = notifications.Outcome('retry', 'connect_failed')
+        self.process(now=600)
+        self.failed_job(start=700)
+        self.assertEqual(self.query("SELECT d.state,d.error_code FROM notification_dispatches d JOIN notification_operational_events e ON e.batch_id=d.batch_id WHERE e.kind='JOB_RESTORED'"), [('cancelled', None)])
+        self.send.return_value = notifications.Outcome('accepted')
+        self.process(now=1000)
+        self.assertEqual([c.args[1]['kind'] for c in self.send.call_args_list], ['JOB_FAILED', 'JOB_RESTORED', 'JOB_FAILED'])
+
+    def test_first_new_failure_cancels_old_unsent_recovery_without_reviving_it(self):
+        self.owner_destinations(email=False); self.failed_job(); self.process(now=500)
+        self.job('healthy', at=600)
+        self.assertFalse(self.job('failed', at=700))
+        self.process(now=700)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertFalse(self.job('healthy', at=800))
+        self.process(now=800)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.query("SELECT invalidated_at FROM notification_operational_events WHERE kind='JOB_RESTORED'"), [(700,)])
+
+    def test_new_failure_during_recovery_render_cancels_before_reservation(self):
+        self.owner_destinations(email=False); self.failed_job(); self.process(now=500)
+        self.job('healthy', at=600)
+        def fail_again(target, event):
+            self.job('failed', at=700)
+            return event
+        self.callbacks = replace(self.callbacks, render_event=fail_again)
+        self.process(now=600)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.query("SELECT d.state FROM notification_dispatches d JOIN notification_operational_events e ON e.batch_id=d.batch_id WHERE e.kind='JOB_RESTORED'"), [('cancelled',)])
+
+    def test_authoritative_job_scope_change_cancels_old_scope_work_only(self):
+        self.owner_destinations(email=False)
+        self.store.synchronize_job_scopes({'keep-expiry': 'scope-a'}, allowed_job_ids={'keep-expiry'}, now=100)
+        self.failed_job(scope='scope-a')
+        self.send.return_value = notifications.Outcome('retry', 'connect_failed'); self.process(now=500)
+        self.store.observe_connection('plex', 'failed', scope='connection-a', now=500)
+        self.store.synchronize_job_scopes({'keep-expiry': 'scope-b'}, allowed_job_ids={'keep-expiry'}, now=550)
+        self.assertEqual(self.query('SELECT state,error_code FROM notification_dispatches'), [('cancelled', None)])
+        self.send.return_value = notifications.Outcome('accepted'); self.process(now=600)
+        self.assertEqual(self.send.call_args.args[1]['kind'], 'CONNECTION_FAILED')
+        self.assertEqual(self.send.call_count, 2)
+
+    def test_missing_job_scope_disables_unscoped_job_and_reservation_rechecks_scope(self):
+        self.owner_destinations(email=False)
+        self.store.synchronize_job_scopes({'keep-expiry': None}, allowed_job_ids={'keep-expiry'}, now=100)
+        self.failed_job()
+        def disable(target, event):
+            self.store.synchronize_job_scopes({}, allowed_job_ids={'keep-expiry'}, now=550)
+            return event
+        self.callbacks = replace(self.callbacks, render_event=disable)
+        self.process(now=500)
+        self.send.assert_not_called()
+        self.assertEqual(self.query('SELECT state,error_code FROM notification_dispatches'), [('cancelled', None)])
+
+    def test_scope_reconciliation_preserves_confirmed_and_uncertain_dispatches(self):
+        self.owner_destinations()
+        self.store.synchronize_job_scopes({'keep-expiry': 'scope-a'}, allowed_job_ids={'keep-expiry'}, now=100)
+        self.failed_job(scope='scope-a')
+        self.send.side_effect = lambda target, event: notifications.Outcome('accepted') if target.provider == 'pushover' else notifications.Outcome('review', 'email_uncertain')
+        self.process(now=500)
+        before = self.query('SELECT * FROM notification_dispatches')
+        self.store.synchronize_job_scopes({}, allowed_job_ids={'keep-expiry'}, now=600)
+        self.assertEqual(self.query('SELECT * FROM notification_dispatches'), before)
+
+    def test_scope_cycle_restarts_grace_and_new_episode_without_replaying_old_work(self):
+        self.owner_destinations(email=False)
+        sync = lambda scopes, now: self.store.synchronize_job_scopes(scopes, allowed_job_ids={'keep-expiry'}, now=now)
+        sync({'keep-expiry': 'scope-a'}, 100)
+        self.failed_job(scope='scope-a')
+        sync({'keep-expiry': 'scope-b'}, 550)
+        sync({'keep-expiry': 'scope-a'}, 575)
+        self.assertFalse(self.job('failed', at=500, scope='scope-a', observed_at=600))
+        self.assertFalse(self.job('failed', at=600, scope='scope-a'))
+        self.process(now=600); self.send.assert_not_called()
+        self.assertTrue(self.job('failed', at=900, scope='scope-a'))
+        self.process(now=900)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.send.call_args.args[1]['episode'], 2)
+
+    def test_disable_and_reenable_same_scope_resets_unqualified_failure_evidence(self):
+        sync = lambda scopes, now: self.store.synchronize_job_scopes(scopes, allowed_job_ids={'keep-expiry'}, now=now)
+        sync({'keep-expiry': None}, 100)
+        self.job('failed', at=200)
+        sync({}, 300)
+        sync({'keep-expiry': None}, 600)
+        self.assertFalse(self.job('failed', at=200, observed_at=700))
+        self.assertFalse(self.job('failed', at=700))
+        self.assertFalse(self.job('failed', at=900))
+        self.assertTrue(self.job('failed', at=1000))
+        self.assertEqual(self.query('SELECT first_failed_at,failed_runs FROM notification_job_observations'), [(700, 3)])
+
+    def test_accepted_old_scope_failure_does_not_create_recovery_after_reenable(self):
+        self.owner_destinations(email=False)
+        sync = lambda scopes, now: self.store.synchronize_job_scopes(scopes, allowed_job_ids={'keep-expiry'}, now=now)
+        sync({'keep-expiry': None}, 100)
+        self.failed_job(); self.process(now=500)
+        accepted = self.query('SELECT * FROM notification_dispatches')
+        sync({}, 550); sync({'keep-expiry': None}, 575)
+        self.assertFalse(self.job('healthy', at=600))
+        self.process(now=600)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.query('SELECT * FROM notification_dispatches'), accepted)
+        self.assertEqual(self.query("SELECT * FROM notification_operational_events WHERE kind='JOB_RESTORED'"), [])
+
+    def test_owner_retry_cannot_resurrect_a_recovered_uncertain_failure(self):
+        self.owner_destinations(email=False); self.failed_job()
+        self.send.return_value = notifications.Outcome('review', 'response_uncertain'); self.process(now=500)
+        batch = self.query('SELECT batch_id FROM notification_dispatches')[0][0]
+        self.job('healthy', at=600)
+        self.assertTrue(self.store.resolve_review(batch, self.push.provider, self.push.id, action='retry', now=700))
+        self.process(now=700)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.query('SELECT state,error_code FROM notification_dispatches'), [('cancelled', None)])
+
+    def test_legacy_unannounced_failures_cannot_send_before_observation_or_bypass_grace(self):
+        self.owner_destinations(email=False); self.legacy_job(dispatch_state='pending')
+        self.store = notifications.Store(self.path)
+        self.process(now=300)
+        self.send.assert_not_called()
+        self.assertFalse(self.job('failed', at=400))
+        self.assertTrue(self.job('failed', at=700))
+        self.process(now=700)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.send.call_args.args[1]['episode'], 2)
+
+    def test_legacy_accepted_job_episode_restores_only_its_confirmed_destination(self):
+        self.owner_destinations(); self.legacy_job(target=self.destinations[1], dispatch_state='accepted')
+        before = self.query("SELECT * FROM notification_dispatches WHERE state='accepted'")
+        self.store = notifications.Store(self.path)
+        self.assertTrue(self.job('healthy', at=400))
+        self.process(now=400)
+        self.assertEqual(self.send.call_count, 1)
+        self.assertEqual(self.send.call_args.args[0].provider, 'pushover')
+        self.assertEqual(self.send.call_args.args[1]['kind'], 'JOB_RESTORED')
+        self.assertEqual(self.query("SELECT * FROM notification_dispatches WHERE batch_id='legacy-job'"), before)
+
+    def test_legacy_orphan_recoveries_do_not_send_without_accepted_failure(self):
+        self.owner_destinations(); self.legacy_job('healthy')
+        self.process(now=400)
+        self.send.assert_not_called()
+
     def test_connection_and_job_events_are_deduplicated_per_transition_and_scope_after_restart(self):
         self.assertFalse(self.store.observe_connection('plex', 'healthy', scope='plex-v1', now=100))
         self.assertTrue(self.store.observe_connection('plex', 'failed', scope='plex-v1', now=200))
@@ -485,8 +801,10 @@ class NotificationTests(unittest.TestCase):
         self.assertTrue(self.store.observe_connection('plex', 'healthy', scope='plex-v1', now=500))
         self.assertTrue(self.store.observe_connection('plex', 'failed', scope='plex-v1', now=600))
         self.assertFalse(self.store.observe_connection('plex', 'healthy', scope='plex-v2', now=700))
-        self.assertTrue(self.store.observe_job('keep-expiry', 'failed', allowed_job_ids={'keep-expiry'}, now=800))
-        self.assertFalse(self.store.observe_job('keep-expiry', 'failed', allowed_job_ids={'keep-expiry'}, now=900))
+        self.assertFalse(self.job('failed', at=800))
+        self.assertFalse(self.job('failed', at=800, observed_at=1000))
+        self.assertTrue(self.job('failed', at=1100))
+        self.assertFalse(self.job('failed', at=1100, observed_at=1200))
         rows = self.query('SELECT kind,payload_json FROM notification_operational_events ORDER BY id')
         self.assertEqual([row[0] for row in rows], ['CONNECTION_FAILED', 'CONNECTION_RESTORED', 'CONNECTION_FAILED', 'JOB_FAILED'])
         self.assertIn('"episode": 2', rows[2][1])
@@ -502,7 +820,7 @@ class NotificationTests(unittest.TestCase):
     def test_operational_only_processing_leaves_unreconciled_media_and_legacy_receipts_untouched(self):
         self.owner_destinations()
         self.queue('unclaimed', now=100)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO notification_batches VALUES ('legacy','sent',100,'old')")
             db.execute("INSERT INTO notification_deliveries VALUES ('legacy','a@example.test',100)")
         self.queue('legacy-leftover', now=100, batch='legacy')
@@ -521,7 +839,7 @@ class NotificationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.observe_connection('https://private.example/?token=secret', 'failed')
         with self.assertRaises(ValueError):
-            self.store.observe_job('unknown-job', 'failed', allowed_job_ids={'keep-expiry'})
+            self.store.observe_job('unknown-job', 'failed', allowed_job_ids={'keep-expiry'}, run_token='run', finished_at=100, now=100)
         with self.assertRaises(ValueError):
             self.store.observe_connection('plex', 'waiting')
         for version in ('2.9', 'v2.10.0', '2.10.0-rc1', '<script>', '02.10.0'):
@@ -583,7 +901,7 @@ class NotificationTests(unittest.TestCase):
     def test_operational_event_payload_does_not_forward_untrusted_fields(self):
         self.owner_destinations(email=False)
         self.store.observe_update('2.10.0', now=200)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('''UPDATE notification_operational_events SET payload_json=
                 '{"version":"2.10.0","token":"SECRET","exception":"private url"}' ''')
         self.process(now=200)

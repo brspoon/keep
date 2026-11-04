@@ -14,6 +14,7 @@ class ReminderTests(unittest.TestCase):
             for table in ('notification_dispatches', 'notification_runs',
                           'notification_destination_epochs', 'notification_cooldowns',
                           'notification_operational_events', 'notification_transitions',
+                          'notification_job_observations', 'notification_job_scopes',
                           'notification_test_attempts', 'notification_email_events',
                           'pushover_preferences', 'notification_provider_generations',
                           'notification_queue', 'notification_reminders',

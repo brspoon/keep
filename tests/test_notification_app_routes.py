@@ -97,6 +97,7 @@ class NotificationAppRoutesTests(TestCase):
                           'notification_email_events', 'notification_dispatches', 'notification_runs',
                           'notification_destination_epochs', 'notification_cooldowns', 'notification_operational_events',
                           'notification_transitions', 'notification_deliveries', 'notification_queue',
+                          'notification_job_observations', 'notification_job_scopes',
                           'notification_batches', 'recipient_subscriptions', 'email_recipients'):
                 db.execute('DELETE FROM ' + table)
             db.execute("INSERT INTO email_recipients(email,enabled) VALUES ('owner@example.com',1)")

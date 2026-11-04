@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.30.4 — 2026-11-03
+
+- Avoid failure and recovery alerts for short-lived background job interruptions. Persistent failures still alert.
+
 ## 2.30.3 — 2026-11-02
 
 - Update Expat to 2.10.0 to fix XML parser edge cases and use upstream CDATA handling.
