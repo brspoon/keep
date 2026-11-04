@@ -66,10 +66,13 @@ def retain_http_framing_sources(stage, inventory, root):
 
 def fetch_source(url):
     """Fetch locked PyPI/native/patch sources, checking HTTPS redirect hosts."""
+    import build_patched_sqlite as sqlite_build
     hosts = {'pypi.org', 'files.pythonhosted.org', 'github.com', 'codeload.github.com',
              'raw.githubusercontent.com'}
     if url == 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz':
         hosts = {'www.python.org'}
+    elif url in {sqlite_build.SOURCE_URL, sqlite_build.PREFERRED_SOURCE_URL}:
+        hosts = {'www.sqlite.org'}
     public_url(url, hosts)
     request = urllib.request.Request(url, headers={'User-Agent': 'Keep-source-bundle/1'})
     with urllib.request.urlopen(request, timeout=60) as response:

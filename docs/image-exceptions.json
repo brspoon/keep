@@ -16,7 +16,7 @@
     "scripts/alpine_zlib_sources.py": "1d7742f9e8a35048d65bf4642f37efc988635b6452836d71f5575e4876d983ff",
     "scripts/dhi_python_packages.py": "edfeca760335cb5539846b15bd0f65beef62ae8526ce5a5c20d10c1f6ff77e74",
     "scripts/install_runtime_packages.py": "a5dfc0d53fae61e4d447fd58ce0f178a23c331b8ed94fc1b2ecd14cf179e8c76",
-    "scripts/build_distribution_bundle.py": "6f3df9488d90e970680c29f5bf9d7788b0497dd4012534d587ea3586072ce225",
+    "scripts/build_distribution_bundle.py": "d87c016e81e726200cf75d32e589e87dcfda3e128e49d9db53ee3af462453703",
     "scripts/collect_package_sources.py": "2e2c8cbc6ca776c7ee5a0e994da5cf85c477f947ad9a9dde9fdfd992170874c7",
     "scripts/package_source_notices.py": "2110083fd47fe6c16451034cb42012ac1faf7f69f642e9901d4070fc0f3a65fb",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",

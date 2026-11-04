@@ -819,6 +819,34 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
 
 
 class MatchingSourceDownloadTests(unittest.TestCase):
+    def test_reviewed_sqlite_archives_use_official_host(self):
+        import build_patched_sqlite as sqlite_build
+        for url in (sqlite_build.SOURCE_URL, sqlite_build.PREFERRED_SOURCE_URL):
+            class Response(io.BytesIO):
+                def geturl(self):
+                    return url
+            with self.subTest(url=url), patch.object(bundle.urllib.request, 'urlopen',
+                    return_value=Response(b'locked SQLite source archive')) as opener:
+                self.assertEqual(bundle.fetch_source(url), b'locked SQLite source archive')
+                self.assertEqual(opener.call_args.args[0].full_url, url)
+
+    def test_sqlite_allowlist_rejects_other_archives_and_redirect_hosts(self):
+        import build_patched_sqlite as sqlite_build
+        with patch.object(bundle.urllib.request, 'urlopen') as opener:
+            for url in ('https://www.sqlite.org/2026/sqlite-src-3540000.zip',
+                        'https://sqlite.org/2026/sqlite-src-3540100.zip',
+                        'http://www.sqlite.org/2026/sqlite-src-3540100.zip',
+                        'https://secret:token@www.sqlite.org/2026/sqlite-src-3540100.zip'):
+                with self.subTest(url=url), self.assertRaisesRegex(ValueError, 'download URL'):
+                    bundle.fetch_source(url)
+            opener.assert_not_called()
+        class Response(io.BytesIO):
+            def geturl(self):
+                return 'https://github.com/other/source.zip'
+        with patch.object(bundle.urllib.request, 'urlopen', return_value=Response(b'bytes')):
+            with self.assertRaisesRegex(ValueError, 'download URL'):
+                bundle.fetch_source(sqlite_build.PREFERRED_SOURCE_URL)
+
     def test_pinned_native_github_source_can_redirect_to_official_archive_host(self):
         class Response(io.BytesIO):
             def geturl(self):
