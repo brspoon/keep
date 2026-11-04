@@ -57,6 +57,8 @@ Under **Admin → Notifications**, the owner enables providers, configures their
 
 The owner can opt into connection failures and recovery, failed jobs and recovery, and available Keep updates. These events are unavailable to other accounts. A failed connection alert follows two failed automatic checks. Notifications use recorded results; they do not start extra service checks.
 
+Job failures appear in **Admin → Jobs** immediately. Keep alerts only when distinct runs fail repeatedly and the failure lasts at least five minutes. Short interruptions that recover before an alert qualifies stay quiet. Recovery alerts go only to recipients whose failure alert was accepted by the notification provider.
+
 An uncertain delivery stays available for review while other destinations continue. The owner can discard it or explicitly resend it after acknowledging that a duplicate is possible. A successful send records provider acceptance; it does not confirm inbox or device delivery.
 
 ## Owner controls and API access

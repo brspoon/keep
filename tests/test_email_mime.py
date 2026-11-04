@@ -67,6 +67,7 @@ class EmailMimeTests(unittest.TestCase):
         tables = ('notification_dispatches', 'notification_runs',
                   'notification_destination_epochs', 'notification_cooldowns',
                   'notification_operational_events', 'notification_transitions',
+                  'notification_job_observations', 'notification_job_scopes',
                   'notification_queue', 'notification_reminders',
                   'notification_deliveries', 'notification_batches')
         for kind in ('MEDIA_ADDED_TO_COLLECTION', keep.REMINDER_KIND):

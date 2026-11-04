@@ -319,6 +319,10 @@ class Runtime:
         """
         now = time.time() if now is None else now
         store, count = self.helpers.store(), 0
+        job_scopes = {job_id: scope for job_id, scope in current_job_scopes.items()
+                      if job_id in background_jobs.JOB_IDS
+                      and (scope is None or isinstance(scope, str) and len(scope) <= 128)}
+        store.synchronize_job_scopes(job_scopes, allowed_job_ids=background_jobs.JOB_IDS, now=now)
         for service, scope in current_connection_scopes.items():
             row = connections.get(service)
             if (service not in notifications.CONNECTIONS or not isinstance(scope, str)
@@ -332,16 +336,19 @@ class Runtime:
             if row['failures'] == 1:
                 continue
             count += bool(store.observe_connection(service, 'failed' if row['failures'] else 'healthy', scope=scope, now=now))
-        for job_id, scope in current_job_scopes.items():
+        for job_id, scope in job_scopes.items():
             row = jobs.get(job_id)
             if (job_id not in background_jobs.JOB_IDS or job_id in excluded_job_ids
                     or job_id.startswith('probe-') or job_id == 'connection-monitor'
                     or not isinstance(row, Mapping) or (row.get('scope') or None) != (scope or None)
                     or scope is not None and (not isinstance(scope, str) or len(scope) > 128)
+                    or not isinstance(row.get('run_token'), str) or not 1 <= len(row['run_token']) <= 128
+                    or any(ord(char) < 33 or ord(char) == 127 for char in row['run_token'])
                     or not _observed_time(row.get('finished'), now)
                     or row.get('status') not in ('success', 'failed', 'review')):
                 continue
             count += bool(store.observe_job(job_id, 'healthy' if row['status'] == 'success' else 'failed',
+                run_token=row['run_token'], finished_at=row['finished'],
                 scope=scope or '', allowed_job_ids=background_jobs.JOB_IDS, now=now))
         if (isinstance(releases, Mapping) and releases.get('status') == 'success'
                 and releases.get('stale') is False and releases.get('comparison') == 'update_available'

@@ -325,29 +325,117 @@ class NotificationAppTests(unittest.TestCase):
         self.enable_owner_alerts()
         connections = {'seerr': {'fingerprint': 'active', 'checked': 200, 'failures': 2,
             'raw_error': 'private URL and token'}, 'plex': {'fingerprint': 'old', 'checked': 200, 'failures': 3}}
-        jobs = {'keep-expiry': {'scope': None, 'finished': 200, 'status': 'failed'},
-                'seerr-history': {'scope': 'old', 'finished': 200, 'status': 'failed'},
-                'email-digest': {'scope': None, 'finished': 200, 'status': 'review'},
-                'probe-email': {'scope': 'smtp', 'finished': 200, 'status': 'failed'},
-                'reminder-scan': {'scope': None, 'finished': None, 'status': 'running'}}
+        jobs = {'keep-expiry': {'scope': None, 'finished': 200, 'status': 'failed', 'run_token': 'a' * 32},
+                'seerr-history': {'scope': 'old', 'finished': 200, 'status': 'failed', 'run_token': 'd' * 32},
+                'email-digest': {'scope': None, 'finished': 200, 'status': 'review', 'run_token': 'e' * 32},
+                'probe-email': {'scope': 'smtp', 'finished': 200, 'status': 'failed', 'run_token': 'f' * 32},
+                'reminder-scan': {'scope': None, 'finished': None, 'status': 'running', 'run_token': 'g' * 32}}
         releases = {'status': 'success', 'stale': False, 'comparison': 'update_available',
                     'update_available': True, 'latest_version': '2.26.0', 'raw_error': 'private'}
         kwargs = dict(connections=connections, jobs=jobs, releases=releases,
             current_connection_scopes={'seerr': 'active', 'plex': 'new'},
             current_job_scopes={'keep-expiry': None, 'seerr-history': 'new', 'email-digest': None,
                                 'probe-email': 'smtp', 'reminder-scan': None}, now=200)
-        self.assertEqual(self.runtime.observe_recorded(**kwargs), 3)
+        with patch.object(self.store, 'observe_job', wraps=self.store.observe_job) as observe:
+            self.assertEqual(self.runtime.observe_recorded(**kwargs), 2)
+            self.assertEqual(observe.call_count, 1)
+            self.assertEqual(observe.call_args.args, ('keep-expiry', 'failed'))
         self.assertEqual(self.runtime.observe_recorded(**kwargs), 0)
-        connections['seerr'].update(failures=0, checked=300)
-        jobs['keep-expiry'].update(status='success', finished=300)
-        self.assertEqual(self.runtime.observe_recorded(**{**kwargs, 'now': 300}), 2)
-        self.runtime.process_operational(now=300)
+        jobs['keep-expiry'].update(finished=500, run_token='b' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**{**kwargs, 'now': 500}), 1)
+        self.runtime.process_operational(now=500)
+        connections['seerr'].update(failures=0, checked=600)
+        jobs['keep-expiry'].update(status='success', finished=600, run_token='c' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**{**kwargs, 'now': 600}), 2)
+        self.runtime.process_operational(now=600)
         self.assertEqual(self.send_push.call_count, 5)
         combined = str(self.send_push.call_args_list) + str(self.send_email.call_args_list)
         self.assertNotIn('private', combined)
         self.assertNotIn('active', combined)
         self.assertIn('Seerr', combined)
         self.assertIn('Temporary Keeps', combined)
+
+    def test_short_upstream_interruption_recovers_without_job_failure_or_recovery_messages(self):
+        self.enable_owner_alerts()
+        rows = {job: {'scope': None, 'status': 'failed', 'finished': 200, 'run_token': 'a' * 32}
+                for job in ('reminder-scan', 'plex-access-sync')}
+        kwargs = dict(connections={}, jobs=rows, releases={}, current_connection_scopes={},
+                      current_job_scopes={job: None for job in rows})
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=200), 0)
+        for row in rows.values():
+            row.update(finished=260, run_token='b' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=260), 0)
+        for row in rows.values():
+            row.update(status='success', finished=380, run_token='c' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=380), 0)
+        self.runtime.process_operational(now=380)
+        self.assertEqual(self.query('SELECT kind FROM notification_operational_events'), [])
+        self.send_push.assert_not_called()
+        self.send_email.assert_not_called()
+
+    def test_job_failure_grace_uses_native_runs_and_survives_store_restart(self):
+        self.enable_owner_alerts()
+        row = {'scope': None, 'status': 'failed', 'finished': 200, 'run_token': 'a' * 32}
+        kwargs = dict(connections={}, jobs={'plex-access-sync': row}, releases={},
+                      current_connection_scopes={}, current_job_scopes={'plex-access-sync': None})
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=200), 0)
+        self.store = notifications.Store(self.path)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=600), 0)
+        self.assertEqual(self.query('SELECT kind FROM notification_operational_events'), [])
+        row.update(finished=500, run_token='b' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=600), 1)
+        self.runtime.process_operational(now=600)
+        self.assertEqual(self.send_push.call_count, 1)
+        self.assertEqual(self.send_email.call_count, 1)
+        row.update(finished=630, run_token='c' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=630), 0)
+        self.runtime.process_operational(now=630)
+        self.assertEqual(self.send_push.call_count, 1)
+        row.update(status='success', finished=660, run_token='d' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=660), 1)
+        self.runtime.process_operational(now=660)
+        self.assertEqual(self.send_push.call_count, 2)
+        self.assertEqual(self.send_email.call_count, 2)
+        self.assertIn('recovered', self.send_push.call_args.kwargs['title'])
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=690), 0)
+
+    def test_job_observation_rejects_missing_invalid_and_future_completed_run_evidence(self):
+        self.enable_owner_alerts()
+        row = {'scope': None, 'status': 'failed', 'finished': 200, 'run_token': 'a' * 32}
+        kwargs = dict(connections={}, jobs={'plex-access-sync': row}, releases={},
+                      current_connection_scopes={}, current_job_scopes={'plex-access-sync': None}, now=200)
+        invalid = [('run_token', value) for value in (None, '', 1, True, 'x' * 129, 'bad\ntoken', 'bad token')]
+        invalid += [('finished', value) for value in (None, -1, True, float('nan'), float('inf'), 300)]
+        with patch.object(self.store, 'observe_job', wraps=self.store.observe_job) as observe:
+            for field, value in invalid:
+                with self.subTest(field=field, value=value):
+                    bad = {**row, field: value}
+                    self.assertEqual(self.runtime.observe_recorded(**{**kwargs, 'jobs': {'plex-access-sync': bad}}), 0)
+            observe.assert_not_called()
+        self.send_push.assert_not_called()
+        self.send_email.assert_not_called()
+
+    def test_changed_or_removed_job_scope_cancels_queued_alerts_before_delivery(self):
+        self.enable_owner_alerts()
+        row = {'scope': 'old', 'status': 'failed', 'finished': 200, 'run_token': 'a' * 32}
+        kwargs = dict(connections={}, jobs={'seerr-history': row}, releases={},
+                      current_connection_scopes={}, current_job_scopes={'seerr-history': 'old'})
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=200), 0)
+        row.update(finished=500, run_token='b' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=500), 1)
+        kwargs['current_job_scopes'] = {'seerr-history': 'new'}
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=530), 0)
+        self.runtime.process_operational(now=530)
+        self.send_push.assert_not_called()
+        self.send_email.assert_not_called()
+        row.update(scope='new', finished=600, run_token='c' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=600), 0)
+        row.update(finished=900, run_token='d' * 32)
+        self.assertEqual(self.runtime.observe_recorded(**kwargs, now=900), 1)
+        self.assertEqual(self.runtime.observe_recorded(**{**kwargs, 'jobs': {}, 'current_job_scopes': {}}, now=930), 0)
+        self.runtime.process_operational(now=930)
+        self.send_push.assert_not_called()
+        self.send_email.assert_not_called()
 
     def test_connection_alerts_match_two_failure_threshold_and_only_restore_on_definite_success(self):
         row = {'fingerprint': 'active', 'checked': 100, 'failures': 1}

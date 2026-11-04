@@ -4,6 +4,7 @@ The caller holds the existing digest worker lock. Web handlers only read status
 or queue work; they never invoke delivery or recover an active worker's sends.
 """
 from contextlib import closing
+from collections.abc import Mapping
 from dataclasses import dataclass
 import json
 import math
@@ -27,6 +28,7 @@ STATES = frozenset(('pending', 'sending', 'accepted', 'retry', 'review', 'reject
 SAFE_CODES = frozenset(('configuration', 'connect_failed', 'rejected', 'quota', 'response_uncertain',
                         'email_uncertain', 'worker_interrupted', 'preparation_failed', 'preferences_changed'))
 REQUEST_ID = re.compile(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\Z')
+JOB_FAILURE_GRACE_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,7 @@ class Store:
 
     def initialize(self):
         with closing(self._connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
             db.execute('''CREATE TABLE IF NOT EXISTS notification_runs (
                 batch_id TEXT PRIMARY KEY, legacy INTEGER NOT NULL DEFAULT 0,
                 finished_at REAL
@@ -139,12 +142,25 @@ class Store:
             db.execute('''CREATE TABLE IF NOT EXISTS notification_operational_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT UNIQUE NOT NULL,
                 kind TEXT NOT NULL, payload_json TEXT NOT NULL,
-                created_at REAL NOT NULL, batch_id TEXT UNIQUE
+                created_at REAL NOT NULL, batch_id TEXT UNIQUE, invalidated_at REAL
             )''')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(notification_operational_events)')}
+            if 'invalidated_at' not in columns:
+                db.execute('ALTER TABLE notification_operational_events ADD COLUMN invalidated_at REAL')
             db.execute('''CREATE TABLE IF NOT EXISTS notification_transitions (
                 kind TEXT NOT NULL, entity TEXT NOT NULL, scope TEXT NOT NULL,
                 state TEXT NOT NULL, episode INTEGER NOT NULL,
                 PRIMARY KEY(kind,entity,scope)
+            )''')
+            db.execute('''CREATE TABLE IF NOT EXISTS notification_job_observations (
+                job_id TEXT NOT NULL, scope TEXT NOT NULL, state TEXT NOT NULL,
+                run_token TEXT NOT NULL, finished_at REAL NOT NULL,
+                first_failed_at REAL, failed_runs INTEGER NOT NULL,
+                qualified_episode INTEGER,
+                PRIMARY KEY(job_id,scope)
+            )''')
+            db.execute('''CREATE TABLE IF NOT EXISTS notification_job_scopes (
+                job_id TEXT PRIMARY KEY, scope TEXT NOT NULL
             )''')
             db.execute('''CREATE INDEX IF NOT EXISTS notification_dispatch_ready
                           ON notification_dispatches(state,next_attempt)''')
@@ -178,11 +194,192 @@ class Store:
             raise ValueError('Unknown notification connection')
         return self._observe_transition('connection', service, state, scope, now)
 
-    def observe_job(self, job_id, state, *, allowed_job_ids, scope='', now=None):
+    def synchronize_job_scopes(self, scopes, *, allowed_job_ids, now=None):
+        """Apply the worker's latest configured scope map, including disabled jobs."""
+        if not isinstance(scopes, Mapping):
+            raise ValueError('Invalid current job scopes')
+        current = {}
+        for job_id, scope in scopes.items():
+            if (not isinstance(job_id, str) or job_id not in allowed_job_ids
+                    or not re.fullmatch(r'[a-z0-9-]{1,80}', job_id)
+                    or scope is not None and (not isinstance(scope, str) or len(scope) > 128)):
+                raise ValueError('Invalid current job scope')
+            current[job_id] = scope or ''
+        now = time.time() if now is None else now
+        if type(now) not in (int, float) or not math.isfinite(now) or now < 0:
+            raise ValueError('Invalid job scope observation time')
+        with closing(self._connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            previous = {row['job_id']: row['scope'] for row in db.execute('SELECT * FROM notification_job_scopes')}
+            transitions = db.execute("SELECT entity,scope FROM notification_transitions WHERE kind='job'").fetchall()
+            for row in transitions:
+                job_id, scope = row['entity'], row['scope']
+                inactive = job_id not in current or current[job_id] != scope
+                reactivated = '' in previous and not inactive and previous.get(job_id) != scope
+                if inactive or reactivated:
+                    db.execute('''UPDATE notification_transitions SET state='healthy'
+                        WHERE kind='job' AND entity=? AND scope=?''', (job_id, scope))
+                    # A scope boundary is also an evidence watermark: an old
+                    # completed row cannot restart grace after re-enabling it.
+                    db.execute('''INSERT INTO notification_job_observations VALUES (?,?,'healthy','',?,NULL,0,NULL)
+                        ON CONFLICT(job_id,scope) DO UPDATE SET state='healthy',
+                            finished_at=MAX(finished_at,excluded.finished_at),
+                            first_failed_at=NULL,failed_runs=0,qualified_episode=NULL''',
+                        (job_id, scope, now))
+            db.execute('DELETE FROM notification_job_scopes')
+            # The empty catalog ID marks an explicitly supplied authoritative map.
+            # Standalone callers otherwise have no authoritative scope map.
+            db.executemany('INSERT INTO notification_job_scopes VALUES (?,?)', [('', ''), *current.items()])
+            events = db.execute('''SELECT * FROM notification_operational_events
+                WHERE kind IN ('JOB_FAILED','JOB_RESTORED') AND invalidated_at IS NULL''').fetchall()
+            for event in events:
+                coordinates = self._job_coordinates(event)
+                if (coordinates is None or coordinates[0] not in current
+                        or coordinates[1] != current[coordinates[0]]):
+                    self._invalidate_job_event(db, event['event_key'], now)
+
+    def observe_job(self, job_id, state, *, allowed_job_ids, run_token, finished_at,
+                    scope='', now=None):
         # The app passes its fixed background_jobs.JOB_IDS catalog, not request data.
         if job_id not in allowed_job_ids or not isinstance(job_id, str) or not re.fullmatch(r'[a-z0-9-]{1,80}', job_id):
             raise ValueError('Unknown notification job')
-        return self._observe_transition('job', job_id, state, scope, now)
+        now = time.time() if now is None else now
+        if (state not in ('healthy', 'failed') or not isinstance(scope, str) or len(scope) > 128
+                or not isinstance(run_token, str) or not 1 <= len(run_token) <= 128
+                or any(ord(char) < 33 or ord(char) == 127 for char in run_token)
+                or type(now) not in (int, float) or not math.isfinite(now) or now < 0
+                or type(finished_at) not in (int, float) or not math.isfinite(finished_at)
+                or not 0 <= finished_at <= now + 30):
+            raise ValueError('Invalid completed job observation')
+        with closing(self._connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            observed = db.execute('''SELECT * FROM notification_job_observations
+                WHERE job_id=? AND scope=?''', (job_id, scope)).fetchone()
+            if observed and (observed['run_token'] == run_token or finished_at <= observed['finished_at']):
+                return False
+            previous = db.execute('''SELECT state,episode FROM notification_transitions
+                WHERE kind='job' AND entity=? AND scope=?''', (job_id, scope)).fetchone()
+            episode = previous['episode'] if previous else 0
+            qualified = observed['qualified_episode'] if observed else None
+            # A pre-upgrade transition alone does not establish notification.
+            # Keep confirmed legacy incidents; retire only their unsent work.
+            if previous and previous['state'] == 'failed' and qualified != episode:
+                if self._accepted_job_failure(db, job_id, scope, episode):
+                    qualified = episode
+                else:
+                    self._invalidate_job_event(db, self._job_key(job_id, scope, episode, 'failed'), now)
+                    db.execute('''UPDATE notification_transitions SET state='healthy'
+                        WHERE kind='job' AND entity=? AND scope=?''', (job_id, scope))
+                    previous = {'state': 'healthy', 'episode': episode}
+            continuing = state == 'failed' and observed and observed['state'] == 'failed'
+            first_failed = observed['first_failed_at'] if continuing else finished_at if state == 'failed' else None
+            failed_runs = min(observed['failed_runs'] + 1, 1000000000) if continuing else int(state == 'failed')
+            announced = bool(previous and previous['state'] == 'failed')
+            if state == 'failed' and not announced and episode:
+                # A recovery waiting in the queue is no longer current, even
+                # while the next failure is still inside its alert grace period.
+                self._invalidate_job_event(db, self._job_key(job_id, scope, episode, 'healthy'), now)
+            ready = (state == 'failed' and failed_runs >= 2
+                     and finished_at - first_failed >= JOB_FAILURE_GRACE_SECONDS)
+            changed = False
+            if ready and not announced:
+                # An older recovery must not arrive after a new incident began.
+                if episode:
+                    self._invalidate_job_event(db, self._job_key(job_id, scope, episode, 'healthy'), now)
+                episode += 1
+                qualified = episode
+                changed = self._queue_event(db, self._job_key(job_id, scope, episode, 'failed'),
+                    'JOB_FAILED', {'entity': job_id, 'episode': episode}, now)
+                transition = 'failed'
+            elif state == 'healthy':
+                if episode:
+                    self._invalidate_job_event(db, self._job_key(job_id, scope, episode, 'failed'), now)
+                    if announced and self._accepted_job_failure(db, job_id, scope, episode):
+                        changed = self._queue_event(db, self._job_key(job_id, scope, episode, 'healthy'),
+                            'JOB_RESTORED', {'entity': job_id, 'episode': episode}, now)
+                transition = 'healthy'
+            else:
+                transition = 'failed' if announced else 'healthy'
+            db.execute('''INSERT INTO notification_transitions VALUES ('job',?,?,?,?)
+                ON CONFLICT(kind,entity,scope) DO UPDATE SET state=excluded.state,episode=excluded.episode''',
+                (job_id, scope, transition, episode))
+            db.execute('''INSERT INTO notification_job_observations VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(job_id,scope) DO UPDATE SET state=excluded.state,
+                    run_token=excluded.run_token,finished_at=excluded.finished_at,
+                    first_failed_at=excluded.first_failed_at,failed_runs=excluded.failed_runs,
+                    qualified_episode=excluded.qualified_episode''',
+                (job_id, scope, state, run_token, finished_at, first_failed, failed_runs, qualified))
+            return changed
+
+    @staticmethod
+    def _job_key(job_id, scope, episode, state):
+        return json.dumps(('job', job_id, scope, episode, state), separators=(',', ':'))
+
+    @staticmethod
+    def _job_coordinates(event):
+        try:
+            key = json.loads(event['event_key'])
+            payload = json.loads(event['payload_json'])
+            if (not isinstance(key, list) or len(key) != 5 or key[0] != 'job'
+                    or not isinstance(key[1], str) or not re.fullmatch(r'[a-z0-9-]{1,80}', key[1])
+                    or not isinstance(key[2], str) or len(key[2]) > 128
+                    or type(key[3]) is not int or not 1 <= key[3] <= 1000000000
+                    or key[4] != ('failed' if event['kind'] == 'JOB_FAILED' else 'healthy')
+                    or not isinstance(payload, dict) or payload.get('entity') != key[1]
+                    or payload.get('episode') != key[3]):
+                return None
+            return key[1], key[2], key[3], key[4]
+        except (ValueError, TypeError, KeyError):
+            return None
+
+    @classmethod
+    def _accepted_job_failure(cls, db, job_id, scope, episode, target=None):
+        sql = '''SELECT 1 FROM notification_dispatches d
+            JOIN notification_operational_events e ON e.batch_id=d.batch_id
+            WHERE e.kind='JOB_FAILED' AND e.event_key=? AND d.state='accepted'
+                AND d.accepted_at IS NOT NULL'''
+        args = [cls._job_key(job_id, scope, episode, 'failed')]
+        if target is not None:
+            sql += ''' AND d.provider=? AND d.destination_id=? AND d.generation=?
+                AND d.provider_generation=?'''
+            args.extend((target.provider, target.id, target.generation, target.provider_generation))
+        return bool(db.execute(sql + ' LIMIT 1', args).fetchone())
+
+    @staticmethod
+    def _invalidate_job_event(db, key, now):
+        event = db.execute('SELECT id,batch_id FROM notification_operational_events WHERE event_key=?', (key,)).fetchone()
+        if not event:
+            return
+        db.execute('UPDATE notification_operational_events SET invalidated_at=COALESCE(invalidated_at,?) WHERE id=?',
+                   (now, event['id']))
+        db.execute('''UPDATE notification_dispatches SET state='cancelled',error_code=NULL,next_attempt=0
+            WHERE batch_id=? AND state IN ('pending','retry')''', (event['batch_id'],))
+        if event['batch_id'] is not None:
+            states = {row[0] for row in db.execute('SELECT state FROM notification_dispatches WHERE batch_id=?', (event['batch_id'],))}
+            if states <= {'accepted', 'cancelled'}:
+                db.execute("UPDATE notification_batches SET status='sent',detail='Notification delivery completed' WHERE id=?", (event['batch_id'],))
+                db.execute('UPDATE notification_runs SET finished_at=? WHERE batch_id=?', (now, event['batch_id']))
+
+    @classmethod
+    def _job_event_active(cls, db, event, target):
+        coordinates = cls._job_coordinates(event)
+        if coordinates is None or event['invalidated_at'] is not None:
+            return False
+        job_id, scope, episode, state = coordinates
+        if db.execute("SELECT 1 FROM notification_job_scopes WHERE job_id=''").fetchone():
+            active = db.execute('SELECT scope FROM notification_job_scopes WHERE job_id=?', (job_id,)).fetchone()
+            if active is None or active['scope'] != scope:
+                return False
+        current = db.execute('''SELECT state,episode FROM notification_transitions
+            WHERE kind='job' AND entity=? AND scope=?''', (job_id, scope)).fetchone()
+        if not current or current['state'] != state or current['episode'] != episode:
+            return False
+        if state == 'healthy':
+            return cls._accepted_job_failure(db, job_id, scope, episode, target)
+        observation = db.execute('''SELECT qualified_episode FROM notification_job_observations
+            WHERE job_id=? AND scope=?''', (job_id, scope)).fetchone()
+        return bool(observation and observation['qualified_episode'] == episode
+                    or cls._accepted_job_failure(db, job_id, scope, episode))
 
     def _observe_transition(self, kind, entity, state, scope, now):
         if state not in ('healthy', 'failed') or not isinstance(scope, str) or len(scope) > 128:
@@ -211,9 +408,11 @@ class Store:
         with closing(self._connect()) as db, db:
             return self._queue_event(db, 'update:' + version, 'UPDATE_AVAILABLE', {'version': version}, now)
 
-    @staticmethod
-    def _owner_eligible(db, event, target):
+    @classmethod
+    def _owner_eligible(cls, db, event, target):
         if not target.owner_verified or event['kind'] not in target.events:
+            return False
+        if event['kind'] in ('JOB_FAILED', 'JOB_RESTORED') and not cls._job_event_active(db, event, target):
             return False
         epoch = db.execute('''SELECT after_event_id FROM notification_destination_epochs
             WHERE provider=? AND destination_id=? AND generation=?''',
@@ -223,7 +422,8 @@ class Store:
     def _claim_events(self, targets, now, limit):
         with closing(self._connect()) as db, db:
             db.execute('BEGIN IMMEDIATE')
-            events = db.execute('SELECT * FROM notification_operational_events WHERE batch_id IS NULL ORDER BY id LIMIT ?', (limit,)).fetchall()
+            events = db.execute('''SELECT * FROM notification_operational_events
+                WHERE batch_id IS NULL AND invalidated_at IS NULL ORDER BY id LIMIT ?''', (limit,)).fetchall()
             claimed = []
             for event in events:
                 batch_id = uuid.uuid4().hex
@@ -357,6 +557,10 @@ class Store:
             else:
                 event = db.execute('SELECT * FROM notification_operational_events WHERE id=? AND batch_id=?', (operational_id, row['batch_id'])).fetchone()
                 if not event or not self._owner_eligible(db, event, target):
+                    if event and event['kind'] in ('JOB_FAILED', 'JOB_RESTORED'):
+                        db.execute('''UPDATE notification_dispatches SET state='cancelled',error_code=NULL,next_attempt=0
+                            WHERE batch_id=? AND provider=? AND destination_id=? AND state IN ('pending','retry')''',
+                            (row['batch_id'], row['provider'], row['destination_id']))
                     return False
             cooldown = db.execute('SELECT until_at FROM notification_cooldowns WHERE provider=? AND generation=?', (target.provider, target.provider_generation)).fetchone()
             if cooldown and cooldown[0] > now:
