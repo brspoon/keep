@@ -24,7 +24,10 @@ class HttpFramingTests(unittest.TestCase):
         with patch.object(image_distribution.importlib.metadata, 'distributions', return_value=[]), \
                 patch.object(Path, 'read_bytes', return_value=b''), \
                 patch.object(Path, 'is_dir', return_value=False), \
+                patch.object(Path, 'exists', return_value=True), \
+                patch.object(Path, 'is_file', return_value=True), \
                 patch.object(image_distribution, 'expat_replacement_inventory', return_value=None), \
+                patch.object(image_distribution, 'socket_replacement_inventory', return_value=None), \
                 patch.object(image_distribution, 'sqlite_replacement_inventory', return_value=None), \
                 patch.object(image_distribution, 'sqlite_cli_runtime_inventory', return_value={'success': True}), \
                 patch.dict(sys.modules, {'http_framing_checks': None}):
