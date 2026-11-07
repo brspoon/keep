@@ -1044,29 +1044,27 @@
     },
     {
       "origin": "zlib",
-      "version": "1.3.2-r1",
+      "version": "1.4-r0",
       "source_method": "alpine-signed-zlib-v1",
       "recipe": {
         "path": "main/zlib/APKBUILD",
-        "revision": "0afa2da0e8c8051c6f8f64a7a388e5a259904245",
-        "url": "https://raw.githubusercontent.com/alpinelinux/aports/0afa2da0e8c8051c6f8f64a7a388e5a259904245/main/zlib/APKBUILD",
-        "sha256": "c9348892bf3857602fe74fcc1d411e263b408b7d70344170396f5993a62bbe26",
-        "archive_url": "https://github.com/alpinelinux/aports/archive/0afa2da0e8c8051c6f8f64a7a388e5a259904245.tar.gz",
-        "archive_sha256": "d64797bed37c573333fdda5061a4636c2c8106a2d01dd0cfb327a6a135cf46d3"
+        "revision": "bdf501c870a92a05c097857401f69c48c4810384",
+        "url": "https://gitlab.alpinelinux.org/alpine/aports/-/raw/bdf501c870a92a05c097857401f69c48c4810384/main/zlib/APKBUILD",
+        "sha256": "f03e134596ecd53717a25715fd7b7616a0ad42a151246ee9c2a06242370ec51b",
+        "archive_url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/archive.tar.gz?sha=bdf501c870a92a05c097857401f69c48c4810384",
+        "archive_sha256": "3a94eb2eb15859d68261e285e35abd99f481439fe23e6ea9fae25fb1a1871631"
       },
       "source": {
-        "url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
-        "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
-        "sha512": "70963771ea5d763614278a69b474f09b7d237ef8f53b675a10fe31d9923aeef601504b35d7ebd1b1e7f347e9ebb048e6b3b47fffdf137e7bdc7e8d5eb4ec4692",
-        "license_path": "zlib-1.3.2/LICENSE",
+        "url": "https://zlib.net/fossils/zlib-1.4.tar.gz",
+        "sha256": "02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584",
+        "sha512": "13f02285da85956ff722d814695b96807aff7a511ebf4b6d98cf708c353920666093cc18b6653cd7992c8e75c103f7b4baf2de3a105c2db9dcd62bab2c940859",
+        "license_path": "zlib-1.4/LICENSE",
         "license_sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
       },
-      "patch": {
-        "path": "main/zlib/CVE-2026-85091.patch",
-        "url": "https://raw.githubusercontent.com/alpinelinux/aports/0afa2da0e8c8051c6f8f64a7a388e5a259904245/main/zlib/CVE-2026-85091.patch",
-        "sha256": "110ff14375733173d8aa54574473424fbd7dfe4b81f1ca34a759c6fe14b15b14",
-        "sha512": "878888308a51296470f05eca59a79212314d4c9a26c19bbf70c1cb1b8d25eb42e0cce5a001acbe287268aa215c854cb5a9990ff62b7aefa9de221803d172957e",
-        "upstream_commit": "df84af25dc1942490e1d1c899a07619152a46148"
+      "upstream_fix": {
+        "commit": "df84af25dc1942490e1d1c899a07619152a46148",
+        "path": "zlib-1.4/gzwrite.c",
+        "sha256": "e57621b7fffbc1909401acad13bef42adb5debee24a4c356a246f6b480e2db02"
       },
       "signing_keys": {
         "amd64": {
@@ -1083,21 +1081,21 @@
       "packages": [
         {
           "name": "zlib",
-          "version": "1.3.2-r1",
+          "version": "1.4-r0",
           "license": "Zlib",
-          "build_commit": "0afa2da0e8c8051c6f8f64a7a388e5a259904245",
+          "build_commit": "bdf501c870a92a05c097857401f69c48c4810384",
           "binaries": {
             "amd64": {
-              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/zlib-1.3.2-r1.apk",
-              "sha256": "63aeea03c15a2f9018f81805cfc8aa926bdf5cd68921f22149c2fbb5d0ee9f47",
-              "pkginfo_sha256": "395e0ee97996853c6cf03f17dfe25b57d109b0432c6faabb585d78e6ac6f534a",
-              "library_sha256": "ecc8b9dfc45eb7fa29b410ffaca6257873890de53b80fe91735737b49067c5f2"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/zlib-1.4-r0.apk",
+              "sha256": "7b05bc778b8b25cd880835b40114182bd4d1581717504d0129c810c0a14291cb",
+              "pkginfo_sha256": "2eb5885520ad91e7ad574c6a77472ba3cd33a145235c2bc17156d8d7c19ba1da",
+              "library_sha256": "9995c2fe07ba436423709dd8ce6a186c2c6b3db7ac7719496a55554c4a95274e"
             },
             "arm64": {
-              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/zlib-1.3.2-r1.apk",
-              "sha256": "1f77a542ac6634761b9fe38d8bdca19b154071dcfa25432e73f2bc8a0740a33f",
-              "pkginfo_sha256": "a05759ee7a44bc55b4e9455d12f5220293724e7f743fdae265863c00e02c521b",
-              "library_sha256": "afe41fdd58868461eae3b04068f334bfad2d4ecd0e11c7e30f9afafe06f28528"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/zlib-1.4-r0.apk",
+              "sha256": "d3e30d012a3445222b0b4a28f1d4d97ce67387f8b48561921111696da174f0de",
+              "pkginfo_sha256": "2840c2a64f0600e01fd18abdd04f6392bb61ce917f0703e18bc6896ab99692c1",
+              "library_sha256": "0ad1835b2abd14d0297d4ef0694460bc06ed964478a166a698c10608b2b2abbb"
             }
           }
         }

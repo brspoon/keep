@@ -30,7 +30,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
             ('musl', ('musl',), '1.2.6-r3', 'MUSL_SECURITY.json'),
             ('certificates', ('ca-certificates-bundle',), '20261020-r0', 'CA_CERTIFICATES_SECURITY.json'),
             ('expat', ('expat', 'libexpat'), '2.10.0-r0', 'EXPAT_SECURITY.json'),
-            ('zlib', ('zlib',), '1.3.2-r1', 'ZLIB_SECURITY.json'),
+            ('zlib', ('zlib',), '1.4-r0', 'ZLIB_SECURITY.json'),
             ('python', ('pyc-3.14', 'python-3.14', 'python-3.14-pyc',
                         'python-3.14-pycache-pyc0'), '3.14.8-r0', 'PYTHON_SECURITY.json'),
         )

@@ -218,8 +218,8 @@ class PythonSecurityChecks(unittest.TestCase):
         # Opening the patched file by absolute path can mask a delivery defect.
         library = ctypes.CDLL('libz.so.1')
         library.zlibVersion.restype = ctypes.c_char_p
-        self.assertEqual(library.zlibVersion(), b'1.3.2')
-        self.assertEqual(zlib.ZLIB_RUNTIME_VERSION, '1.3.2')
+        self.assertEqual(library.zlibVersion(), b'1.4')
+        self.assertEqual(zlib.ZLIB_RUNTIME_VERSION, '1.4')
         payload = b'normal compression round trip' * 100
         self.assertEqual(zlib.decompress(zlib.compress(payload)), payload)
         self.assertEqual(gzip.decompress(gzip.compress(payload)), payload)
