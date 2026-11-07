@@ -49,7 +49,7 @@
     ]
   },
   "build_script": "scripts/build_patched_sqlite.py",
-  "build_script_sha256": "cf8db126158c3197faae15b9f8d8401858cb67b5b4e927e1b69570cada42310b",
+  "build_script_sha256": "b939a1b8df71e664e6f0fba766f6dd7b50a22fcc5a6a3a1fd8e818ecabbeab2d",
   "build_tools": {
     "installation": "build-only-offline-apk",
     "packages": {
@@ -534,8 +534,8 @@
     "arm64": "0348c199766d12d8ae87b5407bb4b9e2bd4eeff946b89fb21e0f1af8e2915500"
   },
   "expected_vendor_library_sha256": {
-    "amd64": "828785f82a615e0cdb902bc5bc6f56bc2f2cc52f9d5f5f3df3ddf1a60e0ba7cb",
-    "arm64": "0888906482874de8afc8f14e8298365ac65afc18aa29b0c221ef1d1b0b7ad997"
+    "amd64": "2a0a9f55c43f4f1d1f6021a951ca02653690264352e7a0ff4d80fbe85da3ecca",
+    "arm64": "a7229e8dffcdc7a1c3768dec0eb3452376e056dc0ffe6c3cc2d7c491a54ae9cf"
   },
   "fortify_headers": {
     "build_commit": "363be18be4b1f33af5a058990ba9b297e8fb547b",
@@ -625,8 +625,8 @@
     "url": "https://www.sqlite.org/2026/sqlite-src-3540100.zip"
   },
   "required_abi": {
-    "export_count": 351,
-    "exports_sha256": "7e6afec6a15fbf440bcd580c831b7b78640a3beb55630c667333a84a3dedd1f9"
+    "export_count": 353,
+    "exports_sha256": "1823bb48786d4ad4fedfeafc82399cb3b1678ece66e633dd67c268da19507921"
   },
   "required_compile_options": [
     "ATOMIC_INTRINSICS=1",
@@ -712,14 +712,14 @@
   "vendor_package": {
     "alias": "/usr/lib/libsqlite3.so.0",
     "apk_sha256": {
-      "amd64": "51106cf0602767e9bdf7a75760fa14216d07467076f279e0447ec6286d497ac4",
-      "arm64": "540bd2a5c442658206e1bd5fb7193c9ffe501f8aabf8038263c8419a5cadf73a"
+      "amd64": "5dfd76936e795efd988d6bad4949b8d20c410d6dc9dd256da884111f668f3915",
+      "arm64": "e92861972b07c848fbf7e2e5ed20ca872c00f3a87550d01a5f7820d4d02df526"
     },
-    "build_commit": "02faf84da04ae70c6ece2602e3cd8abdb5abb5aa",
-    "library": "/usr/lib/libsqlite3.so.3.53.4",
+    "build_commit": "f8081b25590214e2695a4faa77c7892bd902a4e8",
+    "library": "/usr/lib/libsqlite3.so.3.54.1",
     "name": "sqlite-libs",
     "origin": "sqlite",
-    "version": "3.53.4-r0"
+    "version": "3.54.1-r0"
   },
   "vendor_recipe": {
     "sha256": "de648fc75c4ec249f958c9cf557793ab35a5a9e90b7d8758a3ec654f483117bd",

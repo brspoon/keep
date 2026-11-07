@@ -16,9 +16,9 @@ class SQLiteComponentReviewTests(unittest.TestCase):
         lock = json.loads((ROOT / 'docs/os-package-sources.json').read_bytes())
         origin = next(row for row in lock['origins'] if row['origin'] == 'sqlite')
         vendor = origin['packages'][0]
-        package = {'name': 'sqlite-libs', 'version': '3.53.4-r0', 'origin': 'sqlite',
-            'provides': ['so:libsqlite3.so.0=3.53.4'],
-            'payloads': ['usr/lib/libsqlite3.so.0', 'usr/lib/libsqlite3.so.3.53.4']}
+        package = {'name': 'sqlite-libs', 'version': '3.54.1-r0', 'origin': 'sqlite',
+            'provides': ['so:libsqlite3.so.0=3.54.1'],
+            'payloads': ['usr/lib/libsqlite3.so.0', 'usr/lib/libsqlite3.so.3.54.1']}
         inventory = {'os_packages': [{**{key: vendor[key] for key in
             ('name', 'version', 'build_commit', 'license')}, 'origin': 'sqlite'}],
             'sqlite_cli': {'schema': 1, 'scope': 'runtime-filesystem', 'success': True,
@@ -87,7 +87,7 @@ class SQLiteComponentReviewTests(unittest.TestCase):
             elif mutation == 'payload':
                 package['payloads'].append('usr/bin/sqlite3')
             elif mutation == 'provider':
-                package['provides'].append('cmd:sqlite3=3.53.4')
+                package['provides'].append('cmd:sqlite3=3.54.1')
             elif mutation == 'malformed':
                 layers['sqlite_cli']['apk_metadata'][0]['packages'] = [None]
             else:

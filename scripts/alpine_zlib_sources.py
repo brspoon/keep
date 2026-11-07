@@ -23,22 +23,22 @@ else:
     )
 
 
-VERSION = '1.3.2-r1'
-UPSTREAM_VERSION = '1.3.2'
+VERSION = '1.4-r0'
+UPSTREAM_VERSION = '1.4'
 UPSTREAM_COMMIT = 'df84af25dc1942490e1d1c899a07619152a46148'
-BUILD_COMMIT = '0afa2da0e8c8051c6f8f64a7a388e5a259904245'
-APORTS_URL = f'https://github.com/alpinelinux/aports/archive/{BUILD_COMMIT}.tar.gz'
-APORTS_SHA256 = 'd64797bed37c573333fdda5061a4636c2c8106a2d01dd0cfb327a6a135cf46d3'
-APKBUILD_URL = f'https://raw.githubusercontent.com/alpinelinux/aports/{BUILD_COMMIT}/main/zlib/APKBUILD'
-APKBUILD_SHA256 = 'c9348892bf3857602fe74fcc1d411e263b408b7d70344170396f5993a62bbe26'
-PATCH_URL = f'https://raw.githubusercontent.com/alpinelinux/aports/{BUILD_COMMIT}/main/zlib/CVE-2026-85091.patch'
-PATCH_SHA256 = '110ff14375733173d8aa54574473424fbd7dfe4b81f1ca34a759c6fe14b15b14'
-PATCH_SHA512 = ('878888308a51296470f05eca59a79212314d4c9a26c19bbf70c1cb1b8d25eb42e'
-                '0cce5a001acbe287268aa215c854cb5a9990ff62b7aefa9de221803d172957e')
-SOURCE_URL = 'https://zlib.net/fossils/zlib-1.3.2.tar.gz'
-SOURCE_SHA256 = 'bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16'
-SOURCE_SHA512 = ('70963771ea5d763614278a69b474f09b7d237ef8f53b675a10fe31d9923aeef601'
-                 '504b35d7ebd1b1e7f347e9ebb048e6b3b47fffdf137e7bdc7e8d5eb4ec4692')
+GZWRITE_SHA256 = 'e57621b7fffbc1909401acad13bef42adb5debee24a4c356a246f6b480e2db02'
+BUILD_COMMIT = 'bdf501c870a92a05c097857401f69c48c4810384'
+APORTS_URL = ('https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/'
+              f'repository/archive.tar.gz?sha={BUILD_COMMIT}')
+APORTS_PREFIX = f'aports-{BUILD_COMMIT}-{BUILD_COMMIT}'
+APORTS_SHA256 = '3a94eb2eb15859d68261e285e35abd99f481439fe23e6ea9fae25fb1a1871631'
+APKBUILD_URL = (f'https://gitlab.alpinelinux.org/alpine/aports/-/raw/{BUILD_COMMIT}'
+                '/main/zlib/APKBUILD')
+APKBUILD_SHA256 = 'f03e134596ecd53717a25715fd7b7616a0ad42a151246ee9c2a06242370ec51b'
+SOURCE_URL = 'https://zlib.net/fossils/zlib-1.4.tar.gz'
+SOURCE_SHA256 = '02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584'
+SOURCE_SHA512 = ('13f02285da85956ff722d814695b96807aff7a511ebf4b6d98cf708c35392066609'
+                 '3cc18b6653cd7992c8e75c103f7b4baf2de3a105c2db9dcd62bab2c940859')
 LICENSE_SHA256 = 'e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2'
 ARCHES = {'amd64': 'x86_64', 'arm64': 'aarch64'}
 KEYS = {
@@ -48,19 +48,19 @@ KEYS = {
               'sha256': 'd11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d'},
 }
 BINARY_SHA256 = {
-    'amd64': '63aeea03c15a2f9018f81805cfc8aa926bdf5cd68921f22149c2fbb5d0ee9f47',
-    'arm64': '1f77a542ac6634761b9fe38d8bdca19b154071dcfa25432e73f2bc8a0740a33f',
+    'amd64': '7b05bc778b8b25cd880835b40114182bd4d1581717504d0129c810c0a14291cb',
+    'arm64': 'd3e30d012a3445222b0b4a28f1d4d97ce67387f8b48561921111696da174f0de',
 }
 LIBRARY_SHA256 = {
-    'amd64': 'ecc8b9dfc45eb7fa29b410ffaca6257873890de53b80fe91735737b49067c5f2',
-    'arm64': 'afe41fdd58868461eae3b04068f334bfad2d4ecd0e11c7e30f9afafe06f28528',
+    'amd64': '9995c2fe07ba436423709dd8ce6a186c2c6b3db7ac7719496a55554c4a95274e',
+    'arm64': '0ad1835b2abd14d0297d4ef0694460bc06ed964478a166a698c10608b2b2abbb',
 }
 PKGINFO_SHA256 = {
-    'amd64': '395e0ee97996853c6cf03f17dfe25b57d109b0432c6faabb585d78e6ac6f534a',
-    'arm64': 'a05759ee7a44bc55b4e9455d12f5220293724e7f743fdae265863c00e02c521b',
+    'amd64': '2eb5885520ad91e7ad574c6a77472ba3cd33a145235c2bc17156d8d7c19ba1da',
+    'arm64': '2840c2a64f0600e01fd18abdd04f6392bb61ce917f0703e18bc6896ab99692c1',
 }
 ROOT = Path(__file__).resolve().parents[1]
-LIBRARY_PATH = 'usr/lib/libz.so.1.3.2'
+LIBRARY_PATH = 'usr/lib/libz.so.1.4'
 ALIAS_PATH = 'usr/lib/libz.so.1'
 
 
@@ -72,10 +72,9 @@ def reviewed_spec(root=None):
                    'url': APKBUILD_URL, 'sha256': APKBUILD_SHA256,
                    'archive_url': APORTS_URL, 'archive_sha256': APORTS_SHA256},
         'source': {'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'sha512': SOURCE_SHA512,
-                   'license_path': 'zlib-1.3.2/LICENSE', 'license_sha256': LICENSE_SHA256},
-        'patch': {'path': 'main/zlib/CVE-2026-85091.patch', 'url': PATCH_URL,
-                  'sha256': PATCH_SHA256, 'sha512': PATCH_SHA512,
-                  'upstream_commit': UPSTREAM_COMMIT},
+                   'license_path': 'zlib-1.4/LICENSE', 'license_sha256': LICENSE_SHA256},
+        'upstream_fix': {'commit': UPSTREAM_COMMIT, 'path': 'zlib-1.4/gzwrite.c',
+                         'sha256': GZWRITE_SHA256},
         'signing_keys': {arch: {**key, 'url': 'https://alpinelinux.org/keys/' + key['name']}
                          for arch, key in KEYS.items()},
         'packages': [{'name': 'zlib', 'version': VERSION, 'license': 'Zlib',
@@ -117,7 +116,7 @@ def package_identity(metadata, architecture, payload_hash):
         raise ValueError('zlib APK package identity, license or payload hash mismatch')
     for field, values in (
             ('depend', {'so:libc.musl-' + ARCHES[architecture] + '.so.1'}),
-            ('provides', {'so:libz.so.1=1.3.2'})):
+            ('provides', {'so:libz.so.1=1.4'})):
         actual = fields.get(field, [])
         if len(actual) != len(values) or set(actual) != values:
             raise ValueError('zlib APK dependency or SONAME provision mismatch')
@@ -148,7 +147,7 @@ def verify_apk(body, architecture, key):
         raise ValueError('zlib APK library parents must be directories')
     library, alias = payload[LIBRARY_PATH], payload[ALIAS_PATH]['member']
     if (library['body'] is None or not alias.issym()
-            or alias.linkname != 'libz.so.1.3.2'):
+            or alias.linkname != 'libz.so.1.4'):
         raise ValueError('zlib APK canonical library or SONAME alias mismatch')
     checked(library['body'], 'sha256', LIBRARY_SHA256[architecture], 'zlib runtime library')
     return metadata, {**identity, 'apk_sha256': hashlib.sha256(body).hexdigest(),
@@ -160,16 +159,14 @@ def verify_apk(body, architecture, key):
 def recipe_identity(body):
     text = body.decode('utf-8')
     for key, value in {'pkgname': 'zlib', 'pkgver': UPSTREAM_VERSION,
-                       'pkgrel': '1', 'license': '"Zlib"'}.items():
+                       'pkgrel': '0', 'license': '"Zlib"'}.items():
         if re.findall(r'^' + key + r'=([^\n]+)$', text, re.M) != [value]:
             raise ValueError('zlib APKBUILD identity mismatch')
-    declaration = 'source="https://zlib.net/fossils/zlib-$pkgver.tar.gz\n\tCVE-2026-85091.patch\n\t"'
-    if text.count(declaration) != 1:
+    if re.findall(r'^source=(.*)$', text, re.M) != ['"https://zlib.net/fossils/zlib-$pkgver.tar.gz"']:
         raise ValueError('zlib APKBUILD source declaration mismatch')
-    sums = SOURCE_SHA512 + '  zlib-1.3.2.tar.gz\n' + PATCH_SHA512 + '  CVE-2026-85091.patch'
-    if re.findall(r'^sha512sums="\n([^"\n]+\n[^"\n]+)\n"$', text, re.M) != [sums]:
-        raise ValueError('zlib APKBUILD source or patch checksum mismatch')
-    if '#   1.3.2-r1:\n#     - CVE-2026-85091\n' not in text:
+    if re.findall(r'^sha512sums="\n([^"\n]+)\n"$', text, re.M) != [SOURCE_SHA512 + '  zlib-1.4.tar.gz']:
+        raise ValueError('zlib APKBUILD source checksum mismatch')
+    if '#   1.4-r0:\n#     - CVE-2026-4738\n' not in text:
         raise ValueError('zlib APKBUILD lacks the reviewed security-fix declaration')
 
 
@@ -236,21 +233,18 @@ def collect_sources(package_spec, architecture, runtime_inventory, output_root, 
     root, records = empty_output(output_root), []
     installation, packages = prepare(root, package_spec, architecture, fetch, records)
     recipes = checked(fetch(APORTS_URL), 'sha256', APORTS_SHA256, 'Complete zlib aports context')
-    prefix = f'aports-{BUILD_COMMIT}/main/zlib/'
+    prefix = APORTS_PREFIX + '/main/zlib/'
     recipe = checked(read_member(recipes, prefix + 'APKBUILD'), 'sha256', APKBUILD_SHA256, 'zlib APKBUILD')
     recipe_identity(recipe)
-    patch = checked(read_member(recipes, prefix + 'CVE-2026-85091.patch'), 'sha256', PATCH_SHA256, 'zlib security patch')
-    checked(patch, 'sha512', PATCH_SHA512, 'zlib recipe patch')
-    if not patch.startswith(('From ' + UPSTREAM_COMMIT + ' ').encode()):
-        raise ValueError('zlib patch has the wrong upstream fix identity')
     retain(root, records, f'aports-{BUILD_COMMIT}.tar.gz', recipes, APORTS_URL, 'complete-alpine-build-recipes')
     retain(root, records, 'context/main/zlib/APKBUILD', recipe, APKBUILD_URL, 'matching-apk-build-script', prefix + 'APKBUILD')
-    retain(root, records, 'context/main/zlib/CVE-2026-85091.patch', patch, PATCH_URL, 'matching-apk-build-patch', prefix + 'CVE-2026-85091.patch')
     source = checked(fetch(SOURCE_URL), 'sha256', SOURCE_SHA256, 'zlib source')
     checked(source, 'sha512', SOURCE_SHA512, 'zlib recipe source')
-    retain(root, records, 'zlib-1.3.2.tar.gz', source, SOURCE_URL, 'upstream-source')
-    license_body = checked(read_member(source, 'zlib-1.3.2/LICENSE'), 'sha256', LICENSE_SHA256, 'zlib full notice')
-    retain(root, records, 'zlib-1.3.2-LICENSE', license_body, SOURCE_URL, 'upstream-notice', 'zlib-1.3.2/LICENSE')
+    checked(read_member(source, 'zlib-1.4/gzwrite.c'), 'sha256', GZWRITE_SHA256,
+            'zlib integrated gzwrite correction')
+    retain(root, records, 'zlib-1.4.tar.gz', source, SOURCE_URL, 'upstream-source')
+    license_body = checked(read_member(source, 'zlib-1.4/LICENSE'), 'sha256', LICENSE_SHA256, 'zlib full notice')
+    retain(root, records, 'zlib-1.4-LICENSE', license_body, SOURCE_URL, 'upstream-notice', 'zlib-1.4/LICENSE')
     retain(root, records, 'runtime-zlib-identity.json',
            (json.dumps({'os_packages': rows}, indent=2) + '\n').encode(),
            'verified-candidate-runtime:/lib/apk/db/installed', 'runtime-package-build-identity')
@@ -262,7 +256,7 @@ def collect_sources(package_spec, architecture, runtime_inventory, output_root, 
         'installation_manifest_sha256': hashlib.sha256((root / 'ZLIB_SECURITY.json').read_bytes()).hexdigest(),
         'files': records, 'upstream_signature_verified': False,
         'coverage': 'Exact Alpine-signed zlib APK, RSA verification key, native installed package identity, '
-                    'complete pinned aports context, exact upstream security patch and checksum-matching '
+                    'complete pinned aports context, integrated upstream correction and checksum-matching '
                     'zlib source and full license. No separate upstream OpenPGP verification or Docker '
                     'package-build or source-image attestation is claimed.',
     }

@@ -731,6 +731,15 @@ Only explicitly reviewed attribution headers are copied from source code.
             selected_header_roles = {'reviewed-keep-build-attribution-source',
                                      'upstream-permissive-attribution-source'}
             binding_method = verified['binding_method']
+        elif origin == 'sqlite':
+            from alpine_sqlite_sources import collect_sources
+            if package_spec is None:
+                raise ValueError('Alpine SQLite notices require the reviewed source map')
+            if runtime_inventory is None:
+                runtime_inventory = json.loads(checked_path(source, 'runtime-sqlite-identity.json').read_bytes())
+            verified = collect_sources(package_spec, architecture, runtime_inventory, directory, fetch=fetch)
+            selected_header_roles = set()
+            binding_method = verified['binding_method']
         elif origin == 'zlib':
             from alpine_zlib_sources import collect_sources
             if package_spec is None:
