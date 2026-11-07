@@ -266,21 +266,6 @@
       "runtime_notice_count": 3
     },
     {
-      "origin": "sqlite",
-      "version": "3.53.4-r0",
-      "architecture": "amd64",
-      "source_image_digest": null,
-      "provider_oci_binding": true,
-      "binding_method": "signed-build-provenance",
-      "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
-      "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-      "signed_statement_sha256": {
-        "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
-        "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
-      },
-      "runtime_notice_count": 7
-    },
-    {
       "origin": "util-linux",
       "version": "2.42.3-r1",
       "architecture": "amd64",
@@ -350,16 +335,6 @@
       "binding_method": "IANA release version and source checksums in the pinned public provider/Alpine recipes; no historical provider OCI digest inferred.",
       "source_manifest_sha256": "6af35e4eb69f7b893f5f4c995067715a228aef65d5c1b1c40a60d225e8a7bd48",
       "runtime_notice_count": 7
-    },
-    {
-      "origin": "zlib",
-      "version": "1.3.2-r1",
-      "architecture": "amd64",
-      "source_image_digest": null,
-      "provider_oci_binding": false,
-      "binding_method": "signed-alpine-packages",
-      "source_manifest_sha256": "6e3669dfedf5c2833df3cb20e2d6768f11e79402958a651430fcaa0f8f935897",
-      "runtime_notice_count": 1
     },
     {
       "origin": "python-socket-overlay",
@@ -620,21 +595,6 @@
       "runtime_notice_count": 3
     },
     {
-      "origin": "sqlite",
-      "version": "3.53.4-r0",
-      "architecture": "arm64",
-      "source_image_digest": null,
-      "provider_oci_binding": true,
-      "binding_method": "signed-build-provenance",
-      "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
-      "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-      "signed_statement_sha256": {
-        "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
-        "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
-      },
-      "runtime_notice_count": 7
-    },
-    {
       "origin": "util-linux",
       "version": "2.42.3-r1",
       "architecture": "arm64",
@@ -706,16 +666,6 @@
       "runtime_notice_count": 7
     },
     {
-      "origin": "zlib",
-      "version": "1.3.2-r1",
-      "architecture": "arm64",
-      "source_image_digest": null,
-      "provider_oci_binding": false,
-      "binding_method": "signed-alpine-packages",
-      "source_manifest_sha256": "7bd106e7ee85d2a8f1b4895de4a5e66058db987e6496b02e5c799c3fd22bb055",
-      "runtime_notice_count": 1
-    },
-    {
       "origin": "python-socket-overlay",
       "version": "3.14.10",
       "architecture": "arm64",
@@ -741,6 +691,76 @@
       "provider_oci_binding": false,
       "binding_method": "Reviewed upstream SQLite source and native library build",
       "runtime_notice_count": 6
+    },
+    {
+      "origin": "sqlite-original-base",
+      "version": "3.53.4-r0",
+      "architecture": "amd64",
+      "source_image_digest": null,
+      "provider_oci_binding": true,
+      "binding_method": "signed-build-provenance",
+      "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
+      "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
+      "signed_statement_sha256": {
+        "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
+        "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
+      },
+      "runtime_notice_count": 7
+    },
+    {
+      "origin": "sqlite",
+      "version": "3.54.1-r0",
+      "architecture": "amd64",
+      "source_image_digest": null,
+      "provider_oci_binding": false,
+      "binding_method": "signed-alpine-packages",
+      "source_manifest_sha256": "87974faa93bbbb0c1add0eaf8e2faede2b7830b38892962426a4b3191fbc25f4",
+      "runtime_notice_count": 1
+    },
+    {
+      "origin": "zlib",
+      "version": "1.4-r0",
+      "architecture": "amd64",
+      "source_image_digest": null,
+      "provider_oci_binding": false,
+      "binding_method": "signed-alpine-packages",
+      "source_manifest_sha256": "0580be2658ab92394509ded5ccb8028a0fcc7e0a99023a4234992c2c41929acb",
+      "runtime_notice_count": 1
+    },
+    {
+      "origin": "sqlite-original-base",
+      "version": "3.53.4-r0",
+      "architecture": "arm64",
+      "source_image_digest": null,
+      "provider_oci_binding": true,
+      "binding_method": "signed-build-provenance",
+      "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
+      "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
+      "signed_statement_sha256": {
+        "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
+        "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
+      },
+      "runtime_notice_count": 7
+    },
+    {
+      "origin": "sqlite",
+      "version": "3.54.1-r0",
+      "architecture": "arm64",
+      "source_image_digest": null,
+      "provider_oci_binding": false,
+      "binding_method": "signed-alpine-packages",
+      "source_manifest_sha256": "18612c668fe702cef2f3b992a7e693b305bf79a0e2d19e9c10e10fefde46efc3",
+      "runtime_notice_count": 1
+    },
+    {
+      "origin": "zlib",
+      "version": "1.4-r0",
+      "architecture": "arm64",
+      "source_image_digest": null,
+      "provider_oci_binding": false,
+      "binding_method": "signed-alpine-packages",
+      "source_manifest_sha256": "5fc1b399de9ad6e0e5685a77140d8ef1e7ab2d9860263dab65c2c5f905dc52a9",
+      "runtime_notice_count": 1
     }
   ],
   "notices": [
@@ -7819,20 +7839,6 @@
           "discovery": "notice-file"
         },
         {
-          "origin": "zlib",
-          "version": "1.3.2-r1",
-          "architecture": "amd64",
-          "source_image_digest": null,
-          "provider_oci_binding": false,
-          "binding_method": "signed-alpine-packages",
-          "source_manifest_sha256": "6e3669dfedf5c2833df3cb20e2d6768f11e79402958a651430fcaa0f8f935897",
-          "source_role": "upstream-notice",
-          "source_url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
-          "source_file_sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
-          "source_path": "zlib-1.3.2-LICENSE",
-          "discovery": "checked-public-standalone-notice"
-        },
-        {
           "architecture": "arm64",
           "binding_method": "signed-build-provenance",
           "for_packages": [
@@ -7855,16 +7861,30 @@
         },
         {
           "origin": "zlib",
-          "version": "1.3.2-r1",
+          "version": "1.4-r0",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "0580be2658ab92394509ded5ccb8028a0fcc7e0a99023a4234992c2c41929acb",
+          "source_role": "upstream-notice",
+          "source_url": "https://zlib.net/fossils/zlib-1.4.tar.gz",
+          "source_file_sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+          "source_path": "zlib-1.4-LICENSE",
+          "discovery": "checked-public-standalone-notice"
+        },
+        {
+          "origin": "zlib",
+          "version": "1.4-r0",
           "architecture": "arm64",
           "source_image_digest": null,
           "provider_oci_binding": false,
           "binding_method": "signed-alpine-packages",
-          "source_manifest_sha256": "7bd106e7ee85d2a8f1b4895de4a5e66058db987e6496b02e5c799c3fd22bb055",
+          "source_manifest_sha256": "5fc1b399de9ad6e0e5685a77140d8ef1e7ab2d9860263dab65c2c5f905dc52a9",
           "source_role": "upstream-notice",
-          "source_url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
+          "source_url": "https://zlib.net/fossils/zlib-1.4.tar.gz",
           "source_file_sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
-          "source_path": "zlib-1.3.2-LICENSE",
+          "source_path": "zlib-1.4-LICENSE",
           "discovery": "checked-public-standalone-notice"
         }
       ]
@@ -12011,90 +12031,6 @@
       "bytes": 1737,
       "provenance": [
         {
-          "architecture": "amd64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
-          "proof_architecture": "amd64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
-            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/autosetup/LICENSE",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "amd64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
-          "proof_architecture": "amd64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
-            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autosetup/LICENSE",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "arm64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
-          "proof_architecture": "arm64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
-            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/autosetup/LICENSE",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "arm64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
-          "proof_architecture": "arm64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
-            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autosetup/LICENSE",
-          "discovery": "notice-file"
-        },
-        {
           "origin": "sqlite-overlay",
           "version": "3.54.1",
           "architecture": "amd64",
@@ -12135,6 +12071,134 @@
           "source_image_digest": null,
           "binding_method": "Reviewed upstream SQLite source and native library build",
           "replacement_manifest_sha256": "f8848cac843e8a1ea0b4155e56c721215c62b3fe4c7175c5bbfe6dc583135e12",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
+            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
+            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "amd64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "380e4f73c773d4ab37fb8e0f4b6e186df29f7e48710a172b16188abb10a4be92",
+          "source_path": "sqlite-autoconf-3540100.tar.gz!sqlite-autoconf-3540100/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "amd64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "380e4f73c773d4ab37fb8e0f4b6e186df29f7e48710a172b16188abb10a4be92",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
+            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
+            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "arm64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "97564185f6deefc6810e3bf2984f19a90fea89d7e8b998436a7b902ec3680f38",
+          "source_path": "sqlite-autoconf-3540100.tar.gz!sqlite-autoconf-3540100/autosetup/LICENSE",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "arm64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "97564185f6deefc6810e3bf2984f19a90fea89d7e8b998436a7b902ec3680f38",
           "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/autosetup/LICENSE",
           "discovery": "notice-file"
         }
@@ -12152,7 +12216,7 @@
             "sqlite-libs"
           ],
           "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
+          "origin": "sqlite-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -12173,7 +12237,7 @@
             "sqlite-libs"
           ],
           "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
+          "origin": "sqlite-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -12195,90 +12259,6 @@
       "bytes": 257,
       "provenance": [
         {
-          "architecture": "amd64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
-          "proof_architecture": "amd64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
-            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/tea/license.terms",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "amd64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
-          "proof_architecture": "amd64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
-            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autoconf/tea/license.terms",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "arm64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
-          "proof_architecture": "arm64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
-            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/tea/license.terms",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "arm64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
-          "proof_architecture": "arm64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
-            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autoconf/tea/license.terms",
-          "discovery": "notice-file"
-        },
-        {
           "origin": "sqlite-overlay",
           "version": "3.54.1",
           "architecture": "amd64",
@@ -12319,6 +12299,134 @@
           "source_image_digest": null,
           "binding_method": "Reviewed upstream SQLite source and native library build",
           "replacement_manifest_sha256": "f8848cac843e8a1ea0b4155e56c721215c62b3fe4c7175c5bbfe6dc583135e12",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/autoconf/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
+            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
+            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autoconf/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "amd64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "380e4f73c773d4ab37fb8e0f4b6e186df29f7e48710a172b16188abb10a4be92",
+          "source_path": "sqlite-autoconf-3540100.tar.gz!sqlite-autoconf-3540100/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "amd64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "380e4f73c773d4ab37fb8e0f4b6e186df29f7e48710a172b16188abb10a4be92",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/autoconf/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
+            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-autoconf-3530400.tar.gz!sqlite-autoconf-3530400/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
+            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/autoconf/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "arm64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "97564185f6deefc6810e3bf2984f19a90fea89d7e8b998436a7b902ec3680f38",
+          "source_path": "sqlite-autoconf-3540100.tar.gz!sqlite-autoconf-3540100/tea/license.terms",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "arm64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "97564185f6deefc6810e3bf2984f19a90fea89d7e8b998436a7b902ec3680f38",
           "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/autoconf/tea/license.terms",
           "discovery": "notice-file"
         }
@@ -12330,48 +12438,6 @@
       "bytes": 3850,
       "provenance": [
         {
-          "architecture": "amd64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
-          "proof_architecture": "amd64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
-            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/LICENSE.md",
-          "discovery": "notice-file"
-        },
-        {
-          "architecture": "arm64",
-          "binding_method": "signed-build-provenance",
-          "for_packages": [
-            "sqlite-libs"
-          ],
-          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
-          "proof_architecture": "arm64",
-          "provider_oci_binding": true,
-          "schema": 1,
-          "signed_statement_sha256": {
-            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
-            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
-          },
-          "source_image_digest": null,
-          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
-          "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/LICENSE.md",
-          "discovery": "notice-file"
-        },
-        {
           "origin": "sqlite-overlay",
           "version": "3.54.1",
           "architecture": "amd64",
@@ -12392,14 +12458,7 @@
           "replacement_manifest_sha256": "f8848cac843e8a1ea0b4155e56c721215c62b3fe4c7175c5bbfe6dc583135e12",
           "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/LICENSE.md",
           "discovery": "notice-file"
-        }
-      ]
-    },
-    {
-      "notice_file": "e90836013e7660de1b9bbf3ad6da5f582aa672060c9bf533be1d024d4bf3a0b0.txt",
-      "sha256": "e90836013e7660de1b9bbf3ad6da5f582aa672060c9bf533be1d024d4bf3a0b0",
-      "bytes": 1442,
-      "provenance": [
+        },
         {
           "architecture": "amd64",
           "binding_method": "signed-build-provenance",
@@ -12407,7 +12466,7 @@
             "sqlite-libs"
           ],
           "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
-          "origin": "sqlite",
+          "origin": "sqlite-original-base",
           "proof_architecture": "amd64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -12418,7 +12477,32 @@
           "source_image_digest": null,
           "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
           "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/tool/win/sqlite.vsix!license.txt",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/LICENSE.md",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite",
+          "version": "3.54.1-r0",
+          "architecture": "amd64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "87974faa93bbbb0c1add0eaf8e2faede2b7830b38892962426a4b3191fbc25f4",
+          "source_role": "upstream-notice",
+          "source_url": "https://www.sqlite.org/2026/sqlite-src-3540100.zip",
+          "source_file_sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7",
+          "source_path": "SQLite-LICENSE.md",
+          "discovery": "checked-public-standalone-notice"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "amd64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "380e4f73c773d4ab37fb8e0f4b6e186df29f7e48710a172b16188abb10a4be92",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/LICENSE.md",
           "discovery": "notice-file"
         },
         {
@@ -12428,7 +12512,7 @@
             "sqlite-libs"
           ],
           "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
-          "origin": "sqlite",
+          "origin": "sqlite-original-base",
           "proof_architecture": "arm64",
           "provider_oci_binding": true,
           "schema": 1,
@@ -12439,9 +12523,41 @@
           "source_image_digest": null,
           "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
           "version": "3.53.4-r0",
-          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/tool/win/sqlite.vsix!license.txt",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/LICENSE.md",
           "discovery": "notice-file"
         },
+        {
+          "origin": "sqlite",
+          "version": "3.54.1-r0",
+          "architecture": "arm64",
+          "source_image_digest": null,
+          "provider_oci_binding": false,
+          "binding_method": "signed-alpine-packages",
+          "source_manifest_sha256": "18612c668fe702cef2f3b992a7e693b305bf79a0e2d19e9c10e10fefde46efc3",
+          "source_role": "upstream-notice",
+          "source_url": "https://www.sqlite.org/2026/sqlite-src-3540100.zip",
+          "source_file_sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7",
+          "source_path": "SQLite-LICENSE.md",
+          "discovery": "checked-public-standalone-notice"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "arm64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "97564185f6deefc6810e3bf2984f19a90fea89d7e8b998436a7b902ec3680f38",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/LICENSE.md",
+          "discovery": "notice-file"
+        }
+      ]
+    },
+    {
+      "notice_file": "e90836013e7660de1b9bbf3ad6da5f582aa672060c9bf533be1d024d4bf3a0b0.txt",
+      "sha256": "e90836013e7660de1b9bbf3ad6da5f582aa672060c9bf533be1d024d4bf3a0b0",
+      "bytes": 1442,
+      "provenance": [
         {
           "origin": "sqlite-overlay",
           "version": "3.54.1",
@@ -12461,6 +12577,70 @@
           "source_image_digest": null,
           "binding_method": "Reviewed upstream SQLite source and native library build",
           "replacement_manifest_sha256": "f8848cac843e8a1ea0b4155e56c721215c62b3fe4c7175c5bbfe6dc583135e12",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/tool/win/sqlite.vsix!license.txt",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "amd64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:59abf1cc217642a5aa5b82d2f3634ff392dc7a04b9c1fd173c7e29af394d642c",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "amd64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "b4154fac6019e68a4db9769aa8d03d1ad0ab11d55f9cc03a7c4ebdd4a11b6415",
+            "slsa": "073ff407be2124ee8b9f3921318b2de97313224f84380b37b6ebf69914fe8096"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "f825fb76790e3a968c5dc62cf8d1df1b9eadcd955408efa487cd07032bda2eaa",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/tool/win/sqlite.vsix!license.txt",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "amd64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "380e4f73c773d4ab37fb8e0f4b6e186df29f7e48710a172b16188abb10a4be92",
+          "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/tool/win/sqlite.vsix!license.txt",
+          "discovery": "notice-file"
+        },
+        {
+          "architecture": "arm64",
+          "binding_method": "signed-build-provenance",
+          "for_packages": [
+            "sqlite-libs"
+          ],
+          "native_image_digest": "sha256:6e37845ea2c647380a8f8600b3895cc54f332cf38b64d9afc2db2bdec3f82180",
+          "origin": "sqlite-original-base",
+          "proof_architecture": "arm64",
+          "provider_oci_binding": true,
+          "schema": 1,
+          "signed_statement_sha256": {
+            "scout": "3c37b2fe3b7e5bd2dc9f43ceb13b9c771aad818dac85445fe02c4d988a152555",
+            "slsa": "c6c8578101fa236286d1efc77116038f60e72bec59953b09d424f310ebd24cc2"
+          },
+          "source_image_digest": null,
+          "source_manifest_sha256": "0a364b5db6375bc146b3b9a5f6bb0c6520b5d735abecf2bca4f1f7f84ad997af",
+          "version": "3.53.4-r0",
+          "source_path": "sources/sqlite-src-3530400.zip!sqlite-src-3530400/tool/win/sqlite.vsix!license.txt",
+          "discovery": "notice-file"
+        },
+        {
+          "origin": "sqlite-overlay",
+          "version": "3.54.1",
+          "architecture": "arm64",
+          "provider_oci_binding": false,
+          "source_image_digest": null,
+          "binding_method": "Reviewed upstream SQLite source and native library build",
+          "replacement_manifest_sha256": "97564185f6deefc6810e3bf2984f19a90fea89d7e8b998436a7b902ec3680f38",
           "source_path": "sqlite-src-3540100.zip!sqlite-src-3540100/tool/win/sqlite.vsix!license.txt",
           "discovery": "notice-file"
         }
