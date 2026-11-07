@@ -65,15 +65,12 @@ class AlpineZlibSourceTests(unittest.TestCase):
         self.stack.enter_context(patch.object(sources, 'PKGINFO_SHA256', metadata_hashes))
         self.stack.enter_context(patch.object(sources, 'LIBRARY_SHA256', libraries))
         self.license_body = b'Complete zlib copyright, license terms and disclaimer'
-        upstream = archive([('zlib-1.3.2/LICENSE', self.license_body),
-                            ('zlib-1.3.2/gzwrite.c', b'ordinary preferred source')])
+        upstream = archive([('zlib-1.4/LICENSE', self.license_body),
+                            ('zlib-1.4/gzwrite.c', b'ordinary preferred source')])
         self.stack.enter_context(patch.object(sources, 'SOURCE_SHA256', hashlib.sha256(upstream).hexdigest()))
         self.stack.enter_context(patch.object(sources, 'SOURCE_SHA512', hashlib.sha512(upstream).hexdigest()))
         self.stack.enter_context(patch.object(sources, 'LICENSE_SHA256', hashlib.sha256(self.license_body).hexdigest()))
-        self.patch_body = ('From ' + sources.UPSTREAM_COMMIT + ' Mon Sep 17 00:00:00 2001\n'
-                           'Reviewed ordinary source correction\n').encode()
-        self.stack.enter_context(patch.object(sources, 'PATCH_SHA256', hashlib.sha256(self.patch_body).hexdigest()))
-        self.stack.enter_context(patch.object(sources, 'PATCH_SHA512', hashlib.sha512(self.patch_body).hexdigest()))
+        self.stack.enter_context(patch.object(sources, 'GZWRITE_SHA256', hashlib.sha256(b'ordinary preferred source').hexdigest()))
         self.recipe = self.make_recipe()
         self.recipes = self.make_recipes()
         self.stack.enter_context(patch.object(sources, 'APKBUILD_SHA256', hashlib.sha256(self.recipe).hexdigest()))
@@ -83,9 +80,9 @@ class AlpineZlibSourceTests(unittest.TestCase):
 
     @staticmethod
     def url(arch):
-        return f'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/{sources.ARCHES[arch]}/zlib-1.3.2-r1.apk'
+        return f'https://dl-cdn.alpinelinux.org/alpine/v3.24/main/{sources.ARCHES[arch]}/zlib-1.4-r0.apk'
 
-    def apk(self, arch, *, changes=None, library=None, alias='libz.so.1.3.2', signer=None,
+    def apk(self, arch, *, changes=None, library=None, alias='libz.so.1.4', signer=None,
             dependencies=None, provides=None, extra_payload=(), control_extra=(),
             duplicate_field=None, payload_override=None):
         library = library if library is not None else ('ordinary test library ' + arch).encode()
@@ -99,7 +96,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
                   'datahash': hashlib.sha256(data).hexdigest()}
         fields.update(changes or {})
         dependencies = dependencies if dependencies is not None else ['so:libc.musl-' + native + '.so.1']
-        provides = provides if provides is not None else ['so:libz.so.1=1.3.2']
+        provides = provides if provides is not None else ['so:libz.so.1=1.4']
         metadata = (''.join(key + ' = ' + value + '\n' for key, value in fields.items())
                     + ''.join('depend = ' + value + '\n' for value in dependencies)
                     + ''.join('provides = ' + value + '\n' for value in provides)
@@ -113,18 +110,16 @@ class AlpineZlibSourceTests(unittest.TestCase):
         return signed + control + data, metadata
 
     def make_recipe(self):
-        return ('pkgname=zlib\npkgver=1.3.2\npkgrel=1\nlicense="Zlib"\n'
-                'source="https://zlib.net/fossils/zlib-$pkgver.tar.gz\n\tCVE-2026-85091.patch\n\t"\n'
-                '# secfixes:\n#   1.3.2-r1:\n#     - CVE-2026-85091\n'
-                f'sha512sums="\n{sources.SOURCE_SHA512}  zlib-1.3.2.tar.gz\n'
-                f'{sources.PATCH_SHA512}  CVE-2026-85091.patch\n"\n'
+        return ('pkgname=zlib\npkgver=1.4\npkgrel=0\nlicense="Zlib"\n'
+                'source="https://zlib.net/fossils/zlib-$pkgver.tar.gz"\n'
+                '# secfixes:\n#   1.4-r0:\n#     - CVE-2026-4738\n'
+                f'sha512sums="\n{sources.SOURCE_SHA512}  zlib-1.4.tar.gz\n"\n'
                 'build() { ./configure --prefix=/usr; make; }\ncheck() { make check; }\n').encode()
 
-    def make_recipes(self, recipe=None, patch_body=None):
-        prefix = f'aports-{sources.BUILD_COMMIT}/main/zlib/'
+    def make_recipes(self, recipe=None):
+        prefix = sources.APORTS_PREFIX + '/main/zlib/'
         return archive([(prefix + 'APKBUILD', self.recipe if recipe is None else recipe),
-                        (prefix + 'CVE-2026-85091.patch', self.patch_body if patch_body is None else patch_body),
-                        (f'aports-{sources.BUILD_COMMIT}/README.md', b'whole pinned build context')])
+                        (sources.APORTS_PREFIX + '/README.md', b'whole pinned build context')])
 
     @staticmethod
     def inventory():
@@ -145,7 +140,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
         self.package_spec = sources.reviewed_spec()
         return body
 
-    def test_both_architectures_retain_signed_packages_full_recipes_source_patch_and_license(self):
+    def test_both_architectures_retain_signed_packages_full_recipes_source_and_license(self):
         for arch in sources.ARCHES:
             with self.subTest(arch=arch), tempfile.TemporaryDirectory() as directory:
                 result = self.collect(directory, arch)
@@ -157,8 +152,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
                 for row in result['files']:
                     self.assertEqual(hashlib.sha256((Path(directory) / row['path']).read_bytes()).hexdigest(), row['sha256'])
                 self.assertEqual((Path(directory) / f'aports-{sources.BUILD_COMMIT}.tar.gz').read_bytes(), self.recipes)
-                self.assertEqual((Path(directory) / 'context/main/zlib/CVE-2026-85091.patch').read_bytes(), self.patch_body)
-                self.assertEqual((Path(directory) / 'zlib-1.3.2-LICENSE').read_bytes(), self.license_body)
+                self.assertEqual((Path(directory) / 'zlib-1.4-LICENSE').read_bytes(), self.license_body)
                 installation = json.loads((Path(directory) / 'ZLIB_SECURITY.json').read_text())
                 self.assertEqual(installation, sources.security_manifest(self.package_spec, arch))
                 self.assertEqual(result['source_manifest_sha256'], installation['source_manifest_sha256'])
@@ -173,8 +167,8 @@ class AlpineZlibSourceTests(unittest.TestCase):
             with self.subTest(arch=arch), tempfile.TemporaryDirectory() as directory:
                 result = sources.prepare_packages(self.package_spec, arch, directory, fetch=fetch)
                 self.assertEqual(set(fetched), {self.url(arch), self.package_spec['signing_keys'][arch]['url']})
-                self.assertEqual(result['package_version'], '1.3.2-r1')
-                self.assertEqual(result['version'], '1.3.2')
+                self.assertEqual(result['package_version'], '1.4-r0')
+                self.assertEqual(result['version'], '1.4')
                 self.assertEqual(result['library']['sha256'], sources.LIBRARY_SHA256[arch])
                 self.assertEqual((Path(directory) / 'source-lock.json').read_bytes(), sources.source_lock_bytes(self.package_spec))
 
@@ -186,7 +180,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
             path = root / 'docs/os-package-sources.json'
             path.write_text(json.dumps(mapping))
             self.assertEqual(sources.build_security_manifest('amd64', root), sources.security_manifest(self.package_spec, 'amd64'))
-            mapping['origins'][0]['version'] = '1.3.2-r0'
+            mapping['origins'][0]['version'] = '1.3.2-r1'
             path.write_text(json.dumps(mapping))
             with self.assertRaisesRegex(ValueError, 'source map'):
                 sources.build_security_manifest('amd64', root)
@@ -235,7 +229,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
             self.collect(directory)
 
     def test_signed_wrong_package_architecture_build_license_or_version_is_rejected(self):
-        changes = {'pkgname': 'other', 'pkgver': '1.3.2-r0', 'origin': 'other',
+        changes = {'pkgname': 'other', 'pkgver': '1.3.2-r1', 'origin': 'other',
                    'arch': 'aarch64', 'commit': '0' * 40, 'license': 'other', 'url': 'https://example.invalid/'}
         for field, value in changes.items():
             self.replace_apk(changes={field: value})
@@ -256,7 +250,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
 
     def test_signed_unreviewed_dependencies_and_provisions_are_rejected(self):
         for kwargs in ({'dependencies': []}, {'dependencies': ['so:libc.musl-x86_64.so.1', 'other']},
-                       {'provides': ['so:libz.so.2=1.3.2']}, {'provides': ['so:libz.so.1=1.3.2'] * 2}):
+                       {'provides': ['so:libz.so.2=1.4']}, {'provides': ['so:libz.so.1=1.4'] * 2}):
             self.replace_apk(**kwargs)
             with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'dependency|SONAME'):
                 self.collect(directory)
@@ -287,7 +281,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
 
     def test_library_parent_symlinks_are_rejected(self):
         payload = archive([(sources.LIBRARY_PATH, b'ordinary test library amd64')],
-                          {sources.ALIAS_PATH: 'libz.so.1.3.2', 'usr': '/other'},
+                          {sources.ALIAS_PATH: 'libz.so.1.4', 'usr': '/other'},
                           directories=('usr/lib',))
         self.replace_apk(payload_override=payload)
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'parents must be directories'):
@@ -296,7 +290,7 @@ class AlpineZlibSourceTests(unittest.TestCase):
     def test_wrong_runtime_package_or_duplicate_is_rejected_before_download(self):
         original = self.inventory()
         cases = [{'os_packages': []}, {'os_packages': original['os_packages'] * 2}]
-        for field, value in {'version': '1.3.2-r0', 'origin': 'other', 'license': 'other',
+        for field, value in {'version': '1.3.2-r1', 'origin': 'other', 'license': 'other',
                              'build_commit': '0' * 40, 'url': 'https://example.invalid/'}.items():
             changed = copy.deepcopy(original)
             changed['os_packages'][0][field] = value
@@ -307,17 +301,16 @@ class AlpineZlibSourceTests(unittest.TestCase):
 
     def test_wrong_reviewed_spec_and_unsupported_architecture_are_rejected(self):
         changed = copy.deepcopy(self.package_spec)
-        changed['patch']['upstream_commit'] = '0' * 40
+        changed['upstream_fix']['commit'] = '0' * 40
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'source map'):
             self.collect(directory, package_spec=changed)
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'architecture'):
             self.collect(directory, arch='ppc64le')
 
-    def test_recipe_source_and_patch_checksums_are_exact(self):
-        for original, replacement in ((b'pkgrel=1', b'pkgrel=0'),
+    def test_recipe_identity_and_source_checksum_are_exact(self):
+        for original, replacement in ((b'pkgrel=0', b'pkgrel=1'),
                                       (sources.SOURCE_SHA512.encode(), b'0' * 128),
-                                      (sources.PATCH_SHA512.encode(), b'0' * 128),
-                                      (b'CVE-2026-85091', b'CVE-2026-other')):
+                                      (b'CVE-2026-4738', b'CVE-2026-other')):
             changed = self.recipe.replace(original, replacement)
             with self.subTest(original=original), self.assertRaises(ValueError):
                 sources.recipe_identity(changed)
@@ -330,25 +323,19 @@ class AlpineZlibSourceTests(unittest.TestCase):
                 self.collect(directory)
             self.bodies[url] = original
 
-    def test_changed_patch_is_rejected_even_when_context_outer_hash_is_repinned(self):
-        changed = self.make_recipes(patch_body=self.patch_body + b'changed')
-        self.bodies[sources.APORTS_URL] = changed
-        with patch.object(sources, 'APORTS_SHA256', hashlib.sha256(changed).hexdigest()):
-            self.package_spec = sources.reviewed_spec()
-            with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'security patch checksum'):
-                self.collect(directory)
-
-    def test_patch_upstream_commit_is_checked_independently(self):
-        changed_patch = self.patch_body.replace(sources.UPSTREAM_COMMIT.encode(), b'0' * 40)
-        with patch.object(sources, 'PATCH_SHA256', hashlib.sha256(changed_patch).hexdigest()), \
-                patch.object(sources, 'PATCH_SHA512', hashlib.sha512(changed_patch).hexdigest()):
+    def test_integrated_fix_hash_is_independent_of_outer_source_hash(self):
+        changed = archive([('zlib-1.4/LICENSE', self.license_body),
+                           ('zlib-1.4/gzwrite.c', b'changed preferred source')])
+        with patch.object(sources, 'SOURCE_SHA256', hashlib.sha256(changed).hexdigest()), \
+                patch.object(sources, 'SOURCE_SHA512', hashlib.sha512(changed).hexdigest()):
             recipe = self.make_recipe()
-            context = self.make_recipes(recipe=recipe, patch_body=changed_patch)
+            context = self.make_recipes(recipe=recipe)
             with patch.object(sources, 'APKBUILD_SHA256', hashlib.sha256(recipe).hexdigest()), \
                     patch.object(sources, 'APORTS_SHA256', hashlib.sha256(context).hexdigest()):
                 self.bodies[sources.APORTS_URL] = context
+                self.bodies[sources.SOURCE_URL] = changed
                 self.package_spec = sources.reviewed_spec()
-                with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'upstream fix identity'):
+                with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, 'integrated gzwrite correction checksum'):
                     self.collect(directory)
 
     def test_license_hash_is_independent_of_outer_source_hash(self):

@@ -4,15 +4,15 @@ The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
-installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.3.2-r1`, DHI Python `3.14.10-r1` and
-DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
+installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.4-r0`, DHI Python `3.14.10-r1` and
+DHI CA bundle `20261020-r0` and Alpine SQLite library `3.54.1-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
 The compiled `_socket` extension is separately rebuilt from the exact Python
 3.14.10 source archive with the upstream null-byte rejection correction for
 `CVE-2026-116566` / `PSF-2026-48`. The Python 3.14 backport is pinned by source
-head in scripts/python_socket_patches.json; an unmerged backport is not described
-as an upstream release. The interpreter and original APK metadata remain unchanged.
+head in scripts/python_socket_patches.json. The 3.14 backport has merged, but
+the pinned vendor package does not yet replace this verified overlay. The interpreter and original APK metadata remain unchanged.
 The independent docs/python-socket-build.json lock binds both native extension
 hashes, original extension hashes, generated configuration headers and compiler
 identities. No Python wrapper substitutes for the compiled correction.
@@ -960,3 +960,36 @@ returns. The exact musl approval and its deadline are unchanged. No certificate
 or socket exception is added, and no deadline is extended. Full rebuilt source
 archives, native qualification, exact-main validation and hosted analysis remain
 mandatory before the applicable release stages.
+
+## zlib 1.4 candidate
+
+The candidate installs Alpine 3.24's signed zlib `1.4-r0` packages on both
+architectures. The complete pinned aports context, upstream archive and full
+Zlib license remain part of the source bundle. Upstream 1.4 includes the earlier
+gzwrite failure-path correction and additional core-library fixes; no separate
+gzwrite patch is applied. The collector independently checks the integrated
+`gzwrite.c` bytes as well as the complete archive and recipe checksums.
+
+The ordinary `libz.so.1` alias must resolve to the exact signed
+`/usr/lib/libz.so.1.4` payload. Python's loaded runtime version, mapped-library
+hashes, gzip/zlib behavior and all existing qualification gates remain required.
+CVE-2026-4738 concerns the separate contrib/infback9 code; it is not the identity
+of the additional core-library fixes. No new exception or deadline extension
+is included in this candidate.
+
+## Signed SQLite package candidate
+
+The candidate installs the exact Alpine `sqlite-libs 3.54.1-r0` package before
+applying Keep's existing hardened SQLite 3.54.1 build. APK metadata comes from
+that signed installation. The vendor APK signature covers its input library;
+it does not cover Keep's rebuilt output. Both native builds check the signed
+vendor library's exported API, compile options, source ID, threading and limit
+defaults before checking the hardened replacement.
+
+Vendor and replacement now share `/usr/lib/libsqlite3.so.3.54.1`. Installation
+authenticates the original bytes and exact SONAME family, atomically replaces
+the canonical file, and verifies the final hash without deleting that file.
+Original DHI SQLite package/source evidence remains retained for earlier layers.
+The exact all-layer command-line-shell detector and every existing SQLite,
+backup, recovery and ordinary-loader gate remain required. Package availability
+alone does not qualify a replacement or authorize a new finding approval.

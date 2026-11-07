@@ -113,7 +113,7 @@ class PatchedSqliteBuildTests(unittest.TestCase):
         self.assertEqual(spec['fortify_headers'], build.fortify.reviewed_spec())
         self.assertEqual(spec['cpp_packages'], build.cpp.reviewed_spec())
         self.assertEqual(spec['build_tools'], build.build_tools.reviewed_spec())
-        self.assertEqual(spec['vendor_package']['version'], '3.53.4-r0')
+        self.assertEqual(spec['vendor_package']['version'], '3.54.1-r0')
         self.assertEqual(spec['upstream_version'], '3.54.1')
 
     def test_compile_is_library_only_and_keeps_features_limits_and_zero_defaults(self):
@@ -171,13 +171,13 @@ class PatchedSqliteBuildTests(unittest.TestCase):
         for field in ('origin', 'version', 'build_commit', 'binary'):
             mapping = copy.deepcopy(original); row = next(r for r in mapping['origins'] if r['origin'] == 'sqlite')
             if field == 'origin': row['origin'] = 'renamed'
-            elif field == 'version': row['version'] = '3.54.1-r0'
+            elif field == 'version': row['version'] = '3.53.4-r0'
             elif field == 'build_commit': row['packages'][0]['build_commit'] = 'f' * 40
             else: row['packages'][0]['binaries']['amd64']['sha256'] = 'f' * 64
             (self.root / 'docs/os-package-sources.json').write_bytes(build.json_bytes(mapping))
             with self.subTest(field=field), self.assertRaises(ValueError):
                 build.verify_vendor_source_map(self.root)
-        self.assertEqual(build.verify_vendor_source_map(build.ROOT)['version'], '3.53.4-r0')
+        self.assertEqual(build.verify_vendor_source_map(build.ROOT)['version'], '3.54.1-r0')
 
     def fake_library(self, *, options=None, version=None, source_id=None, threads=1, limits=None):
         library = Mock()

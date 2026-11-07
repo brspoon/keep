@@ -367,9 +367,9 @@ def validate_sqlite_cli_review(inventory, layers, arch, *, root=Path('.'), image
             and type(whole.get('elf_files_scanned')) is int
             and 0 < whole['elf_files_scanned'] <= whole['files_scanned'],
             'Incomplete SQLite component layer coverage')
-    expected = {'name': 'sqlite-libs', 'version': '3.53.4-r0', 'origin': 'sqlite',
-                'provides': ['so:libsqlite3.so.0=3.53.4'],
-                'payloads': ['usr/lib/libsqlite3.so.0', 'usr/lib/libsqlite3.so.3.53.4']}
+    expected = {'name': 'sqlite-libs', 'version': '3.54.1-r0', 'origin': 'sqlite',
+                'provides': ['so:libsqlite3.so.0=3.54.1'],
+                'payloads': ['usr/lib/libsqlite3.so.0', 'usr/lib/libsqlite3.so.3.54.1']}
     metadata = runtime.get('apk_metadata')
     require(isinstance(metadata, dict) and metadata.get('path') == '/lib/apk/db/installed'
             and isinstance(metadata.get('sha256'), str)
@@ -386,7 +386,7 @@ def validate_sqlite_cli_review(inventory, layers, arch, *, root=Path('.'), image
     installed = [row for row in inventory.get('os_packages', []) if row.get('origin') == 'sqlite']
     lock = json.loads((Path(root) / 'docs/os-package-sources.json').read_bytes())
     origins = [row for row in lock.get('origins', []) if row.get('origin') == 'sqlite']
-    require(len(origins) == 1 and origins[0].get('version') == '3.53.4-r0'
+    require(len(origins) == 1 and origins[0].get('version') == '3.54.1-r0'
             and len(origins[0].get('packages', [])) == 1,
             'SQLite vendor-input source identity differs')
     vendor = origins[0]['packages'][0]

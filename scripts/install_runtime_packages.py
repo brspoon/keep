@@ -18,6 +18,7 @@ import tempfile
 if __package__:
     from . import alpine_expat_sources as expat
     from . import alpine_zlib_sources as zlib
+    from . import alpine_sqlite_sources as sqlite
     from . import alpine_musl_sources as musl
     from . import dhi_python_packages as python
     from . import dhi_certificate_packages as certificates
@@ -25,6 +26,7 @@ if __package__:
 else:
     import alpine_expat_sources as expat
     import alpine_zlib_sources as zlib
+    import alpine_sqlite_sources as sqlite
     import alpine_musl_sources as musl
     import dhi_python_packages as python
     import dhi_certificate_packages as certificates
@@ -35,6 +37,7 @@ COHORT = (('musl', musl, 'MUSL_SECURITY.json'),
           ('certificates', certificates, 'CA_CERTIFICATES_SECURITY.json'),
           ('expat', expat, 'EXPAT_SECURITY.json'),
           ('zlib', zlib, 'ZLIB_SECURITY.json'),
+          ('sqlite', sqlite, 'SQLITE_SECURITY.json'),
           ('python', python, 'PYTHON_SECURITY.json'))
 
 
@@ -229,14 +232,15 @@ def install_sqlite(root=ROOT, architecture=None, *, directory=Path('/usr/lib')):
     manifest_path = output / 'SQLITE_PATCHED_SECURITY.json'
     manifest = build.read_build_manifest(manifest_path, architecture)
     spec = build.reviewed_spec()
-    vendor = directory / 'libsqlite3.so.3.53.4'
+    vendor = directory / Path(build.VENDOR_LIBRARY).name
     library = directory / build.LIBRARY
     alias = directory / build.ALIAS
     vendor_hash = spec['expected_vendor_library_sha256'][architecture]
     if (directory.is_symlink() or not directory.is_dir()
             or vendor.is_symlink() or not vendor.is_file()
-            or not alias.is_symlink() or alias.resolve(strict=True) != vendor
-            or library.exists() or library.is_symlink()
+            or not alias.is_symlink() or alias.readlink().as_posix() != vendor.name
+            or alias.resolve(strict=True) != vendor
+            or library.is_symlink() or (vendor != library and library.exists())
             or {path.name for path in directory.glob('libsqlite3.so*')}
                != {vendor.name, alias.name}):
         raise ValueError('SQLite vendor library family or canonical SONAME differs')
@@ -262,8 +266,12 @@ def install_sqlite(root=ROOT, architecture=None, *, directory=Path('/usr/lib')):
         os.replace(temporary_alias, alias)
         if alias.resolve(strict=True) != library:
             raise ValueError('SQLite replacement SONAME alias differs')
-        checked_file(vendor, vendor_hash)
-        vendor.unlink()
+        if vendor != library:
+            checked_file(vendor, vendor_hash)
+            vendor.unlink()
+        checked_file(library, manifest['library']['sha256'])
+        if set(directory.glob('libsqlite3.so*')) != {library, alias}:
+            raise ValueError('SQLite replacement library family differs')
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
@@ -293,6 +301,23 @@ def verify_musl(root, architecture, *, build=False):
     else:
         command.append('--verify-installed')
     subprocess.run(command, check=True)
+
+
+def install_build_sqlite(root=ROOT):
+    """Install the exact signed library input before measuring the build ABI."""
+    architecture = arch()
+    packages = installation_inputs(root, architecture)
+    name = 'sqlite-libs-' + sqlite.VERSION + '.apk'
+    selected = [path for path in packages if path.name == name]
+    if len(selected) != 1:
+        raise ValueError('Require the exact signed SQLite build package')
+    subprocess.run(['/sbin/apk', 'add', '--no-network', '--repositories-file', '/dev/null',
+                    '--keys-dir', str(root / 'keys'), '--no-cache', '--upgrade',
+                    str(selected[0])], check=True)
+    checked_file(Path('/' + sqlite.LIBRARY_PATH), sqlite.LIBRARY_SHA256[architecture])
+    alias = Path('/' + sqlite.ALIAS_PATH)
+    if not alias.is_symlink() or alias.readlink().as_posix() != Path(sqlite.LIBRARY_PATH).name:
+        raise ValueError('SQLite build SONAME alias differs')
 
 
 def install_build_python(root=ROOT):
@@ -352,6 +377,7 @@ def main():
     mode.add_argument('--install', action='store_true')
     mode.add_argument('--install-certificates', action='store_true')
     mode.add_argument('--install-build-musl', action='store_true')
+    mode.add_argument('--install-build-sqlite', action='store_true')
     mode.add_argument('--install-build-python', action='store_true')
     mode.add_argument('--install-expat', action='store_true')
     mode.add_argument('--install-socket', action='store_true')
@@ -366,6 +392,8 @@ def main():
         install_certificates()
     elif args.install_build_musl:
         install_build_musl()
+    elif args.install_build_sqlite:
+        install_build_sqlite()
     elif args.install_build_python:
         install_build_python()
     elif args.install_expat:

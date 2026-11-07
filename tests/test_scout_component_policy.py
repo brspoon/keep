@@ -32,7 +32,7 @@ class ScoutComponentPolicyTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
         self.policy = json.loads((ROOT / 'docs/image-exceptions.json').read_bytes())
-        self.policy.update(exceptions={}, scout_exceptions={}, require_zero_findings=False)
+        self.policy.update(exceptions={}, grype_component_reviews={}, scout_exceptions={}, require_zero_findings=False)
         paths = set(self.policy['reviewed_sources']) | COMPONENT_SOURCE_BINDINGS
         for name in paths:
             target = self.root / name; target.parent.mkdir(parents=True, exist_ok=True)
@@ -108,10 +108,8 @@ class ScoutComponentPolicyTests(unittest.TestCase):
     def test_repository_component_review_requires_proof_and_expires(self):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_bytes())
         self.assertNotIn(FINDING['id'], policy['exceptions'])
-        deadline = component_deadlines(policy)[FINDING['id']]
-        self.assertEqual(finding_decision(FINDING, policy, DAY), 'missing_component_proof')
-        self.assertEqual(finding_decision(FINDING, policy, deadline + datetime.timedelta(days=1)),
-                         'exception_expired')
+        self.assertNotIn(FINDING['id'], policy['scout_component_reviews'])
+        self.assertEqual(finding_decision(FINDING, policy, DAY), 'unmatched_finding')
 
     def test_complete_same_arch_original_proof_passes_without_changing_reports_or_counts(self):
         for arch in ('amd64', 'arm64'):

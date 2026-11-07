@@ -342,7 +342,8 @@ class ImageReviewTests(unittest.TestCase):
         self.assertIn('*"Control server error"*)', smoke)
 
 
-CURRENT_FINDINGS = {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low'}
+CURRENT_FINDINGS = {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low',
+                    'CVE-2026-116566': 'Medium'}
 
 
 class CurrentImageReviewTests(unittest.TestCase):
@@ -366,12 +367,11 @@ class CurrentImageReviewTests(unittest.TestCase):
         self.assertFalse(self.policy['require_zero_findings'])
         expected = {finding: (severity, 'apk', 'python-3.14', '3.14.10-r1', 'fixed')
                     for finding, severity in CURRENT_FINDINGS.items()}
-        expected['CVE-2026-119376'] = ('Medium', 'apk', 'sqlite-libs', '3.53.4-r0', 'fixed')
         self.assertEqual({finding: tuple(rule[field] for field in
                                         ('severity', 'type', 'package', 'version', 'status'))
                           for finding, rule in self.policy['exceptions'].items()}, expected)
         for finding, rule in self.policy['exceptions'].items():
-            reviewed_on = '2026-11-04' if finding == 'CVE-2026-119376' else '2026-11-01'
+            reviewed_on = '2026-11-07' if finding == 'CVE-2026-116566' else '2026-11-01'
             self.assertEqual(rule['review']['reviewed_on'], reviewed_on)
             self.assertEqual(rule['review']['deadline'], '2026-11-11')
             self.assertTrue(rule['evidence'].strip())
@@ -390,14 +390,14 @@ class CurrentImageReviewTests(unittest.TestCase):
                 self.assertFalse(result['accepted_fixed'])
                 self.assertEqual([entry['reason'] for entry in result['blocked']],
                                  ['exception_expired', 'exception_expired'])
-            for day, expired in ((datetime.date(2026, 11, 1), False),
+            for day, expired in ((datetime.date(2026, 11, 7), False),
                                  (datetime.date(2026, 11, 11), False),
                                  (datetime.date(2026, 11, 12), True)):
                 with self.subTest(arch=arch, day=day):
                     result = self.result(arch, day)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                                      [] if expired else list(CURRENT_FINDINGS))
-                    self.assertEqual(len(result['blocked']), 2 if expired else 0)
+                    self.assertEqual(len(result['blocked']), 3 if expired else 0)
                     for entry in result['accepted_fixed'] + result['blocked']:
                         self.assertEqual(entry['deadline'], '2026-11-11')
                     for entry in result['blocked']:
@@ -413,7 +413,7 @@ class CurrentImageReviewTests(unittest.TestCase):
             })
             for arch in DIRECT:
                 with self.subTest(arch=arch, finding=finding):
-                    result = self.result(arch, datetime.date(2026, 11, 1))
+                    result = self.result(arch, datetime.date(2026, 11, 7))
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                                      list(CURRENT_FINDINGS))
                     self.assertEqual(result['blocked'], [{
@@ -424,8 +424,9 @@ class CurrentImageReviewTests(unittest.TestCase):
     def test_http_scope_does_not_accept_a_different_severity(self):
         self.report['matches'][1]['vulnerability']['severity'] = 'Medium'
         for arch in DIRECT:
-            result = self.result(arch, datetime.date(2026, 11, 1))
-            self.assertEqual([entry['id'] for entry in result['accepted_fixed']], ['CVE-2025-15367'])
+            result = self.result(arch, datetime.date(2026, 11, 7))
+            self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
+                             ['CVE-2025-15367', 'CVE-2026-116566'])
             self.assertEqual(result['blocked'][0]['reason'], 'exception_mismatch')
 
     def test_renewal_does_not_accept_unknown_or_broaden_package_and_severity_matches(self):
@@ -443,11 +444,11 @@ class CurrentImageReviewTests(unittest.TestCase):
             self.report['matches'][0][section][field] = value
             for arch in DIRECT:
                 with self.subTest(arch=arch, section=section, field=field):
-                    result = self.result(arch, datetime.date(2026, 11, 1))
+                    result = self.result(arch, datetime.date(2026, 11, 7))
                     self.assertEqual(len(result['blocked']), 1)
                     self.assertEqual(result['blocked'][0]['reason'], reason)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
-                                     ['CVE-2026-103995'])
+                                     ['CVE-2026-103995', 'CVE-2026-116566'])
 
     def test_unused_expired_renewals_do_not_block_clean_scans(self):
         self.report['matches'] = []

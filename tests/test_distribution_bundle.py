@@ -724,7 +724,7 @@ class OriginalBaseProvenanceBundleTests(unittest.TestCase):
         lock = bundle.read_json(ROOT, 'docs/os-package-sources.json')
         original = bundle.reviewed_original_base_origins(lock)
         self.assertEqual({row['origin'] for row in original},
-                         {'expat', 'zlib', 'python-3.14', 'ca-certificates', 'musl'})
+                         {'expat', 'zlib', 'python-3.14', 'ca-certificates', 'musl', 'sqlite'})
         old_ca = next(row for row in original if row['origin'] == 'ca-certificates')
         self.assertEqual(old_ca['version'], '20260909-r0')
         self.assertEqual(old_ca['packages'][0]['binaries']['amd64']['sha256'],
@@ -886,7 +886,7 @@ class CommittedKeepSourceTests(unittest.TestCase):
         self.root.mkdir()
         self.output = Path(self.temp.name) / 'sources'
         self.files = ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-            'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
+            'scripts/alpine_zlib_sources.py', 'scripts/alpine_sqlite_sources.py', 'scripts/alpine_musl_sources.py',
             'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'docs/python-socket-build.json', 'scripts/security-fixtures/distrusted.zip',

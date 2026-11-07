@@ -37,7 +37,7 @@ WORK = Path('/opt/keep-sqlite-build')
 SOURCE_DIRECTORY = 'sqlite-autoconf-3540100'
 LIBRARY = 'libsqlite3.so.3.54.1'
 ALIAS = 'libsqlite3.so.0'
-VENDOR_LIBRARY = '/usr/lib/libsqlite3.so.3.53.4'
+VENDOR_LIBRARY = '/usr/lib/libsqlite3.so.3.54.1'
 BUILD_SCRIPT = 'scripts/build_patched_sqlite.py'
 PATCH_PATH = 'scripts/sqlite_security_patches.json'
 BUILD_IDENTITY = 'keep-sqlite-3.54.1-library-v1'
@@ -94,7 +94,7 @@ ENVIRONMENT = {
 ARCHITECTURE_CFLAGS = {'amd64': '-fno-plt', 'arm64': ''}
 EXPECTED_HARDENING = {'gnu_stack_non_executable': True, 'relro': True, 'bind_now': True,
                       'stack_protector': True, 'fortify_source': 2}
-VENDOR_ABI = {'export_count': 351, 'exports_sha256': '7e6afec6a15fbf440bcd580c831b7b78640a3beb55630c667333a84a3dedd1f9'}
+VENDOR_ABI = {'export_count': 353, 'exports_sha256': '1823bb48786d4ad4fedfeafc82399cb3b1678ece66e633dd67c268da19507921'}
 REQUIRED_LIMIT_DEFAULTS = {'schema': 10000000, 'trigger_steps': 65000}
 LIMIT = 32 * 1024 * 1024
 SHA256 = re.compile(r'[a-f0-9]{64}\Z')
@@ -141,11 +141,11 @@ def immutable_spec():
         'preferred_source': {'url': PREFERRED_SOURCE_URL, 'sha256': PREFERRED_SOURCE_SHA256,
             'sha512': PREFERRED_SOURCE_SHA512},
         'vendor_recipe': {'url': RECIPE_URL, 'sha256': RECIPE_SHA256},
-        'vendor_package': {'origin': 'sqlite', 'name': 'sqlite-libs', 'version': '3.53.4-r0',
-            'build_commit': '02faf84da04ae70c6ece2602e3cd8abdb5abb5aa',
+        'vendor_package': {'origin': 'sqlite', 'name': 'sqlite-libs', 'version': '3.54.1-r0',
+            'build_commit': 'f8081b25590214e2695a4faa77c7892bd902a4e8',
             'library': VENDOR_LIBRARY, 'alias': '/usr/lib/' + ALIAS,
-            'apk_sha256': {'amd64': '51106cf0602767e9bdf7a75760fa14216d07467076f279e0447ec6286d497ac4',
-                'arm64': '540bd2a5c442658206e1bd5fb7193c9ffe501f8aabf8038263c8419a5cadf73a'}},
+            'apk_sha256': {'amd64': '5dfd76936e795efd988d6bad4949b8d20c410d6dc9dd256da884111f668f3915',
+                'arm64': 'e92861972b07c848fbf7e2e5ed20ca872c00f3a87550d01a5f7820d4d02df526'}},
         'patch_manifest': {'path': PATCH_PATH, 'sha256': PATCH_SHA256},
         'patched_files': {'sqlite3.c': AMALGAMATION_SHA256}, 'build_script': BUILD_SCRIPT,
         'fortify_headers': fortify.reviewed_spec(),
@@ -211,7 +211,7 @@ def _manifest(spec, arch, library_hash, compiler_hash, vendor_hash, *, qualified
     return {'schema': 'keep-sqlite-patched-security-v1', 'architecture': arch,
         'qualified': qualified, 'purpose': 'reviewed-build' if qualified else 'preparation-only',
         'identity': BUILD_IDENTITY, 'upstream_version': UPSTREAM_VERSION, 'source_id': SOURCE_ID,
-        'vendor_package_version': '3.53.4-r0', 'vendor_apk_signature_applies_to_replacement': False,
+        'vendor_package_version': '3.54.1-r0', 'vendor_apk_signature_applies_to_replacement': False,
         'build_lock_sha256': digest(json_bytes(spec)), 'build_script_sha256': spec['build_script_sha256'],
         'build_image': BUILD_IMAGE, 'source_sha256': SOURCE_SHA256,
         'preferred_source_sha256': PREFERRED_SOURCE_SHA256, 'patch_manifest_sha256': PATCH_SHA256,
@@ -432,7 +432,7 @@ def runtime_features(library):
 def verify_vendor_source_map(root):
     mapping = json.loads(regular_bytes(Path(root) / 'docs/os-package-sources.json', 'SQLite original vendor source map'))
     rows = [row for row in mapping.get('origins', []) if row.get('origin') == 'sqlite']
-    require(len(rows) == 1 and rows[0].get('version') == '3.53.4-r0', 'SQLite original vendor origin/version differs')
+    require(len(rows) == 1 and rows[0].get('version') == '3.54.1-r0', 'SQLite original vendor origin/version differs')
     packages = rows[0].get('packages', [])
     expected = immutable_spec()['vendor_package']
     require(len(packages) == 1 and packages[0].get('name') == expected['name']
@@ -463,6 +463,7 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     require(Path('/usr/lib/' + ALIAS).is_symlink() and Path('/usr/lib/' + ALIAS).resolve(strict=True) == Path(VENDOR_LIBRARY), 'Original SQLite alias differs')
     require(spec['expected_vendor_library_sha256'][arch] is None or spec['expected_vendor_library_sha256'][arch] == vendor_hash, 'Original SQLite vendor library hash differs')
     vendor_abi = elf_information(vendor_body, arch)
+    vendor_features = runtime_features(Path(VENDOR_LIBRARY))
     require({k: vendor_abi[k] for k in VENDOR_ABI} == VENDOR_ABI, 'Original SQLite exported ABI differs')
     cpp_proof, tools_proof = cpp.verify_installed(arch), build_tools.verify_installed(arch)
     require(regular_bytes(cpp.PREPARED_ROOT / 'CPP_BUILD_SECURITY.json', 'C++ build receipt') == cpp.json_bytes(cpp_proof)
@@ -495,7 +496,7 @@ def build(output, preparation=False, *, architecture=None, root=ROOT, fetch=down
     (destination / 'BUILD_ENVIRONMENT.json').write_bytes(json_bytes({'compiler_sha256': compiler_hash,
         'vendor_library_sha256': vendor_hash, 'command': command, 'environment': environment,
         'effective_compiler_hardening': {'fortify_source': 2, 'fortify_headers_active': True, 'stack_protector_strong': True},
-        'elf_verification': protections, 'vendor_abi': vendor_abi, 'runtime_features': features,
+        'elf_verification': protections, 'vendor_abi': vendor_abi, 'vendor_runtime_features': vendor_features, 'runtime_features': features,
         'build_image_declaration': BUILD_IMAGE, 'image_identity_requires_external_provenance_verification': True,
         'library_only': True, 'cpp_build_inputs': cpp_proof, 'build_tool_inputs': tools_proof}))
     (destination / 'SQLITE_PATCHED_SECURITY.json').write_bytes(json_bytes(manifest))
