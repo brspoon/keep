@@ -19,7 +19,7 @@ class InstallSQLiteTests(unittest.TestCase):
         self.output.mkdir(parents=True)
         self.directory = self.root / 'lib'
         self.directory.mkdir()
-        self.vendor = self.directory / 'libsqlite3.so.3.53.4'
+        self.vendor = self.directory / Path(build.VENDOR_LIBRARY).name
         self.alias = self.directory / build.ALIAS
         self.library = self.directory / build.LIBRARY
         self.vendor.write_bytes(b'authenticated old library')
@@ -38,17 +38,19 @@ class InstallSQLiteTests(unittest.TestCase):
     def assert_original(self):
         self.assertEqual(self.vendor.read_bytes(), b'authenticated old library')
         self.assertEqual(self.alias.resolve(), self.vendor)
-        self.assertFalse(self.library.exists())
+        if self.vendor != self.library:
+            self.assertFalse(self.library.exists())
         self.assertEqual({p.name for p in self.directory.iterdir()}, {self.vendor.name, self.alias.name})
 
-    def test_replacement_changes_inode_and_alias_and_removes_old_loadable_target(self):
+    def test_same_path_replacement_changes_inode_and_preserves_canonical_target(self):
         original = self.vendor.stat().st_ino
         self.install()
         self.assertEqual(self.alias.resolve(), self.library)
         self.assertEqual(self.library.read_bytes(), self.replacement.read_bytes())
         self.assertNotEqual(self.library.stat().st_ino, original)
         self.assertEqual(self.library.stat().st_mode & 0o777, 0o755)
-        self.assertFalse(self.vendor.exists())
+        if self.vendor != self.library:
+            self.assertFalse(self.vendor.exists())
         self.assertEqual({p.name for p in self.directory.iterdir()}, {self.library.name, self.alias.name})
 
     def test_modified_vendor_or_replacement_is_rejected_before_publication(self):
@@ -72,7 +74,8 @@ class InstallSQLiteTests(unittest.TestCase):
         with self.assertRaises((ValueError, FileNotFoundError)):
             self.install()
         self.assertTrue(self.vendor.is_file())
-        self.assertFalse(self.library.exists())
+        if self.vendor != self.library:
+            self.assertFalse(self.library.exists())
 
     def test_symlink_replacement_input_is_rejected(self):
         body = self.replacement.read_bytes()
@@ -89,3 +92,22 @@ class InstallSQLiteTests(unittest.TestCase):
             with self.assertRaisesRegex(OSError, 'publication failed'):
                 self.install()
         self.assert_original()
+
+    def test_alias_publication_failure_keeps_verified_same_path_replacement(self):
+        replace = installer.os.replace
+        def fail_alias(source, destination):
+            if destination == self.alias:
+                raise OSError('alias publication failed')
+            return replace(source, destination)
+        with patch.object(installer.os, 'replace', side_effect=fail_alias):
+            with self.assertRaisesRegex(OSError, 'alias publication failed'):
+                self.install()
+        self.assertEqual(self.library.read_bytes(), self.replacement.read_bytes())
+        self.assertEqual(self.alias.resolve(), self.library)
+        self.assertEqual(set(self.directory.iterdir()), {self.library, self.alias})
+
+    def test_reinstall_rejects_replacement_as_original_signed_vendor(self):
+        self.install()
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+            self.install()
+        self.assertEqual(self.library.read_bytes(), self.replacement.read_bytes())

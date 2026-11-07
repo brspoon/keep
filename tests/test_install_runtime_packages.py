@@ -31,6 +31,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
             ('certificates', ('ca-certificates-bundle',), '20261020-r0', 'CA_CERTIFICATES_SECURITY.json'),
             ('expat', ('expat', 'libexpat'), '2.10.0-r0', 'EXPAT_SECURITY.json'),
             ('zlib', ('zlib',), '1.4-r0', 'ZLIB_SECURITY.json'),
+            ('sqlite', ('sqlite-libs',), '3.54.1-r0', 'SQLITE_SECURITY.json'),
             ('python', ('pyc-3.14', 'python-3.14', 'python-3.14-pyc',
                         'python-3.14-pycache-pyc0'), '3.14.8-r0', 'PYTHON_SECURITY.json'),
         )
@@ -97,7 +98,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
             installer.install(self.root)
         run.assert_not_called()
 
-    def test_preparation_merges_only_identical_reviewed_keys_and_exact_nine_packages(self):
+    def test_preparation_merges_only_identical_reviewed_keys_and_exact_ten_packages(self):
         for architecture in ('amd64', 'arm64'):
             with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory) / 'prepared'
@@ -105,7 +106,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
                 self.assertEqual({path.name for path in (root / 'keys').iterdir()},
                                  {'alpine-test.rsa.pub', 'dhi-test.rsa.pub'})
                 packages = installer.installation_inputs(root, architecture)
-                self.assertEqual(len(packages), 9)
+                self.assertEqual(len(packages), 10)
                 self.assertEqual({path.name for path in packages},
                                  {package['name'] + '-' + package['version'] + '.apk'
                                   for spec in self.specs.values() for package in spec['packages']})
@@ -406,7 +407,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
 
 
 class RealInstallerContractTests(unittest.TestCase):
-    def test_actual_cohort_metadata_supports_all_nine_offline_inputs(self):
+    def test_actual_cohort_metadata_supports_all_ten_offline_inputs(self):
         # Keep genuine helper contracts here; substitute only file checks so this
         # test neither downloads vendor APKs nor invokes a native package manager.
         for architecture in ('amd64', 'arm64'):
@@ -427,8 +428,8 @@ class RealInstallerContractTests(unittest.TestCase):
                 with patch.object(installer, 'checked_file', side_effect=lambda path, digest: path) as checked:
                     actual = installer.installation_inputs(root, architecture)
                 self.assertEqual(actual, expected)
-                self.assertEqual(len(actual), 9)
-                self.assertEqual(sum(path.suffix == '.apk' for path, _ in (item.args for item in checked.call_args_list)), 9)
+                self.assertEqual(len(actual), 10)
+                self.assertEqual(sum(path.suffix == '.apk' for path, _ in (item.args for item in checked.call_args_list)), 10)
 
     def test_final_docker_layer_installs_verifies_patches_and_cleans_without_tool_copies(self):
         text = (ROOT / 'Dockerfile').read_text()

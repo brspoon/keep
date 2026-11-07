@@ -48,7 +48,7 @@ identifiers are not interchangeable. The image-level source collection contains
 assembly inputs, so package-level sources are collected separately.
 
 The source map covers 18 origins and 29 installed OS packages. The original
-DHI Expat 2.8.5, Python 3.14.7-r2, zlib 1.3.2-r0, musl 1.2.6-r2 and CA bundle 20260909-r0 in earlier image layers retain their exact APK hashes,
+DHI Expat 2.8.5, Python 3.14.7-r2, zlib 1.3.2-r0, musl 1.2.6-r2, SQLite 3.53.4-r0 and CA bundle 20260909-r0 in earlier image layers retain their exact APK hashes,
 native-base material binding and signed package sources separately from the
 installed replacement packages. Alpine's zlib 1.4-r0 is verified separately
 against signed APKs, its complete pinned aports context, upstream source,
@@ -429,3 +429,10 @@ source records, and the full Python license. Original signed Python package
 sources remain separate. The upstream synthetic distrusted-SPKI test fixture is
 retained in Keep's matching source under the Python license; its public test
 credentials are excluded from the runtime image.
+
+The signed Alpine SQLite 3.54.1-r0 input has its own complete aports context,
+checksum-matching amalgamation and preferred-source ZIP, full license notice,
+native APK metadata and RSA proof. Keep's hardened library and toolchain retain
+their separate source/build records. Vendor-signature coverage must not be
+attributed to the custom library. Original DHI SQLite source-image bindings and
+full notices remain in the earlier-layer materials.

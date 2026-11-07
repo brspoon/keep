@@ -5,7 +5,7 @@ Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in
 scripts/python_security_patches.json, and
 installs the exact signed Alpine musl `1.2.6-r3`, zlib `1.4-r0`, DHI Python `3.14.10-r1` and
-DHI CA bundle `20261020-r0` packages. Package versions change through verified offline APK installation;
+DHI CA bundle `20261020-r0` and Alpine SQLite library `3.54.1-r0` packages. Package versions change through verified offline APK installation;
 the build never relabels an older package or suppresses a finding.
 
 The compiled `_socket` extension is separately rebuilt from the exact Python
@@ -976,3 +976,20 @@ hashes, gzip/zlib behavior and all existing qualification gates remain required.
 CVE-2026-4738 concerns the separate contrib/infback9 code; it is not the identity
 of the additional core-library fixes. No new exception or deadline extension
 is included in this candidate.
+
+## Signed SQLite package candidate
+
+The candidate installs the exact Alpine `sqlite-libs 3.54.1-r0` package before
+applying Keep's existing hardened SQLite 3.54.1 build. APK metadata comes from
+that signed installation. The vendor APK signature covers its input library;
+it does not cover Keep's rebuilt output. Both native builds check the signed
+vendor library's exported API, compile options, source ID, threading and limit
+defaults before checking the hardened replacement.
+
+Vendor and replacement now share `/usr/lib/libsqlite3.so.3.54.1`. Installation
+authenticates the original bytes and exact SONAME family, atomically replaces
+the canonical file, and verifies the final hash without deleting that file.
+Original DHI SQLite package/source evidence remains retained for earlier layers.
+The exact all-layer command-line-shell detector and every existing SQLite,
+backup, recovery and ordinary-loader gate remain required. Package availability
+alone does not qualify a replacement or authorize a new finding approval.

@@ -616,6 +616,15 @@ def retain_signed_alpine(source, destination, origin, result, arch, runtime_inve
                 'replacement_library': checked['replacement_library'],
                 'cpp_source_binding': checked['cpp_source_binding'],
                 'files': len(checked['files'])}
+    elif origin.get('source_method') == 'alpine-signed-sqlite-v1':
+        from alpine_sqlite_sources import collect_sources
+        from collect_package_sources import verify_sqlite_replacement
+        if (result.get('apk_binary_match_verified') is not False
+                or result.get('runtime_build_verified') is not True
+                or result.get('vendor_apk_signature_verified') is not True):
+            raise ValueError('Require separately verified SQLite runtime overlay')
+        verify_sqlite_replacement(runtime_inventory, arch)
+        directory = 'alpine-sqlite-sources'
     elif origin.get('source_method') == 'alpine-signed-zlib-v1':
         from alpine_zlib_sources import collect_sources
         directory = 'alpine-zlib-sources'
@@ -627,7 +636,7 @@ def retain_signed_alpine(source, destination, origin, result, arch, runtime_inve
     if (result.get('binding_method') != 'signed-alpine-packages'
             or result.get('provider_oci_binding') is not False
             or result.get('signature_verified') is not True
-            or result.get('apk_binary_match_verified') is not True
+            or result.get('apk_binary_match_verified') is not (origin['origin'] != 'sqlite')
             or runtime_inventory is None
             or result.get('public_sources') != {'directory': directory,
                                                 'manifest': 'manifest.json'}):
@@ -642,7 +651,7 @@ def retain_signed_alpine(source, destination, origin, result, arch, runtime_inve
         raise ValueError('Alpine sources differ from checked signed package inputs')
     return {'origin': origin['origin'], 'version': origin['version'],
             'provider_oci_binding': False, 'binding_method': checked['binding_method'],
-            'signature_verified': True, 'apk_binary_match_verified': True,
+            'signature_verified': True, 'apk_binary_match_verified': origin['origin'] != 'sqlite',
             'source_manifest_sha256': checked['source_manifest_sha256'],
             'files': len(checked['files'])}
 
@@ -702,7 +711,7 @@ def retain_packages(source, destination, os_lock, arch, *, material_inspector=No
         copy_file(package_root, 'acquisition.json', target / 'acquisition.json')
         if result.get('provider_oci_binding') is False:
             if origin.get('source_method') in {
-                    'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1'}:
+                    'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1', 'alpine-signed-sqlite-v1'}:
                 coverage.append(retain_signed_alpine(package_root, target / 'public-sources',
                     origin, result, arch, runtime_inventory))
             elif name == 'openssl' and base_source is not None and runtime_inventory is not None:
@@ -810,6 +819,8 @@ def reviewed_original_base_origins(os_lock):
     for origin in os_lock.get('origins', []):
         if origin.get('source_method') == 'alpine-signed-zlib-v1':
             expected_originals.add('zlib')
+        if origin.get('source_method') == 'alpine-signed-sqlite-v1':
+            expected_originals.add('sqlite')
         if origin.get('source_method') == 'alpine-signed-musl-v1':
             expected_originals.add('musl')
         if origin.get('origin') == 'python-3.14' and origin.get('version') in {'3.14.8-r0', '3.14.10-r1'}:
@@ -961,6 +972,11 @@ def consolidate_notices(stage, os_lock, arch, runtime_inventory=None, *, selecte
         origins = [row for row in os_lock['origins'] if row['origin'] == 'zlib']
         import_public_notices(zlib, public / 'zlib', origin='zlib', architecture=arch,
             package_spec=origins[0], runtime_inventory=runtime_inventory)
+    sqlite = stage / 'os-packages/sqlite/public-sources'
+    if sqlite.exists():
+        origins = [row for row in os_lock['origins'] if row['origin'] == 'sqlite']
+        import_public_notices(sqlite, public / 'sqlite', origin='sqlite', architecture=arch,
+            package_spec=origins[0], runtime_inventory=runtime_inventory)
     musl = stage / 'os-packages/musl/public-sources'
     if musl.exists():
         origins = [row for row in os_lock['origins'] if row['origin'] == 'musl']
@@ -1057,8 +1073,8 @@ def archive_tree(directory, archive, name):
 def retain_sqlite_sources(stage, inventory, arch, *, root=ROOT, fetch=fetch_source):
     """Retain the corrected library's preferred sources and independent build proof.
 
-    The unchanged sqlite origin continues to cover the signed vendor APK and
-    its lower-layer bytes. This separate component makes no vendor APK claim.
+    The SQLite origin covers the signed Alpine input. Original DHI SQLite
+    sources remain independently bound to the lower-layer bytes. This separate component makes no vendor APK claim.
     """
     import build_patched_sqlite as build
     import build_patched_expat as expat_build
@@ -1187,7 +1203,7 @@ def keep_source(root, destination):
     with (destination / 'keep-source.tar').open('wb') as stream:
         subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=root, stdout=stream, check=True)
     for filename in ('Dockerfile', '.dockerignore', 'requirements.txt', 'LICENSE', 'VERSION',
-                     'scripts/alpine_zlib_sources.py', 'scripts/alpine_musl_sources.py',
+                     'scripts/alpine_zlib_sources.py', 'scripts/alpine_sqlite_sources.py', 'scripts/alpine_musl_sources.py',
                      'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'docs/python-socket-build.json',

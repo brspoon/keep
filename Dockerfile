@@ -6,7 +6,7 @@ USER 0
 WORKDIR /app
 ENV KEEP_EXPAT_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
 ENV KEEP_SQLITE_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
-COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py /opt/runtime-build-tools/
+COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_sqlite_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py /opt/runtime-build-tools/
 COPY scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/alpine_expat_sources.py scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py scripts/dhi_python_packages.py /opt/scripts/
 COPY docs/expat-build.json /opt/docs/expat-build.json
 COPY scripts/build_patched_sqlite.py scripts/sqlite_security_patches.json /opt/runtime-build-tools/
@@ -21,6 +21,9 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
     ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-certificates"]
+RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
+    --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
+    ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install-build-sqlite"]
 RUN ["python", "-B", "/opt/scripts/dhi_cpp_packages.py", "--prepare", "--output", "/opt/build-cpp"]
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
@@ -91,6 +94,7 @@ COPY docs/expat-build.json /app/EXPAT_BUILD.json
 COPY --from=dependencies /opt/runtime-packages/sqlite-patched/SQLITE_PATCHED_SECURITY.json /app/SQLITE_PATCHED_SECURITY.json
 COPY docs/sqlite-build.json /app/SQLITE_BUILD.json
 COPY --from=dependencies /opt/runtime-packages/zlib/ZLIB_SECURITY.json /app/ZLIB_SECURITY.json
+COPY --from=dependencies /opt/runtime-packages/sqlite/SQLITE_SECURITY.json /app/SQLITE_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/python/PYTHON_SECURITY.json /app/PYTHON_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/certificates/CA_CERTIFICATES_SECURITY.json /app/CA_CERTIFICATES_SECURITY.json
 COPY --from=dependencies /opt/runtime-packages/musl/MUSL_SECURITY.json /app/MUSL_SECURITY.json

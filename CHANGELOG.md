@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.30.5 — 2026-11-07
+
+- Update zlib to 1.4 with upstream compression-library fixes.
+
 ## 2.30.4 — 2026-11-03
 
 - Avoid failure and recovery alerts for short-lived background job interruptions. Persistent failures still alert.

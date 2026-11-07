@@ -1029,10 +1029,13 @@ def replay_patched_expat_sources(source, destination, origin, architecture,
 
 def acquire_origin(origin, architecture, destination, registry, *, base_provenance=None, runtime_inventory=None):
     if origin.get('source_method') in {
-            'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1'}:
+            'alpine-signed-expat-v1', 'alpine-signed-zlib-v1', 'alpine-signed-musl-v1', 'alpine-signed-sqlite-v1'}:
         if origin['source_method'] == 'alpine-signed-expat-v1':
             collect_sources = collect_patched_expat_sources
             directory = 'alpine-expat-sources'
+        elif origin['source_method'] == 'alpine-signed-sqlite-v1':
+            from alpine_sqlite_sources import collect_sources
+            directory = 'alpine-sqlite-sources'
         elif origin['source_method'] == 'alpine-signed-zlib-v1':
             from alpine_zlib_sources import collect_sources
             directory = 'alpine-zlib-sources'
@@ -1041,6 +1044,8 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
             directory = 'alpine-musl-sources'
         if runtime_inventory is None:
             raise ValueError('Signed Alpine sources require the actual candidate inventory')
+        if origin['origin'] == 'sqlite':
+            verify_sqlite_replacement(runtime_inventory, architecture)
         root = Path(destination)
         root.mkdir(parents=True, exist_ok=True)
         if origin['origin'] == 'expat':
@@ -1054,10 +1059,10 @@ def acquire_origin(origin, architecture, destination, registry, *, base_provenan
         result = {'origin': origin['origin'], 'version': origin['version'],
                   'architecture': architecture, 'success': True,
                   'provider_oci_binding': False, 'signature_verified': True,
-                  'apk_binary_match_verified': origin['origin'] != 'expat',
+                  'apk_binary_match_verified': origin['origin'] not in {'expat', 'sqlite'},
                   'binding_method': manifest['binding_method'],
                   'public_sources': {'directory': directory, 'manifest': 'manifest.json'}}
-        if origin['origin'] == 'expat':
+        if origin['origin'] in {'expat', 'sqlite'}:
             result['runtime_build_verified'] = True
             result['vendor_apk_signature_verified'] = True
         (root / 'acquisition.json').write_text(json.dumps(result, indent=2) + '\n')
