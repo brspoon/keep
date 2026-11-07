@@ -1,6 +1,6 @@
 {
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
-  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 1, 2026 review permits only CVE-2025-15367 at Medium and CVE-2026-103995 at Low for APK python-3.14 version 3.14.10-r1, plus the unchanged exact Alpine 3.24 musl 1.2.6-r3 UNSPECIFIED Scout scope below, through November 11, 2026 UTC inclusive. The older Python scopes are replaced; CVE-2026-12345 and CVE-2026-87910 are retired. Both native runtime suites and signed-source/notice preparation passed in 41329357665 at 33bf107; original unsuppressed reports contain exactly the two Python matches and one musl match per architecture. Complete rebuilt source archives and every existing functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard and existing protections. Raw reports and truthful counts remain visible. The November 4 UTC review also permits the exact verified-fixed SQLite library match CVE-2026-119376 and the exact absent SQLite command-line shell match CVE-2026-119586 below through November 11, 2026 UTC inclusive. No other package, version, severity, finding, PURL or threshold is accepted. No deadline extension or automatic future renewal is permitted.",
+  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 7, 2026 review keeps the exact verified-fixed CVE-2025-15367 Medium and CVE-2026-103995 Low scopes for APK python-3.14 3.14.10-r1, adds verified-fixed CVE-2026-116566 Medium for that same exact Python package, and retains only the exact Alpine 3.24 musl 1.2.6-r3 Scout false-positive scope below at High severity. It also permits the exact Grype CVE-2026-119586 package-to-absent-SQLite-command-line-shell review below. These scopes expire November 11, 2026 UTC inclusive. The prior SQLite CVE-2026-119376 library scope and Scout 3.53.4-r0 SQLite shell scope are retired; if they recur they block. CVE-2026-12345 and CVE-2026-87910 remain retired. Candidate scans in 42406395894 found only these exact findings on both architectures; the scanner-policy gate failed pending this review and downstream source-archive gates did not run. The reviewed signed SQLite package contains only the library payload, and runtime plus all-layer evidence showed no shell, with documented detector limitations. Complete source archives and every functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard, hardened SQLite library and all existing protections. Raw reports and truthful counts remain visible. No other package, version, severity, finding, PURL, matcher identity or threshold is accepted. No deadline extension or automatic future renewal is permitted.",
   "reviewed_sources": {
     "Dockerfile": "d839b5555220962a5b9ee81c0169b1eef31ca44ce5f5b96e3efcdc66ef1b082a",
     "scripts/inspect_candidate.py": "8c1dcc1a7d7895cc1c5e1ab297ee78c28c1ed9ec7fd76bd64083ce646d52073f",
@@ -12,7 +12,7 @@
     "scripts/runtime_dependency_checks.py": "b0bc70b9b2e60f7e6dc0e33ebfbf2be54fe43e504429629c4c20791aeddb9b8b",
     "docs/os-package-sources.json": "7854ff92cc65e9e18449f97d96d1a70ff4cdf7eba374372e1beb460849f97ab7",
     ".dockerignore": "f18fa7b6775eee269a2ea0bc3f8ab53817810df24c4fed92170d5d2d339425bc",
-    "scripts/review_image.py": "3a8045e7146c991719b80162329a16b3f3080fb8274a1bd7925f532dbe4bf7c8",
+    "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
     "scripts/alpine_zlib_sources.py": "e3b4d5efc7a31dd04bd316458f2ece1a0a72b0f6b7ec7a1d6185a2f058c7456d",
     "scripts/dhi_python_packages.py": "edfeca760335cb5539846b15bd0f65beef62ae8526ce5a5c20d10c1f6ff77e74",
     "scripts/install_runtime_packages.py": "57d8a913cd92e19950d867b7c219da60d4e3efd95eb519f65deecddae6382aad",
@@ -91,25 +91,25 @@
         "reviewed_on": "2026-11-01"
       }
     },
-    "CVE-2026-119376": {
-      "evidence": "Native loaded SQLite 3.54.1 enforces expression depth against raw, quoted, and stored-view COLLATE chains. The inherited package record remains 3.53.4-r0. Both architectures passed loaded-runtime, compatibility, installer, recovery, signed-source and full source-archive/member checks in https://github.com/brspoon/keep/actions/runs/41760341346 at ab1f5c83d0caca581844b7a3f255907a4c63ffd9. The run failed only at finding acceptance with the SQLite rules inactive. Fresh exact-revision qualification and completed unfiltered hosted analysis remain required.",
-      "package": "sqlite-libs",
-      "review": {
-        "approval": "The November 4 UTC review permits only the exact Medium APK sqlite-libs 3.53.4-r0 Grype match for CVE-2026-119376 through November 11, 2026 UTC inclusive. Verify the loaded SQLite 3.54.1 correction and all existing release gates. No automatic renewal.",
-        "deadline": "2026-11-11",
-        "remove_when": "Complete unsuppressed scans no longer report this exact finding after a verified package or matcher replacement.",
-        "reviewed_on": "2026-11-04"
-      },
+    "CVE-2026-116566": {
       "severity": "Medium",
-      "status": "fixed",
       "type": "apk",
-      "version": "3.53.4-r0"
+      "package": "python-3.14",
+      "version": "3.14.10-r1",
+      "status": "fixed",
+      "evidence": "The exact DHI Python 3.14.10-r1 package is accompanied by Keep's rebuilt _socket extension carrying upstream embedded-NUL correction 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 with the vendor ABI, flags and pyconfig. Both native architecture probes reject embedded NUL bytes for host and port through raw and public getaddrinfo paths while preserving numeric/ordinary resolver and socketpair behavior. The original Grype reports in candidate run 42406395894 contain this exact Medium package-level CPE match on each architecture, with ignoredMatches empty. Full source-archive, matching source/license and exact-main gates remain mandatory; this review does not claim application exploitability or replace the native and hosted release gates.",
+      "review": {
+        "approval": "The November 7, 2026 review permits only CVE-2026-116566 at Medium severity for APK python-3.14 version 3.14.10-r1 through November 11, 2026 UTC inclusive. Require the exact local socket correction, resolver probes and every existing provenance/source/license/runtime/native and hosted-analysis gate. Other identities, versions or severities block. No automatic renewal.",
+        "deadline": "2026-11-11",
+        "remove_when": "Remove after a verified vendor package or matcher correction eliminates this exact finding from complete unsuppressed native scans while preserving the socket correction and all other Python guards and release gates.",
+        "reviewed_on": "2026-11-07"
+      }
     }
   },
   "require_zero_findings": false,
   "scout_exceptions": {
     "CVE-2026-107891": {
-      "severity": "UNSPECIFIED",
+      "severity": "HIGH",
       "type": "apk",
       "package": "musl",
       "version": "1.2.6-r3",
@@ -125,42 +125,48 @@
       },
       "evidence": "Alpine stable v3.24 secdb identifies 1.2.6-r3 as fixed; edge separately uses r6. Immutable aports commit 8f79d39391b46d6dbf1800fb68b8212a21d5ee2e and patch SHA256 0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b carry upstream fix 7813e9119eb5fe681b6750b8a033a0490bca0941. Exact signed APKs, loaded default-libc hashes, benign regex and compatibility probes, complete matching-source archives and notices passed on native amd64 and arm64 in qualification 39728273258 at 3437692f4473856e875187cd05a55d129e915219. That run remained failed solely at Scout acceptance and cannot qualify publication. Original Scout 1.27.0 reports incorrectly apply the edge r6 threshold to stable r3. The correction report and original evidence are public at https://github.com/docker/scout-cli/issues/248. Every changed candidate must pass fresh complete qualification and exact-main validation; this scoped policy does not accept missing evidence. Fresh October 23 review reverified the four exact signed Alpine musl/musl-utils APKs, unchanged stable r3 and edge r6 official feeds, immutable recipe and complete patch equivalence to upstream. Qualification https://github.com/brspoon/keep/actions/runs/40017413915 at 996b45565161ad9d71dfcade9956ebfaeff2711d passed both native architectures, including default loaded-libc hashes 095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5 (amd64) and 53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793 (arm64), all bounded musl controls, complete unsuppressed scans and source/license notice preparation. Scout still reports only this exact musl scope; Grype contains only the two unchanged approved Python scopes. Final rebuilt source-archive and installed-notice verification, exact-main validation and original-byte promotion revalidation remain mandatory. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
       "review": {
-        "reviewed_on": "2026-10-28",
+        "reviewed_on": "2026-11-07",
         "deadline": "2026-11-11",
-        "approval": "Fresh verified-fixed false-positive review on October 28, 2026 permits only CVE-2026-107891 at UNSPECIFIED severity for Alpine 3.24 APK musl 1.2.6-r3 with its unchanged exact PURL, erroneous affected range <1.2.6-r6 and fixed threshold 1.2.6-r6, through November 11, 2026 UTC inclusive. Both native architectures passed complete qualification 40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf and all signed-source, loaded-libc, functional/security/runtime and full source/archive/license gates. Alpine stable r3 remains fixed; edge uses a separate r6 threshold. Other revisions, distributions, findings, severities and thresholds are not approved. Original reports and truthful hosted counts remain visible. No automatic future renewal is permitted.",
+        "approval": "Fresh November 7, 2026 review permits only CVE-2026-107891 at HIGH severity for Alpine 3.24 APK musl 1.2.6-r3 with its unchanged exact PURL, erroneous affected range <1.2.6-r6 and fixed threshold 1.2.6-r6, through November 11, 2026 UTC inclusive. The original candidate reports in 42406395894 contain only this exact stable-r3 musl finding on each architecture; preserve the original severity and unfiltered hosted counts. Alpine stable r3 remains fixed; edge uses a separate r6 threshold. Other revisions, distributions, findings, packages and thresholds are not approved. No automatic future renewal.",
         "remove_when": "Remove after a released or deployed Scout advisory/matcher correction eliminates this exact false match in complete unsuppressed native scans and actual completed Docker Hub analysis for both exact native digests, with all provenance/source/license/runtime gates passing. A verified dependency replacement may also retire it only after the same full qualification. An announcement, issue closure, relabeling or suppression does not qualify removal."
       }
     }
   },
-  "scout_component_reviews": {
+  "scout_component_reviews": {},
+  "grype_component_reviews": {
     "CVE-2026-119586": {
-      "affected_version": "<=3.53.4-r0",
-      "component": "sqlite-command-line-shell",
-      "distribution": "alpine",
-      "distribution_version": "3.24",
-      "evidence": "Signed SQLite library package and all-layer evidence bound to each tested image config show the C shell component absent. The detector recognizes the actual signed stock shell, including when renamed. Both architectures passed loaded-runtime, compatibility, installer, recovery, signed-source and full source-archive/member checks in https://github.com/brspoon/keep/actions/runs/41760341346 at ab1f5c83d0caca581844b7a3f255907a4c63ffd9. The run failed only at finding acceptance with the SQLite rules inactive. Fresh exact-revision qualification and completed unfiltered hosted analysis remain required.",
-      "fixed_version": "not fixed",
+      "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "package": "sqlite",
-      "purl": "pkg:apk/alpine/sqlite@3.53.4-r0?os_name=alpine&os_version=3.24",
-      "review": {
-        "approval": "The November 4 UTC review permits only the exact High Alpine 3.24 SQLite C shell match for CVE-2026-119586 through November 11, 2026 UTC inclusive. Require bound evidence of the absent shell on each exact tested image and preserve the unfiltered scanner finding. No automatic renewal.",
-        "deadline": "2026-11-11",
-        "remove_when": "Complete unsuppressed Scout scans and hosted analysis no longer report this exact absent-component match after a verified correction.",
-        "reviewed_on": "2026-11-04"
+      "component": "sqlite-command-line-shell",
+      "severity": "High",
+      "type": "apk",
+      "package": "sqlite-libs",
+      "version": "3.54.1-r0",
+      "namespace": "nvd:cpe",
+      "matcher": "apk-matcher",
+      "cpe": "cpe:2.3:a:sqlite:sqlite:3.54.1:*:*:*:*:*:*:*",
+      "cpe_version_constraint": "<= 3.54.1 (unknown)",
+      "purl_by_arch": {
+        "amd64": "pkg:apk/alpine/sqlite-libs@3.54.1-r0?arch=x86_64&distro=alpine-3.24&upstream=sqlite",
+        "arm64": "pkg:apk/alpine/sqlite-libs@3.54.1-r0?arch=aarch64&distro=alpine-3.24&upstream=sqlite"
       },
-      "severity": "HIGH",
+      "evidence": "The original Grype result is an NVD CPE match for sqlite 3.54.1-r0, reported against Alpine sqlite-libs APK metadata at /lib/apk/db/installed. The advisory concerns command injection in the SQLite command-line shell's .recover output, not the shared library. The signed sqlite-libs 3.54.1-r0 payload contains only libsqlite3.so.0 and libsqlite3.so.3.54.1. Exact-config runtime and all-layer inventories inspect all image layers, APK metadata, executable paths and shell markers; the candidate run found no shell on either architecture (amd64: 29 layers, 4,403 files, 201 ELF files; arm64: 29 layers, 4,402 files, 201 ELF files). The detector documents limitations for arbitrary renamed, rebuilt, packed, compressed or encoded shell code; this review is limited to the exact package, finding identity, image configuration and supplied proof. Fresh full native and hosted gates remain required.",
       "source_bindings": {
+        "docs/os-package-sources.json": "7854ff92cc65e9e18449f97d96d1a70ff4cdf7eba374372e1beb460849f97ab7",
         "docs/sqlite-build.json": "94fb54b6d7015d3ba652e2e1de205161e04d20f7091fa4b0292e5a593e9ccd92",
         "scripts/build_patched_sqlite.py": "b939a1b8df71e664e6f0fba766f6dd7b50a22fcc5a6a3a1fd8e818ecabbeab2d",
+        "scripts/collect_package_sources.py": "b58b83edabdd29fd272df3f6065ad0c1328292f6fe7ec280d8002fccbcb564e0",
         "scripts/image_distribution.py": "b2932b151cef8c5167c83421d4346ee8c0cf68eda2a73b18f90845696265d461",
-        "scripts/runtime_dependency_checks.py": "b0bc70b9b2e60f7e6dc0e33ebfbf2be54fe43e504429629c4c20791aeddb9b8b",
+        "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
         "scripts/sqlite_security_checks.py": "beb0a8c5bcd873b5139e45144fe16adcb19d9d607c63a03e08c05572fb125085",
         "scripts/sqlite_security_patches.json": "0309b5f618067978d0ef0c648d1e97ee83ea55ea4c543b42135927403cabd8a3"
       },
-      "status": "not_affected",
-      "type": "apk",
-      "version": "3.53.4-r0"
+      "review": {
+        "reviewed_on": "2026-11-07",
+        "deadline": "2026-11-11",
+        "approval": "The November 7, 2026 review permits only CVE-2026-119586 at High severity for the exact APK sqlite-libs 3.54.1-r0 Grype NVD CPE match shown here, and only when the exact scanned image configuration is independently bound to complete runtime and all-layer proof that the vulnerable SQLite command-line shell is absent. Keep the raw finding visible; do not mark the library fixed or suppress the report. Through November 11, 2026 UTC inclusive. No other package, architecture identity, CPE, matcher, constraint or finding is approved; no automatic renewal.",
+        "remove_when": "Retire this component review when the exact finding disappears from complete unsuppressed scans after a verified upstream/package/matcher correction, or if the image shell status is no longer proven absent. Require all source, provenance, native and hosted-analysis gates."
+      }
     }
   }
 }

@@ -21,7 +21,7 @@ from tests.native_dependency_fixture import dependency_report, musl_failure_repo
 FINDING_ID = 'CVE-2026-107891'
 PURL = 'pkg:apk/alpine/musl@1.2.6-r3?os_name=alpine&os_version=3.24'
 FINDING = {
-    'id': FINDING_ID, 'severity': 'UNSPECIFIED', 'purl': PURL,
+    'id': FINDING_ID, 'severity': 'HIGH', 'purl': PURL,
     'affected_version': '<1.2.6-r6', 'fixed_version': '1.2.6-r6',
 }
 DEADLINE = datetime.date(2026, 10, 25)
@@ -34,19 +34,19 @@ def scout_report(arch='amd64'):
         'version': '2.1.0',
         'runs': [{
             'tool': {'driver': {
-                'name': 'docker scout', 'version': '1.27.0',
+                'name': 'docker scout', 'version': '1.29.0',
                 'rules': [{
                     'id': FINDING_ID, 'name': 'OsPackageVulnerability',
                     'properties': {
                         'affected_version': '<1.2.6-r6',
-                        'cvssV3_severity': 'UNSPECIFIED',
+                        'cvssV3_severity': 'HIGH',
                         'fixed_version': '1.2.6-r6', 'purls': [PURL],
-                        'security-severity': '3.1', 'tags': ['UNSPECIFIED'],
+                        'security-severity': '3.1', 'tags': ['HIGH'],
                     },
                 }],
             }},
             'results': [{
-                'ruleId': FINDING_ID, 'ruleIndex': 0, 'kind': 'fail', 'level': 'none',
+                'ruleId': FINDING_ID, 'ruleIndex': 0, 'kind': 'fail', 'level': 'error',
                 'message': {'text': 'Vulnerability   :' + FINDING_ID},
                 'locations': [
                     {'physicalLocation': {'artifactLocation': {'uri': '/lib/apk/db/installed'}}},
@@ -94,30 +94,34 @@ def regression_report(policy, arch):
 class ScoutExceptionPolicyTests(unittest.TestCase):
     def test_current_joint_review_preserves_the_previously_reviewed_scopes(self):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
-        python_findings = ('CVE-2025-15367', 'CVE-2026-103995')
-        self.assertEqual(set(policy['exceptions']), {*python_findings, 'CVE-2026-119376'})
+        python_findings = ('CVE-2025-15367', 'CVE-2026-103995', 'CVE-2026-116566')
+        self.assertEqual(set(policy['exceptions']), set(python_findings))
+        self.assertEqual(set(policy['grype_component_reviews']), {'CVE-2026-119586'})
         self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID})
-        rules = [*policy['exceptions'].values(), *policy['scout_exceptions'].values(),
+        self.assertEqual(policy['scout_component_reviews'], {})
+        rules = [*policy['exceptions'].values(), *policy['grype_component_reviews'].values(),
+                 *policy['scout_exceptions'].values(),
                  *policy['scout_component_reviews'].values()]
-        self.assertTrue(all(policy['exceptions'][finding]['review']['reviewed_on'] == '2026-11-01'
-                            for finding in python_findings))
+        self.assertEqual({policy['exceptions'][finding]['review']['reviewed_on'] for finding in python_findings},
+                         {'2026-11-01', '2026-11-07'})
         self.assertEqual(policy['scout_exceptions'][FINDING_ID]['review']['reviewed_on'],
-                         '2026-10-28')
+                         '2026-11-07')
+        self.assertEqual(policy['scout_exceptions'][FINDING_ID]['severity'], 'HIGH')
         self.assertTrue(all(rule['review']['deadline'] == '2026-11-11' for rule in rules))
-        matches = [{'vulnerability': {'id': finding, 'severity': {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low'}[finding]},
+        matches = [{'vulnerability': {'id': finding, 'severity': {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low', 'CVE-2026-116566': 'Medium'}[finding]},
                     'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.10-r1'}}
                    for finding in python_findings]
         for arch in DIRECT:
             original = scout_report(arch)
-            for day, expired in ((datetime.date(2026, 11, 2), False),
+            for day, expired in ((datetime.date(2026, 11, 7), False),
                                  (datetime.date(2026, 11, 11), False),
                                  (datetime.date(2026, 11, 12), True)):
                 result = self.assess(copy.deepcopy(original), arch=arch, day=day,
                                      policy=policy, matches=matches)
                 with self.subTest(arch=arch, day=day):
                     self.assertEqual(len(result['blocked']) + len(result['scout_blocked']),
-                                     3 if expired else 0)
-                    self.assertEqual(len(result['accepted_fixed']), 0 if expired else 2)
+                                     4 if expired else 0)
+                    self.assertEqual(len(result['accepted_fixed']), 0 if expired else 3)
                     self.assertEqual(len(result['scout_accepted_false_positive']), 0 if expired else 1)
                     self.assertEqual(original, scout_report(arch))
             clean = self.assess({'runs': [{'results': []}]}, arch=arch,
@@ -184,7 +188,7 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
                     self.assertEqual(result['scout_blocked'],
                                      [] if accepted else report['runs'][0]['results'])
                     self.assertEqual(json.dumps(report, sort_keys=True).encode(), original)
-            changed = {**FINDING, 'severity': 'HIGH'}
+            changed = {**FINDING, 'severity': 'UNSPECIFIED'}
             self.assertEqual(finding_decision(changed, renewed, datetime.date(2026, 10, 26)),
                              'exception_mismatch')
             self.assertFalse(result['scout_accepted_false_positive'])
@@ -214,7 +218,7 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
     def test_each_finding_field_is_bound_to_the_approved_false_positive(self):
         mutations = {
             'id': ('CVE-2099-9999',),
-            'severity': ('LOW', 'HIGH', 'unspecified'),
+            'severity': ('LOW', 'UNSPECIFIED', 'unspecified'),
             'purl': (
                 PURL.replace('1.2.6-r3', '1.2.6-r2'),
                 PURL.replace('1.2.6-r3', '1.2.6-r4'),
