@@ -48,7 +48,7 @@ def grype_match(arch):
 class GrypeComponentPolicyTests(unittest.TestCase):
     def setUp(self):
         self.policy = json.loads((ROOT / 'docs/image-exceptions.json').read_bytes())
-        self.today = datetime.date(2026, 11, 7)
+        self.today = datetime.date(2026, 11, 10)
 
     def assess(self, arch='amd64', *, match=None, day=None, inventory=None, layers=None,
                expected=CONFIG, zero=False, proof_result=None):
@@ -77,7 +77,7 @@ class GrypeComponentPolicyTests(unittest.TestCase):
             self.assertEqual(result['grype_not_affected'], [{
                 'id': FINDING, 'package': 'sqlite-libs', 'version': '3.54.1-r0',
                 'status': 'not_affected', 'justification': 'vulnerable_code_not_present',
-                'component': 'sqlite-command-line-shell', 'deadline': '2026-11-11'}])
+                'component': 'sqlite-command-line-shell', 'deadline': '2026-11-18'}])
             validate.assert_called_once_with({'sqlite_cli': {'success': True}}, {
                 'architecture': arch, 'config_sha256': CONFIG, 'success': True, 'findings': []},
                 arch, root=ROOT, image_config_sha256=CONFIG)
@@ -109,13 +109,13 @@ class GrypeComponentPolicyTests(unittest.TestCase):
         result, validate = self.assess(expected=None)
         self.assertEqual(result['blocked'][0]['reason'], 'missing_component_proof')
         validate.assert_not_called()
-        result, validate = self.assess(day=datetime.date(2026, 11, 6))
+        result, validate = self.assess(day=datetime.date(2026, 11, 9))
         self.assertEqual(result['blocked'][0]['reason'], 'component_review_not_started')
         validate.assert_not_called()
-        result, validate = self.assess(day=datetime.date(2026, 11, 11))
+        result, validate = self.assess(day=datetime.date(2026, 11, 10))
         self.assertFalse(result['blocked'])
         validate.assert_called_once()
-        result, validate = self.assess(day=datetime.date(2026, 11, 12))
+        result, validate = self.assess(day=datetime.date(2026, 11, 19))
         self.assertEqual(result['blocked'][0]['reason'], 'exception_expired')
         validate.assert_not_called()
         result, validate = self.assess(zero=True)
