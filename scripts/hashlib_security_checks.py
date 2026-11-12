@@ -104,7 +104,12 @@ def check_hashlib(extension='', *, expect_vulnerable=False, diagnose=False):
         if not diagnose and result is not expected:
             raise AssertionError(f'Wrong FIPS property behavior: {api}, secure={flag}, {order}')
     if diagnose:
-        return observed
+        import hashlib, _hashlib, platform
+        from pathlib import Path
+        path = Path(_hashlib.__file__).resolve(strict=True)
+        return {'architecture': platform.machine(), 'python': platform.python_version(),
+                'extension': {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()},
+                'cases': observed}
     subprocess.run([sys.executable, '-I', '-S', '-B', '-c', CONTROL, str(extension)],
                    check=True, timeout=15)
     if expect_vulnerable:
