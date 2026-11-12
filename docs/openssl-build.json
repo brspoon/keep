@@ -1,6 +1,6 @@
 {
   "build_image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d",
-  "build_script_sha256": "f84aa70a519791ecfe02cf2683e1787602054f58a3180bd2a8cd6a11b9c9ee34",
+  "build_script_sha256": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
   "commits": [
     "159e1de0c448d7b9f09ad768c8e141def4aa1eb4",
     "a0051cfe699bf5a047bc1c4faef65f80f7987366",
@@ -68,58 +68,94 @@
   "identity": "keep-openssl-3.5.9-november-backports-v1",
   "native": {
     "amd64": {
-      "abi": {},
-      "compiler_sha256": null,
+      "abi": {
+        "libcrypto.so.3": {
+          "export_count": 5811,
+          "exports_sha256": "20c9e9c8f06fa91a2292611adfe8b2c2be6ad36a6a42cc0b1600c41635555f5f",
+          "version_definitions_sha256": "a3b7a2e9433b7ef23a346dee12459d1c3b37720e51de7c91b62156b777c6d10c"
+        },
+        "libssl.so.3": {
+          "export_count": 608,
+          "exports_sha256": "8daf97b2faf223134f0046ad81583a08b3f94c327a0e4e265cb8c570759dc9c2",
+          "version_definitions_sha256": "0b266193bf3369c721a795b4a828defb8b27a6ba501ae3026fb33735816ce7cf"
+        }
+      },
+      "compiler_sha256": "cd314c5e8159e9984b63685b98a04797b4f77af3c1f771c27f240d3491a4f89c",
       "files": {
-        "usr/bin/openssl": null,
-        "usr/lib/engines-3/afalg.so": null,
-        "usr/lib/engines-3/capi.so": null,
-        "usr/lib/engines-3/loader_attic.so": null,
-        "usr/lib/engines-3/padlock.so": null,
-        "usr/lib/libcrypto.so.3": null,
-        "usr/lib/libssl.so.3": null,
-        "usr/lib/ossl-modules/legacy.so": null
+        "usr/bin/openssl": "db49403b06a90b18315266ac1d43c9790746b89e5377222af4f208add965c723",
+        "usr/lib/engines-3/afalg.so": "f89ff3d80781678f1223b7c7afac3a014783fb9b1c2b6d39b0c9bc9cec174360",
+        "usr/lib/engines-3/capi.so": "21b01c3c5f53f80536c7bd72d62016a57131e0526eeecd77ebb935ab84cfaf15",
+        "usr/lib/engines-3/loader_attic.so": "c2f64d30b5143faf5bfc374ee7ec99396809f923bc84002a358b8582788be741",
+        "usr/lib/engines-3/padlock.so": "061ac4520b6035a2e76b975d2fe6dd3cae0b862ee4c43486ab9f272b5584f114",
+        "usr/lib/libcrypto.so.3": "041b5bf9f00497eebce1101b3f178f24102d06d72c8feae8f4de861b6560b25b",
+        "usr/lib/libssl.so.3": "863092f89a22ce729f85867d29117f04970cb3a84bfdd356449d29a51e93c2e2",
+        "usr/lib/ossl-modules/legacy.so": "9ee631cdc2e31b37175203e9427881d200f95e2b4e6ca6c564e957ad46444da7"
       },
       "vendor_files": {
-        "usr/bin/openssl": null,
-        "usr/lib/engines-3/afalg.so": null,
-        "usr/lib/engines-3/capi.so": null,
-        "usr/lib/engines-3/loader_attic.so": null,
-        "usr/lib/engines-3/padlock.so": null,
-        "usr/lib/libcrypto.so.3": null,
-        "usr/lib/libssl.so.3": null,
-        "usr/lib/ossl-modules/legacy.so": null
+        "usr/bin/openssl": "0c0e0730dac7f85d2ffc1692b4c182dfc2387aefe0af750980ed7f5034c25465",
+        "usr/lib/engines-3/afalg.so": "aa3d8b95a731de2cb73aa0c87afc092590c97adb7597612c60ffcb2ddfbd8473",
+        "usr/lib/engines-3/capi.so": "d8b1ca564e82846f198b1dbd14f47b572ee0eba7a87c496c543fb95204384500",
+        "usr/lib/engines-3/loader_attic.so": "0b701136968613d92b2fecb26fc81cba1c3165ebbb596b441e85ce056dfc45c0",
+        "usr/lib/engines-3/padlock.so": "ee2c5a461a0fa15e97fd5dc2c180c5f7a3b00c916e9baa26663e296a4d1e2fba",
+        "usr/lib/libcrypto.so.3": "e61a4c4e545736e6bbe61d8dd58a8e134380ae991083074485cd147cb587927d",
+        "usr/lib/libssl.so.3": "3ea9d32848e6ec2e817f06d199f4d05e2fce05a059298978bde6da69c18bb513",
+        "usr/lib/ossl-modules/legacy.so": "a0b072d1bed0f186675ca245a2d6daf53c619e786a3911b9675288c514211e46"
       }
     },
     "arm64": {
-      "abi": {},
-      "compiler_sha256": null,
+      "abi": {
+        "libcrypto.so.3": {
+          "export_count": 5808,
+          "exports_sha256": "06305e4958466a885466ea2dc925e78337f49b6e12ed596f740e7b671f28517a",
+          "version_definitions_sha256": "4589a5c516eb88485317a88bf5be23b9b0ea77415d0a113fc6764c25acf1ef0d"
+        },
+        "libssl.so.3": {
+          "export_count": 608,
+          "exports_sha256": "8daf97b2faf223134f0046ad81583a08b3f94c327a0e4e265cb8c570759dc9c2",
+          "version_definitions_sha256": "410a760c51e66ca89d869b445bf5879cc268cc760050fb5249c554ba40e0849f"
+        }
+      },
+      "compiler_sha256": "b006211469e77f67bb5ba4c72f94242ae69f6d989d8e13e73113a6fdeca715db",
       "files": {
-        "usr/bin/openssl": null,
-        "usr/lib/engines-3/afalg.so": null,
-        "usr/lib/engines-3/capi.so": null,
-        "usr/lib/engines-3/loader_attic.so": null,
-        "usr/lib/engines-3/padlock.so": null,
-        "usr/lib/libcrypto.so.3": null,
-        "usr/lib/libssl.so.3": null,
-        "usr/lib/ossl-modules/legacy.so": null
+        "usr/bin/openssl": "83c9021d3c81b7a53b1942e4fe8eeb6360155ed2a7e523c01c29155b5038df34",
+        "usr/lib/engines-3/afalg.so": "793423de3363ce77eebd6eb80e69209b70738c8216c0625cc96223ddd0c65abb",
+        "usr/lib/engines-3/capi.so": "36a045b795d5427759570f0e361fcfd12b3088ee3a9e7d639d531827852f8571",
+        "usr/lib/engines-3/loader_attic.so": "b51fe98f7716f8332b8edb3bc9ef71be45b67efc7a0081f5863f58b4b968e3c7",
+        "usr/lib/engines-3/padlock.so": "c007ba8e8451aeccb0d19262532e97ca6ddc7e12db32d721318d7ccd9be9b520",
+        "usr/lib/libcrypto.so.3": "0858b778638160985c94fb3f5ba89a0e423d3e6828494adf3cbfc57f96b560d4",
+        "usr/lib/libssl.so.3": "ad6bf7b5fa6cf83fca55640b735d7363d7a34b1087835091af77a13408db17be",
+        "usr/lib/ossl-modules/legacy.so": "fb7ebbb8e9654f1132ad7999605f86b246b2c1e6630871a11c57c5b6676bc988"
       },
       "vendor_files": {
-        "usr/bin/openssl": null,
-        "usr/lib/engines-3/afalg.so": null,
-        "usr/lib/engines-3/capi.so": null,
-        "usr/lib/engines-3/loader_attic.so": null,
-        "usr/lib/engines-3/padlock.so": null,
-        "usr/lib/libcrypto.so.3": null,
-        "usr/lib/libssl.so.3": null,
-        "usr/lib/ossl-modules/legacy.so": null
+        "usr/bin/openssl": "50a841d01fbef9b455a1f8f9850cb3fdffc15074b801dcdc4a784ac01c462caf",
+        "usr/lib/engines-3/afalg.so": "80665368e7cf4ce7f8f4dd175c23d090c82f8bc83d3cb5e39375211fe3547705",
+        "usr/lib/engines-3/capi.so": "96a7cb5eae8e3bfe344722354cd25d20f1de8b0e1834b936601908ce25f58011",
+        "usr/lib/engines-3/loader_attic.so": "8133c6ee96f86f3611aa0e6adf1789c81ab88fa651b6b955bb67c51cf0c71870",
+        "usr/lib/engines-3/padlock.so": "f0b3533b6bf76d742072b07e377552f32b4a63657f8bb189544f99bfcd520b6c",
+        "usr/lib/libcrypto.so.3": "afa7b4175d9312db308350b2a24b11b81d02a30f9004baf04645e4e308c62701",
+        "usr/lib/libssl.so.3": "568397c9a83ec0b1b64b0f77025333511227bc281fa0304c9e3dfd0d79fa43a6",
+        "usr/lib/ossl-modules/legacy.so": "052718917c2a8e1e94be67fa37f1ee3580dd04f7233581c931b3c1a3f7492c22"
       }
     }
   },
   "patch_sha256": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
-  "perl_helper_sha256": "435b8ce051e02ec2b75643a65cfda4552c5d0e205db4fdfb26833d45738c38b8",
+  "perl_helper_sha256": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
   "perl_lock_sha256": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
   "schema": "keep-openssl-build-v1",
   "source_sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
-  "source_url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz"
+  "source_url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz",
+  "toolchain": {
+    "build_tools": {
+      "helper_sha256": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa",
+      "source_lock_sha256": "2dc4bb1f65f4b8259fb9c886a559d02a1983539a0fa6cf214aa6415b3e8353d9"
+    },
+    "cpp": {
+      "helper_sha256": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb",
+      "source_lock_sha256": "272922e2eb2ce7bc5bd7c35717dc557d0225fe867dff22a1b34ddde57cd0d165"
+    },
+    "fortify": {
+      "helper_sha256": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
+      "source_lock_sha256": "8bf7a3d8ef7b26bbf29f40ba39a176dcf3806058262a10794104ea540bfbd6fb"
+    }
+  }
 }

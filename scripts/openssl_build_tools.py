@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import subprocess
 import tarfile
 
@@ -73,13 +74,41 @@ def prepare(output, architecture, *, root=ROOT, fetch=tools.download):
         algorithm = 'sha256' if 'sha256' in item else 'sha512'
         require(hashlib.new(algorithm, body).hexdigest() == item[algorithm], 'Perl matching source differs')
         (output / item['path']).write_bytes(body)
+    verify_sources(output, spec)
     (output / 'openssl-build-tools.json').write_bytes(json_bytes(spec))
     return spec
+
+
+def verify_sources(output, spec):
+    output = Path(output)
+    for row in spec['sources']:
+        path = output / row['path']
+        require(path.is_file() and not path.is_symlink(), 'Missing regular Perl source input')
+        algorithm = 'sha256' if 'sha256' in row else 'sha512'
+        require(hashlib.new(algorithm, path.read_bytes()).hexdigest() == row[algorithm],
+                'Retained Perl source checksum differs')
+    for name, checksum in spec['recipe_files'].items():
+        checked((output / ('recipe-' + name)).read_bytes(), checksum, 'Complete Perl recipe input')
+    recipe = (output / 'recipe-APKBUILD').read_text()
+    require(re.findall(r'^pkgver=(.*)$', recipe, re.M) == ['5.42.3']
+            and re.findall(r'^pkgrel=(.*)$', recipe, re.M) == ['0'], 'Perl recipe version differs')
+    checksums = dict((name, checksum) for checksum, name in
+                     re.findall(r'^([a-f0-9]{128})  (\S+)$', recipe, re.M))
+    expected = {'perl-5.42.3.tar.xz': 'perl-5.42.3.tar.xz',
+                'perl-cross-1.6.3.tar.gz.noauto': 'perl-cross-1.6.3.tar.gz'}
+    expected.update({name: 'recipe-' + name for name in spec['recipe_files'] if name != 'APKBUILD'})
+    require(set(checksums) == set(expected), 'Perl recipe source list is incomplete')
+    for name, path in expected.items():
+        require(hashlib.sha512((output / path).read_bytes()).hexdigest() == checksums[name],
+                'Perl source does not match its exact signed-build recipe')
+    return {'build_commit': spec['build_commit'], 'lock_sha256': LOCK_SHA256,
+            'source_inputs': len(spec['sources'])}
 
 
 def install(output, architecture):
     output = Path(output)
     spec = reviewed_spec()
+    verify_sources(output, spec)
     key = tools.alpine.KEYS[architecture]
     payload = verify_apk((output / 'perl.apk').read_bytes(), architecture,
                          (output / key['name']).read_bytes(), spec)

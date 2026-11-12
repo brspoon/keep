@@ -117,6 +117,8 @@ def install(root=ROOT):
                     str(root / 'python/PYTHON_SECURITY.json')], check=True)
     verify_musl(root, architecture)
     verify_certificates(root, architecture)
+    subprocess.run(['/usr/bin/python3.14', '-B', '/opt/scripts/build_patched_openssl.py',
+                    '--install', '--output', str(root / 'openssl-patched')], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),
                     '--install-expat'], check=True)
     subprocess.run(['/usr/bin/python3.14', '-B', str(Path(__file__)),

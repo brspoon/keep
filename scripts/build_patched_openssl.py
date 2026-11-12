@@ -78,6 +78,10 @@ def facts(root=ROOT):
             'perl_lock_sha256': perl.LOCK_SHA256,
             'perl_helper_sha256': digest(Path(perl.__file__).read_bytes()),
             'compiler_profile_sha256': digest(Path(profile.__file__).read_bytes()),
+            'toolchain': {name: {'helper_sha256': digest(Path(module.__file__).read_bytes()),
+                                'source_lock_sha256': digest(json_bytes(module.reviewed_spec()))}
+                          for name, module in (('fortify', profile.fortify), ('cpp', profile.cpp),
+                                               ('build_tools', profile.build_tools))},
             'build_image': BUILD_IMAGE, 'configure_options': list(OPTIONS),
             'environment': {a: environment(a) for a in profile.TARGETS},
             'commits': list(COMMITS), 'files': list(FILES)}
@@ -100,6 +104,12 @@ def reviewed_spec(root=ROOT, *, lock_path=None, preparation=False):
                     for v in values), 'Unreviewed OpenSSL native pins cannot qualify a runtime')
         require(preparation or set(row['abi']) == {'libcrypto.so.3', 'libssl.so.3'},
                 'OpenSSL vendor ABI is missing')
+        for abi in row['abi'].values():
+            require(set(abi) == {'exports_sha256', 'export_count', 'version_definitions_sha256'}
+                    and type(abi['export_count']) is int and 0 < abi['export_count'] < 100000
+                    and all(isinstance(abi[k], str) and re.fullmatch('[a-f0-9]{64}', abi[k])
+                            for k in ('exports_sha256', 'version_definitions_sha256')),
+                    'OpenSSL ABI identity is incomplete')
     return spec
 
 
@@ -146,6 +156,9 @@ def apply_patches(source, manifest):
     require(manifest['schema'] == 'keep-openssl-patches-v1' and manifest['version'] == '3.5.9'
             and [p['commit'] for p in manifest['patches']] == list(COMMITS), 'OpenSSL patch scope differs')
     for path, checksum in manifest['original_files'].items():
+        safe = PurePosixPath(path)
+        require(not safe.is_absolute() and '..' not in safe.parts and '\\' not in path and '\x00' not in path,
+                'Unsafe OpenSSL original source path')
         checked((source / path).read_bytes(), checksum, 'Original OpenSSL source ' + path)
     for patch in manifest['patches']:
         for row in patch['files']:
@@ -188,17 +201,23 @@ def apply_auxv(source, patch):
 
 def replay_sources(output, *, root=ROOT, fetch=download):
     spec = reviewed_spec(root, preparation=True)
-    source = extract_source(fetch(SOURCE_URL), output)
+    output = profile.empty_directory(output)
+    archive = checked(fetch(SOURCE_URL), SOURCE_SHA256, 'OpenSSL source archive')
+    (output / (SOURCE_DIRECTORY + '.tar.gz')).write_bytes(archive)
+    source = extract_source(archive, output / 'source')
     auxv = fetch(AUXV_URL)
     require(hashlib.sha512(auxv).hexdigest() == AUXV_SHA512, 'Vendor auxv patch differs')
     apply_auxv(source, auxv.decode())
+    (output / 'auxv.patch').write_bytes(auxv)
     patch = checked((Path(root) / 'scripts/openssl_security_patches.json').read_bytes(),
                     spec['patch_sha256'], 'OpenSSL patch manifest')
     manifest = json.loads(patch)
     # Retain original upstream patches as well as exact-context replay records.
     for row in manifest['patches']:
-        checked(fetch(row['url']), row['sha256'], 'Original upstream OpenSSL patch')
+        (output / (row['commit'] + '.patch')).write_bytes(
+            checked(fetch(row['url']), row['sha256'], 'Original upstream OpenSSL patch'))
     apply_patches(source, manifest)
+    (output / 'openssl_security_patches.json').write_bytes(patch)
     return source
 
 

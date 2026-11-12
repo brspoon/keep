@@ -98,7 +98,8 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
         self.assertEqual(set(policy['exceptions']), set(python_findings) | {'CVE-2026-119170'})
         self.assertEqual(policy['exceptions']['CVE-2026-119170']['review']['reviewed_on'], '2026-11-12')
         self.assertEqual(set(policy['grype_component_reviews']), {'CVE-2026-119586'})
-        self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID})
+        from scout_exception_policy import OPENSSL_FINDINGS
+        self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID} | OPENSSL_FINDINGS)
         self.assertEqual(policy['scout_component_reviews'], {})
         rules = [*policy['exceptions'].values(), *policy['grype_component_reviews'].values(),
                  *policy['scout_exceptions'].values(),

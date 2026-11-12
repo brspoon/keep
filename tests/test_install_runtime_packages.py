@@ -254,6 +254,8 @@ class InstallRuntimePackageTests(unittest.TestCase):
             call(['/usr/bin/python3.14', '-B', str(tool / 'dhi_certificate_packages.py'),
                   '--architecture', 'amd64', '--manifest',
                   str(self.root / 'certificates/CA_CERTIFICATES_SECURITY.json')], check=True),
+            call(['/usr/bin/python3.14', '-B', '/opt/scripts/build_patched_openssl.py',
+                  '--install', '--output', str(self.root / 'openssl-patched')], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
                   '--install-expat'], check=True),
             call(['/usr/bin/python3.14', '-B', str(tool / 'install_runtime_packages.py'),
@@ -268,7 +270,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
 
     def test_failure_at_each_native_step_prevents_all_later_steps(self):
         self.prepared()
-        for failing_step in range(9):
+        for failing_step in range(10):
             def fail(command, *, check):
                 if run.call_count == failing_step + 1:
                     raise subprocess.CalledProcessError(1, command)
@@ -285,7 +287,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
                 patch.object(installer, 'installation_inputs', return_value=packages), \
                 patch.object(installer.subprocess, 'run') as run:
             installer.main()
-        self.assertEqual(run.call_count, 9)
+        self.assertEqual(run.call_count, 10)
         verification = run.call_args_list[1].args[0]
         self.assertEqual(verification[0:2], ['/usr/bin/python3.14', '-B'])
         self.assertIn('--verify-installed', verification)
@@ -293,10 +295,11 @@ class InstallRuntimePackageTests(unittest.TestCase):
         self.assertEqual(Path(run.call_args_list[2].args[0][2]).name, 'alpine_musl_sources.py')
         self.assertIn('--verify-installed', run.call_args_list[2].args[0])
         self.assertEqual(Path(run.call_args_list[3].args[0][2]).name, 'dhi_certificate_packages.py')
-        self.assertEqual(run.call_args_list[4].args[0][-1], '--install-expat')
-        self.assertEqual(run.call_args_list[5].args[0][-1], '--install-sqlite')
-        self.assertEqual(Path(run.call_args_list[6].args[0][2]).name, 'patch_python_runtime.py')
-        self.assertEqual(run.call_args_list[8].args[0][-1], '--clean-stdlib')
+        self.assertEqual(Path(run.call_args_list[4].args[0][2]).name, 'build_patched_openssl.py')
+        self.assertEqual(run.call_args_list[5].args[0][-1], '--install-expat')
+        self.assertEqual(run.call_args_list[6].args[0][-1], '--install-sqlite')
+        self.assertEqual(Path(run.call_args_list[7].args[0][2]).name, 'patch_python_runtime.py')
+        self.assertEqual(run.call_args_list[9].args[0][-1], '--clean-stdlib')
 
     def test_build_musl_requires_matching_development_package_and_fresh_verification(self):
         self.prepared()
@@ -458,7 +461,7 @@ class RealInstallerContractTests(unittest.TestCase):
         inputs = next(stage for stage in re.split(r'(?m)^FROM ', text)[1:]
                       if re.search(r'\bAS runtime-inputs\s*$', stage.splitlines()[0]))
         self.assertIn('"--install-build-musl"', inputs)
-        self.assertIn('FROM runtime-inputs AS dependencies', text)
+        self.assertIn('FROM openssl-build-inputs AS dependencies', text)
         self.assertLess(dependency.index('build_patched_expat.py'), dependency.index('COPY requirements.txt'))
         self.assertIn('/opt/runtime-packages/musl/MUSL_SECURITY.json /app/MUSL_SECURITY.json', final)
         self.assertIn('RUN python -m venv', dependency)

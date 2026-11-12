@@ -1005,3 +1005,27 @@ Original DHI SQLite package/source evidence remains retained for earlier layers.
 The exact all-layer command-line-shell detector and every existing SQLite,
 backup, recovery and ordinary-loader gate remain required. Package availability
 alone does not qualify a replacement or authorize a new finding approval.
+
+## OpenSSL November backports
+
+Keep rebuilds OpenSSL 3.5.9 with the five fixes in the
+[November 10 advisory](https://openssl-library.org/news/secadv/20261110.txt).
+The original upstream patches, exact source inputs and outputs, vendor auxv
+patch, complete patched tree and native build configuration are retained.
+Both architectures must pass the complete upstream test suite and reproduce
+the reviewed output hashes before a qualified receipt can be written.
+
+The replacement preserves the vendor ABI and replaces the canonical libraries,
+CLI, engines and legacy provider. Configuration and certificate trust are
+preserved. Native Keep checks bind the ordinarily mapped libssl and libcrypto
+bytes and exercise TLS, hostname checking, trust and hashing. Build-only Perl
+is separately authenticated against its signed Alpine APK and complete matching
+source recipe; its sources and full notices are retained outside the runtime
+notice union. No Perl toolchain or FIPS module is added to the runtime.
+
+Original vendor APK metadata and source records remain unchanged. Their
+signatures do not cover Keep's rebuilt outputs. The exact five Scout matches
+may pass only with complete source-bound native replacement evidence and the
+existing review deadline; raw findings and hosted counts remain visible.
+No FIPS certification is claimed. Other finding scopes and deadlines remain
+unchanged, and all release, source, notice and hosted-image gates still apply.
