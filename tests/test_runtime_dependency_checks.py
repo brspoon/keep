@@ -624,6 +624,7 @@ class LoadedPythonIdentityTests(unittest.TestCase):
              patch.object(_ssl, '__file__', self.manifest['ssl_extension']['path'], create=True), \
              patch.object(packages, 'verify_installed', return_value=self.manifest) as installed, \
              patch.object(checks, 'check_socket_runtime', return_value={'library': {}}), \
+             patch.object(checks, 'check_hashlib_runtime', return_value=({}, {})), \
              patch.object(checks, 'exercise_python', return_value={
                  'version': '3.14.10', 'tls_probes': dict(checks.PYTHON_TLS_PROBES)}) as probes:
             result = checks.check_python('amd64', self.root / 'manifest.json', maps)
@@ -889,7 +890,7 @@ class RuntimeReportTests(unittest.TestCase):
              'files': {'executable': library('python3.14'), 'abi_library': library('libpython3.so')},
              'aliases': python['aliases'], 'tls_probes': dict(checks.PYTHON_TLS_PROBES),
              **{key: valid[key] for key in
-                ('socket_manifest', 'socket_manifest_sha256', 'socket_probes')},
+                ('socket_manifest', 'socket_manifest_sha256', 'socket_probes', 'hashlib_probes')},
              'source_manifest_sha256': 'e' * 64, 'install_manifest_sha256': 'f' * 64},
             {'version': '1.2.6-r3', 'libraries': {'musl': library('ld-musl-aarch64.so.1')},
              'aliases': musl['aliases'], 'probes': dict(checks.MUSL_PROBES),
@@ -914,7 +915,7 @@ class RuntimeReportTests(unittest.TestCase):
              patch.object(checks, 'check_sqlite', return_value=sqlite):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 7, 'arch': 'arm64', 'success': True, 'tests': 5, 'failures': 0,
+            'schema': 8, 'arch': 'arm64', 'success': True, 'tests': 5, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10',
                                       'musl': '1.2.6-r3', 'sqlite': '3.54.1'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
@@ -928,7 +929,7 @@ class RuntimeReportTests(unittest.TestCase):
             'python_install_manifest_sha256': 'f' * 64,
             'python_files': python['files'], 'python_aliases': python['aliases'],
             'python_tls_probes': python['tls_probes'],
-            **{key: python[key] for key in ('socket_manifest', 'socket_manifest_sha256', 'socket_probes')},
+            **{key: python[key] for key in ('socket_manifest', 'socket_manifest_sha256', 'socket_probes', 'hashlib_probes')},
             'musl_source_manifest_sha256': 'a' * 64,
             'musl_install_manifest_sha256': 'b' * 64,
             'musl_aliases': musl['aliases'], 'musl_probes': musl['probes'],

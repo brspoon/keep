@@ -1,5 +1,17 @@
 # Image security
 
+The exact vendor Python 3.14.10-r1 `_hashlib` extension already enforces the
+OpenSSL property boundary described by CVE-2026-119170. Native review run
+43310515856 verified all 12 constructor, generic, alias, public and cache-order
+cases on amd64 and arm64. The scanner's version-only match remains visible.
+Release qualification now also binds this module to its signed APK payload,
+checks its ordinary loaded path and hash, repeats the isolated native property
+checks, and verifies ordinary SHA-256, MD5, HMAC and PBKDF2 behavior. Only this
+exact High finding may pass through November 18 UTC inclusive with that proof;
+no other existing scope or deadline changes. No replacement extension or FIPS
+certification is claimed.
+
+
 The portable runtime uses the digest-pinned Docker Hardened Python base in
 Dockerfile. The build removes installation tools, runs as UID 10001, applies
 the reviewed upstream Python fixes and separately identified Keep hardening in

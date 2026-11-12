@@ -1,22 +1,22 @@
 {
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
-  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 10, 2026 review of the immutable Keep 2.30.5 evidence and current upstream status found all five exact scopes below still needed: the three listed Python findings, the Alpine 3.24 musl 1.2.6-r3 Scout finding, and the exact SQLite command-line-shell component review. With explicit user approval, these exact scopes continue through November 18, 2026 UTC inclusive. The prior SQLite CVE-2026-119376 library scope and Scout 3.53.4-r0 SQLite shell scope are retired; if they recur they block. CVE-2026-12345 and CVE-2026-87910 remain retired. Candidate scans in 42406395894 found only these exact findings on both architectures; the scanner-policy gate failed pending this review and downstream source-archive gates did not run. The reviewed signed SQLite package contains only the library payload, and runtime plus all-layer evidence showed no shell, with documented detector limitations. Complete source archives and every functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard, hardened SQLite library and all existing protections. Raw reports and truthful counts remain visible. No other package, version, severity, finding, PURL, matcher identity or threshold is accepted. No automatic future renewal is permitted.",
+  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 10, 2026 review of the immutable Keep 2.30.5 evidence and current upstream status found all five exact scopes below still needed: the three listed Python findings, the Alpine 3.24 musl 1.2.6-r3 Scout finding, and the exact SQLite command-line-shell component review. With explicit user approval, these exact scopes continue through November 18, 2026 UTC inclusive. The prior SQLite CVE-2026-119376 library scope and Scout 3.53.4-r0 SQLite shell scope are retired; if they recur they block. CVE-2026-12345 and CVE-2026-87910 remain retired. Candidate scans in 42406395894 found only these exact findings on both architectures; the scanner-policy gate failed pending this review and downstream source-archive gates did not run. The reviewed signed SQLite package contains only the library payload, and runtime plus all-layer evidence showed no shell, with documented detector limitations. Complete source archives and every functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard, hardened SQLite library and all existing protections. Raw reports and truthful counts remain visible. No other package, version, severity, finding, PURL, matcher identity or threshold is accepted. No automatic future renewal is permitted. The November 12 hashlib review additionally permits only CVE-2026-119170 at High for the exact Python 3.14.10-r1 vendor implementation with mandatory signed-module and native property-boundary proof. No runtime overlay or FIPS certification is claimed; the existing five scopes and their deadlines are unchanged.",
   "reviewed_sources": {
-    "Dockerfile": "d839b5555220962a5b9ee81c0169b1eef31ca44ce5f5b96e3efcdc66ef1b082a",
+    "Dockerfile": "407860779d8dd4c156924cc414a24ad4902afc00b3817443402a34211171794d",
     "scripts/inspect_candidate.py": "8c1dcc1a7d7895cc1c5e1ab297ee78c28c1ed9ec7fd76bd64083ce646d52073f",
     "requirements.txt": "601cdb57645d6a96ab6f6a7e6acf12485b66f00c3a22d506377d48867239da91",
     "scripts/python_security_patches.json": "2252108f17e74cb4a92a5de3a6829fc09f04244a06913bd26ec188bf126d3ccc",
     "scripts/patch_python_runtime.py": "7e04ab28f407cd4e78b21b31b357c9d93b39fafe1aabd988145673ff34034ac1",
     "scripts/python_security_checks.py": "6238d76408139eb7af727b77368374ccb05d3cec98759d9c6072e09828465df4",
     "scripts/alpine_expat_sources.py": "7327688551567acf58b3ce5b0ea042320dc64dc8e3f4a3a3c07039634db3c7b0",
-    "scripts/runtime_dependency_checks.py": "b0bc70b9b2e60f7e6dc0e33ebfbf2be54fe43e504429629c4c20791aeddb9b8b",
+    "scripts/runtime_dependency_checks.py": "f774085c5ce00482e70d0425020bec73c7a44db8af3d040670603ab51b9ed4f6",
     "docs/os-package-sources.json": "7854ff92cc65e9e18449f97d96d1a70ff4cdf7eba374372e1beb460849f97ab7",
-    ".dockerignore": "f18fa7b6775eee269a2ea0bc3f8ab53817810df24c4fed92170d5d2d339425bc",
+    ".dockerignore": "1d198abfb0afc0abe8ac795029b7b251b505fa35d5502a9ebcfdf8031e85e958",
     "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
     "scripts/alpine_zlib_sources.py": "e3b4d5efc7a31dd04bd316458f2ece1a0a72b0f6b7ec7a1d6185a2f058c7456d",
-    "scripts/dhi_python_packages.py": "edfeca760335cb5539846b15bd0f65beef62ae8526ce5a5c20d10c1f6ff77e74",
+    "scripts/dhi_python_packages.py": "87fff6e3b52a07d5937e29c1d283cf808591bf17721a4148a50d43b3c97f3877",
     "scripts/install_runtime_packages.py": "57d8a913cd92e19950d867b7c219da60d4e3efd95eb519f65deecddae6382aad",
-    "scripts/build_distribution_bundle.py": "1f1f28cfbd0743c3bec371e3d5131185eda9b2c01d0b98761a6fa8f644de6def",
+    "scripts/build_distribution_bundle.py": "ad0e1833ae81a0de91b0733a71c1a421964ee3353e6b0638e27d331687cc1f51",
     "scripts/collect_package_sources.py": "b58b83edabdd29fd272df3f6065ad0c1328292f6fe7ec280d8002fccbcb564e0",
     "scripts/package_source_notices.py": "1ce1894419ee67a0742dc0659cd93fb8acda26f78ddb766c58fede2a3cab3807",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
@@ -42,7 +42,7 @@
     "scripts/expat_security_checks.py": "293e15b76deb820aacc27a33f7d3f9c08f3f2669882a90b6c6e2a65aa30b786d",
     "docs/expat-build.json": "96ddf778a3bb1ae837bca4e9c7692be899c6c8fb73fe89f87d10edf891323cc7",
     "scripts/image_distribution.py": "b2932b151cef8c5167c83421d4346ee8c0cf68eda2a73b18f90845696265d461",
-    ".github/workflows/runtime-base-review.yml": "5369c9c2d8cfb153220686c430e86bef2a800c372c6e8c32bf08c366aec29730",
+    ".github/workflows/runtime-base-review.yml": "f363f254f2747191c16593ae3b414a5196d0f41559eb1941b4dc65366a6db8d1",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
     "scripts/dhi_cpp_packages.py": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb",
     "scripts/expat_build_tools.py": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa",
@@ -60,7 +60,8 @@
     "scripts/sqlite_security_patches.json": "0309b5f618067978d0ef0c648d1e97ee83ea55ea4c543b42135927403cabd8a3",
     "scripts/sqlite_security_checks.py": "beb0a8c5bcd873b5139e45144fe16adcb19d9d607c63a03e08c05572fb125085",
     "docs/sqlite-build.json": "94fb54b6d7015d3ba652e2e1de205161e04d20f7091fa4b0292e5a593e9ccd92",
-    "scripts/alpine_sqlite_sources.py": "d8ce1831d2dd38ab3ec8cd5e8a3b7d628eb9e048d2d783168470d31c0609821b"
+    "scripts/alpine_sqlite_sources.py": "d8ce1831d2dd38ab3ec8cd5e8a3b7d628eb9e048d2d783168470d31c0609821b",
+    "scripts/hashlib_security_checks.py": "f1792656ccca3aeb84825dc454f64a8dfe97feed7cac91d96af55d4f9b284c25"
   },
   "exceptions": {
     "CVE-2025-15367": {
@@ -104,6 +105,20 @@
         "remove_when": "Remove after a verified vendor package or matcher correction eliminates this exact finding from complete unsuppressed native scans while preserving the socket correction and all other Python guards and release gates.",
         "reviewed_on": "2026-11-10"
       }
+    },
+    "CVE-2026-119170": {
+      "severity": "High",
+      "type": "apk",
+      "package": "python-3.14",
+      "version": "3.14.10-r1",
+      "status": "fixed",
+      "evidence": "The immutable signed vendor _hashlib extension already enforces the intended OpenSSL property boundary. Native diagnostics in run 43310515856 verified all 12 named/generic/alias/public and cache-order cases on amd64 and arm64 with explicit default-provider loading, fips=yes, and direct EVP_MD_fetch positive (-fips and fips=no) and negative (default FIPS properties) controls. Security hashing is rejected and explicit nonsecurity hashing remains available. Exact vendor extension SHA256 values are 01d7d5bc85f7451db614cc9d58075e8d8ad2cbdb4b4d6ea948c967b42d8c50de (amd64) and 442f4c487f751effd548c6344c41038796702e34973bf1e0fd8fb1b96a2d887d (arm64). Package acquisition must verify each extension inside the original checksum-locked RSA-signed APK; final ordinary imports, mapped library hashes, the complete native property probes and SHA256/MD5/HMAC/PBKDF2 compatibility controls remain mandatory. No custom overlay, FIPS certification, ignored match or severity change is claimed. The generic Python version CPE cannot distinguish these checked vendor bytes. Full source/provenance/license and exact-main qualification remain required.",
+      "review": {
+        "reviewed_on": "2026-11-12",
+        "deadline": "2026-11-18",
+        "approval": "Permit only this exact High Grype finding for the verified vendor Python 3.14.10-r1 implementation through November 18 UTC inclusive, with the newly mandatory signed-APK, mapped-module and native FIPS-property evidence on both architectures. This does not approve a vulnerable runtime or relax other findings.",
+        "remove_when": "Remove when complete unsuppressed scans stop matching this exact package, or a fully qualified vendor replacement removes the need. Changed extension bytes, missing probes, changed severity/package/version, or the review deadline block release."
+      }
     }
   },
   "require_zero_findings": false,
@@ -121,7 +136,7 @@
       "status": "fixed_false_positive",
       "source_bindings": {
         "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
-        "scripts/runtime_dependency_checks.py": "b0bc70b9b2e60f7e6dc0e33ebfbf2be54fe43e504429629c4c20791aeddb9b8b"
+        "scripts/runtime_dependency_checks.py": "f774085c5ce00482e70d0425020bec73c7a44db8af3d040670603ab51b9ed4f6"
       },
       "evidence": "Alpine stable v3.24 secdb identifies 1.2.6-r3 as fixed; edge separately uses r6. Immutable aports commit 8f79d39391b46d6dbf1800fb68b8212a21d5ee2e and patch SHA256 0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b carry upstream fix 7813e9119eb5fe681b6750b8a033a0490bca0941. Exact signed APKs, loaded default-libc hashes, benign regex and compatibility probes, complete matching-source archives and notices passed on native amd64 and arm64 in qualification 39728273258 at 3437692f4473856e875187cd05a55d129e915219. That run remained failed solely at Scout acceptance and cannot qualify publication. Original Scout 1.27.0 reports incorrectly apply the edge r6 threshold to stable r3. The correction report and original evidence are public at https://github.com/docker/scout-cli/issues/248. Every changed candidate must pass fresh complete qualification and exact-main validation; this scoped policy does not accept missing evidence. Fresh October 23 review reverified the four exact signed Alpine musl/musl-utils APKs, unchanged stable r3 and edge r6 official feeds, immutable recipe and complete patch equivalence to upstream. Qualification https://github.com/brspoon/keep/actions/runs/40017413915 at 996b45565161ad9d71dfcade9956ebfaeff2711d passed both native architectures, including default loaded-libc hashes 095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5 (amd64) and 53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793 (arm64), all bounded musl controls, complete unsuppressed scans and source/license notice preparation. Scout still reports only this exact musl scope; Grype contains only the two unchanged approved Python scopes. Final rebuilt source-archive and installed-notice verification, exact-main validation and original-byte promotion revalidation remain mandatory. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
       "review": {

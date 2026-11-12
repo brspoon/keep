@@ -546,6 +546,21 @@ def check_socket_runtime(arch, maps_path=MAPS_PATH):
             'socket_probes': probes, 'library': library}
 
 
+def check_hashlib_runtime(manifest, maps_path=MAPS_PATH):
+    import _hashlib
+    if __package__:
+        from .hashlib_security_checks import check_hashlib
+    else:
+        from hashlib_security_checks import check_hashlib
+    expected = manifest['hashlib_extension']
+    path = Path(expected['path'])
+    require(Path(_hashlib.__file__).resolve(strict=True) == path
+            and not path.is_symlink(), 'Ordinary hashlib import differs from signed vendor input')
+    library = verify_loaded_library(path, '_hashlib', Path(maps_path).read_text(),
+                                    expected['sha256'])
+    return library, check_hashlib()
+
+
 def check_python(arch, manifest_path=PYTHON_MANIFEST_PATH, maps_path=MAPS_PATH):
     import ssl
     manifest, install_hash = read_python_manifest(manifest_path, arch)
@@ -554,7 +569,8 @@ def check_python(arch, manifest_path=PYTHON_MANIFEST_PATH, maps_path=MAPS_PATH):
     result = exercise_python()
     socket = check_socket_runtime(arch, maps_path)
     binding['libraries']['python_socket'] = socket.pop('library')
-    return {**binding, **result, **socket,
+    binding['libraries']['python_hashlib'], hashlib_probes = check_hashlib_runtime(manifest, maps_path)
+    return {**binding, **result, **socket, 'hashlib_probes': hashlib_probes,
             'source_manifest_sha256': manifest['source_manifest_sha256'],
             'install_manifest_sha256': install_hash}
 
@@ -782,7 +798,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     musl_manifest_path=MUSL_MANIFEST_PATH,
                     sqlite_manifest_path=SQLITE_MANIFEST_PATH,
                     sqlite_lock_path=SQLITE_BUILD_PATH):
-    report = {'schema': 7, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+    report = {'schema': 8, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
               'expat_build_manifest': None, 'expat_build_manifest_sha256': None,
@@ -790,6 +806,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
               'python_source_manifest_sha256': None, 'python_install_manifest_sha256': None,
               'python_files': {}, 'python_aliases': {}, 'python_tls_probes': {},
               'socket_manifest': None, 'socket_manifest_sha256': None, 'socket_probes': {},
+              'hashlib_probes': {},
               'musl_source_manifest_sha256': None, 'musl_install_manifest_sha256': None,
               'musl_aliases': {}, 'musl_probes': {},
               'certificate_trust': None,
@@ -830,7 +847,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     report['python_files'] = result['files']
                     report['python_aliases'] = result['aliases']
                     report['python_tls_probes'] = result['tls_probes']
-                    for key in ('socket_manifest', 'socket_manifest_sha256', 'socket_probes'):
+                    for key in ('socket_manifest', 'socket_manifest_sha256', 'socket_probes', 'hashlib_probes'):
                         report[key] = result[key]
                 elif name == 'musl':
                     report['musl_source_manifest_sha256'] = result['source_manifest_sha256']
@@ -870,12 +887,12 @@ def validate_report(report, arch, root=ROOT):
             'musl_source_manifest_sha256', 'musl_install_manifest_sha256',
             'musl_aliases', 'musl_probes',
             'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust',
-            'socket_manifest', 'socket_manifest_sha256', 'socket_probes',
+            'socket_manifest', 'socket_manifest_sha256', 'socket_probes', 'hashlib_probes',
             'sqlite_source_id', 'sqlite_compile_options', 'sqlite_limit_defaults', 'sqlite_build_manifest',
             'sqlite_build_manifest_sha256', 'sqlite_security_probes'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 7
+    require(type(report['schema']) is int and report['schema'] == 8
             and report['arch'] == arch and report['success'] is True
             and type(report['tests']) is int and report['tests'] == 5
             and type(report['failures']) is int and report['failures'] == 0
@@ -933,6 +950,12 @@ def validate_report(report, arch, root=ROOT):
     require(report['socket_manifest_sha256'] == socket_build.digest(socket_build.json_bytes(socket_manifest))
             and report['socket_probes'] == socket_probe_report(),
             'Missing or failed socket replacement evidence')
+    if __package__:
+        from .hashlib_security_checks import expected_report as hashlib_probe_report
+    else:
+        from hashlib_security_checks import expected_report as hashlib_probe_report
+    require(report['hashlib_probes'] == hashlib_probe_report(),
+            'Missing or failed native hashlib FIPS property evidence')
     sqlite_build = sqlite_builder()
     sqlite_manifest = sqlite_build.verify_build_manifest(report['sqlite_build_manifest'], arch, root)
     require(report['sqlite_build_manifest_sha256'] == hashlib.sha256(
@@ -944,19 +967,21 @@ def validate_report(report, arch, root=ROOT):
     sqlite_security.validate_report(report['sqlite_security_probes'])
     libraries = report['loaded_libraries']
     require(isinstance(libraries, dict)
-            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'python_socket', 'musl', 'sqlite'},
+            and set(libraries) == {'expat', 'ssl', 'crypto', 'python', 'python_ssl', 'python_socket', 'python_hashlib', 'musl', 'sqlite'},
             'Incomplete dependency loaded-library evidence')
     for name, canonical in (('expat', EXPAT_LIBRARY), ('ssl', SSL_LIBRARY),
                             ('crypto', CRYPTO_LIBRARY),
                             ('python', Path(python['library']['path'])),
                             ('python_ssl', Path(python['ssl_extension']['path'])),
                             ('python_socket', Path(socket_manifest['library']['path'])),
+                            ('python_hashlib', Path(python['hashlib_extension']['path'])),
                             ('musl', Path(musl['library']['path'])),
                             ('sqlite', Path(sqlite_manifest['library']['path']))):
         validate_file_identity(libraries[name], canonical)
     require(libraries['expat']['sha256'] == replacement['library']['sha256'],
             'Dependency report Expat hash differs from the reviewed replacement')
-    for name, record in (('python', python['library']), ('python_ssl', python['ssl_extension'])):
+    for name, record in (('python', python['library']), ('python_ssl', python['ssl_extension']),
+                         ('python_hashlib', python['hashlib_extension'])):
         require(libraries[name]['sha256'] == record['sha256'],
                 'Dependency report Python loaded-library hash differs from the signed package')
     require(libraries['musl']['sha256'] == musl['library']['sha256'],

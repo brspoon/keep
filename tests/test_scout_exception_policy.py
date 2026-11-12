@@ -95,7 +95,8 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
     def test_current_joint_review_preserves_the_previously_reviewed_scopes(self):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
         python_findings = ('CVE-2025-15367', 'CVE-2026-103995', 'CVE-2026-116566')
-        self.assertEqual(set(policy['exceptions']), set(python_findings))
+        self.assertEqual(set(policy['exceptions']), set(python_findings) | {'CVE-2026-119170'})
+        self.assertEqual(policy['exceptions']['CVE-2026-119170']['review']['reviewed_on'], '2026-11-12')
         self.assertEqual(set(policy['grype_component_reviews']), {'CVE-2026-119586'})
         self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID})
         self.assertEqual(policy['scout_component_reviews'], {})
