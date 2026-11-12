@@ -5,6 +5,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 from scripts import build_patched_openssl as build
@@ -36,6 +37,11 @@ class OpenSSLBackportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'pins'):
             build.reviewed_spec(self.root)
         build.reviewed_spec(self.root, preparation=True)
+
+    def test_unmodified_base_inventory_needs_no_overlay_helpers(self):
+        from scripts.image_distribution import openssl_replacement_inventory
+        with patch.dict(sys.modules, {'build_patched_openssl': None}):
+            self.assertIsNone(openssl_replacement_inventory(self.root / 'absent'))
 
     def test_changed_source_or_build_configuration_is_rejected(self):
         for field in ('source_sha256', 'patch_sha256', 'build_script_sha256', 'perl_lock_sha256'):

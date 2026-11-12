@@ -76,8 +76,9 @@ def fetch_source(url):
     perl_urls.update(row['url'] for row in perl['binaries'].values())
     perl_urls.update('https://alpinelinux.org/keys/' + row['name'] for row in perl_build.tools.alpine.KEYS.values())
     if url == openssl_build.SOURCE_URL or url in perl_urls:
-        hosts = {urlsplit(url).hostname}
-        if 'github.com' in hosts:
+        source_host = urlsplit(url).hostname
+        hosts = {source_host}
+        if source_host == 'github.com':
             hosts.update({'codeload.github.com', 'release-assets.githubusercontent.com'})
     if url == 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz':
         hosts = {'www.python.org'}

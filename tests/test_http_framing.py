@@ -29,6 +29,7 @@ class HttpFramingTests(unittest.TestCase):
                 patch.object(image_distribution, 'expat_replacement_inventory', return_value=None), \
                 patch.object(image_distribution, 'socket_replacement_inventory', return_value=None), \
                 patch.object(image_distribution, 'sqlite_replacement_inventory', return_value=None), \
+                patch.object(image_distribution, 'openssl_replacement_inventory', return_value=None), \
                 patch.object(image_distribution, 'sqlite_cli_runtime_inventory', return_value={'success': True}), \
                 patch.dict(sys.modules, {'http_framing_checks': None}):
             result = image_distribution.runtime_inventory()

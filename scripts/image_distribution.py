@@ -521,10 +521,10 @@ def sqlite_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libsql
 
 def openssl_replacement_inventory(app=Path('/app'), runtime_root=Path('/')):
     """Inventory every replacement payload independently of APK metadata."""
-    import build_patched_openssl as build
     paths = [app / 'OPENSSL_BUILD.json', app / 'OPENSSL_SECURITY.json']
     if not any(path.exists() or path.is_symlink() for path in paths):
         return None
+    import build_patched_openssl as build
     records = []
     for path in paths:
         body = build.profile.regular_bytes(path, 'OpenSSL replacement proof')
