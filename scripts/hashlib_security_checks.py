@@ -33,6 +33,14 @@ crypto.EVP_default_properties_enable_fips.argtypes = [ctypes.c_void_p, ctypes.c_
 crypto.EVP_default_properties_enable_fips.restype = ctypes.c_int
 assert crypto.EVP_default_properties_enable_fips(None, 1) == 1
 assert _hashlib.get_fips_mode() == 1
+crypto.EVP_MD_fetch.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+crypto.EVP_MD_fetch.restype = ctypes.c_void_p
+crypto.EVP_MD_free.argtypes = [ctypes.c_void_p]
+for properties, available in ((None, False), (b'-fips', True), (b'fips=no', True)):
+    md = crypto.EVP_MD_fetch(None, b'MD5', properties)
+    assert bool(md) is available, ('Unmet native fetch precondition', properties, bool(md))
+    if md: crypto.EVP_MD_free(md)
+crypto.ERR_clear_error()
 def digest(flag):
     if api == 'constructor': return _hashlib.openssl_md5(b'keep', usedforsecurity=flag)
     if api == 'generic': return _hashlib.new('md5', b'keep', usedforsecurity=flag)
@@ -76,7 +84,7 @@ assert hashlib.pbkdf2_hmac('sha256', b'password', b'salt', 1).hex() == '120fb6cf
 '''
 
 
-def check_hashlib(extension='', *, expect_vulnerable=False):
+def check_hashlib(extension='', *, expect_vulnerable=False, diagnose=False):
     # Native generic and named calls share the broken property selector. The
     # public constructor must remain the OpenSSL constructor, not a wrapper.
     cases = [(api, flag, 'fresh') for api in ('constructor', 'generic', 'alias', 'public')
@@ -86,15 +94,22 @@ def check_hashlib(extension='', *, expect_vulnerable=False):
     if expect_vulnerable:
         cases = [(api, flag, 'fresh') for api in ('constructor', 'generic', 'alias')
                  for flag in (True, False)]
+    observed = []
     for api, flag, order in cases:
-        body = subprocess.check_output([sys.executable, '-B', '-c', CHILD,
+        body = subprocess.check_output([sys.executable, '-I', '-S', '-B', '-c', CHILD,
             str(extension), api, str(flag).lower(), order], timeout=15)
         result = json.loads(body)
         expected = flag if expect_vulnerable else not flag
-        if result is not expected:
+        observed.append({'api': api, 'secure': flag, 'order': order, 'allowed': result})
+        if not diagnose and result is not expected:
             raise AssertionError(f'Wrong FIPS property behavior: {api}, secure={flag}, {order}')
-    subprocess.run([sys.executable, '-B', '-c', CONTROL, str(extension)],
+    if diagnose:
+        return observed
+    subprocess.run([sys.executable, '-I', '-S', '-B', '-c', CONTROL, str(extension)],
                    check=True, timeout=15)
+    if expect_vulnerable:
+        return {'schema': 'keep-hashlib-vulnerable-control-v1', 'cases': len(cases),
+                'ordinary_controls': True}
     return expected_report()
 
 
@@ -102,5 +117,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--extension', default='')
     parser.add_argument('--expect-vulnerable', action='store_true')
+    parser.add_argument('--diagnose', action='store_true')
     args = parser.parse_args()
-    print(json.dumps(check_hashlib(args.extension, expect_vulnerable=args.expect_vulnerable), sort_keys=True))
+    print(json.dumps(check_hashlib(args.extension, expect_vulnerable=args.expect_vulnerable, diagnose=args.diagnose), sort_keys=True))
