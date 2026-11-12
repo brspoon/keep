@@ -2,6 +2,10 @@ name: Review vendor runtime candidate
 on:
   workflow_dispatch:
     inputs:
+      hashlib_diagnostic:
+        type: boolean
+        default: false
+        description: Inspect the pinned published hashlib boundary on both native architectures
       sqlite_preparation:
         type: boolean
         default: false
@@ -432,3 +436,19 @@ jobs:
           path: sqlite-preparation/${{ matrix.arch }}/
           if-no-files-found: warn
           retention-days: 7
+
+  hashlib-diagnostic:
+    if: inputs.hashlib_diagnostic && github.repository == 'brspoon/keep' && startsWith(github.ref, 'refs/heads/brspoon/')
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Inspect the published native hashlib boundary without changing OpenSSL outside disposable processes
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m -v "$PWD/scripts/hashlib_security_checks.py:/checks.py:ro" brspoon/keep@sha256:ca33eda31a70a38aff259ecc2157f00d61f9fbc3dfddc878ebdfe4dc2908506a python -I -S -B /checks.py --diagnose
