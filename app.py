@@ -1972,6 +1972,9 @@ def build_review_collections():
                        key=lambda item: (((item.get("mediaData") or {}).get("title") or "Untitled").casefold(),
                                          str((item.get("mediaData") or {}).get("year") or "")))
         for item in items:
+            if not item.get("image_path"):
+                item["image_path"] = url_for(
+                    'leaving_artwork', media_server_id=item["mediaServerId"])
             item["days_left"] = calculate_days_left(
                 item.get("addDate"),
                 delete_after_days,
@@ -2062,6 +2065,7 @@ def build_kept_collections():
     return collections
 
 
+@app.get('/leaving/artwork/<int:media_server_id>', endpoint='leaving_artwork')
 @app.get('/kept/artwork/<int:media_server_id>')
 def kept_artwork(media_server_id):
     if not session.get('plex_user'):
