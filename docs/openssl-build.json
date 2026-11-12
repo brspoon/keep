@@ -1,0 +1,125 @@
+{
+  "build_image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d",
+  "build_script_sha256": "9674f913b46c2bcadcb6c8a53b2e2d142db2e80411b1f081a38a43877422ff30",
+  "commits": [
+    "159e1de0c448d7b9f09ad768c8e141def4aa1eb4",
+    "a0051cfe699bf5a047bc1c4faef65f80f7987366",
+    "1a73dc590cbad62d6f0329ea4779eadaa8d8fd75",
+    "f6244675833e097c2429a40d1b206d95385bd42f",
+    "257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116"
+  ],
+  "compiler_profile_sha256": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
+  "configure_options": [
+    "--prefix=/usr",
+    "--libdir=lib",
+    "--openssldir=/etc/ssl",
+    "enable-fips",
+    "enable-ktls",
+    "shared",
+    "no-zlib",
+    "no-async",
+    "no-comp",
+    "no-idea",
+    "no-mdc2",
+    "no-rc5",
+    "no-ec2m",
+    "no-ssl3",
+    "no-seed",
+    "no-weak-ssl-ciphers"
+  ],
+  "environment": {
+    "amd64": {
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-openssl-build=. -fno-plt -D_GNU_SOURCE",
+      "CONFIG_SHELL": "/bin/sh",
+      "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-openssl-build/fortify/include",
+      "CXX": "/usr/bin/g++",
+      "LC_ALL": "C",
+      "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
+      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "SHELL": "/bin/sh",
+      "SOURCE_DATE_EPOCH": "1794268800",
+      "TZ": "UTC"
+    },
+    "arm64": {
+      "CC": "/usr/bin/gcc",
+      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-openssl-build=. -D_GNU_SOURCE",
+      "CONFIG_SHELL": "/bin/sh",
+      "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-openssl-build/fortify/include",
+      "CXX": "/usr/bin/g++",
+      "LC_ALL": "C",
+      "LDFLAGS": "-Wl,--as-needed,-O1,--sort-common,--build-id=sha1 -Wl,-z,pack-relative-relocs,-z,relro,-z,now,-z,noexecstack",
+      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "SHELL": "/bin/sh",
+      "SOURCE_DATE_EPOCH": "1794268800",
+      "TZ": "UTC"
+    }
+  },
+  "files": [
+    "usr/lib/libcrypto.so.3",
+    "usr/lib/libssl.so.3",
+    "usr/bin/openssl",
+    "usr/lib/engines-3/afalg.so",
+    "usr/lib/engines-3/capi.so",
+    "usr/lib/engines-3/loader_attic.so",
+    "usr/lib/engines-3/padlock.so",
+    "usr/lib/ossl-modules/legacy.so"
+  ],
+  "identity": "keep-openssl-3.5.9-november-backports-v1",
+  "native": {
+    "amd64": {
+      "abi": {},
+      "compiler_sha256": null,
+      "files": {
+        "usr/bin/openssl": null,
+        "usr/lib/engines-3/afalg.so": null,
+        "usr/lib/engines-3/capi.so": null,
+        "usr/lib/engines-3/loader_attic.so": null,
+        "usr/lib/engines-3/padlock.so": null,
+        "usr/lib/libcrypto.so.3": null,
+        "usr/lib/libssl.so.3": null,
+        "usr/lib/ossl-modules/legacy.so": null
+      },
+      "vendor_files": {
+        "usr/bin/openssl": null,
+        "usr/lib/engines-3/afalg.so": null,
+        "usr/lib/engines-3/capi.so": null,
+        "usr/lib/engines-3/loader_attic.so": null,
+        "usr/lib/engines-3/padlock.so": null,
+        "usr/lib/libcrypto.so.3": null,
+        "usr/lib/libssl.so.3": null,
+        "usr/lib/ossl-modules/legacy.so": null
+      }
+    },
+    "arm64": {
+      "abi": {},
+      "compiler_sha256": null,
+      "files": {
+        "usr/bin/openssl": null,
+        "usr/lib/engines-3/afalg.so": null,
+        "usr/lib/engines-3/capi.so": null,
+        "usr/lib/engines-3/loader_attic.so": null,
+        "usr/lib/engines-3/padlock.so": null,
+        "usr/lib/libcrypto.so.3": null,
+        "usr/lib/libssl.so.3": null,
+        "usr/lib/ossl-modules/legacy.so": null
+      },
+      "vendor_files": {
+        "usr/bin/openssl": null,
+        "usr/lib/engines-3/afalg.so": null,
+        "usr/lib/engines-3/capi.so": null,
+        "usr/lib/engines-3/loader_attic.so": null,
+        "usr/lib/engines-3/padlock.so": null,
+        "usr/lib/libcrypto.so.3": null,
+        "usr/lib/libssl.so.3": null,
+        "usr/lib/ossl-modules/legacy.so": null
+      }
+    }
+  },
+  "patch_sha256": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
+  "perl_helper_sha256": "435b8ce051e02ec2b75643a65cfda4552c5d0e205db4fdfb26833d45738c38b8",
+  "perl_lock_sha256": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
+  "schema": "keep-openssl-build-v1",
+  "source_sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a",
+  "source_url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz"
+}

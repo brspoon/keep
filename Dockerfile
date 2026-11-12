@@ -41,6 +41,18 @@ RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--preparation", "--
 FROM runtime-inputs AS sqlite-preparation
 RUN ["python", "-B", "/opt/scripts/build_patched_sqlite.py", "--preparation", "--output", "/opt/sqlite-preparation"]
 
+FROM runtime-inputs AS openssl-build-inputs
+ENV KEEP_OPENSSL_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
+COPY scripts/build_patched_openssl.py scripts/openssl_build_tools.py scripts/openssl_security_patches.json /opt/scripts/
+COPY docs/openssl-build.json docs/openssl-build-tools.json /opt/docs/
+RUN ["python", "-B", "/opt/scripts/openssl_build_tools.py", "--prepare"]
+RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
+    --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
+    ["python", "-B", "/opt/scripts/openssl_build_tools.py", "--install"]
+
+FROM openssl-build-inputs AS openssl-preparation
+RUN ["python", "-B", "/opt/scripts/build_patched_openssl.py", "--preparation", "--output", "/opt/openssl-preparation"]
+
 FROM runtime-inputs AS dependencies
 RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--output", "/opt/runtime-packages/expat-patched"]
 RUN ["python", "-B", "/opt/scripts/build_patched_sqlite.py", "--output", "/opt/runtime-packages/sqlite-patched"]

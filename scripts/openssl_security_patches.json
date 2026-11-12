@@ -1,0 +1,193 @@
+{
+  "original_files": {
+    "crypto/bio/bss_dgram.c": "25ac92a4db74c85b0d096860112c822a1c3b9e07f35ded77b88bfe891c3c7993",
+    "crypto/ec/ec_key.c": "76ffd45abfc989d3f5a7c80e71e7ff712cff2c1b3c70f471a5f952190b545bf2",
+    "include/internal/quic_strm_reas.h": "6dd9e3268036cd44869e40616e302c033902de6155a57c696420a75c83f0f457",
+    "providers/implementations/ciphers/cipher_aes_gcm_siv.c": "25012f573a36a465f0a68fe004366ef586f3a153d60a5a53db55df9b7b1da5c3",
+    "providers/implementations/ciphers/cipher_aes_gcm_siv_hw.c": "37f4e407d03117c6b74e5d1385efb233f2d71225788f82857bff2368e7fd0457",
+    "ssl/quic/quic_rstream.c": "1d75050a351302038ffc4868c253cb73caaf202f1b91da7fbceb62514c712297",
+    "ssl/quic/quic_strm_reas.c": "040b6e3c0cc3144616d3c899a79b90f70a9517a5fb215a10f38b483499360c4c",
+    "test/ectest.c": "eec366891a69eb9d2de9d814abd51b2c9aa4db2ef51ca19dbc1869a48a446bfe"
+  },
+  "patched_files": {
+    "crypto/bio/bss_dgram.c": "9b0e09c21fdc0ae8c253d1a7aed1114814090d83f92c1ae6e2d83a28c829cb64",
+    "crypto/ec/ec_key.c": "72726357d1e33de2fdc28da42781bb489d4a87762ed308ce81e0c49feaaa82bb",
+    "include/internal/quic_strm_reas.h": "23cddd86dd8ed5246bca7f668197e73cec4a2653e476310a1d6a34ee243f4d1f",
+    "providers/implementations/ciphers/cipher_aes_gcm_siv.c": "62510edfb867c2c33b034ec7f1f04913551827441a0f156966bc857cc271c211",
+    "providers/implementations/ciphers/cipher_aes_gcm_siv_hw.c": "d5ea349bd8c5d48634b3a6006f1a1ef233213564ee675ee2fce4faec824cc639",
+    "ssl/quic/quic_rstream.c": "ca832c01b754e6556d0d29ee667616102870bb93be2c21e5845e461861b21c31",
+    "ssl/quic/quic_strm_reas.c": "9ed4d3ab6508b79c04033ebb793c0fbcce5615e75323022de20bf2748f74c319",
+    "test/ectest.c": "404248bb6baaffa0ba1663cd21be5df7bd65e17c283591b29ab2664cc1ed6582"
+  },
+  "patches": [
+    {
+      "commit": "159e1de0c448d7b9f09ad768c8e141def4aa1eb4",
+      "cve": "CVE-2026-88823",
+      "files": [
+        {
+          "after_sha256": "1c9190d4dfbb2fd767c588376167358e7fd32b135aad0827b8d2cd6b78d69793",
+          "before_sha256": "25012f573a36a465f0a68fe004366ef586f3a153d60a5a53db55df9b7b1da5c3",
+          "hunks": [
+            {
+              "after": "\n    ctx->enc = enc;\n\n    /*\n     * Clear AAD when starting a new message or restarting after payload\n     * processing. Preserve pending AAD during parameter adjustments.\n     */\n    if (key != NULL || iv != NULL || ctx->used_enc || ctx->used_dec) {\n        OPENSSL_clear_free(ctx->aad, ctx->aad_len);\n        ctx->aad = NULL;\n        ctx->aad_len = 0;\n    }\n\n    if (key != NULL) {\n        if (keylen != ctx->key_len) {\n            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);\n",
+              "before": "\n    ctx->enc = enc;\n\n    if (key != NULL) {\n        if (keylen != ctx->key_len) {\n            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_KEY_LENGTH);\n"
+            }
+          ],
+          "path": "providers/implementations/ciphers/cipher_aes_gcm_siv.c"
+        },
+        {
+          "after_sha256": "d5ea349bd8c5d48634b3a6006f1a1ef233213564ee675ee2fce4faec824cc639",
+          "before_sha256": "37f4e407d03117c6b74e5d1385efb233f2d71225788f82857bff2368e7fd0457",
+          "hunks": [
+            {
+              "after": "    uint8_t *ptr;\n    uint64_t len64;\n\n    if (len == 0)\n        return 1;\n    to_alloc = UP16(ctx->aad_len + len);\n    /* need to check the size of the AAD per RFC8452 */\n    len64 = to_alloc;\n",
+              "before": "    uint8_t *ptr;\n    uint64_t len64;\n\n    /* length of 0 resets the AAD */\n    if (len == 0) {\n        OPENSSL_free(ctx->aad);\n        ctx->aad = NULL;\n        ctx->aad_len = 0;\n        return 1;\n    }\n    to_alloc = UP16(ctx->aad_len + len);\n    /* need to check the size of the AAD per RFC8452 */\n    len64 = to_alloc;\n"
+            }
+          ],
+          "path": "providers/implementations/ciphers/cipher_aes_gcm_siv_hw.c"
+        }
+      ],
+      "sha256": "a945077c0a978dbfe5af5e4f7174a2151466547f8fb94562f395baa7b6b7c147",
+      "url": "https://github.com/openssl/openssl/commit/159e1de0c448d7b9f09ad768c8e141def4aa1eb4.patch"
+    },
+    {
+      "commit": "a0051cfe699bf5a047bc1c4faef65f80f7987366",
+      "cve": "CVE-2026-107496",
+      "files": [
+        {
+          "after_sha256": "72726357d1e33de2fdc28da42781bb489d4a87762ed308ce81e0c49feaaa82bb",
+          "before_sha256": "76ffd45abfc989d3f5a7c80e71e7ff712cff2c1b3c70f471a5f952190b545bf2",
+          "hunks": [
+            {
+              "after": "            goto err;\n    }\n\n    if (BN_cmp(order, BN_value_one()) <= 0) {\n        ERR_raise(ERR_LIB_EC, EC_R_INVALID_GROUP_ORDER);\n        goto err;\n    }\n\n    do\n        if (!BN_priv_rand_range_ex(priv_key, order, 0, ctx))\n            goto err;\n",
+              "before": "            goto err;\n    }\n\n    do\n        if (!BN_priv_rand_range_ex(priv_key, order, 0, ctx))\n            goto err;\n"
+            }
+          ],
+          "path": "crypto/ec/ec_key.c"
+        },
+        {
+          "after_sha256": "404248bb6baaffa0ba1663cd21be5df7bd65e17c283591b29ab2664cc1ed6582",
+          "before_sha256": "eec366891a69eb9d2de9d814abd51b2c9aa4db2ef51ca19dbc1869a48a446bfe",
+          "hunks": [
+            {
+              "after": "    return ret;\n}\n\nstatic int keygen_invalid_order_test(void)\n{\n    int ret = 0;\n    EC_GROUP *group = NULL;\n    EC_POINT *generator = NULL;\n    EC_KEY *key = NULL;\n    BIGNUM *order = NULL;\n\n    if (!TEST_ptr(group = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1))\n        || !TEST_ptr(generator = EC_POINT_dup(\n                         EC_GROUP_get0_generator(group), group))\n        || !TEST_ptr(order = BN_new())\n        || !TEST_true(BN_one(order))\n        || !TEST_true(EC_GROUP_set_generator(group, generator, order,\n            BN_value_one()))\n        || !TEST_ptr(key = EC_KEY_new())\n        || !TEST_true(EC_KEY_set_group(key, group))\n        || !TEST_false(EC_KEY_generate_key(key))\n        || !TEST_int_eq(ERR_GET_REASON(ERR_peek_last_error()),\n            EC_R_INVALID_GROUP_ORDER))\n        goto err;\n\n    ret = 1;\nerr:\n    ERR_clear_error();\n    BN_free(order);\n    EC_KEY_free(key);\n    EC_POINT_free(generator);\n    EC_GROUP_free(group);\n    return ret;\n}\n\n/*\n * Helper for ec_point_hex2point_test\n *\n",
+              "before": "    return ret;\n}\n\n/*\n * Helper for ec_point_hex2point_test\n *\n"
+            },
+            {
+              "after": "    ADD_ALL_TESTS(check_named_curve_test, crv_len);\n    ADD_ALL_TESTS(check_named_curve_lookup_test, crv_len);\n    ADD_ALL_TESTS(check_ec_key_field_public_range_test, crv_len);\n    ADD_TEST(keygen_invalid_order_test);\n    ADD_ALL_TESTS(check_named_curve_from_ecparameters, crv_len);\n    ADD_ALL_TESTS(ec_point_hex2point_test, crv_len);\n    ADD_ALL_TESTS(custom_generator_test, crv_len);\n",
+              "before": "    ADD_ALL_TESTS(check_named_curve_test, crv_len);\n    ADD_ALL_TESTS(check_named_curve_lookup_test, crv_len);\n    ADD_ALL_TESTS(check_ec_key_field_public_range_test, crv_len);\n    ADD_ALL_TESTS(check_named_curve_from_ecparameters, crv_len);\n    ADD_ALL_TESTS(ec_point_hex2point_test, crv_len);\n    ADD_ALL_TESTS(custom_generator_test, crv_len);\n"
+            }
+          ],
+          "path": "test/ectest.c"
+        }
+      ],
+      "sha256": "77d3759d279c71af59629c4a0fa82d8272a099762f2fa9e3f66d7ca5ed544157",
+      "url": "https://github.com/openssl/openssl/commit/a0051cfe699bf5a047bc1c4faef65f80f7987366.patch"
+    },
+    {
+      "commit": "1a73dc590cbad62d6f0329ea4779eadaa8d8fd75",
+      "cve": "CVE-2026-88822",
+      "files": [
+        {
+          "after_sha256": "9b0e09c21fdc0ae8c253d1a7aed1114814090d83f92c1ae6e2d83a28c829cb64",
+          "before_sha256": "25ac92a4db74c85b0d096860112c822a1c3b9e07f35ded77b88bfe891c3c7993",
+          "hunks": [
+            {
+              "after": "        BIO_ADDR_make(&data->peer, BIO_ADDR_sockaddr((BIO_ADDR *)ptr));\n        break;\n    case BIO_CTRL_DGRAM_DETECT_PEER_ADDR: {\n        BIO_ADDR xaddr = { 0 }, *p = &data->peer;\n        socklen_t xaddr_len = sizeof(xaddr);\n\n        if (BIO_ADDR_family(p) == AF_UNSPEC) {\n            if (getpeername(b->num, (void *)&xaddr.sa, &xaddr_len) == 0\n",
+              "before": "        BIO_ADDR_make(&data->peer, BIO_ADDR_sockaddr((BIO_ADDR *)ptr));\n        break;\n    case BIO_CTRL_DGRAM_DETECT_PEER_ADDR: {\n        BIO_ADDR xaddr, *p = &data->peer;\n        socklen_t xaddr_len = sizeof(xaddr.sa);\n\n        if (BIO_ADDR_family(p) == AF_UNSPEC) {\n            if (getpeername(b->num, (void *)&xaddr.sa, &xaddr_len) == 0\n"
+            }
+          ],
+          "path": "crypto/bio/bss_dgram.c"
+        }
+      ],
+      "sha256": "50f7cc52fb146703379ca043d17e204c4fda99c684efe3db6d6f3ae1d175bd2a",
+      "url": "https://github.com/openssl/openssl/commit/1a73dc590cbad62d6f0329ea4779eadaa8d8fd75.patch"
+    },
+    {
+      "commit": "f6244675833e097c2429a40d1b206d95385bd42f",
+      "cve": "CVE-2026-95691",
+      "files": [
+        {
+          "after_sha256": "23cddd86dd8ed5246bca7f668197e73cec4a2653e476310a1d6a34ee243f4d1f",
+          "before_sha256": "6dd9e3268036cd44869e40616e302c033902de6155a57c696420a75c83f0f457",
+          "hunks": [
+            {
+              "after": "    size_t stream_chunks;\n    /* Offset of data not yet dropped */\n    uint64_t offset;\n    /* Range returned to a zero-copy caller and not released yet. */\n    UINT_RANGE locked_range;\n    unsigned int range_locked;\n    /* Cleanse data on release? */\n    int cleanse;\n    int move_buffers;\n",
+              "before": "    size_t stream_chunks;\n    /* Offset of data not yet dropped */\n    uint64_t offset;\n    /* Cleanse data on release? */\n    int cleanse;\n    int move_buffers;\n"
+            },
+            {
+              "after": "    UINT_RANGE *range, const unsigned char **data,\n    int *fin);\n\n/**\n * ossl_sframe_set_lock_range() locks the first range of stream chunks\n * so zero-copy caller can access them safely. While range is locked\n * its chunks are protected from memory relocations which may occur\n * during stream reassembly process. The stream reassembly process\n * continues to work making sure following stream chunks are always\n * appended.\n * @param fs stream frame set that holds ranges.\n * @param range range caller wants to lock, the range must be reachable\n * for read operation.\n * @returns 1 on success, 0 on failure (when range cannot be locked, because\n * its end offset is past the gap, or range is locked)\n */\nint ossl_sframe_set_lock_range(SFRAME_SET *fs, const UINT_RANGE *range);\n\n/**\n * ossl_sframe_set_unlock_range() unlocks the stream chunks in the\n * first range previously locked by ossl_sframe_set_lock_range().\n * Stream reassembly is free to reallocate those chunks again.\n * @param fs point to stream frame set with range collection\n * @returns void\n */\nvoid ossl_sframe_set_unlock_range(SFRAME_SET *fs);\n\n/*\n * moves reading offset to new position, discarding all consumed\n * chunks (which end offset is less than offset).\n",
+              "before": "    UINT_RANGE *range, const unsigned char **data,\n    int *fin);\n\n/*\n * moves reading offset to new position, discarding all consumed\n * chunks (which end offset is less than offset).\n"
+            }
+          ],
+          "path": "include/internal/quic_strm_reas.h"
+        },
+        {
+          "after_sha256": "ca832c01b754e6556d0d29ee667616102870bb93be2c21e5845e461861b21c31",
+          "before_sha256": "1d75050a351302038ffc4868c253cb73caaf202f1b91da7fbceb62514c712297",
+          "hunks": [
+            {
+              "after": "{\n    OSSL_TIME rtt = get_rtt(qrs);\n\n    if (qrs->fs.range_locked)\n        return 0;\n\n    if (!read_internal(qrs, buf, size, readbytes, fin, 1))\n        return 0;\n\n",
+              "before": "{\n    OSSL_TIME rtt = get_rtt(qrs);\n\n    if (!read_internal(qrs, buf, size, readbytes, fin, 1))\n        return 0;\n\n"
+            },
+            {
+              "after": "    size_t rec_len_;\n    int ok;\n\n    if (qrs->fs.range_locked)\n        return 0;\n\n    ok = ossl_sframe_set_peek(&qrs->fs, &iterator, &qrs->head_range, &record_,\n        fin);\n    if (ok == 0) {\n",
+              "before": "    size_t rec_len_;\n    int ok;\n\n    ok = ossl_sframe_set_peek(&qrs->fs, &iterator, &qrs->head_range, &record_,\n        fin);\n    if (ok == 0) {\n"
+            },
+            {
+              "after": "    }\n\n    rec_len_ = (size_t)(qrs->head_range.end - qrs->head_range.start);\n    if (!ossl_sframe_set_lock_range(&qrs->fs, &qrs->head_range))\n        return 0;\n    *rec_len = rec_len_;\n    *record = record_;\n\n",
+              "before": "    }\n\n    rec_len_ = (size_t)(qrs->head_range.end - qrs->head_range.start);\n    *rec_len = rec_len_;\n    *record = record_;\n\n"
+            },
+            {
+              "after": "        offset = qrs->head_range.start + read_len;\n    }\n\n    if (!qrs->fs.range_locked)\n        return 0;\n\n    ossl_sframe_set_unlock_range(&qrs->fs);\n    if (!ossl_sframe_set_move_offset(&qrs->fs, offset))\n        return 0;\n\n",
+              "before": "        offset = qrs->head_range.start + read_len;\n    }\n\n    if (!ossl_sframe_set_move_offset(&qrs->fs, offset))\n        return 0;\n\n"
+            }
+          ],
+          "path": "ssl/quic/quic_rstream.c"
+        },
+        {
+          "after_sha256": "9ed4d3ab6508b79c04033ebb793c0fbcce5615e75323022de20bf2748f74c319",
+          "before_sha256": "040b6e3c0cc3144616d3c899a79b90f70a9517a5fb215a10f38b483499360c4c",
+          "hunks": [
+            {
+              "after": "        r->start = fs->offset;\n    }\n\n    if (fs->range_locked\n        && r->start < fs->locked_range.end\n        && r->end > fs->locked_range.start) {\n        uint64_t overlap_end;\n        size_t overlap_len;\n\n        /* The checked-out range is the first readable chunk. */\n        assert(fs->locked_range.start == fs->offset);\n        assert(r->start >= fs->locked_range.start);\n\n        overlap_end = r->end < fs->locked_range.end\n            ? r->end\n            : fs->locked_range.end;\n        overlap_len = UINT64_TO_SIZE_T(overlap_end - r->start);\n\n        if (fs->cleanse)\n            OPENSSL_cleanse(deconst(data), overlap_len);\n        data += overlap_len;\n        r->start = overlap_end;\n    }\n\n    key_sr.sr_range = *r;\n\n    /*\n",
+              "before": "        r->start = fs->offset;\n    }\n\n    key_sr.sr_range = *r;\n\n    /*\n"
+            },
+            {
+              "after": "    return (range->start == range->end) ? 0 : 1;\n}\n\nint ossl_sframe_set_lock_range(SFRAME_SET *fs, const UINT_RANGE *range)\n{\n    if (fs->range_locked\n        || range->start != fs->offset\n        || range->start >= range->end)\n        return 0;\n\n    fs->locked_range = *range;\n    fs->range_locked = 1;\n    return 1;\n}\n\nvoid ossl_sframe_set_unlock_range(SFRAME_SET *fs)\n{\n    assert(fs->range_locked);\n    fs->range_locked = 0;\n}\n\nvoid ossl_sframe_set_destroy_ranges(SFRAME_SET *fs)\n{\n    struct stream_range_t *sr, *save_sr;\n",
+              "before": "    return (range->start == range->end) ? 0 : 1;\n}\n\nvoid ossl_sframe_set_destroy_ranges(SFRAME_SET *fs)\n{\n    struct stream_range_t *sr, *save_sr;\n"
+            },
+            {
+              "after": "    if (new_offset == fs->offset)\n        return 1;\n\n    if (fs->range_locked)\n        return 0;\n\n    /*\n     * Offset can move forward within the continuous head range only.\n     * It can not move backward, into a gap or past the head range end.\n",
+              "before": "    if (new_offset == fs->offset)\n        return 1;\n\n    /*\n     * Offset can move forward within the continuous head range only.\n     * It can not move backward, into a gap or past the head range end.\n"
+            }
+          ],
+          "path": "ssl/quic/quic_strm_reas.c"
+        }
+      ],
+      "sha256": "93d8e82fdc995172a6d5cc6952491658106191bd5ac221d34596adbddfcd1afe",
+      "url": "https://github.com/openssl/openssl/commit/f6244675833e097c2429a40d1b206d95385bd42f.patch"
+    },
+    {
+      "commit": "257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116",
+      "cve": "CVE-2026-95692",
+      "files": [
+        {
+          "after_sha256": "62510edfb867c2c33b034ec7f1f04913551827441a0f156966bc857cc271c211",
+          "before_sha256": "1c9190d4dfbb2fd767c588376167358e7fd32b135aad0827b8d2cd6b78d69793",
+          "hunks": [
+            {
+              "after": "            return 0;\n        }\n    }\n    p = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_IVLEN);\n    if (p != NULL) {\n        size_t iv_len;\n\n        if (!OSSL_PARAM_get_size_t(p, &iv_len)) {\n            ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);\n            return 0;\n        }\n        /* The nonce length can not be modified */\n        if (iv_len != sizeof(ctx->nonce)) {\n            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_IV_LENGTH);\n            return 0;\n        }\n    }\n    return 1;\n}\n\n",
+              "before": "            return 0;\n        }\n    }\n    return 1;\n}\n\n"
+            }
+          ],
+          "path": "providers/implementations/ciphers/cipher_aes_gcm_siv.c"
+        }
+      ],
+      "sha256": "0e328604c0038de6629a29322ae5f02d2f5f5128c2625b57ca64262efab99e05",
+      "url": "https://github.com/openssl/openssl/commit/257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116.patch"
+    }
+  ],
+  "schema": "keep-openssl-patches-v1",
+  "version": "3.5.9"
+}
