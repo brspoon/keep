@@ -84,22 +84,19 @@ assert hashlib.pbkdf2_hmac('sha256', b'password', b'salt', 1).hex() == '120fb6cf
 '''
 
 
-def check_hashlib(extension='', *, expect_vulnerable=False, diagnose=False):
-    # Native generic and named calls share the broken property selector. The
+def check_hashlib(extension='', *, diagnose=False):
+    # Native generic and named calls share the native property selector. The
     # public constructor must remain the OpenSSL constructor, not a wrapper.
     cases = [(api, flag, 'fresh') for api in ('constructor', 'generic', 'alias', 'public')
              for flag in (True, False)]
     cases += [('constructor', flag, order) for order in ('secure-first', 'insecure-first')
               for flag in (True, False)]
-    if expect_vulnerable:
-        cases = [(api, flag, 'fresh') for api in ('constructor', 'generic', 'alias')
-                 for flag in (True, False)]
     observed = []
     for api, flag, order in cases:
         body = subprocess.check_output([sys.executable, '-I', '-S', '-B', '-c', CHILD,
             str(extension), api, str(flag).lower(), order], timeout=15)
         result = json.loads(body)
-        expected = flag if expect_vulnerable else not flag
+        expected = not flag
         observed.append({'api': api, 'secure': flag, 'order': order, 'allowed': result})
         if not diagnose and result is not expected:
             raise AssertionError(f'Wrong FIPS property behavior: {api}, secure={flag}, {order}')
@@ -112,16 +109,12 @@ def check_hashlib(extension='', *, expect_vulnerable=False, diagnose=False):
                 'cases': observed}
     subprocess.run([sys.executable, '-I', '-S', '-B', '-c', CONTROL, str(extension)],
                    check=True, timeout=15)
-    if expect_vulnerable:
-        return {'schema': 'keep-hashlib-vulnerable-control-v1', 'cases': len(cases),
-                'ordinary_controls': True}
     return expected_report()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--extension', default='')
-    parser.add_argument('--expect-vulnerable', action='store_true')
     parser.add_argument('--diagnose', action='store_true')
     args = parser.parse_args()
-    print(json.dumps(check_hashlib(args.extension, expect_vulnerable=args.expect_vulnerable, diagnose=args.diagnose), sort_keys=True))
+    print(json.dumps(check_hashlib(args.extension, diagnose=args.diagnose), sort_keys=True))

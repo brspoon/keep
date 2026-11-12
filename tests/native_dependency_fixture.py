@@ -9,6 +9,7 @@ from scripts.dhi_python_packages import build_security_manifest as python_securi
 from scripts.alpine_musl_sources import build_security_manifest as musl_security_manifest
 from scripts.expat_security_checks import expected_report as expat_probe_report
 from scripts.sqlite_security_checks import expected_report as sqlite_probe_report
+from scripts.hashlib_security_checks import expected_report as hashlib_probe_report
 from scripts.runtime_dependency_checks import MUSL_PROBES
 from tests.certificate_trust_fixture import trust_report
 
@@ -27,7 +28,7 @@ def dependency_report(arch, *, root=ROOT):
     from scripts import build_patched_sqlite as sqlite_build
     sqlite_manifest = sqlite_build.expected_manifest(arch, root=root)
     return {
-        'schema': 7, 'arch': arch, 'success': True, 'tests': 5,
+        'schema': 8, 'arch': arch, 'success': True, 'tests': 5,
         'failures': 0, 'errors': [],
         'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3',
                      'sqlite': '3.54.1'},
@@ -41,6 +42,7 @@ def dependency_report(arch, *, root=ROOT):
                 ('python_ssl', python['ssl_extension']['path'], python['ssl_extension']['sha256'], 105),
                 ('musl', musl['library']['path'], musl['library']['sha256'], 108),
                 ('python_socket', socket_manifest['library']['path'], socket_manifest['library']['sha256'], 109),
+                ('python_hashlib', python['hashlib_extension']['path'], python['hashlib_extension']['sha256'], 111),
                 ('sqlite', sqlite_manifest['library']['path'], sqlite_manifest['library']['sha256'], 110),
             )
         },
@@ -70,6 +72,7 @@ def dependency_report(arch, *, root=ROOT):
         'socket_manifest': socket_manifest,
         'socket_manifest_sha256': socket_build.digest(socket_build.json_bytes(socket_manifest)),
         'socket_probes': socket_probe_report(),
+        'hashlib_probes': hashlib_probe_report(),
         'certificate_trust': trust_report(arch),
         'sqlite_source_id': sqlite_manifest['source_id'],
         'sqlite_compile_options': sqlite_manifest['required_compile_options'],

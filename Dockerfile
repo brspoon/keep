@@ -6,7 +6,7 @@ USER 0
 WORKDIR /app
 ENV KEEP_EXPAT_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
 ENV KEEP_SQLITE_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
-COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_sqlite_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py /opt/runtime-build-tools/
+COPY scripts/alpine_expat_sources.py scripts/alpine_zlib_sources.py scripts/alpine_sqlite_sources.py scripts/alpine_musl_sources.py scripts/dhi_python_packages.py scripts/dhi_certificate_packages.py scripts/certificate_trust_checks.py scripts/hashlib_security_checks.py scripts/bootstrap_build_pip.py scripts/install_runtime_packages.py scripts/patch_python_runtime.py scripts/python_security_patches.json scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py /opt/runtime-build-tools/
 COPY scripts/build_patched_expat.py scripts/expat_security_patches.json scripts/alpine_expat_sources.py scripts/fortify_header_sources.py scripts/dhi_cpp_packages.py scripts/expat_build_tools.py scripts/dhi_python_packages.py /opt/scripts/
 COPY docs/expat-build.json /opt/docs/expat-build.json
 COPY scripts/build_patched_sqlite.py scripts/sqlite_security_patches.json /opt/runtime-build-tools/
@@ -72,16 +72,6 @@ RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_socket
 FROM socket-build-inputs AS socket-builder
 RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_socket.py", "--build", "--output", "/opt/runtime-packages/socket-patched"]
 
-FROM socket-build-inputs AS hashlib-build-inputs
-COPY scripts/build_patched_hashlib.py scripts/python_hashlib_patches.json scripts/hashlib_security_checks.py /opt/runtime-build-tools/
-COPY docs/python-hashlib-build.json /opt/docs/python-hashlib-build.json
-
-FROM hashlib-build-inputs AS hashlib-preparation
-RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_hashlib.py", "--preparation", "--output", "/opt/hashlib-preparation"]
-
-FROM hashlib-build-inputs AS hashlib-builder
-RUN ["/usr/bin/python3.14", "-B", "/opt/runtime-build-tools/build_patched_hashlib.py", "--build", "--output", "/opt/runtime-packages/hashlib-patched"]
-
 FROM dhi.io/python:3.14-alpine3.24@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7
 USER 0
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH="/venv/bin:$PATH"
@@ -91,14 +81,10 @@ WORKDIR /app
 RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=package-manager,source=/usr/lib/libapk.so.3.0.0,target=/usr/lib/libapk.so.3.0.0 \
     --mount=from=socket-builder,source=/opt/runtime-packages,target=/opt/runtime-packages \
-    --mount=from=hashlib-builder,source=/opt/runtime-packages/hashlib-patched,target=/opt/runtime-packages/hashlib-patched \
-    --mount=from=hashlib-builder,source=/opt/runtime-build-tools,target=/opt/runtime-build-tools \
+    --mount=from=socket-builder,source=/opt/runtime-build-tools,target=/opt/runtime-build-tools \
     --mount=from=socket-builder,source=/opt/scripts,target=/opt/scripts \
     --mount=from=socket-builder,source=/opt/docs,target=/opt/docs \
     ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install"]
-COPY --from=hashlib-builder /opt/runtime-packages/hashlib-patched/HASHLIB_SECURITY.json /app/HASHLIB_SECURITY.json
-COPY --from=hashlib-builder /opt/runtime-packages/hashlib-patched/PYTHON_HASHLIB_BUILD.json /app/PYTHON_HASHLIB_BUILD.json
-COPY --from=hashlib-builder /opt/runtime-packages/hashlib-patched/pyconfig.h /app/PYTHON_HASHLIB_PYCONFIG.h
 COPY --from=socket-builder /opt/runtime-packages/socket-patched/SOCKET_SECURITY.json /app/SOCKET_SECURITY.json
 COPY --from=socket-builder /opt/runtime-packages/socket-patched/PYTHON_SOCKET_BUILD.json /app/PYTHON_SOCKET_BUILD.json
 COPY --from=socket-builder /opt/runtime-packages/socket-patched/pyconfig.h /app/PYTHON_SOCKET_PYCONFIG.h

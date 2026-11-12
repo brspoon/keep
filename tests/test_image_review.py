@@ -343,7 +343,7 @@ class ImageReviewTests(unittest.TestCase):
 
 
 CURRENT_FINDINGS = {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low',
-                    'CVE-2026-116566': 'Medium'}
+                    'CVE-2026-116566': 'Medium', 'CVE-2026-119170': 'High'}
 
 
 class CurrentImageReviewTests(unittest.TestCase):
@@ -371,7 +371,7 @@ class CurrentImageReviewTests(unittest.TestCase):
                                         ('severity', 'type', 'package', 'version', 'status'))
                           for finding, rule in self.policy['exceptions'].items()}, expected)
         for finding, rule in self.policy['exceptions'].items():
-            reviewed_on = '2026-11-10'
+            reviewed_on = '2026-11-12' if finding == 'CVE-2026-119170' else '2026-11-10'
             self.assertEqual(rule['review']['reviewed_on'], reviewed_on)
             self.assertEqual(rule['review']['deadline'], '2026-11-18')
             self.assertTrue(rule['evidence'].strip())
@@ -397,7 +397,7 @@ class CurrentImageReviewTests(unittest.TestCase):
                     result = self.result(arch, day)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                                      [] if expired else list(CURRENT_FINDINGS))
-                    self.assertEqual(len(result['blocked']), 3 if expired else 0)
+                    self.assertEqual(len(result['blocked']), len(CURRENT_FINDINGS) if expired else 0)
                     for entry in result['accepted_fixed'] + result['blocked']:
                         self.assertEqual(entry['deadline'], '2026-11-18')
                     for entry in result['blocked']:
@@ -426,7 +426,7 @@ class CurrentImageReviewTests(unittest.TestCase):
         for arch in DIRECT:
             result = self.result(arch, datetime.date(2026, 11, 7))
             self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
-                             ['CVE-2025-15367', 'CVE-2026-116566'])
+                             ['CVE-2025-15367', 'CVE-2026-116566', 'CVE-2026-119170'])
             self.assertEqual(result['blocked'][0]['reason'], 'exception_mismatch')
 
     def test_renewal_does_not_accept_unknown_or_broaden_package_and_severity_matches(self):
@@ -448,7 +448,7 @@ class CurrentImageReviewTests(unittest.TestCase):
                     self.assertEqual(len(result['blocked']), 1)
                     self.assertEqual(result['blocked'][0]['reason'], reason)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
-                                     ['CVE-2026-103995', 'CVE-2026-116566'])
+                                     ['CVE-2026-103995', 'CVE-2026-116566', 'CVE-2026-119170'])
 
     def test_unused_expired_renewals_do_not_block_clean_scans(self):
         self.report['matches'] = []

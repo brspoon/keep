@@ -92,6 +92,13 @@ RUNTIME_FILES = {'amd64': {'executable': {'path': '/usr/bin/python3.14',
                            'sha256': '2f3ffcd3570a1e39b52c0fee4b6083143a5acd0b262de1147078b0bbde8d9d7f'},
            'ssl_extension': {'path': '/usr/lib/python3.14/lib-dynload/_ssl.cpython-314-aarch64-linux-musl.so',
                              'sha256': '38603ae8d849c474935e0fe12e74f2463c12a954c84ecd7adde6f150439a0cfd'}}}
+RUNTIME_FILES['amd64']['hashlib_extension'] = {
+    'path': '/usr/lib/python3.14/lib-dynload/_hashlib.cpython-314-x86_64-linux-musl.so',
+    'sha256': '01d7d5bc85f7451db614cc9d58075e8d8ad2cbdb4b4d6ea948c967b42d8c50de'}
+RUNTIME_FILES['arm64']['hashlib_extension'] = {
+    'path': '/usr/lib/python3.14/lib-dynload/_hashlib.cpython-314-aarch64-linux-musl.so',
+    'sha256': '442f4c487f751effd548c6344c41038796702e34973bf1e0fd8fb1b96a2d887d'}
+
 ALIASES = {'/usr/bin/python': 'python3', '/usr/bin/python3': 'python3.14'}
 
 

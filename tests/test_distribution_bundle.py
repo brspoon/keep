@@ -889,6 +889,7 @@ class CommittedKeepSourceTests(unittest.TestCase):
             'scripts/alpine_zlib_sources.py', 'scripts/alpine_sqlite_sources.py', 'scripts/alpine_musl_sources.py',
             'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
+                     'scripts/hashlib_security_checks.py',
                      'docs/python-socket-build.json', 'scripts/security-fixtures/distrusted.zip',
             'scripts/build_patched_sqlite.py', 'scripts/sqlite_security_patches.json',
             'scripts/sqlite_security_checks.py', 'docs/sqlite-build.json',
