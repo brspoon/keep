@@ -26,6 +26,9 @@ import _hashlib
 if api == 'public':
     import hashlib
 crypto = ctypes.CDLL('/usr/lib/libcrypto.so.3')
+crypto.OSSL_PROVIDER_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+crypto.OSSL_PROVIDER_load.restype = ctypes.c_void_p
+assert crypto.OSSL_PROVIDER_load(None, b'default')
 crypto.EVP_default_properties_enable_fips.argtypes = [ctypes.c_void_p, ctypes.c_int]
 crypto.EVP_default_properties_enable_fips.restype = ctypes.c_int
 assert crypto.EVP_default_properties_enable_fips(None, 1) == 1
@@ -40,7 +43,9 @@ def digest(flag):
     raise AssertionError('Unknown probe')
 def allowed(flag):
     try: digest(flag).digest()
-    except ValueError: return False
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return False
     return True
 try:
     if order != 'fresh':
