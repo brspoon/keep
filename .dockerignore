@@ -71,3 +71,8 @@
 
 # Public upstream TLS fixtures are mounted only for qualification.
 scripts/security-fixtures/**
+
+!scripts/build_patched_hashlib.py
+!scripts/python_hashlib_patches.json
+!scripts/hashlib_security_checks.py
+!docs/python-hashlib-build.json
