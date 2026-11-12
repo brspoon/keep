@@ -15,6 +15,7 @@ import shutil
 import struct
 import subprocess
 import tarfile
+import tempfile
 import urllib.request
 
 if __package__:
@@ -63,14 +64,16 @@ def environment(arch):
     result = {k: v.replace('/opt/keep-expat-build', str(WORK)) for k, v in result.items()}
     result['SOURCE_DATE_EPOCH'] = '1794268800'
     # OpenSSL records its flags in libcrypto; deterministic paths are required.
-    result['CFLAGS'] += ' -D_GNU_SOURCE'
     return result
 
 
 def facts(root=ROOT):
+    def source(name):
+        path = Path(root) / 'scripts' / name
+        return path if path.is_file() else Path(__file__).with_name(name)
     return {'schema': 'keep-openssl-build-v1', 'identity': IDENTITY,
             'source_url': SOURCE_URL, 'source_sha256': SOURCE_SHA256,
-            'patch_sha256': digest((Path(root) / 'scripts/openssl_security_patches.json').read_bytes()),
+            'patch_sha256': digest(source('openssl_security_patches.json').read_bytes()),
             'build_script_sha256': digest(Path(__file__).read_bytes()),
             'perl_lock_sha256': perl.LOCK_SHA256,
             'perl_helper_sha256': digest(Path(perl.__file__).read_bytes()),
@@ -186,6 +189,9 @@ def apply_auxv(source, patch):
 def replay_sources(output, *, root=ROOT, fetch=download):
     spec = reviewed_spec(root, preparation=True)
     source = extract_source(fetch(SOURCE_URL), output)
+    auxv = fetch(AUXV_URL)
+    require(hashlib.sha512(auxv).hexdigest() == AUXV_SHA512, 'Vendor auxv patch differs')
+    apply_auxv(source, auxv.decode())
     patch = checked((Path(root) / 'scripts/openssl_security_patches.json').read_bytes(),
                     spec['patch_sha256'], 'OpenSSL patch manifest')
     manifest = json.loads(patch)
@@ -269,7 +275,7 @@ def build(output, *, preparation=False, root=ROOT):
         except subprocess.SubprocessError:
             print(log.read_text(errors='replace')[-12000:], flush=True)
             raise
-    run(configure); run(['make', '-j2'])
+    run(configure)
     manifest = json.loads((Path(root) / 'scripts/openssl_security_patches.json').read_bytes())
     for patch in manifest['patches']:
         checked(download(patch['url']), patch['sha256'], 'Original upstream fix')
@@ -279,9 +285,12 @@ def build(output, *, preparation=False, root=ROOT):
     installed = WORK / 'install'
     run(['make', 'install_sw', 'DESTDIR=' + str(installed)])
     hashes = {name: digest(profile.regular_bytes(installed / name, 'OpenSSL installed output', 32 * 1024 * 1024)) for name in FILES}
-    vendor = {name: digest(profile.regular_bytes(Path('/') / name, 'OpenSSL vendor input', 32 * 1024 * 1024)) for name in FILES}
+    vendor_root = Path('/opt/openssl-vendor-usr')
+    require(vendor_root.is_dir(), 'Read-only pinned runtime vendor inputs are missing')
+    vendor = {name: digest(profile.regular_bytes(vendor_root / name.removeprefix('usr/'),
+                       'OpenSSL vendor input', 32 * 1024 * 1024)) for name in FILES}
     abi = {name: elf_identity(installed / 'usr/lib' / name, arch) for name in ('libcrypto.so.3', 'libssl.so.3')}
-    require(abi == {name: elf_identity(Path('/usr/lib') / name, arch) for name in abi}, 'OpenSSL vendor ABI changed')
+    require(abi == {name: elf_identity(vendor_root / 'lib' / name, arch) for name in abi}, 'OpenSSL vendor ABI changed')
     native = {'compiler_sha256': compiler, 'vendor_files': vendor, 'files': hashes, 'abi': abi}
     if not preparation:
         require(native == spec['native'][arch], 'OpenSSL output or compiler differs from reviewed native hashes')
@@ -298,9 +307,41 @@ def build(output, *, preparation=False, root=ROOT):
     return result
 
 
+def install(output, arch, *, runtime_root=Path('/'), root=ROOT):
+    """Replace only reviewed regular payloads; preserve configuration and trust."""
+    output = Path(output)
+    manifest_path = output / 'OPENSSL_SECURITY.json'
+    manifest = verify_manifest(json.loads(profile.regular_bytes(manifest_path, 'OpenSSL receipt')), arch, root)
+    native = manifest['native']
+    targets = {}
+    for name in FILES:
+        target = Path(runtime_root) / name
+        require(not any(p.is_symlink() for p in (target, *target.parents)) and target.is_file(),
+                'OpenSSL vendor payload is not canonical: ' + name)
+        checked(target.read_bytes(), native['vendor_files'][name], 'Original OpenSSL payload')
+        replacement = checked(profile.regular_bytes(output / name, 'OpenSSL replacement', 32 * 1024 * 1024),
+                              native['files'][name], 'OpenSSL replacement')
+        targets[target] = replacement
+    for target, body in targets.items():
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=target.parent, prefix='.keep-openssl-', delete=False) as stream:
+                temporary = Path(stream.name); stream.write(body); stream.flush(); os.fsync(stream.fileno())
+            temporary.chmod(0o755)
+            os.replace(temporary, target)
+            checked(target.read_bytes(), digest(body), 'Installed OpenSSL payload')
+        finally:
+            if temporary is not None and temporary.exists(): temporary.unlink()
+    return manifest
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--preparation', action='store_true')
+    parser.add_argument('--install', action='store_true')
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
-    print(json.dumps(build(args.output, preparation=args.preparation), sort_keys=True))
+    require(not (args.install and args.preparation), 'OpenSSL preparation cannot install a runtime')
+    result = (install(args.output, profile.native_architecture()) if args.install
+              else build(args.output, preparation=args.preparation))
+    print(json.dumps(result, sort_keys=True))

@@ -41,6 +41,8 @@ RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--preparation", "--
 FROM runtime-inputs AS sqlite-preparation
 RUN ["python", "-B", "/opt/scripts/build_patched_sqlite.py", "--preparation", "--output", "/opt/sqlite-preparation"]
 
+FROM dhi.io/python:3.14-alpine3.24@sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7 AS openssl-vendor
+
 FROM runtime-inputs AS openssl-build-inputs
 ENV KEEP_OPENSSL_BUILD_IMAGE=dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d
 COPY scripts/build_patched_openssl.py scripts/openssl_build_tools.py scripts/openssl_security_patches.json /opt/scripts/
@@ -51,9 +53,12 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     ["python", "-B", "/opt/scripts/openssl_build_tools.py", "--install"]
 
 FROM openssl-build-inputs AS openssl-preparation
-RUN ["python", "-B", "/opt/scripts/build_patched_openssl.py", "--preparation", "--output", "/opt/openssl-preparation"]
+RUN --mount=from=openssl-vendor,source=/usr,target=/opt/openssl-vendor-usr \
+    ["python", "-B", "/opt/scripts/build_patched_openssl.py", "--preparation", "--output", "/opt/openssl-preparation"]
 
-FROM runtime-inputs AS dependencies
+FROM openssl-build-inputs AS dependencies
+RUN --mount=from=openssl-vendor,source=/usr,target=/opt/openssl-vendor-usr \
+    ["python", "-B", "/opt/scripts/build_patched_openssl.py", "--output", "/opt/runtime-packages/openssl-patched"]
 RUN ["python", "-B", "/opt/scripts/build_patched_expat.py", "--output", "/opt/runtime-packages/expat-patched"]
 RUN ["python", "-B", "/opt/scripts/build_patched_sqlite.py", "--output", "/opt/runtime-packages/sqlite-patched"]
 # Keep the original cp314 compiler environment with matching updated libc headers;
@@ -98,6 +103,8 @@ RUN --mount=from=package-manager,source=/sbin/apk,target=/sbin/apk \
     --mount=from=socket-builder,source=/opt/docs,target=/opt/docs \
     ["python", "-B", "/opt/runtime-build-tools/install_runtime_packages.py", "--install"]
 COPY --from=socket-builder /opt/runtime-packages/socket-patched/SOCKET_SECURITY.json /app/SOCKET_SECURITY.json
+COPY --from=dependencies /opt/runtime-packages/openssl-patched/OPENSSL_SECURITY.json /app/OPENSSL_SECURITY.json
+COPY docs/openssl-build.json /app/OPENSSL_BUILD.json
 COPY --from=socket-builder /opt/runtime-packages/socket-patched/PYTHON_SOCKET_BUILD.json /app/PYTHON_SOCKET_BUILD.json
 COPY --from=socket-builder /opt/runtime-packages/socket-patched/pyconfig.h /app/PYTHON_SOCKET_PYCONFIG.h
 COPY --from=dependencies /opt/runtime-packages/expat/EXPAT_SECURITY.json /app/EXPAT_SECURITY.json

@@ -1,6 +1,6 @@
 {
   "build_image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d",
-  "build_script_sha256": "9674f913b46c2bcadcb6c8a53b2e2d142db2e80411b1f081a38a43877422ff30",
+  "build_script_sha256": "f84aa70a519791ecfe02cf2683e1787602054f58a3180bd2a8cd6a11b9c9ee34",
   "commits": [
     "159e1de0c448d7b9f09ad768c8e141def4aa1eb4",
     "a0051cfe699bf5a047bc1c4faef65f80f7987366",
@@ -30,7 +30,7 @@
   "environment": {
     "amd64": {
       "CC": "/usr/bin/gcc",
-      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-openssl-build=. -fno-plt -D_GNU_SOURCE",
+      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-openssl-build=. -fno-plt",
       "CONFIG_SHELL": "/bin/sh",
       "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-openssl-build/fortify/include",
       "CXX": "/usr/bin/g++",
@@ -43,7 +43,7 @@
     },
     "arm64": {
       "CC": "/usr/bin/gcc",
-      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-openssl-build=. -D_GNU_SOURCE",
+      "CFLAGS": "-Os -fstack-clash-protection -Wformat -Werror=format-security -fstack-protector-strong -ffile-prefix-map=/opt/keep-openssl-build=.",
       "CONFIG_SHELL": "/bin/sh",
       "CPPFLAGS": "-D_FORTIFY_SOURCE=2 -I/opt/keep-openssl-build/fortify/include",
       "CXX": "/usr/bin/g++",
