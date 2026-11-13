@@ -33,6 +33,7 @@ def write_synthetic_dependency_locks(root):
     root = Path(root)
     (root / 'docs').mkdir(parents=True, exist_ok=True)
     (root / 'docs/python-socket-build.json').write_bytes((ROOT / 'docs/python-socket-build.json').read_bytes())
+    (root / 'docs/openssl-build.json').write_bytes((ROOT / 'docs/openssl-build.json').read_bytes())
     (root / 'docs/os-package-sources.json').write_bytes((ROOT / 'docs/os-package-sources.json').read_bytes())
     spec = copy.deepcopy(build_patched_expat.reviewed_spec(ROOT))
     spec['expected_library_sha256'] = {'amd64': 'a' * 64, 'arm64': 'b' * 64}
@@ -414,6 +415,9 @@ class LoadedLibraryIdentityTests(unittest.TestCase):
         maps.write_text(self.mapping(ssl_library) + self.mapping(crypto_library))
         with patch.object(checks, 'SSL_LIBRARY', ssl_library), \
              patch.object(checks, 'CRYPTO_LIBRARY', crypto_library), \
+             patch.object(checks, 'openssl_runtime_manifest', return_value={'native': {'files': {
+                 'usr/lib/libssl.so.3': hashlib.sha256(ssl_library.read_bytes()).hexdigest(),
+                 'usr/lib/libcrypto.so.3': hashlib.sha256(crypto_library.read_bytes()).hexdigest()}}}), \
              patch.object(checks, 'exercise_openssl', return_value='3.5.9'), \
              patch.object(checks.certificate_trust, 'qualify_trust', return_value=trust_report('amd64')) as trust:
             result = checks.check_openssl('amd64', maps)
@@ -882,6 +886,8 @@ class RuntimeReportTests(unittest.TestCase):
              'build_manifest_sha256': hashlib.sha256(build_patched_expat.json_bytes(replacement)).hexdigest(),
              'security_probes': checks.expat_security.expected_report()},
             {'version': '3.5.9', 'certificate_trust': trust_report('arm64'),
+             'build_manifest': valid['openssl_build_manifest'],
+             'build_manifest_sha256': valid['openssl_build_manifest_sha256'],
              'libraries': {'ssl': library('libssl.so.3'),
                                             'crypto': library('libcrypto.so.3')}},
             {'version': '3.14.10',
@@ -915,7 +921,7 @@ class RuntimeReportTests(unittest.TestCase):
              patch.object(checks, 'check_sqlite', return_value=sqlite):
             report = checks.qualify_runtime()
         self.assertEqual(report, {
-            'schema': 8, 'arch': 'arm64', 'success': True, 'tests': 5, 'failures': 0,
+            'schema': 9, 'arch': 'arm64', 'success': True, 'tests': 5, 'failures': 0,
             'errors': [], 'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10',
                                       'musl': '1.2.6-r3', 'sqlite': '3.54.1'},
             'loaded_libraries': {**expat['libraries'], **openssl['libraries'], **python['libraries'],
@@ -934,6 +940,8 @@ class RuntimeReportTests(unittest.TestCase):
             'musl_install_manifest_sha256': 'b' * 64,
             'musl_aliases': musl['aliases'], 'musl_probes': musl['probes'],
             'certificate_trust': openssl['certificate_trust'],
+            'openssl_build_manifest': openssl['build_manifest'],
+            'openssl_build_manifest_sha256': openssl['build_manifest_sha256'],
             'sqlite_source_id': sqlite['source_id'], 'sqlite_compile_options': sqlite['compile_options'],
             'sqlite_limit_defaults': sqlite['limit_defaults'],
             'sqlite_build_manifest': sqlite['build_manifest'],
@@ -1007,6 +1015,7 @@ class RetainedDependencyReportTests(unittest.TestCase):
         destination = Path(root) / 'docs/expat-build.json'
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes((self.root / 'docs/expat-build.json').read_bytes())
+        (destination.parent / 'openssl-build.json').write_bytes((ROOT / 'docs/openssl-build.json').read_bytes())
         (destination.parent / 'python-socket-build.json').write_bytes((ROOT / 'docs/python-socket-build.json').read_bytes())
         (destination.parent / 'sqlite-build.json').write_bytes((self.root / 'docs/sqlite-build.json').read_bytes())
 

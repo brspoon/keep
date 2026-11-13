@@ -73,3 +73,8 @@
 scripts/security-fixtures/**
 
 !scripts/hashlib_security_checks.py
+!scripts/build_patched_openssl.py
+!scripts/openssl_build_tools.py
+!scripts/openssl_security_patches.json
+!docs/openssl-build.json
+!docs/openssl-build-tools.json

@@ -1719,6 +1719,104 @@
           "classification": "upstream-archive-or-compression-test-fixture"
         }
       ]
+    },
+    {
+      "origin": "perl-build-only",
+      "version": "5.42.3-r0",
+      "upstream_archive_sha256": "c9387e1473a1866935cb047ece7c2e0a80767a3acdecb79d4a375f8a95970ddc",
+      "fixtures": [
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/header/signed.tar",
+          "bytes": 10240,
+          "sha256": "6e0c62b88211b95c5ed7dae17ca3b1180164b306c57c87e2f28a22d92f143c06",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/linktest/linktest_missing_dir.tar",
+          "bytes": 10240,
+          "sha256": "8f8f1fc82acca1d94d683db68d00e39205fdc21c382db28098b63e42cc43b83c",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/linktest/linktest_with_dir.tar",
+          "bytes": 9729,
+          "sha256": "d7a3a3d2113498a1e48382e3688cca17cc61de6040fafc0e449e6b28aeb094a8",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/long/bar.tar",
+          "bytes": 10240,
+          "sha256": "7a9206007adce0f7ab3dd3f98ac61267b8cfcf1ff30d3ec00ca58908cad1ed00",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/long/foo.tgz",
+          "bytes": 331,
+          "sha256": "4c45a8dd4bc93cf968d36566956a2e6080b1afbc0f5b9eda4f7efb24df881a22",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/long/prefix-directory-concat.tar",
+          "bytes": 10240,
+          "sha256": "3e9d53831f62e1a127daec4281c5bffaf301df47ec7243a683960d172f8eee7f",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/short/bar.tar",
+          "bytes": 10240,
+          "sha256": "8d5c2052abcdfba8fce1e6d55de18a74866346657ce50c5b87b243317c436d7b",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/Archive-Tar/t/src/short/foo.tgz",
+          "bytes": 145,
+          "sha256": "62b5ebd7d17ac2a445b1095a456db86ee3f8a3fa23e8b5b2361aba3b0e0e35bb",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IO-Compress/t/files/bad-efs.zip",
+          "bytes": 126,
+          "sha256": "8c78af23d5cec8af3dd78a1a34e548e6d6ceabd2d51281bc654f9e993d438aed",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IO-Compress/t/files/encrypt-aes.zip",
+          "bytes": 9007,
+          "sha256": "2ba0cf8b92499259c798ffb78d5498e2eab03924f04f43df4aba4c4bdda655cb",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IO-Compress/t/files/encrypt-standard.zip",
+          "bytes": 207,
+          "sha256": "6e4cf1f477577da37d0ef062eff74177101cc76c305fc22dbd8b66517c951524",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IO-Compress/t/files/jar.zip",
+          "bytes": 434,
+          "sha256": "a2703684f917f12bb178546b3ac2372709c1e12d763ac825206f46b8ec70073e",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IO-Compress/t/files/time-invalid.zip",
+          "bytes": 122,
+          "sha256": "fb9dcd9701df6e61700f1d8bb0ed49f06bb87a699a7a4268ebe0f92c832935a6",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IO-Compress/t/files/time-zero.zip",
+          "bytes": 122,
+          "sha256": "02d329c2ea38920c8fb935fb799a7af25c969d2341d0cbf25adcd284001c59c8",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        },
+        {
+          "path": "perl-5.42.3/cpan/IPC-Cmd/t/src/x.tgz",
+          "bytes": 112,
+          "sha256": "aa26d5acc39cbc0194ddf753139985fb35a14bb81aa7c9eba97a519c5fef0ad1",
+          "classification": "upstream-archive-or-compression-test-fixture"
+        }
+      ],
+      "upstream_url": "https://cpan.metacpan.org/authors/id/S/SH/SHAY/perl-5.42.3.tar.xz"
     }
   ]
 }

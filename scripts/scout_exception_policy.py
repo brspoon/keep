@@ -15,6 +15,16 @@ COMPONENT_SOURCE_BINDINGS = {
     'docs/sqlite-build.json', 'scripts/sqlite_security_patches.json',
 }
 SQLITE_SHELL_FINDING = 'CVE-2026-119586'
+OPENSSL_FINDINGS = {'CVE-2026-107496', 'CVE-2026-88822', 'CVE-2026-88823',
+                    'CVE-2026-95691', 'CVE-2026-95692'}
+OPENSSL_SOURCE_BINDINGS = {
+    'scripts/build_patched_openssl.py', 'scripts/openssl_security_patches.json',
+    'scripts/openssl_build_tools.py', 'docs/openssl-build-tools.json',
+    'docs/openssl-build.json', 'scripts/runtime_dependency_checks.py',
+    'scripts/image_distribution.py', 'scripts/collect_package_sources.py',
+    'scripts/openssl_overlay_sources.py', 'scripts/build_distribution_bundle.py',
+    'scripts/install_runtime_packages.py',
+}
 
 
 def component_deadlines(policy):
@@ -79,8 +89,14 @@ def scout_deadlines(policy):
                 f"?os_name={rule['distribution']}&os_version={rule['distribution_version']}")
         if rule['purl'] != purl or rule['severity'] not in {'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNSPECIFIED'}:
             raise ValueError(f'{finding}: invalid Scout package or severity binding')
+        required_bindings = OPENSSL_SOURCE_BINDINGS if finding in OPENSSL_FINDINGS else SOURCE_BINDINGS
+        if finding in OPENSSL_FINDINGS and any(rule.get(k) != v for k, v in {
+                'type': 'apk', 'package': 'openssl', 'version': '3.5.9-r0',
+                'severity': 'UNSPECIFIED', 'distribution': 'alpine', 'distribution_version': '3.24',
+                'affected_version': '<3.5.9-r1', 'fixed_version': '3.5.9-r1'}.items()):
+            raise ValueError(f'{finding}: OpenSSL finding identity differs')
         bindings = rule.get('source_bindings')
-        if (not isinstance(bindings, dict) or set(bindings) != SOURCE_BINDINGS
+        if (not isinstance(bindings, dict) or set(bindings) != required_bindings
                 or any(not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)
                        or policy.get('reviewed_sources', {}).get(name) != digest
                        for name, digest in bindings.items())):
@@ -124,6 +140,17 @@ def finding_decision(finding, policy, today, *, inventory=None, layers=None,
         return 'finding_not_permitted'
     if today > deadlines[finding['id']]:
         return 'exception_expired'
+    if finding['id'] in OPENSSL_FINDINGS:
+        if (not isinstance(layers, dict) or arch not in ('amd64', 'arm64')
+                or not isinstance(image_config_sha256, str)
+                or not re.fullmatch(r'[a-f0-9]{64}', image_config_sha256)
+                or layers.get('config_sha256') != image_config_sha256):
+            return 'missing_openssl_image_binding'
+        try:
+            from collect_package_sources import verify_openssl_replacement
+            verify_openssl_replacement(inventory, arch, root=root)
+        except (ValueError, TypeError, KeyError, OSError, ImportError):
+            return 'invalid_openssl_replacement_proof'
     if component is not None:
         if today < datetime.date.fromisoformat(rule['review']['reviewed_on']):
             return 'component_review_not_started'

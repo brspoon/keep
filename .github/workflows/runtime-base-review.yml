@@ -2,6 +2,10 @@ name: Review vendor runtime candidate
 on:
   workflow_dispatch:
     inputs:
+      openssl_preparation:
+        type: boolean
+        default: false
+        description: Build and test source-bound OpenSSL backports on both native architectures
       hashlib_diagnostic:
         type: boolean
         default: false
@@ -366,6 +370,70 @@ jobs:
         with:
           name: sqlite-preparation-${{ matrix.arch }}-${{ github.run_id }}
           path: sqlite-preparation/${{ matrix.arch }}/
+          if-no-files-found: warn
+          retention-days: 7
+
+  openssl-preparation:
+    if: ${{ inputs.openssl_preparation && !inputs.qualification && !inputs.expat_preparation && !inputs.socket_preparation && github.repository == 'brspoon/keep' && startsWith(github.ref, 'refs/heads/brspoon/') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build exact OpenSSL library source-review outputs
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          REVIEW_ARCH: ${{ matrix.arch }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, subprocess, sys, tempfile
+          sys.path.insert(0, 'scripts')
+          from collect_package_sources import Registry, acquire_expat_compiler_provenance
+          from inspect_candidate import DIRECT, download
+          username = os.environ.pop('DOCKERHUB_USERNAME')
+          token = os.environ.pop('DOCKERHUB_TOKEN')
+          arch = os.environ['REVIEW_ARCH']
+          output = pathlib.Path('openssl-preparation') / arch
+          output.mkdir(parents=True)
+          with tempfile.TemporaryDirectory() as directory:
+              temporary = pathlib.Path(directory)
+              env = {**os.environ, 'DOCKER_CONFIG': directory}
+              subprocess.run(['docker', 'login', 'dhi.io', '--username', username,
+                              '--password-stdin'], input=token, text=True, env=env, check=True)
+              regctl = download(temporary, 'regctl', f'https://github.com/regclient/regclient/releases/download/v0.11.6/regctl-linux-{arch}', DIRECT[arch][2])
+              cosign = download(temporary, 'cosign', f'https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-{arch}', DIRECT[arch][3])
+              key = download(temporary, 'dhi.pub', 'https://registry.scout.docker.com/keyring/dhi/latest.pub',
+                             '1d02bbccf149283ae6288d96264dcad3fb23ee1911d90324a48eab28e4cb8a5f')
+              acquire_expat_compiler_provenance(arch, output / 'compiler-provenance',
+                  Registry(regctl, cosign, key, env))
+              subprocess.run(['docker', 'build', '--progress=plain', '--target',
+                              'openssl-preparation', '--tag', 'keep-openssl-preparation', '.'],
+                             env=env, check=True)
+          container = subprocess.check_output(['docker', 'create',
+              'keep-openssl-preparation'], text=True).strip()
+          try:
+              subprocess.run(['docker', 'cp', container + ':/opt/openssl-preparation/.',
+                              str(output)], check=True)
+          finally:
+              subprocess.run(['docker', 'rm', container], check=True)
+          print('Preparation only: final native image qualification remains required.')
+          PY
+      - name: Retain native OpenSSL preparatory evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: openssl-preparation-${{ matrix.arch }}-${{ github.run_id }}
+          path: openssl-preparation/${{ matrix.arch }}/
           if-no-files-found: warn
           retention-days: 7
 

@@ -3,6 +3,7 @@
 ## 2.30.6 — 2026-11-12
 
 - Restore missing artwork on Leaving when Maintainerr has a poster but its collection artwork is empty.
+- Include upstream OpenSSL security fixes.
 
 ## 2.30.5 — 2026-11-07
 

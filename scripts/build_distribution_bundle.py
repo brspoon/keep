@@ -67,8 +67,19 @@ def retain_http_framing_sources(stage, inventory, root):
 def fetch_source(url):
     """Fetch locked PyPI/native/patch sources, checking HTTPS redirect hosts."""
     import build_patched_sqlite as sqlite_build
+    import build_patched_openssl as openssl_build
+    import openssl_build_tools as perl_build
     hosts = {'pypi.org', 'files.pythonhosted.org', 'github.com', 'codeload.github.com',
              'raw.githubusercontent.com'}
+    perl = perl_build.reviewed_spec()
+    perl_urls = {row['url'] for row in perl['sources']}
+    perl_urls.update(row['url'] for row in perl['binaries'].values())
+    perl_urls.update('https://alpinelinux.org/keys/' + row['name'] for row in perl_build.tools.alpine.KEYS.values())
+    if url == openssl_build.SOURCE_URL or url in perl_urls:
+        source_host = urlsplit(url).hostname
+        hosts = {source_host}
+        if source_host == 'github.com':
+            hosts.update({'codeload.github.com', 'release-assets.githubusercontent.com'})
     if url == 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz':
         hosts = {'www.python.org'}
     elif url in {row['url'] for row in sqlite_build.source_download_records()}:
@@ -222,6 +233,9 @@ def check_runtime(inventory, lock, os_lock, arch, *, root=ROOT):
     if any(row['origin'] == 'sqlite' for row in os_lock['origins']):
         from collect_package_sources import verify_sqlite_replacement
         verify_sqlite_replacement(inventory, arch, root=root)
+    if any(row['origin'] == 'openssl' for row in os_lock['origins']):
+        from collect_package_sources import verify_openssl_replacement
+        verify_openssl_replacement(inventory, arch, root=root)
     check_native_wheels(inventory, lock, arch)
     return {'python_packages': len(expected_python), 'os_packages': len(expected),
             'os_origins': len(os_lock['origins']), 'native_wheels': 2}
@@ -244,6 +258,8 @@ def check_runtime_notices(root, inventory, os_lock, arch):
             expected['python-socket-overlay'] = '3.14.10'
     if 'sqlite_replacement' in inventory:
         expected['sqlite-overlay'] = '3.54.1'
+    if 'openssl_replacement' in inventory:
+        expected['openssl-overlay'] = '3.5.9'
     installed = {row['path']: row for row in inventory.get('notices', [])}
     covered = set()
     seen = set()
@@ -1207,6 +1223,9 @@ def keep_source(root, destination):
                      'scripts/patch_python_runtime.py', 'scripts/build_patched_socket.py',
                      'scripts/socket_security_checks.py', 'scripts/python_socket_patches.json',
                      'scripts/hashlib_security_checks.py',
+                     'scripts/build_patched_openssl.py', 'scripts/openssl_build_tools.py',
+                     'scripts/openssl_security_patches.json', 'scripts/openssl_overlay_sources.py',
+                     'docs/openssl-build.json', 'docs/openssl-build-tools.json',
                      'docs/python-socket-build.json',
                      'scripts/build_patched_sqlite.py', 'scripts/sqlite_security_patches.json',
                      'scripts/sqlite_security_checks.py', 'docs/sqlite-build.json',
@@ -1264,6 +1283,9 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
                            if 'socket_replacement' in inventory else None)
         sqlite_coverage = (retain_sqlite_sources(stage, inventory, architecture, root=root, fetch=fetch)
                            if 'sqlite_replacement' in inventory else None)
+        from openssl_overlay_sources import retain as retain_openssl_overlay
+        openssl_coverage = (retain_openssl_overlay(stage, inventory, architecture, root=root, fetch=fetch)
+                            if 'openssl_replacement' in inventory else None)
         notice_union = consolidate_notices(stage, os_lock, architecture, inventory,
             selected_comment_paths=reviewed_notice_comments(root, architecture))
         check_generated_notices(root, notice_union, architecture)
@@ -1287,6 +1309,7 @@ def build_bundle(sources, architecture, runtime_inventory, output, *, root=ROOT,
         coverage = {'runtime': counts, 'runtime_notices': runtime_notices,
                     'http_framing': http_framing, 'socket_overlay': socket_coverage,
                     'sqlite_overlay': sqlite_coverage,
+                    'openssl_overlay': openssl_coverage,
                     'source_notice_union': {'notices': len(notice_union['notices']),
                                            'origins_needing_explicit_attribution': notice_union['origins_needing_explicit_attribution']},
                     'original_base': base_coverage, 'os_origins': os_coverage,
@@ -1339,12 +1362,16 @@ def prepare_notices(sources, architecture, runtime_inventory, output, *, root=RO
                        if 'socket_replacement' in inventory else None)
     sqlite_coverage = (retain_sqlite_sources(output, inventory, architecture, root=root, fetch=fetch)
                        if 'sqlite_replacement' in inventory else None)
+    from openssl_overlay_sources import retain as retain_openssl_overlay
+    openssl_coverage = (retain_openssl_overlay(output, inventory, architecture, root=root, fetch=fetch)
+                        if 'openssl_replacement' in inventory else None)
     notices = consolidate_notices(output, os_lock, architecture, inventory, retain_inputs=True)
     notice_inputs = read_json(output / 'notice-inputs', 'index.json')
     report = {'format': 'keep-runtime-notice-preparation-v1', 'architecture': architecture,
         'runtime': counts, 'os_origins': coverage, 'original_base': base,
         'socket_overlay': socket_coverage,
         'sqlite_overlay': sqlite_coverage,
+        'openssl_overlay': openssl_coverage,
         'notices': len(notices['notices']), 'notice_directory': 'os-notices',
         'notice_inputs_directory': 'notice-inputs', 'notice_input_bundles': len(notice_inputs['bundles']),
         'notice_input_files': notice_inputs['notice_files'],

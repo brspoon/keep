@@ -1,0 +1,192 @@
+{
+  "binaries": {
+    "amd64": {
+      "controls": {
+        ".PKGINFO": "a741aaf782a7550759ccae4f9d1a859fef7fd1f5eb553f53d831470cb7c4b75e"
+      },
+      "data_sha256": "9ca01775919923f2e0cf3644556e5bc45a45f77edbe5175d22a991b8aae38259",
+      "fields": {
+        "arch": [
+          "x86_64"
+        ],
+        "builddate": [
+          "1793729891"
+        ],
+        "commit": [
+          "202d687a7e8911ce847f7b94051c39ea14c65354"
+        ],
+        "datahash": [
+          "9ca01775919923f2e0cf3644556e5bc45a45f77edbe5175d22a991b8aae38259"
+        ],
+        "depend": [
+          "so:libbz2.so.1",
+          "so:libc.musl-x86_64.so.1",
+          "so:libz.so.1"
+        ],
+        "license": [
+          "Artistic-1.0-Perl OR GPL-1.0-or-later"
+        ],
+        "origin": [
+          "perl"
+        ],
+        "packager": [
+          "Buildozer <alpine-devel@lists.alpinelinux.org>"
+        ],
+        "pkgdesc": [
+          "Larry Wall's Practical Extraction and Report Language"
+        ],
+        "pkgname": [
+          "perl"
+        ],
+        "pkgver": [
+          "5.42.3-r0"
+        ],
+        "provides": [
+          "perl-scalar-list-utils=5.42.3-r0",
+          "cmd:perl5.42.3=5.42.3-r0",
+          "cmd:perl=5.42.3-r0",
+          "cmd:perldoc=5.42.3-r0",
+          "cmd:pod2html=5.42.3-r0",
+          "cmd:pod2man=5.42.3-r0",
+          "cmd:pod2text=5.42.3-r0",
+          "cmd:pod2usage=5.42.3-r0",
+          "cmd:podchecker=5.42.3-r0",
+          "cmd:streamzip=5.42.3-r0",
+          "so:libperl.so=0"
+        ],
+        "size": [
+          "40257848"
+        ],
+        "url": [
+          "https://www.perl.org/"
+        ]
+      },
+      "payload_sha256": "3fc7b40b5658ec71ca69cdb9248bc6f81c17f8c474fc8afc7a950a27ee6fcc47",
+      "sha256": "6bb4d744425b1689d54feece20bdd51f71508c4d23d1af5f66298f03f8310df7",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/perl-5.42.3-r0.apk"
+    },
+    "arm64": {
+      "controls": {
+        ".PKGINFO": "e5e42ad91755e4b7ca966e96bf9945a06193e6a991203519e8555862d14555e6"
+      },
+      "data_sha256": "f98bec125f45a5c682405a1a8029357cad474a8085556149923ae6a4f6885794",
+      "fields": {
+        "arch": [
+          "aarch64"
+        ],
+        "builddate": [
+          "1793729891"
+        ],
+        "commit": [
+          "202d687a7e8911ce847f7b94051c39ea14c65354"
+        ],
+        "datahash": [
+          "f98bec125f45a5c682405a1a8029357cad474a8085556149923ae6a4f6885794"
+        ],
+        "depend": [
+          "so:libbz2.so.1",
+          "so:libc.musl-aarch64.so.1",
+          "so:libz.so.1"
+        ],
+        "license": [
+          "Artistic-1.0-Perl OR GPL-1.0-or-later"
+        ],
+        "origin": [
+          "perl"
+        ],
+        "packager": [
+          "Unknown"
+        ],
+        "pkgdesc": [
+          "Larry Wall's Practical Extraction and Report Language"
+        ],
+        "pkgname": [
+          "perl"
+        ],
+        "pkgver": [
+          "5.42.3-r0"
+        ],
+        "provides": [
+          "perl-scalar-list-utils=5.42.3-r0",
+          "cmd:perl5.42.3=5.42.3-r0",
+          "cmd:perl=5.42.3-r0",
+          "cmd:perldoc=5.42.3-r0",
+          "cmd:pod2html=5.42.3-r0",
+          "cmd:pod2man=5.42.3-r0",
+          "cmd:pod2text=5.42.3-r0",
+          "cmd:pod2usage=5.42.3-r0",
+          "cmd:podchecker=5.42.3-r0",
+          "cmd:streamzip=5.42.3-r0",
+          "so:libperl.so=0"
+        ],
+        "size": [
+          "41825574"
+        ],
+        "url": [
+          "https://www.perl.org/"
+        ]
+      },
+      "payload_sha256": "3d8945f2eac5511bda1650aff3e801c2d455693d128bc878da091fb9672fd938",
+      "sha256": "2e0de796c7ec30c2711816c03bc0af6dc4eee141039387c6530ab21375460f7d",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/perl-5.42.3-r0.apk"
+    }
+  },
+  "build_commit": "202d687a7e8911ce847f7b94051c39ea14c65354",
+  "recipe_files": {
+    "APKBUILD": "5344bd808404e76a3dd4bb266f2c273a4cfa9dc3662f72ed2f49210b152aac5d",
+    "digest-sha-cflags.patch": "0d0a3c892c8ee281aafcc155a26c5b2edb57601a34d316acd5681b52c039670a",
+    "dont-write-packlist.patch": "9fb3c710b18da89ec99e7595b6d7bee9aa49781aeeab8601439959e96deec3f9",
+    "json-pp-options.patch": "3af09a4f9ef21818de93f86547968bd291a8f0554d7f575df2e9917170f26eb5",
+    "musl-skip-dst-test.patch": "e788d9f0a2835d07e43888d73ec8e4911fb8d20dce1ad517aa63968d0dc0572c",
+    "musl-stack-size.patch": "152335c74f059fce47008e72fd4e81d93a426d5287299699ea5b0bdc42938c0b",
+    "skip-test-due-to-busybox-ps.patch": "b66bb18aa6b8b9e62236b28ede948ce1afc0b3d66454f0279017a008cafd3c6c"
+  },
+  "sources": [
+    {
+      "path": "recipe-APKBUILD",
+      "sha256": "5344bd808404e76a3dd4bb266f2c273a4cfa9dc3662f72ed2f49210b152aac5d",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/APKBUILD"
+    },
+    {
+      "path": "recipe-digest-sha-cflags.patch",
+      "sha256": "0d0a3c892c8ee281aafcc155a26c5b2edb57601a34d316acd5681b52c039670a",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/digest-sha-cflags.patch"
+    },
+    {
+      "path": "recipe-dont-write-packlist.patch",
+      "sha256": "9fb3c710b18da89ec99e7595b6d7bee9aa49781aeeab8601439959e96deec3f9",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/dont-write-packlist.patch"
+    },
+    {
+      "path": "recipe-json-pp-options.patch",
+      "sha256": "3af09a4f9ef21818de93f86547968bd291a8f0554d7f575df2e9917170f26eb5",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/json-pp-options.patch"
+    },
+    {
+      "path": "recipe-musl-skip-dst-test.patch",
+      "sha256": "e788d9f0a2835d07e43888d73ec8e4911fb8d20dce1ad517aa63968d0dc0572c",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/musl-skip-dst-test.patch"
+    },
+    {
+      "path": "recipe-musl-stack-size.patch",
+      "sha256": "152335c74f059fce47008e72fd4e81d93a426d5287299699ea5b0bdc42938c0b",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/musl-stack-size.patch"
+    },
+    {
+      "path": "recipe-skip-test-due-to-busybox-ps.patch",
+      "sha256": "b66bb18aa6b8b9e62236b28ede948ce1afc0b3d66454f0279017a008cafd3c6c",
+      "url": "https://raw.githubusercontent.com/alpinelinux/aports/202d687a7e8911ce847f7b94051c39ea14c65354/main/perl/skip-test-due-to-busybox-ps.patch"
+    },
+    {
+      "path": "perl-5.42.3.tar.xz",
+      "sha512": "1b4596bf8bd537514121dec30657d015b5bae7e993d3ada91481aa15483e725308bbbd846d24cf93b278d13be154dc4d20849a216b7aecafe852009aa50150a9",
+      "url": "https://cpan.metacpan.org/authors/id/S/SH/SHAY/perl-5.42.3.tar.xz"
+    },
+    {
+      "path": "perl-cross-1.6.3.tar.gz",
+      "sha512": "eb8aa2d57121ef288e253f9443bd4f53ad8b23152096265a0f8211ca4f2a61fdf3fdd03ca1e7d1e1c4a8a408421c7254cfaf12d1f81333aa4a0bf53d74cfa223",
+      "url": "https://github.com/arsv/perl-cross/releases/download/1.6.3/perl-cross-1.6.3.tar.gz"
+    }
+  ],
+  "version": "5.42.3-r0"
+}

@@ -726,14 +726,38 @@ def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
             'security_probes': probes}
 
 
+def openssl_runtime_manifest(arch):
+    if __package__:
+        from . import build_patched_openssl as build
+    else:
+        import build_patched_openssl as build
+    lock = Path('/app/OPENSSL_BUILD.json')
+    body = build.profile.regular_bytes('/app/OPENSSL_SECURITY.json', 'OpenSSL runtime receipt')
+    manifest = build.verify_manifest(json.loads(body), arch, lock_path=lock)
+    require(body == build.json_bytes(manifest), 'OpenSSL receipt is not canonical')
+    for name, checksum in manifest['native']['files'].items():
+        path = Path('/') / name
+        require(not path.is_symlink() and path.resolve(strict=True) == path,
+                'OpenSSL runtime payload is not canonical')
+        build.checked(build.profile.regular_bytes(path, 'OpenSSL runtime payload', 32 * 1024 * 1024),
+                      checksum, 'OpenSSL runtime payload')
+    return manifest
+
+
 def check_openssl(arch, maps_path=MAPS_PATH):
+    manifest = openssl_runtime_manifest(arch)
     version = exercise_openssl()
     maps_text = Path(maps_path).read_text()
     trust = certificate_trust.qualify_trust(
         arch, TLS_CERTIFICATE, TLS_PRIVATE_KEY, memory_tls_handshake)
-    return {'version': version, 'certificate_trust': trust, 'libraries': {
-        'ssl': verify_loaded_library(SSL_LIBRARY, 'libssl.so', maps_text),
-        'crypto': verify_loaded_library(CRYPTO_LIBRARY, 'libcrypto.so', maps_text),
+    return {'version': version, 'certificate_trust': trust,
+            'build_manifest': manifest,
+            'build_manifest_sha256': hashlib.sha256((json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode()).hexdigest(),
+            'libraries': {
+        'ssl': verify_loaded_library(SSL_LIBRARY, 'libssl.so', maps_text,
+                                    manifest['native']['files']['usr/lib/libssl.so.3']),
+        'crypto': verify_loaded_library(CRYPTO_LIBRARY, 'libcrypto.so', maps_text,
+                                       manifest['native']['files']['usr/lib/libcrypto.so.3']),
     }}
 
 
@@ -798,7 +822,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     musl_manifest_path=MUSL_MANIFEST_PATH,
                     sqlite_manifest_path=SQLITE_MANIFEST_PATH,
                     sqlite_lock_path=SQLITE_BUILD_PATH):
-    report = {'schema': 8, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
+    report = {'schema': 9, 'arch': None, 'success': False, 'tests': 0, 'failures': 0,
               'errors': [], 'versions': {}, 'loaded_libraries': {},
               'expat_source_manifest_sha256': None, 'expat_install_manifest_sha256': None,
               'expat_build_manifest': None, 'expat_build_manifest_sha256': None,
@@ -810,6 +834,7 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
               'musl_source_manifest_sha256': None, 'musl_install_manifest_sha256': None,
               'musl_aliases': {}, 'musl_probes': {},
               'certificate_trust': None,
+              'openssl_build_manifest': None, 'openssl_build_manifest_sha256': None,
               'sqlite_source_id': None, 'sqlite_compile_options': [], 'sqlite_limit_defaults': {},
               'sqlite_build_manifest': None, 'sqlite_build_manifest_sha256': None,
               'sqlite_security_probes': {}}
@@ -841,6 +866,8 @@ def qualify_runtime(manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH,
                     report['expat_security_probes'] = result['security_probes']
                 elif name == 'openssl':
                     report['certificate_trust'] = result['certificate_trust']
+                    report['openssl_build_manifest'] = result['build_manifest']
+                    report['openssl_build_manifest_sha256'] = result['build_manifest_sha256']
                 elif name == 'python':
                     report['python_source_manifest_sha256'] = result['source_manifest_sha256']
                     report['python_install_manifest_sha256'] = result['install_manifest_sha256']
@@ -887,12 +914,13 @@ def validate_report(report, arch, root=ROOT):
             'musl_source_manifest_sha256', 'musl_install_manifest_sha256',
             'musl_aliases', 'musl_probes',
             'python_files', 'python_aliases', 'python_tls_probes', 'certificate_trust',
+            'openssl_build_manifest', 'openssl_build_manifest_sha256',
             'socket_manifest', 'socket_manifest_sha256', 'socket_probes', 'hashlib_probes',
             'sqlite_source_id', 'sqlite_compile_options', 'sqlite_limit_defaults', 'sqlite_build_manifest',
             'sqlite_build_manifest_sha256', 'sqlite_security_probes'}
     require(isinstance(report, dict) and set(report) == keys,
             'Invalid dependency qualification report schema')
-    require(type(report['schema']) is int and report['schema'] == 8
+    require(type(report['schema']) is int and report['schema'] == 9
             and report['arch'] == arch and report['success'] is True
             and type(report['tests']) is int and report['tests'] == 5
             and type(report['failures']) is int and report['failures'] == 0
@@ -902,6 +930,13 @@ def validate_report(report, arch, root=ROOT):
                                    'sqlite': SQLITE_VERSION},
             'Dependency report versions differ from the reviewed runtime')
     certificate_trust.validate_trust_report(report['certificate_trust'], arch, root=root)
+    if __package__:
+        from . import build_patched_openssl as openssl_build
+    else:
+        import build_patched_openssl as openssl_build
+    openssl = openssl_build.verify_manifest(report['openssl_build_manifest'], arch, root)
+    require(report['openssl_build_manifest_sha256'] == openssl_build.digest(openssl_build.json_bytes(openssl)),
+            'Dependency report OpenSSL receipt digest differs')
     expected = validate_expat_manifest(expected_expat_manifest(arch, root), arch)
     expected_install_hash = hashlib.sha256(
         (json.dumps(expected, sort_keys=True, indent=2) + '\n').encode()).hexdigest()
@@ -980,6 +1015,9 @@ def validate_report(report, arch, root=ROOT):
         validate_file_identity(libraries[name], canonical)
     require(libraries['expat']['sha256'] == replacement['library']['sha256'],
             'Dependency report Expat hash differs from the reviewed replacement')
+    for name, path in (('ssl', 'usr/lib/libssl.so.3'), ('crypto', 'usr/lib/libcrypto.so.3')):
+        require(libraries[name]['sha256'] == openssl['native']['files'][path],
+                'Dependency report OpenSSL mapped bytes differ from reviewed replacement')
     for name, record in (('python', python['library']), ('python_ssl', python['ssl_extension']),
                          ('python_hashlib', python['hashlib_extension'])):
         require(libraries[name]['sha256'] == record['sha256'],

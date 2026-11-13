@@ -519,6 +519,30 @@ def sqlite_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libsql
             'library': {'path': str(library), 'sha256': digest(body)}}
 
 
+def openssl_replacement_inventory(app=Path('/app'), runtime_root=Path('/')):
+    """Inventory every replacement payload independently of APK metadata."""
+    paths = [app / 'OPENSSL_BUILD.json', app / 'OPENSSL_SECURITY.json']
+    if not any(path.exists() or path.is_symlink() for path in paths):
+        return None
+    import build_patched_openssl as build
+    records = []
+    for path in paths:
+        body = build.profile.regular_bytes(path, 'OpenSSL replacement proof')
+        value = json.loads(body)
+        if body != build.json_bytes(value):
+            raise ValueError('OpenSSL proof must use canonical JSON bytes')
+        records.append((value, digest(body)))
+    files = {}
+    for name in build.FILES:
+        path = runtime_root / name
+        if path.is_symlink() or path.resolve(strict=True) != path:
+            raise ValueError('OpenSSL replacement payload must be canonical')
+        files[name] = {'path': '/' + name,
+                       'sha256': digest(build.profile.regular_bytes(path, 'OpenSSL installed payload', 32 * 1024 * 1024))}
+    return {'build_lock': records[0][0], 'build_lock_sha256': records[0][1],
+            'manifest': records[1][0], 'manifest_sha256': records[1][1], 'files': files}
+
+
 def sqlite_cli_runtime_inventory(root=Path('/'), installed=None):
     """Check actual installed component/payload metadata and standard CLI aliases.
 
@@ -606,6 +630,9 @@ def runtime_inventory(*, http_framing=False):
     sqlite_replacement = sqlite_replacement_inventory()
     if sqlite_replacement is not None:
         result['sqlite_replacement'] = sqlite_replacement
+    openssl_replacement = openssl_replacement_inventory()
+    if openssl_replacement is not None:
+        result['openssl_replacement'] = openssl_replacement
     result['sqlite_cli'] = sqlite_cli_runtime_inventory(installed=installed)
     if not result['sqlite_cli']['success']:
         result['success'] = False

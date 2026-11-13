@@ -735,6 +735,23 @@ def verify_socket_replacement(runtime_inventory, architecture, *, root=ROOT):
     return replacement
 
 
+def verify_openssl_replacement(runtime_inventory, architecture, *, root=ROOT):
+    import build_patched_openssl as build
+    replacement = runtime_inventory.get('openssl_replacement') if isinstance(runtime_inventory, dict) else None
+    if not isinstance(replacement, dict) or set(replacement) != {
+            'build_lock', 'build_lock_sha256', 'manifest', 'manifest_sha256', 'files'}:
+        raise ValueError('Missing complete OpenSSL replacement source binding')
+    spec = build.reviewed_spec(root)
+    manifest = build.verify_manifest(replacement['manifest'], architecture, root)
+    if (replacement['build_lock'] != spec
+            or replacement['build_lock_sha256'] != build.digest(build.json_bytes(spec))
+            or replacement['manifest_sha256'] != build.digest(build.json_bytes(manifest))
+            or replacement['files'] != {name: {'path': '/' + name, 'sha256': checksum}
+                                       for name, checksum in spec['native'][architecture]['files'].items()}):
+        raise ValueError('OpenSSL source and actual runtime payloads differ from reviewed native build')
+    return replacement
+
+
 def verify_sqlite_replacement(runtime_inventory, architecture, *, root=ROOT):
     """Bind the library overlay separately from the unchanged vendor APK input."""
     import build_patched_sqlite as build
