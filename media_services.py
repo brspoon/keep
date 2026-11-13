@@ -112,10 +112,47 @@ def get_media(service, item_id, settings):
 
 def delete_media(service, item_id, settings):
     config = _config(service)
+    # Delete tracked files synchronously before removing their title record.
+    # Whole-title DELETE uses asynchronous folder cleanup; a disk failure there
+    # otherwise leaves orphan files with no title left in Arr to retry.
+    resource = 'moviefile' if service == 'radarr' else 'episodefile'
+    owner = 'movieId' if service == 'radarr' else 'seriesId'
+    files = _request(service, settings, 'GET', f'/api/v3/{resource}',
+                     params={owner: item_id}).json()
+    if not isinstance(files, list) or any(not isinstance(row, dict) or
+            type(row.get('id')) is not int or row['id'] < 1 or
+            row.get(owner) != item_id for row in files):
+        raise ValueError('Incomplete media file inventory')
+    ids = [row['id'] for row in files]
+    if len(set(ids)) != len(ids):
+        raise ValueError('Duplicate media file inventory')
+    if service == 'radarr':
+        for file_id in ids:
+            _request(service, settings, 'DELETE', f'/api/v3/moviefile/{file_id}')
+    elif ids:
+        delete_episode_files(ids, settings)
     return _request(
         service, settings, "DELETE", config["singular"].format(item_id=item_id),
         params={"deleteFiles": "true", config["delete_exclusion"]: "false"},
     )
+
+
+def wait_for_file_removal(service, path, settings, *, attempts=11, paths=None):
+    """Check Arr's filesystem, since title deletion can precede disk deletion."""
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError('Missing media folder')
+    for attempt in range(attempts):
+        rows = _request(service, settings, 'GET', '/api/v3/filesystem/mediafiles',
+                        params={'path': path}).json()
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or
+                not isinstance(row.get('path'), str) or not row['path'] for row in rows):
+            raise ValueError('Incomplete filesystem verification')
+        remaining = {row['path'] for row in rows}
+        if not remaining or (paths is not None and not remaining.intersection(paths)):
+            return
+        if attempt < attempts - 1:
+            time.sleep(1)
+    raise ValueError('Video files remain after deletion')
 
 
 def downloaded_seasons(item):
@@ -185,6 +222,7 @@ def season_inventory(series_id, settings):
                      'episodes': [{k:v for k,v in e.items() if k != 'monitored'}
                                   for e in sorted(all_episodes, key=lambda e:e['id'])]}
         result[number] = {'number': number, 'fileIds': sorted(r['file']['id'] for r in rows),
+                          'paths': sorted(r['file']['path'] for r in rows),
                           'episodeIds': sorted(e['id'] for e in all_episodes),
                           'monitoredEpisodeIds': sorted(e['id'] for e in all_episodes if e['monitored']),
                           'episodes': sum(len(r['episodes']) for r in rows),

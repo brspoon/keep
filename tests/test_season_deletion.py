@@ -27,7 +27,7 @@ def series():
 
 def inventory():
     return {n:{'number':n,'fileIds':[n+100],'episodeIds':[n+200],'monitoredEpisodeIds':[n+200],
-               'episodes':2 if n==1 else 1,'bytes':100,'fingerprint':str(n)} for n in (0,1,2,3)}
+               'episodes':2 if n==1 else 1,'bytes':100,'fingerprint':str(n), 'paths':[f'/shows/A show/season{n}.mkv']} for n in (0,1,2,3)}
 
 
 class SeasonPolicyTests(unittest.TestCase):

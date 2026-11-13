@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.30.7 — 2026-11-13
+
+- Prevent deletion of kept titles when their title or year differs between services.
+- Remove deleted titles from Leaving immediately.
+- Delete media files before removing titles from Radarr or Sonarr, and report incomplete deletion when files remain.
+
 ## 2.30.6 — 2026-11-12
 
 - Restore missing artwork on Leaving when Maintainerr has a poster but its collection artwork is empty.

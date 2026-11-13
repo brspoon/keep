@@ -152,6 +152,8 @@ class MovieDeletionRouteTests(unittest.TestCase):
         self.live = self.mock(seerr.Client, 'snapshot', return_value=history())
         self.fetch = self.mock(keep.media_services, 'get_media', return_value=self.item)
         self.remove = self.mock(keep.media_services, 'delete_media')
+        self.disk = self.mock(keep.media_services, 'wait_for_file_removal')
+        self.cleanup = self.mock(keep, 'remove_deleted_from_leaving')
         self.real_keep_check = keep.media_matches_active_keep
         self.kept = self.mock(keep, 'media_matches_active_keep', return_value=False)
 
@@ -179,6 +181,26 @@ class MovieDeletionRouteTests(unittest.TestCase):
         self.remove.assert_called_once_with('radarr', 22, keep.connection_value)
         self.assertEqual(self.fetch.call_count, 2)
         queued.assert_called_once_with()
+
+    def test_partial_completion_does_not_report_success(self):
+        for target in (self.disk, self.cleanup):
+            with self.subTest(target=target):
+                target.side_effect = ValueError('Unavailable')
+                response = self.post()
+                self.assertEqual(response.status_code, 502)
+                self.assertTrue(response.json['refreshRequired'])
+                self.assertIn('accepted', response.json['error'])
+                target.side_effect = None
+
+    def test_nested_provider_id_protects_differently_named_kept_movie(self):
+        self.kept.side_effect = self.real_keep_check
+        self.mock(keep, 'get_collections', return_value={1: 'Movies'})
+        self.mock(keep, 'deletion_keep_inventory', return_value=[
+            {'mediaServerId': '42', 'mediaData': {'title': 'Another title', 'year': 2000,
+             'providerIds': {'tmdb': ['100']}}}])
+        self.assertEqual(self.post().status_code, 409)
+        self.remove.assert_not_called()
+        self.cleanup.assert_not_called()
 
     def test_other_unknown_shared_and_unlinked_requests_deny(self):
         queued = self.mock(keep, 'queue_seerr_availability')

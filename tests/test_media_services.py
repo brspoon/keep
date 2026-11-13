@@ -24,6 +24,7 @@ class MediaServiceClientTests(unittest.TestCase):
     def test_delete_matches_native_radarr_and_sonarr_file_deletion(self, request):
         request.return_value.status_code = 200
         request.return_value.raise_for_status.return_value = None
+        request.return_value.json.return_value = []
         media_services.delete_media('radarr', 12, self.settings)
         self.assertEqual(request.call_args.args[:2], ('DELETE', 'http://radarr:7878/api/v3/movie/12'))
         self.assertEqual(request.call_args.kwargs['params'],
@@ -50,6 +51,7 @@ class MediaServiceClientTests(unittest.TestCase):
     @patch.object(media_services.requests, 'request')
     def test_redirect_is_failure_instead_of_false_delete_success(self, request):
         request.return_value.status_code = 302
+        request.return_value.json.return_value = []
         request.return_value.raise_for_status.return_value = None
         with self.assertRaises(media_services.requests.HTTPError):
             media_services.delete_media('radarr', 12, self.settings)
@@ -241,7 +243,8 @@ class LibraryManagementTests(unittest.TestCase):
             'path': '/mnt/synology/Movies/Example Movie',
             'rootFolderPath': '/mnt/synology/Movies',
         }
-        response = self.post_delete()
+        with patch.object(keep.media_services, 'wait_for_file_removal'), patch.object(keep, 'remove_deleted_from_leaving'):
+            response = self.post_delete()
         self.assertEqual(response.status_code, 200)
         delete_media.assert_called_once_with('radarr', 22, keep.connection_value)
         with closing(keep.attribution_db()) as db:
