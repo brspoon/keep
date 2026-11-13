@@ -25,7 +25,7 @@
     "scripts/registry_transfer.py": "864e6558f0bab1854473921b6a8e83e156295d5d01ea113532290323b1a9bcb6",
     "scripts/candidate_publication.py": "4caa8c48aad6bbf64d89a0cc9278369fd7717a6bd4435357c01f4091db297564",
     "scripts/hub_analysis_review.py": "d90e50893ad0f8ac06c157918caad736f53f987f9b1e19ef3a91b77890aa6c04",
-    ".github/workflows/image.yml": "cedf1d70acd863015c73783ccce80775fa58307667116278045560df0dbe9ef4",
+    ".github/workflows/image.yml": "638f42cd96d71622e3820a165712807ee54e2364e42e90a5b910355c935d8aa6",
     "scripts/publish_portable.py": "4c2b245014387e73354a235ebfe731ae45bc35a1e9cda80cef14445f35136b25",
     ".github/workflows/native-image.yml": "2ae62c34821ca74ba2186c88fb1daadd7806d3b19a4648c470115f93035e667a",
     "scripts/validated_build.py": "35869791bfa6095f681eb0cb6f6b563b18558ab7b5ac672fdbecc29abab7be28",
