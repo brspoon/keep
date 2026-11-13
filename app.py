@@ -3581,11 +3581,60 @@ def media_has_files(service, item):
     return bool(stats.get("episodeFileCount") or stats.get("sizeOnDisk"))
 
 
+def maintainerr_provider_id(service, row):
+    data = row.get('mediaData') or {}
+    field = 'tmdbId' if service == 'radarr' else 'tvdbId'
+    value = row.get(field) or data.get(field)
+    if value:
+        return str(value)
+    providers = data.get('providerIds') or {}
+    values = providers.get('tmdb' if service == 'radarr' else 'tvdb') if isinstance(providers, dict) else None
+    return str(values[0]) if isinstance(values, list) and values else ''
+
+
+def remove_deleted_from_leaving(service, item):
+    identifier = str(item.get('tmdbId' if service == 'radarr' else 'tvdbId') or '')
+    if not identifier:
+        raise ValueError('Missing title identity for Leaving cleanup')
+    deadline = time.monotonic() + 20
+    # Check every page and each matching collection membership.
+    for collection_id in get_collections():
+        rows = list(deletion_keep_inventory(collection_id, deadline, kind='media'))
+        removed = set()
+        for row in rows:
+            media_type = (row.get('mediaData') or {}).get('type')
+            if media_type != ('movie' if service == 'radarr' else 'show'):
+                continue
+            if maintainerr_provider_id(service, row) != identifier:
+                continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError('Leaving cleanup timed out')
+            response = requests.delete(
+                f"{connection_value('MAINTAINERR_URL')}/api/collections/media",
+                params={'mediaId': str(row['mediaServerId']), 'collectionId': collection_id},
+                timeout=min(10, remaining), allow_redirects=False)
+            response.raise_for_status()
+            if not 200 <= response.status_code < 300:
+                raise ValueError('Leaving cleanup was not confirmed')
+            try:
+                result = response.json()
+            except ValueError:
+                result = None
+            if isinstance(result, dict) and result.get('code') == 0:
+                raise ValueError('Leaving cleanup was rejected')
+            removed.add(str(row['mediaServerId']))
+        if removed and any(str(row['mediaServerId']) in removed for row in
+                deletion_keep_inventory(collection_id, deadline, kind='media')):
+            raise ValueError('Deleted title remains in Leaving')
+
+
 def media_matches_active_keep(service, item, *, budget=20):
     title = str(item.get("title") or "").casefold()
     year = item.get("year")
     external_field = "tmdbId" if service == "radarr" else "tvdbId"
     external_id = str(item.get(external_field) or "")
+
     deadline = time.monotonic() + budget
     # Selection controls browsing, not the protection promised by saved Keeps.
     # Include legacy attribution-only rows as well as current schedules.
@@ -3600,7 +3649,7 @@ def media_matches_active_keep(service, item, *, budget=20):
     for collection_id in sorted(collection_ids):
         for kept in deletion_keep_inventory(collection_id, deadline):
             data = kept.get("mediaData") or {}
-            if external_id and str(data.get(external_field) or "") == external_id:
+            if external_id and maintainerr_provider_id(service, kept) == external_id:
                 return True
             if title and str(data.get("title") or "").casefold() == title:
                 kept_year = data.get("year")
@@ -3609,15 +3658,15 @@ def media_matches_active_keep(service, item, *, budget=20):
     return False
 
 
-def deletion_keep_inventory(collection_id, deadline):
-    """Deletion must check every Keep, not only the first browsing page."""
+def deletion_keep_inventory(collection_id, deadline, *, kind='exclusions'):
+    """Read all Keep or Leaving rows, rejecting incomplete inventories."""
     seen = set()
     for page in range(1, 101):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise ValueError('Keep verification timed out')
         response = requests.get(
-            f"{connection_value('MAINTAINERR_URL')}/api/collections/exclusions/{collection_id}/content/{page}",
+            f"{connection_value('MAINTAINERR_URL')}/api/collections/{kind}/{collection_id}/content/{page}",
             params={'size': 100}, timeout=min(5, remaining), allow_redirects=False)
         response.raise_for_status()
         if response.status_code != 200:
@@ -4052,6 +4101,10 @@ def perform_library_deletion():
                 remaining = media_services.season_inventory(item_id, connection_value)
                 if any(n in remaining for n in seasons):
                     raise ValueError('Season deletion incomplete')
+                media_services.wait_for_file_removal('sonarr', fresh_item['path'], connection_value,
+                    paths={path for n in seasons for path in fresh_files[n]['paths']})
+                if not remaining:
+                    remove_deleted_from_leaving('sonarr', fresh_item)
             except (ValueError, requests.RequestException):
                 library_artwork_cache().forget(artwork_cache.namespace(service, connection_value) + ':' + str(item_id) + ':')
                 log_activity('season-delete-unconfirmed', f'Season deletion needs review for series {item_id}; seasons {sorted(seasons)}')
@@ -4061,8 +4114,18 @@ def perform_library_deletion():
             queue_seerr_availability()
             return jsonify(status='seasons-deleted', title=title, seasons=sorted(seasons))
         media_services.delete_media(service, item_id, connection_value)
+        # Arr removes its database record before asynchronous folder deletion.
+        # Keep partial completion distinct from a rejected deletion request.
+        try:
+            media_services.wait_for_file_removal(service, fresh_item.get('path'), connection_value)
+            remove_deleted_from_leaving(service, fresh_item)
+        except (ValueError, requests.RequestException):
+            library_artwork_cache().forget(artwork_cache.namespace(service, connection_value) + ':' + str(item_id) + ':')
+            queue_seerr_availability()
+            log_activity('media-delete-unconfirmed', f'Deletion needs review for {title} from {library["name"]}')
+            return jsonify(error='The deletion request was accepted, but Keep could not confirm file removal and Leaving cleanup. Files or a Leaving entry may remain. Check the media service before retrying.', refreshRequired=True), 502
         library_artwork_cache().forget(artwork_cache.namespace(service, connection_value) + ':' + str(item_id) + ':')
-        log_activity("media-deleted", f"Deleted {title} and its folder from {library['name']} via {service.title()}")
+        log_activity("media-deleted", f"Deleted {title} from {library['name']} via {service.title()}; no video files remain in its folder")
         queue_seerr_availability()
         return jsonify(status="deleted", title=title)
     except requests.HTTPError as error:
@@ -4072,11 +4135,11 @@ def perform_library_deletion():
         app.logger.error("%s deletion failed for item %s", service, item_id)
         log_activity("media-delete-failed",
                      f"Failed to delete {service.title()} item {item_id} from {library['name']}")
-        return jsonify(error="The media service could not delete this title"), 502
+        return jsonify(error="The media service could not complete this deletion. Some files may have been removed. Reload the library before trying again.", refreshRequired=True), 502
     except (ValueError, requests.RequestException):
         log_activity("media-delete-failed",
                      f"Failed to delete {service.title()} item {item_id} from {library['name']}")
-        return jsonify(error="The media service could not delete this title"), 502
+        return jsonify(error="The media service could not complete this deletion. Some files may have been removed. Reload the library before trying again.", refreshRequired=True), 502
 
 
 @app.route("/preferences", methods=["GET", "POST"])
