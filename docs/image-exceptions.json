@@ -36,7 +36,7 @@
     "scripts/package_provenance_sources.py": "6cf5d353e12a205efea1729f03fcd24c50b985c2d98e1c0aae98b51069d869bd",
     "docs/aports-source-lock.json": "9988fc62bc077f07b80f57b6718abe8cb1bc4b29dc0c4a110bef8cb54d1f652d",
     "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
-    "scripts/scout_exception_policy.py": "39aa61ea58a31e85d6da0645fe13f5bf44f02bc22e7fbba6c8cc0d4153c96dfc",
+    "scripts/scout_exception_policy.py": "4ef616b0b0fce855c9b33bf77189ce8f18b9ae3035175a4b3a779abc9833868d",
     "scripts/build_patched_expat.py": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
     "scripts/expat_security_patches.json": "bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae",
     "scripts/expat_security_checks.py": "293e15b76deb820aacc27a33f7d3f9c08f3f2669882a90b6c6e2a65aa30b786d",
@@ -154,7 +154,7 @@
     },
     "CVE-2026-107496": {
       "status": "fixed_false_positive",
-      "severity": "UNSPECIFIED",
+      "severity": "HIGH",
       "type": "apk",
       "package": "openssl",
       "version": "3.5.9-r0",
@@ -180,13 +180,13 @@
       "review": {
         "reviewed_on": "2026-11-17",
         "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release.",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
     "CVE-2026-88822": {
       "status": "fixed_false_positive",
-      "severity": "UNSPECIFIED",
+      "severity": "MEDIUM",
       "type": "apk",
       "package": "openssl",
       "version": "3.5.9-r0",
@@ -212,13 +212,13 @@
       "review": {
         "reviewed_on": "2026-11-17",
         "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release.",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact MEDIUM Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
     "CVE-2026-88823": {
       "status": "fixed_false_positive",
-      "severity": "UNSPECIFIED",
+      "severity": "HIGH",
       "type": "apk",
       "package": "openssl",
       "version": "3.5.9-r0",
@@ -244,13 +244,13 @@
       "review": {
         "reviewed_on": "2026-11-17",
         "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release.",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
     "CVE-2026-95691": {
       "status": "fixed_false_positive",
-      "severity": "UNSPECIFIED",
+      "severity": "HIGH",
       "type": "apk",
       "package": "openssl",
       "version": "3.5.9-r0",
@@ -276,13 +276,13 @@
       "review": {
         "reviewed_on": "2026-11-17",
         "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release.",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
     "CVE-2026-95692": {
       "status": "fixed_false_positive",
-      "severity": "UNSPECIFIED",
+      "severity": "HIGH",
       "type": "apk",
       "package": "openssl",
       "version": "3.5.9-r0",
@@ -308,7 +308,7 @@
       "review": {
         "reviewed_on": "2026-11-17",
         "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release.",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     }

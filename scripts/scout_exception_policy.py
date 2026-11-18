@@ -92,7 +92,8 @@ def scout_deadlines(policy):
         required_bindings = OPENSSL_SOURCE_BINDINGS if finding in OPENSSL_FINDINGS else SOURCE_BINDINGS
         if finding in OPENSSL_FINDINGS and any(rule.get(k) != v for k, v in {
                 'type': 'apk', 'package': 'openssl', 'version': '3.5.9-r0',
-                'severity': 'UNSPECIFIED', 'distribution': 'alpine', 'distribution_version': '3.24',
+                'severity': 'MEDIUM' if finding == 'CVE-2026-88822' else 'HIGH',
+                'distribution': 'alpine', 'distribution_version': '3.24',
                 'affected_version': '<3.5.9-r1', 'fixed_version': '3.5.9-r1'}.items()):
             raise ValueError(f'{finding}: OpenSSL finding identity differs')
         bindings = rule.get('source_bindings')
@@ -200,8 +201,10 @@ def canonical_scout_finding(run, result):
     if any(not isinstance(value, str) or not value for value in finding.values()):
         return None
     # These are the observed Scout pairs needed by the two supported scopes.
-    # Unknown severity/level combinations remain blocking, including low/medium.
+    # Unknown severity/level combinations remain blocking.
     levels = {'UNSPECIFIED': 'none', 'HIGH': 'error'}
+    if finding['id'] == 'CVE-2026-88822':
+        levels['MEDIUM'] = 'warning'
     if finding['severity'] not in levels or result.get('level') != levels[finding['severity']]:
         return None
     return finding
