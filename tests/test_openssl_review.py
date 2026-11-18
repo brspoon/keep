@@ -5,7 +5,7 @@ import unittest
 
 from scripts import build_patched_openssl as build
 from scripts import review_image
-from scripts.scout_exception_policy import OPENSSL_FINDINGS, finding_decision
+from scripts.scout_exception_policy import OPENSSL_FINDINGS, finding_decision, canonical_scout_finding
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +18,7 @@ class OpenSSLReviewTests(unittest.TestCase):
         self.inventory = {}
         self.config = 'a' * 64
         self.layers = {'config_sha256': self.config}
-        self.today = datetime.date(2026, 11, 12)
+        self.today = datetime.date(2026, 11, 17)
         for arch in ('amd64', 'arm64'):
             manifest = build.expected_manifest(arch)
             self.inventory[arch] = {'openssl_replacement': {
@@ -48,6 +48,20 @@ class OpenSSLReviewTests(unittest.TestCase):
                                      'invalid_openssl_replacement_proof')
                     self.assertEqual(self.decision(finding, arch, layers=None),
                                      'missing_openssl_image_binding')
+
+    def test_medium_scout_pair_is_limited_to_the_approved_openssl_finding(self):
+        finding = self.finding('CVE-2026-88822')
+        properties = {'cvssV3_severity': 'MEDIUM', 'purls': [finding['purl']],
+                      'affected_version': finding['affected_version'],
+                      'fixed_version': finding['fixed_version']}
+        run = {'tool': {'driver': {'rules': [{'id': finding['id'], 'properties': properties}]}}}
+        result = {'ruleId': finding['id'], 'ruleIndex': 0, 'kind': 'fail', 'level': 'warning'}
+        self.assertEqual(canonical_scout_finding(run, result), finding)
+        self.assertIsNone(canonical_scout_finding(run, {**result, 'level': 'error'}))
+        for identifier in OPENSSL_FINDINGS - {'CVE-2026-88822'}:
+            changed = copy.deepcopy(run)
+            changed['tool']['driver']['rules'][0]['id'] = identifier
+            self.assertIsNone(canonical_scout_finding(changed, {**result, 'ruleId': identifier}))
 
     def test_metadata_severity_and_threshold_changes_remain_blocked(self):
         finding = self.finding('CVE-2026-88822')
