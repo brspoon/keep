@@ -77,7 +77,7 @@ class OpenSSLReviewTests(unittest.TestCase):
         finding = self.finding('CVE-2026-107496')
         self.assertEqual(self.decision(finding, image_config_sha256='b' * 64),
                          'missing_openssl_image_binding')
-        self.today = datetime.date(2026, 11, 19)
+        self.today = datetime.date(2026, 11, 26)
         self.assertEqual(self.decision(finding), 'exception_expired')
 
 
