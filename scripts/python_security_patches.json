@@ -254,5 +254,38 @@
         "after": "        cert_reqs = CERT_NONE\n    context = _create_stdlib_context(ssl_version,\n                                     cert_reqs=cert_reqs,\n                                     check_hostname=ca_certs is not None,\n                                     cafile=ca_certs)\n    with create_connection(addr, timeout=timeout) as sock:\n        with context.wrap_socket(sock, server_hostname=host) as sslsock:\n"
       }
     ]
+  },
+  {
+    "path": "gzip.py",
+    "source_kind": "keep-local",
+    "source_id": "keep-python-archive-cli-safe-path-v1",
+    "hunks": [
+      {
+        "before": "\ndef main():\n    from argparse import ArgumentParser\n    parser = ArgumentParser(description=\n        \"A simple command line interface for the gzip module: act like gzip, \"\n        \"but do not delete the input file.\",\n",
+        "after": "\ndef main():\n    from argparse import ArgumentParser\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    path0 = sys._path0\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n    parser = ArgumentParser(description=\n        \"A simple command line interface for the gzip module: act like gzip, \"\n        \"but do not delete the input file.\",\n"
+      }
+    ]
+  },
+  {
+    "path": "tarfile.py",
+    "source_kind": "keep-local",
+    "source_id": "keep-python-archive-cli-safe-path-v1",
+    "hunks": [
+      {
+        "before": "\ndef main():\n    import argparse\n\n    description = 'A simple command-line interface for tarfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n",
+        "after": "\ndef main():\n    import argparse\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    path0 = sys._path0\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n\n    description = 'A simple command-line interface for tarfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n"
+      }
+    ]
+  },
+  {
+    "path": "zipfile/__init__.py",
+    "source_kind": "keep-local",
+    "source_id": "keep-python-archive-cli-safe-path-v1",
+    "hunks": [
+      {
+        "before": "\ndef main(args=None):\n    import argparse\n\n    description = 'A simple command-line interface for zipfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n",
+        "after": "\ndef main(args=None):\n    import argparse\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    path0 = sys._path0\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n\n    description = 'A simple command-line interface for zipfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n"
+      }
+    ]
   }
 ]
