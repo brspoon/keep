@@ -85,9 +85,11 @@ REQUIRED_BUILD_TOOLS = (
 )
 EXPECTED_HARDENING = {'gnu_stack_non_executable': True, 'relro': True,
                       'bind_now': True, 'stack_protector': True, 'fortify_source': 2}
+# Signed Alpine 2.11.0-r0 keeps all 83 prior XML exports and adds
+# XML_GetBuffer64, XML_Parse64 and XML_ParseBuffer64 on both architectures.
 EXPECTED_ABI = {
-    'exports_sha256': '89ef922b0558f2ee73e46ace5331d4ec9da8718bccb483738983d5dc04d20465',
-    'export_count': 83,
+    'exports_sha256': '63528c2ee675266021b0d4c1a49d631ddfa8f2b276e4c20fb4304512cc573e06',
+    'export_count': 86,
     'features': {'sizeof(XML_Char)': 1, 'sizeof(XML_LChar)': 1,
                  'XML_DTD': 0, 'XML_CONTEXT_BYTES': 1024, 'XML_NS': 0,
                  'XML_BLAP_MAX_AMP': 100, 'XML_BLAP_ACT_THRES': 8388608,

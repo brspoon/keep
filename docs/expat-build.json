@@ -83,7 +83,7 @@
     ]
   },
   "build_script": "scripts/build_patched_expat.py",
-  "build_script_sha256": "ec249f26168d99fd0cfc824b0300d6d3429e5c069eb1d918ec6203a7a0adb244",
+  "build_script_sha256": "e2e447d0692ad253132e242220ac83689a571036909b43abb2af44159d1e798f",
   "build_tools": {
     "installation": "build-only-offline-apk",
     "packages": {
@@ -667,8 +667,8 @@
     "tests/misc_tests.c": "46f513837611c15cd97b8998abdc1c7b90f1faea0a8533f384b23c0109cf8ee7"
   },
   "required_abi": {
-    "export_count": 83,
-    "exports_sha256": "89ef922b0558f2ee73e46ace5331d4ec9da8718bccb483738983d5dc04d20465",
+    "export_count": 86,
+    "exports_sha256": "63528c2ee675266021b0d4c1a49d631ddfa8f2b276e4c20fb4304512cc573e06",
     "features": {
       "XML_AT_ACT_THRES": 67108864,
       "XML_AT_MAX_AMP": 100,
