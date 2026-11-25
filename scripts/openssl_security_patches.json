@@ -2,21 +2,37 @@
   "original_files": {
     "crypto/bio/bss_dgram.c": "25ac92a4db74c85b0d096860112c822a1c3b9e07f35ded77b88bfe891c3c7993",
     "crypto/ec/ec_key.c": "76ffd45abfc989d3f5a7c80e71e7ff712cff2c1b3c70f471a5f952190b545bf2",
+    "crypto/pem/pem_info.c": "62da2460ad5fa302cf86bf8f9932ba6ae4b40cb67eb0a5e4290458692176c2f1",
+    "crypto/x509/x509_vfy.c": "59ca3fef0f03cd9bd87eeb80f9ba05387c8e1a2b95e45be890303fe002133b14",
+    "include/internal/quic_channel.h": "40325390c0dd9fcb8bb859bb9438d403cd7d3f6e399e5fe8bcad6ebfab6e858c",
     "include/internal/quic_strm_reas.h": "6dd9e3268036cd44869e40616e302c033902de6155a57c696420a75c83f0f457",
     "providers/implementations/ciphers/cipher_aes_gcm_siv.c": "25012f573a36a465f0a68fe004366ef586f3a153d60a5a53db55df9b7b1da5c3",
     "providers/implementations/ciphers/cipher_aes_gcm_siv_hw.c": "37f4e407d03117c6b74e5d1385efb233f2d71225788f82857bff2368e7fd0457",
+    "ssl/quic/quic_channel.c": "25d4c6efcddebbc4cfd180ac86389740e9eaded490e940346f7f8ad0d9faf76b",
+    "ssl/quic/quic_channel_local.h": "6e602eef8fab4cb7119bbb500d5c5aae4f42fecad1584046b2604cbbdb173dea",
     "ssl/quic/quic_rstream.c": "1d75050a351302038ffc4868c253cb73caaf202f1b91da7fbceb62514c712297",
+    "ssl/quic/quic_stream_map.c": "8bc3bb3585d4131f25fadc1010d6367eb8085670c4d8cf814a62892e6f257088",
     "ssl/quic/quic_strm_reas.c": "040b6e3c0cc3144616d3c899a79b90f70a9517a5fb215a10f38b483499360c4c",
+    "ssl/statem/extensions_srvr.c": "2b7eb5ec78bdae624ab1b26c52a76810b45962d6ce26925a472d8ebebdaceeaa",
+    "ssl/t1_lib.c": "96a137ed0cb866f6fecc11ffbeed269321bce3fffc01af1d72e519d251448584",
     "test/ectest.c": "eec366891a69eb9d2de9d814abd51b2c9aa4db2ef51ca19dbc1869a48a446bfe"
   },
   "patched_files": {
     "crypto/bio/bss_dgram.c": "9b0e09c21fdc0ae8c253d1a7aed1114814090d83f92c1ae6e2d83a28c829cb64",
     "crypto/ec/ec_key.c": "72726357d1e33de2fdc28da42781bb489d4a87762ed308ce81e0c49feaaa82bb",
+    "crypto/pem/pem_info.c": "25b5bdecc831e734fd3af3d8b1222883929a57f4f15fa44190c0e4f88376a475",
+    "crypto/x509/x509_vfy.c": "0ef96f292f8fc84e01bc1486bcc9fc6cc52fd0b79930725aa24501fcd16eeccb",
+    "include/internal/quic_channel.h": "3baf3cf15d701f818d08207824f2b9750c2976444a1d9d623192547a268fdc22",
     "include/internal/quic_strm_reas.h": "23cddd86dd8ed5246bca7f668197e73cec4a2653e476310a1d6a34ee243f4d1f",
     "providers/implementations/ciphers/cipher_aes_gcm_siv.c": "62510edfb867c2c33b034ec7f1f04913551827441a0f156966bc857cc271c211",
     "providers/implementations/ciphers/cipher_aes_gcm_siv_hw.c": "d5ea349bd8c5d48634b3a6006f1a1ef233213564ee675ee2fce4faec824cc639",
+    "ssl/quic/quic_channel.c": "f2d149fc745d3e0862d62ec94517c6558e7c813d0788e7862763d00a114e55a1",
+    "ssl/quic/quic_channel_local.h": "81e651ba367dcaa6c6a8582d66d315d69f9ad89e8221467fcf7bf25bc87b0346",
     "ssl/quic/quic_rstream.c": "ca832c01b754e6556d0d29ee667616102870bb93be2c21e5845e461861b21c31",
+    "ssl/quic/quic_stream_map.c": "7bceb5bdc408c3e5a46eb38944f5d16727b812e3e049dae6f2b2e4cdadce3616",
     "ssl/quic/quic_strm_reas.c": "9ed4d3ab6508b79c04033ebb793c0fbcce5615e75323022de20bf2748f74c319",
+    "ssl/statem/extensions_srvr.c": "004fb384e61fd3ca36d12c7d83baa29fa5ed42950ab727e3d19504f97f5606f6",
+    "ssl/t1_lib.c": "3a5988443e2b6cd6aac52ab1438b5f211cab83864cbed90b32b0feba60ff5652",
     "test/ectest.c": "404248bb6baaffa0ba1663cd21be5df7bd65e17c283591b29ab2664cc1ed6582"
   },
   "patches": [
@@ -186,6 +202,233 @@
       ],
       "sha256": "0e328604c0038de6629a29322ae5f02d2f5f5128c2625b57ca64262efab99e05",
       "url": "https://github.com/openssl/openssl/commit/257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116.patch"
+    },
+    {
+      "commit": "9491b0d9cc7950af1f3dc89499bd5433b9cd4f43",
+      "cve": "CVE-2026-35190",
+      "files": [
+        {
+          "after_sha256": "004fb384e61fd3ca36d12c7d83baa29fa5ed42950ab727e3d19504f97f5606f6",
+          "before_sha256": "2b7eb5ec78bdae624ab1b26c52a76810b45962d6ce26925a472d8ebebdaceeaa",
+          "hunks": [
+            {
+              "after": "    const size_t *srvrtuples;\n    uint16_t *first_group_in_tuple;\n    size_t clnt_num_groups, srvr_num_groups, srvr_num_tuples;\n    size_t srvr_groups_remaining;\n    PACKET *encoded_pubkey_arr = NULL;\n    uint16_t *keyshares_arr = NULL;\n    size_t keyshares_cnt = 0;\n",
+              "before": "    const size_t *srvrtuples;\n    uint16_t *first_group_in_tuple;\n    size_t clnt_num_groups, srvr_num_groups, srvr_num_tuples;\n    PACKET *encoded_pubkey_arr = NULL;\n    uint16_t *keyshares_arr = NULL;\n    size_t keyshares_cnt = 0;\n"
+            },
+            {
+              "after": "     * Remark: Selection priority different for client- or server-preference\n     */\n    first_group_in_tuple = (uint16_t *)srvrgroups;\n    srvr_groups_remaining = srvr_num_groups;\n    for (current_tuple = 0; current_tuple < srvr_num_tuples; current_tuple++) {\n        size_t number_of_groups_in_tuple = srvrtuples[current_tuple];\n        int prio_group_idx = 0, candidate_group_idx = 0;\n\n        /*\n         * The tuple sizes must partition srvrgroups exactly. A tuple larger\n         * than the groups still left means the group and tuple lists have\n         * come from different sources, which is an internal error: stop here\n         * rather than reading past the end of srvrgroups.\n         */\n        if (number_of_groups_in_tuple > srvr_groups_remaining) {\n            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);\n            goto err;\n        }\n        srvr_groups_remaining -= number_of_groups_in_tuple;\n\n        /* Server or client preference ? */\n        if (s->options & SSL_OP_CIPHER_SERVER_PREFERENCE) {\n            /* Server preference */\n",
+              "before": "     * Remark: Selection priority different for client- or server-preference\n     */\n    first_group_in_tuple = (uint16_t *)srvrgroups;\n    for (current_tuple = 0; current_tuple < srvr_num_tuples; current_tuple++) {\n        size_t number_of_groups_in_tuple = srvrtuples[current_tuple];\n        int prio_group_idx = 0, candidate_group_idx = 0;\n\n        /* Server or client preference ? */\n        if (s->options & SSL_OP_CIPHER_SERVER_PREFERENCE) {\n            /* Server preference */\n"
+            }
+          ],
+          "path": "ssl/statem/extensions_srvr.c"
+        },
+        {
+          "after_sha256": "3a5988443e2b6cd6aac52ab1438b5f211cab83864cbed90b32b0feba60ff5652",
+          "before_sha256": "96a137ed0cb866f6fecc11ffbeed269321bce3fffc01af1d72e519d251448584",
+          "hunks": [
+            {
+              "after": "    OSSL_TLS_GROUP_ID_secp384r1,\n};\n\n/*\n * Group tuples matching the Suite B group lists returned by\n * tls1_get_supported_groups(): a single tuple holding both P-256 and P-384,\n * or a single tuple holding just one of them.\n */\nstatic const size_t suiteb_tuples_both[] = { OSSL_NELEM(suiteb_curves) };\nstatic const size_t suiteb_tuples_one[] = { 1 };\n\n/* Group list string of the built-in pseudo group DEFAULT_SUITE_B */\n#define SUITE_B_GROUP_NAME \"DEFAULT_SUITE_B\"\n#define SUITE_B_GROUP_LIST \"?secp256r1:?secp384r1\",\n",
+              "before": "    OSSL_TLS_GROUP_ID_secp384r1,\n};\n\n/* Group list string of the built-in pseudo group DEFAULT_SUITE_B */\n#define SUITE_B_GROUP_NAME \"DEFAULT_SUITE_B\"\n#define SUITE_B_GROUP_LIST \"?secp256r1:?secp384r1\",\n"
+            },
+            {
+              "after": "    }\n}\n\n/*\n * Set *ptuples to the list of group tuple sizes and *ptupleslen to the number\n * of tuples. The tuples returned here always partition exactly the group list\n * returned by tls1_get_supported_groups().\n */\nvoid tls1_get_group_tuples(SSL_CONNECTION *s, const size_t **ptuples,\n    size_t *ptupleslen)\n{\n    SSL_CTX *sctx = SSL_CONNECTION_GET_CTX(s);\n\n    if (tls1_suiteb(s)) {\n        const uint16_t *groups;\n        size_t groupslen;\n\n        /*\n         * In Suite B mode the fixed group list forms a single tuple. Derive\n         * its size from the list tls1_get_supported_groups() actually returns\n         * rather than repeating the Suite B profile selection here.\n         */\n        tls1_get_supported_groups(s, &groups, &groupslen);\n        *ptuples = groupslen == OSSL_NELEM(suiteb_curves) ? suiteb_tuples_both\n                                                          : suiteb_tuples_one;\n        *ptupleslen = 1;\n        return;\n    }\n\n    if (s->ext.supportedgroups == NULL) {\n        *ptuples = sctx->ext.tuples;\n        *ptupleslen = sctx->ext.tuples_len;\n",
+              "before": "    }\n}\n\nvoid tls1_get_group_tuples(SSL_CONNECTION *s, const size_t **ptuples,\n    size_t *ptupleslen)\n{\n    SSL_CTX *sctx = SSL_CONNECTION_GET_CTX(s);\n\n    if (s->ext.supportedgroups == NULL) {\n        *ptuples = sctx->ext.tuples;\n        *ptupleslen = sctx->ext.tuples_len;\n"
+            }
+          ],
+          "path": "ssl/t1_lib.c"
+        }
+      ],
+      "sha256": "e1b45282a8876fdda6b930273e28bad1cdb1c6915ccd25fe0b61789281489ed1",
+      "url": "https://github.com/openssl/openssl/commit/9491b0d9cc7950af1f3dc89499bd5433b9cd4f43.patch"
+    },
+    {
+      "commit": "c8f6d04f8e6d40b1bf83334e4a2ec9daf5943a3d",
+      "cve": "CVE-2026-107493",
+      "files": [
+        {
+          "after_sha256": "25b5bdecc831e734fd3af3d8b1222883929a57f4f15fa44190c0e4f88376a475",
+          "before_sha256": "62da2460ad5fa302cf86bf8f9932ba6ae4b40cb67eb0a5e4290458692176c2f1",
+          "hunks": [
+            {
+              "after": "    unsigned char *data = NULL;\n    const unsigned char *p;\n    long len, error = 0;\n    int ok = 0, preserve_cnt = 0;\n    STACK_OF(X509_INFO) *ret = NULL;\n    unsigned int i, raw, ptype;\n    d2i_of_void *d2i = 0;\n",
+              "before": "    unsigned char *data = NULL;\n    const unsigned char *p;\n    long len, error = 0;\n    int ok = 0;\n    STACK_OF(X509_INFO) *ret = NULL;\n    unsigned int i, raw, ptype;\n    d2i_of_void *d2i = 0;\n"
+            },
+            {
+              "after": "            ERR_raise(ERR_LIB_PEM, ERR_R_CRYPTO_LIB);\n            goto err;\n        }\n    } else {\n        ret = sk;\n        preserve_cnt = sk_X509_INFO_num(sk);\n    }\n\n    if ((xi = X509_INFO_new()) == NULL)\n        goto err;\n",
+              "before": "            ERR_raise(ERR_LIB_PEM, ERR_R_CRYPTO_LIB);\n            goto err;\n        }\n    } else\n        ret = sk;\n\n    if ((xi = X509_INFO_new()) == NULL)\n        goto err;\n"
+            },
+            {
+              "after": "err:\n    X509_INFO_free(xi);\n    if (!ok) {\n        while (sk_X509_INFO_num(ret) > preserve_cnt)\n            X509_INFO_free(sk_X509_INFO_pop(ret));\n        if (ret != sk)\n            sk_X509_INFO_free(ret);\n        ret = NULL;\n",
+              "before": "err:\n    X509_INFO_free(xi);\n    if (!ok) {\n        for (i = 0; ((int)i) < sk_X509_INFO_num(ret); i++) {\n            xi = sk_X509_INFO_value(ret, i);\n            X509_INFO_free(xi);\n        }\n        if (ret != sk)\n            sk_X509_INFO_free(ret);\n        ret = NULL;\n"
+            }
+          ],
+          "path": "crypto/pem/pem_info.c"
+        }
+      ],
+      "sha256": "6176d694ac38251bfa4e11198d002d8720f9efb05deffb35703adb93be6173e1",
+      "url": "https://github.com/openssl/openssl/commit/c8f6d04f8e6d40b1bf83334e4a2ec9daf5943a3d.patch"
+    },
+    {
+      "commit": "f3acb0a3328046741479482c51cec815839e1b05",
+      "cve": "CVE-2026-124709",
+      "files": [
+        {
+          "after_sha256": "7bceb5bdc408c3e5a46eb38944f5d16727b812e3e049dae6f2b2e4cdadce3616",
+          "before_sha256": "8bc3bb3585d4131f25fadc1010d6367eb8085670c4d8cf814a62892e6f257088",
+          "hunks": [
+            {
+              "after": "    }\n}\n\nstatic int qsm_recv_part_is_terminal(const QUIC_STREAM *qs)\n{\n    switch (qs->recv_state) {\n    case QUIC_RSTREAM_STATE_DATA_RECVD:\n    case QUIC_RSTREAM_STATE_DATA_READ:\n    case QUIC_RSTREAM_STATE_RESET_RECVD:\n    case QUIC_RSTREAM_STATE_RESET_READ:\n        return 1;\n    default:\n        return 0;\n    }\n}\n\nstatic int qsm_ready_for_gc(QUIC_STREAM_MAP *qsm, QUIC_STREAM *qs)\n{\n    /*\n     * Once the receive part has reached a terminal state (all data received\n     * or the peer reset the stream) there is nothing more the peer can send\n     * which we need to track, so we do not need to wait for STOP_SENDING to\n     * be acknowledged. Note that STOP_SENDING may never be sent at all in\n     * this case (e.g. if the peer's RESET_STREAM arrives first), so waiting\n     * for it would leak the stream for the lifetime of the connection.\n     */\n    int recv_stream_fully_drained = qsm_recv_part_is_terminal(qs);\n\n    /*\n     * If sstream has no FIN, we auto-reset it at marked-for-deletion time, so\n",
+              "before": "    }\n}\n\nstatic int qsm_ready_for_gc(QUIC_STREAM_MAP *qsm, QUIC_STREAM *qs)\n{\n    int recv_stream_fully_drained = 0; /* TODO(QUIC FUTURE): Optimisation */\n\n    /*\n     * If sstream has no FIN, we auto-reset it at marked-for-deletion time, so\n"
+            }
+          ],
+          "path": "ssl/quic/quic_stream_map.c"
+        }
+      ],
+      "sha256": "d52a6af23bc966daaa9eded816a392d429a67bb76faafd922f4c4cf35a9349f4",
+      "url": "https://github.com/openssl/openssl/commit/f3acb0a3328046741479482c51cec815839e1b05.patch"
+    },
+    {
+      "commit": "1ad851363d5b8588b0d40edcc045fd633e93f0c2",
+      "cve": "CVE-2026-84786",
+      "files": [
+        {
+          "after_sha256": "ab6c931a3fcff24ccbd13a6cd8823f0d37a242c750e20373f0cc7206fb7e5fd4",
+          "before_sha256": "59ca3fef0f03cd9bd87eeb80f9ba05387c8e1a2b95e45be890303fe002133b14",
+          "hunks": [
+            {
+              "after": "    return X509_TRUST_UNTRUSTED;\n}\n\n/*\n * As a last resort, check whether the last untrusted certificate is signed by\n * an explicit DANE-TA(2) SPKI(1) Full(0) public key in the TLSA RRset.\n */\nstatic int check_dane_pkeys(X509_STORE_CTX *ctx)\n{\n    SSL_DANE *dane = ctx->dane;\n    danetls_record *t;\n    X509 *cert;\n    int recnum = sk_danetls_record_num(dane->trecs);\n    int ix, i;\n\n    /*\n     * When a self-signed leaf was replaced by its trust store copy,\n     * num_untrusted is 0 and the leaf itself is checked against the keys.\n     */\n    ix = ctx->num_untrusted > 0 ? ctx->num_untrusted - 1 : 0;\n    cert = sk_X509_value(ctx->chain, ix);\n    if (!ossl_assert(cert != NULL))\n        return X509_TRUST_UNTRUSTED;\n\n    for (i = 0; i < recnum; ++i) {\n        t = sk_danetls_record_value(dane->trecs, i);\n",
+              "before": "    return X509_TRUST_UNTRUSTED;\n}\n\nstatic int check_dane_pkeys(X509_STORE_CTX *ctx)\n{\n    SSL_DANE *dane = ctx->dane;\n    danetls_record *t;\n    int num = ctx->num_untrusted;\n    X509 *cert = sk_X509_value(ctx->chain, num - 1);\n    int recnum = sk_danetls_record_num(dane->trecs);\n    int i;\n\n    for (i = 0; i < recnum; ++i) {\n        t = sk_danetls_record_value(dane->trecs, i);\n"
+            },
+            {
+              "after": "\n        /* Record match via a bare TA public key */\n        ctx->bare_ta_signed = 1;\n        dane->mdpth = ix;\n        dane->mtlsa = t;\n\n        /* Prune any excess chain certificates */\n        for (i = sk_X509_num(ctx->chain) - 1; i > ix; --i)\n            X509_free(sk_X509_pop(ctx->chain));\n\n        return X509_TRUST_TRUSTED;\n",
+              "before": "\n        /* Record match via a bare TA public key */\n        ctx->bare_ta_signed = 1;\n        dane->mdpth = num - 1;\n        dane->mtlsa = t;\n\n        /* Prune any excess chain certificates */\n        num = sk_X509_num(ctx->chain);\n        for (; num > ctx->num_untrusted; --num)\n            X509_free(sk_X509_pop(ctx->chain));\n\n        return X509_TRUST_TRUSTED;\n"
+            }
+          ],
+          "path": "crypto/x509/x509_vfy.c"
+        }
+      ],
+      "sha256": "ba6d7ad89dc2bb79a236cfc3ce3168f40b97b687f4ae2c8838ec116987ad30b9",
+      "url": "https://github.com/openssl/openssl/commit/1ad851363d5b8588b0d40edcc045fd633e93f0c2.patch"
+    },
+    {
+      "commit": "734c6cd7444bdbf589bfec917e47598c1b21ddd3",
+      "cve": "CVE-2026-107494",
+      "files": [
+        {
+          "after_sha256": "3baf3cf15d701f818d08207824f2b9750c2976444a1d9d623192547a268fdc22",
+          "before_sha256": "40325390c0dd9fcb8bb859bb9438d403cd7d3f6e399e5fe8bcad6ebfab6e858c",
+          "hunks": [
+            {
+              "after": "void ossl_ch_reset_rx_state(QUIC_CHANNEL *ch);\nuint64_t ossl_quic_channel_get_path_challenge_count(const QUIC_CHANNEL *ch);\nuint64_t ossl_quic_channel_get_path_response_count(const QUIC_CHANNEL *ch);\n/**\n * ossl_quic_channel_get_on_new_conn_id_handled() is just for testing purposes\n * @param ch pointer to channel\n * @returns number of NEW_CONNECTION_ID frames handled. Handling means\n * how many RETIRE_CONN_ID frames we dispatched on behalf of reception\n * of NEW_CONNECTION_ID.\n */\nuint64_t ossl_quic_channel_get_on_new_conn_id_handled(const QUIC_CHANNEL *ch);\n#endif\n\n#endif\n",
+              "before": "void ossl_ch_reset_rx_state(QUIC_CHANNEL *ch);\nuint64_t ossl_quic_channel_get_path_challenge_count(const QUIC_CHANNEL *ch);\nuint64_t ossl_quic_channel_get_path_response_count(const QUIC_CHANNEL *ch);\n#endif\n\n#endif\n"
+            }
+          ],
+          "path": "include/internal/quic_channel.h"
+        },
+        {
+          "after_sha256": "f2d149fc745d3e0862d62ec94517c6558e7c813d0788e7862763d00a114e55a1",
+          "before_sha256": "25d4c6efcddebbc4cfd180ac86389740e9eaded490e940346f7f8ad0d9faf76b",
+          "hunks": [
+            {
+              "after": "        return;\n    }\n\n    /*\n     * do nothing if dealing with older NEW_CONN_ID frame or retransmission.\n     */\n    if (new_remote_seq_num == ch->cur_remote_seq_num)\n        return;\n    ch->on_new_conn_id_handled++;\n\n    if (new_remote_seq_num > ch->cur_remote_seq_num) {\n        /* Add new stateless reset token */\n        if (!ossl_quic_srtm_add(ch->srtm, ch, new_remote_seq_num,\n",
+              "before": "        return;\n    }\n\n    if (new_remote_seq_num > ch->cur_remote_seq_num) {\n        /* Add new stateless reset token */\n        if (!ossl_quic_srtm_add(ch->srtm, ch, new_remote_seq_num,\n"
+            },
+            {
+              "after": "{\n    return ch->path_response_tx;\n}\n\nuint64_t ossl_quic_channel_get_on_new_conn_id_handled(const QUIC_CHANNEL *ch)\n{\n    return ch->on_new_conn_id_handled;\n}\n",
+              "before": "{\n    return ch->path_response_tx;\n}\n"
+            }
+          ],
+          "path": "ssl/quic/quic_channel.c"
+        },
+        {
+          "after_sha256": "81e651ba367dcaa6c6a8582d66d315d69f9ad89e8221467fcf7bf25bc87b0346",
+          "before_sha256": "6e602eef8fab4cb7119bbb500d5c5aae4f42fecad1584046b2604cbbdb173dea",
+          "hunks": [
+            {
+              "after": "    unsigned int path_challenge_rx;\n    /* number of path response frames sent */\n    unsigned int path_response_tx;\n    uint64_t on_new_conn_id_handled;\n};\n\n#endif\n",
+              "before": "    unsigned int path_challenge_rx;\n    /* number of path response frames sent */\n    unsigned int path_response_tx;\n};\n\n#endif\n"
+            }
+          ],
+          "path": "ssl/quic/quic_channel_local.h"
+        }
+      ],
+      "sha256": "c1726a50d589b2dc289727865c184382c2bd846733ddb139427062713ebeb5bd",
+      "url": "https://github.com/openssl/openssl/commit/734c6cd7444bdbf589bfec917e47598c1b21ddd3.patch"
+    },
+    {
+      "commit": "468c287cf451a834b370b69ab321b8ffdfac23aa",
+      "cve": "CVE-2026-121482",
+      "files": [
+        {
+          "after_sha256": "0ef96f292f8fc84e01bc1486bcc9fc6cc52fd0b79930725aa24501fcd16eeccb",
+          "before_sha256": "ab6c931a3fcff24ccbd13a6cd8823f0d37a242c750e20373f0cc7206fb7e5fd4",
+          "hunks": [
+            {
+              "after": "#include \"crypto/x509.h\"\n#include \"x509_local.h\"\n\n/*\n * Defines the maximum number of relative dist points\n * a certificate allows\n */\n#define MAX_DP_NAMES 16\n\n/* CRL score values */\n#define CRL_SCORE_NOCRITICAL 0x100 /* No unhandled critical extensions */\n#define CRL_SCORE_SCOPE 0x080 /* certificate is within CRL scope */\n#define CRL_SCORE_TIME 0x040 /* CRL times valid */\n",
+              "before": "#include \"crypto/x509.h\"\n#include \"x509_local.h\"\n\n/* CRL score values */\n\n#define CRL_SCORE_NOCRITICAL 0x100 /* No unhandled critical extensions */\n#define CRL_SCORE_SCOPE 0x080 /* certificate is within CRL scope */\n#define CRL_SCORE_TIME 0x040 /* CRL times valid */\n"
+            },
+            {
+              "after": "static int check_curve(X509 *cert);\n\nstatic int get_crl_score(X509_STORE_CTX *ctx, X509 **pissuer,\n    unsigned int *preasons, X509_CRL *crl, X509 *x, STACK_OF(X509_NAME) **crldp_names,\n    int *vfy_cb_err);\nstatic int get_crl_delta(X509_STORE_CTX *ctx,\n    X509_CRL **pcrl, X509_CRL **pdcrl, X509 *x, int *vfy_cb_err);\nstatic void get_delta_sk(X509_STORE_CTX *ctx, X509_CRL **dcrl,\n    int *pcrl_score, X509_CRL *base,\n    STACK_OF(X509_CRL) *crls);\nstatic void crl_akid_check(X509_STORE_CTX *ctx, X509_CRL *crl, X509 **pissuer,\n    int *pcrl_score);\nstatic int crl_crldp_check(X509 *x, X509_CRL *crl, int crl_score,\n    unsigned int *preasons, STACK_OF(X509_NAME) **crldp_names,\n    int *vfy_cb_err);\nstatic int check_crl_path(X509_STORE_CTX *ctx, X509 *x);\nstatic int check_crl_chain(X509_STORE_CTX *ctx,\n    STACK_OF(X509) *cert_path,\n    STACK_OF(X509) *crl_path);\n\nstatic int internal_verify(X509_STORE_CTX *ctx);\nstatic X509_NAME *crldp_full_name(const X509 *x, const DIST_POINT *dp);\n\nstatic int null_callback(int ok, X509_STORE_CTX *e)\n{\n",
+              "before": "static int check_curve(X509 *cert);\n\nstatic int get_crl_score(X509_STORE_CTX *ctx, X509 **pissuer,\n    unsigned int *preasons, X509_CRL *crl, X509 *x);\nstatic int get_crl_delta(X509_STORE_CTX *ctx,\n    X509_CRL **pcrl, X509_CRL **pdcrl, X509 *x);\nstatic void get_delta_sk(X509_STORE_CTX *ctx, X509_CRL **dcrl,\n    int *pcrl_score, X509_CRL *base,\n    STACK_OF(X509_CRL) *crls);\nstatic void crl_akid_check(X509_STORE_CTX *ctx, X509_CRL *crl, X509 **pissuer,\n    int *pcrl_score);\nstatic int crl_crldp_check(X509 *x, X509_CRL *crl, int crl_score,\n    unsigned int *preasons);\nstatic int check_crl_path(X509_STORE_CTX *ctx, X509 *x);\nstatic int check_crl_chain(X509_STORE_CTX *ctx,\n    STACK_OF(X509) *cert_path,\n    STACK_OF(X509) *crl_path);\n\nstatic int internal_verify(X509_STORE_CTX *ctx);\n\nstatic int null_callback(int ok, X509_STORE_CTX *e)\n{\n"
+            },
+            {
+              "after": "    return 1;\n}\n\n/**\n * @brief builds a stack of crldp full names from relative distribution points\n * @param cert - The certificate to build full crldp names for\n * @returns - a stack of X509_NAME structs, indexed in parallel with cert->crldp\n * @returns NULL if an error occurred, such as trying to build more than MAX_DP_NAMES\n * full names from relative distribution points\n */\nstatic STACK_OF(X509_NAME) *get_crldp_full_names(const X509 *cert)\n{\n    int i;\n    STACK_OF(X509_NAME) *crldp_names = NULL;\n    DIST_POINT *dp;\n    X509_NAME *dp_name;\n    int full_names = 0;\n\n    crldp_names = sk_X509_NAME_new_reserve(NULL, sk_DIST_POINT_num(cert->crldp));\n    if (crldp_names == NULL)\n        return NULL;\n\n    for (i = 0; i < sk_DIST_POINT_num(cert->crldp); i++) {\n        dp = sk_DIST_POINT_value(cert->crldp, i);\n        if (dp->distpoint != NULL && dp->distpoint->type == 1) {\n            if (full_names >= MAX_DP_NAMES) {\n                ERR_raise_data(ERR_LIB_X509, X509_R_INVALID_DISTPOINT, \"Too many relative dist points in certificate\");\n                goto err;\n            }\n            full_names++;\n            dp_name = crldp_full_name(cert, dp);\n            if (dp_name == NULL)\n                goto err;\n        } else {\n            dp_name = NULL;\n        }\n\n        if (!sk_X509_NAME_push(crldp_names, dp_name))\n            goto err;\n    }\n    return crldp_names;\nerr:\n    sk_X509_NAME_pop_free(crldp_names, X509_NAME_free);\n    return NULL;\n}\n\n/* Sadly, returns 0 also on internal error. */\nstatic int check_cert(X509_STORE_CTX *ctx)\n{\n",
+              "before": "    return 1;\n}\n\n/* Sadly, returns 0 also on internal error. */\nstatic int check_cert(X509_STORE_CTX *ctx)\n{\n"
+            },
+            {
+              "after": "    int ok = 0;\n    int cnum = ctx->error_depth;\n    X509 *x = sk_X509_value(ctx->chain, cnum);\n    STACK_OF(X509_NAME) *crldp_names = NULL;\n    int vfy_cb_err = X509_V_OK;\n\n    ctx->current_cert = x;\n    ctx->current_issuer = NULL;\n",
+              "before": "    int ok = 0;\n    int cnum = ctx->error_depth;\n    X509 *x = sk_X509_value(ctx->chain, cnum);\n\n    ctx->current_cert = x;\n    ctx->current_issuer = NULL;\n"
+            },
+            {
+              "after": "            ok = ctx->get_crl(ctx, &crl, x);\n            if (crl != NULL) {\n                ctx->current_crl_score = get_crl_score(ctx, &crl_issuer,\n                    &reasons, crl, x, &crldp_names, &vfy_cb_err);\n                if (vfy_cb_err != X509_V_OK) {\n                    ok = verify_cb_crl(ctx, vfy_cb_err);\n                    goto done;\n                }\n                ctx->current_issuer = crl_issuer;\n                ctx->current_reasons = reasons;\n            }\n        } else {\n            ok = get_crl_delta(ctx, &crl, &dcrl, x, &vfy_cb_err);\n        }\n        /* If error looking up CRL, nothing we can do except notify callback */\n        if (!ok) {\n            if (vfy_cb_err == X509_V_OK)\n                vfy_cb_err = X509_V_ERR_UNABLE_TO_GET_CRL;\n\n            ok = verify_cb_crl(ctx, vfy_cb_err);\n            goto done;\n        }\n        ctx->current_crl = crl;\n",
+              "before": "            ok = ctx->get_crl(ctx, &crl, x);\n            if (crl != NULL) {\n                ctx->current_crl_score = get_crl_score(ctx, &crl_issuer,\n                    &reasons, crl, x);\n                ctx->current_issuer = crl_issuer;\n                ctx->current_reasons = reasons;\n            }\n        } else {\n            ok = get_crl_delta(ctx, &crl, &dcrl, x);\n        }\n        /* If error looking up CRL, nothing we can do except notify callback */\n        if (!ok) {\n            ok = verify_cb_crl(ctx, X509_V_ERR_UNABLE_TO_GET_CRL);\n            goto done;\n        }\n        ctx->current_crl = crl;\n"
+            },
+            {
+              "after": "done:\n    X509_CRL_free(crl);\n    X509_CRL_free(dcrl);\n    sk_X509_NAME_pop_free(crldp_names, X509_NAME_free);\n    ctx->current_crl = NULL;\n    return ok;\n}\n",
+              "before": "done:\n    X509_CRL_free(crl);\n    X509_CRL_free(dcrl);\n\n    ctx->current_crl = NULL;\n    return ok;\n}\n"
+            },
+            {
+              "after": "\nstatic int get_crl_sk(X509_STORE_CTX *ctx, X509_CRL **pcrl, X509_CRL **pdcrl,\n    X509 **pissuer, int *pscore, unsigned int *preasons,\n    STACK_OF(X509_CRL) *crls, STACK_OF(X509_NAME) **crldp_names,\n    int *vfy_cb_err)\n{\n    int i, crl_score, best_score = *pscore;\n    unsigned int reasons, best_reasons = 0;\n",
+              "before": "\nstatic int get_crl_sk(X509_STORE_CTX *ctx, X509_CRL **pcrl, X509_CRL **pdcrl,\n    X509 **pissuer, int *pscore, unsigned int *preasons,\n    STACK_OF(X509_CRL) *crls)\n{\n    int i, crl_score, best_score = *pscore;\n    unsigned int reasons, best_reasons = 0;\n"
+            },
+            {
+              "after": "    for (i = 0; i < sk_X509_CRL_num(crls); i++) {\n        crl = sk_X509_CRL_value(crls, i);\n        reasons = *preasons;\n\n        crl_score = get_crl_score(ctx, &crl_issuer, &reasons, crl, x, crldp_names, vfy_cb_err);\n        if (*vfy_cb_err != X509_V_OK)\n            return 0;\n\n        if (crl_score < best_score || crl_score == 0)\n            continue;\n        /* If current CRL is equivalent use it if it is newer */\n",
+              "before": "    for (i = 0; i < sk_X509_CRL_num(crls); i++) {\n        crl = sk_X509_CRL_value(crls, i);\n        reasons = *preasons;\n        crl_score = get_crl_score(ctx, &crl_issuer, &reasons, crl, x);\n        if (crl_score < best_score || crl_score == 0)\n            continue;\n        /* If current CRL is equivalent use it if it is newer */\n"
+            },
+            {
+              "after": "    *dcrl = NULL;\n}\n\n/**\n * @brief Score a candidate CRL for suitability in checking a certificate.\n *\n * Evaluates @p crl as a possible base CRL for determining the revocation\n * status of @p x and returns a bitmask of CRL_SCORE_* flags describing how\n * well it matches. A return of 0 means the CRL is unusable and must not be\n * selected.\n *\n * The CRL is rejected outright (score 0) if any of the following hold:\n *  - its issuingDistributionPoint extension is invalid (IDP_INVALID);\n *  - it is a delta CRL (has a BaseCRLNumber). Deltas are considered\n *    separately by get_delta_sk() once a base CRL has been chosen;\n *  - it is indirect or carries onlySomeReasons, and\n *    X509_V_FLAG_EXTENDED_CRL_SUPPORT is not set in @p ctx;\n *  - it carries onlySomeReasons that add nothing to @p *preasons;\n *  - its issuer name differs from the certificate's issuer and it is not\n *    an indirect CRL;\n *  - its issuing certificate cannot be located via the AKID check;\n *  - its distribution point scope covers no reasons not already in\n *    @p *preasons.\n *\n * Otherwise the following bits may be set in the result:\n *  - CRL_SCORE_ISSUER_NAME: CRL issuer name equals the cert issuer name;\n *  - CRL_SCORE_NOCRITICAL:  CRL has no unhandled critical extensions;\n *  - CRL_SCORE_TIME:        CRL is within its validity period;\n *  - CRL_SCORE_AKID (and related issuer bits): set by crl_akid_check();\n *  - CRL_SCORE_SCOPE:       CRL distribution point scope matches @p x.\n *\n * Callers compare scores across candidates and keep the highest. A CRL\n * scoring CRL_SCORE_VALID covers all criteria.\n *\n * @param[in]     ctx         Verification context. Supplies the\n *                            verification flags and validation time.\n * @param[out]    pissuer     On success, set to the certificate that issued\n *                            @p crl, as located by crl_akid_check().\n * @param[in,out] preasons    Reason codes already covered by previously\n *                            selected CRLs. On a non-zero return, updated\n *                            with the reasons this CRL newly covers.\n * @param[in]     crl         Candidate CRL to score.\n * @param[in]     x           Certificate whose revocation status is being\n *                            checked.\n * @param[in, out]    crldp_names Receives the CRL distribution point names\n *                            matched for @p x, for use when checking\n *                            indirect CRL entries.  It is passed in as a pointer\n *                            to a pointer, so multiple calls to this function\n *                            can reuse the constructed stack of crldp names for\n *                            multiple CRL's without having to rebuild it multiple\n *                            times.\n * @param[out]    vfy_cb_err  Receives an X509_V_ERR_* code to report through\n *                            the verify callback when scoring fails for a\n *                            reportable reason.\n *\n * @return A bitmask of CRL_SCORE_* flags, or 0 if @p crl cannot be used.\n *         @p *preasons is modified only on a non-zero return.\n */\nstatic int get_crl_score(X509_STORE_CTX *ctx, X509 **pissuer,\n    unsigned int *preasons, X509_CRL *crl, X509 *x, STACK_OF(X509_NAME) **crldp_names,\n    int *vfy_cb_err)\n{\n    int crl_score = 0;\n    unsigned int tmp_reasons = *preasons, crl_reasons;\n",
+              "before": "    *dcrl = NULL;\n}\n\n/*\n * For a given CRL return how suitable it is for the supplied certificate\n * 'x'. The return value is a mask of several criteria. If the issuer is not\n * the certificate issuer this is returned in *pissuer. The reasons mask is\n * also used to determine if the CRL is suitable: if no new reasons the CRL\n * is rejected, otherwise reasons is updated.\n */\nstatic int get_crl_score(X509_STORE_CTX *ctx, X509 **pissuer,\n    unsigned int *preasons, X509_CRL *crl, X509 *x)\n{\n    int crl_score = 0;\n    unsigned int tmp_reasons = *preasons, crl_reasons;\n"
+            },
+            {
+              "after": "        return 0;\n\n    /* Check cert for matching CRL distribution points */\n    if (crl_crldp_check(x, crl, crl_score, &crl_reasons, crldp_names, vfy_cb_err)) {\n        /* If no new reasons reject */\n        if ((crl_reasons & ~tmp_reasons) == 0)\n            return 0;\n",
+              "before": "        return 0;\n\n    /* Check cert for matching CRL distribution points */\n    if (crl_crldp_check(x, crl, crl_score, &crl_reasons)) {\n        /* If no new reasons reject */\n        if ((crl_reasons & ~tmp_reasons) == 0)\n            return 0;\n"
+            },
+            {
+              "after": "\n/* Check CRLDP and IDP */\nstatic int crl_crldp_check(X509 *x, X509_CRL *crl, int crl_score,\n    unsigned int *preasons, STACK_OF(X509_NAME) **crldp_names,\n    int *vfy_cb_err)\n{\n    int i;\n\n",
+              "before": "\n/* Check CRLDP and IDP */\nstatic int crl_crldp_check(X509 *x, X509_CRL *crl, int crl_score,\n    unsigned int *preasons)\n{\n    int i;\n\n"
+            },
+            {
+              "after": "    *preasons = crl->idp_reasons;\n    for (i = 0; i < sk_DIST_POINT_num(x->crldp); i++) {\n        DIST_POINT *dp = sk_DIST_POINT_value(x->crldp, i);\n        X509_NAME *dpname;\n        int match;\n\n        if (!crldp_check_crlissuer(dp, crl, crl_score))\n",
+              "before": "    *preasons = crl->idp_reasons;\n    for (i = 0; i < sk_DIST_POINT_num(x->crldp); i++) {\n        DIST_POINT *dp = sk_DIST_POINT_value(x->crldp, i);\n        X509_NAME *dpname = NULL;\n        int match;\n\n        if (!crldp_check_crlissuer(dp, crl, crl_score))\n"
+            },
+            {
+              "after": "        if (crl->idp == NULL) {\n            match = 1;\n        } else {\n            if (dp->distpoint != NULL && dp->distpoint->type == 1) {\n                if (*crldp_names == NULL) {\n                    *crldp_names = get_crldp_full_names(x);\n                    if (*crldp_names == NULL) {\n                        *vfy_cb_err = X509_V_ERR_UNSPECIFIED;\n                        return 0;\n                    }\n                }\n            }\n\n            dpname = sk_X509_NAME_value(*crldp_names, i);\n            match = idp_check_dp(dp->distpoint, dpname, crl->idp->distpoint);\n        }\n        if (match) {\n            *preasons &= dp->dp_reasons;\n",
+              "before": "        if (crl->idp == NULL) {\n            match = 1;\n        } else {\n            /*\n             * A relative distribution point name is only comparable in\n             * full form.  Build it for this one comparison and discard it;\n             * if that fails the entry simply does not match.\n             */\n            if (dp->distpoint != NULL && dp->distpoint->type == 1\n                && (dpname = crldp_full_name(x, dp)) == NULL)\n                continue;\n            match = idp_check_dp(dp->distpoint, dpname, crl->idp->distpoint);\n            X509_NAME_free(dpname);\n        }\n        if (match) {\n            *preasons &= dp->dp_reasons;\n"
+            },
+            {
+              "after": " * to find a delta CRL too\n */\nstatic int get_crl_delta(X509_STORE_CTX *ctx,\n    X509_CRL **pcrl, X509_CRL **pdcrl, X509 *x,\n    int *vfy_cb_err)\n{\n    int ok;\n    X509 *issuer = NULL;\n    int crl_score = 0;\n    unsigned int reasons;\n    X509_CRL *crl = NULL, *dcrl = NULL;\n    STACK_OF(X509_CRL) *skcrl = NULL;\n    const X509_NAME *nm = X509_get_issuer_name(x);\n    STACK_OF(X509_NAME) *crldp_names = NULL;\n\n    reasons = ctx->current_reasons;\n    ok = get_crl_sk(ctx, &crl, &dcrl,\n        &issuer, &crl_score, &reasons, ctx->crls, &crldp_names, vfy_cb_err);\n    if (ok)\n        goto done;\n    if (*vfy_cb_err != X509_V_OK)\n        goto done;\n\n    /* Lookup CRLs from store */\n    skcrl = ctx->lookup_crls(ctx, nm);\n",
+              "before": " * to find a delta CRL too\n */\nstatic int get_crl_delta(X509_STORE_CTX *ctx,\n    X509_CRL **pcrl, X509_CRL **pdcrl, X509 *x)\n{\n    int ok;\n    X509 *issuer = NULL;\n    int crl_score = 0;\n    unsigned int reasons;\n    X509_CRL *crl = NULL, *dcrl = NULL;\n    STACK_OF(X509_CRL) *skcrl;\n    const X509_NAME *nm = X509_get_issuer_name(x);\n\n    reasons = ctx->current_reasons;\n    ok = get_crl_sk(ctx, &crl, &dcrl,\n        &issuer, &crl_score, &reasons, ctx->crls);\n    if (ok)\n        goto done;\n\n    /* Lookup CRLs from store */\n    skcrl = ctx->lookup_crls(ctx, nm);\n"
+            },
+            {
+              "after": "    if (skcrl == NULL && crl != NULL)\n        goto done;\n\n    ok = get_crl_sk(ctx, &crl, &dcrl, &issuer, &crl_score, &reasons, skcrl, &crldp_names, vfy_cb_err);\n\ndone:\n    sk_X509_CRL_pop_free(skcrl, X509_CRL_free);\n    sk_X509_NAME_pop_free(crldp_names, X509_NAME_free);\n    if (*vfy_cb_err != X509_V_OK) {\n        X509_CRL_free(crl);\n        X509_CRL_free(dcrl);\n        crl = dcrl = NULL;\n    }\n    /* If we got any kind of CRL use it and return success */\n    if (crl != NULL) {\n        ctx->current_issuer = issuer;\n",
+              "before": "    if (skcrl == NULL && crl != NULL)\n        goto done;\n\n    get_crl_sk(ctx, &crl, &dcrl, &issuer, &crl_score, &reasons, skcrl);\n\n    sk_X509_CRL_pop_free(skcrl, X509_CRL_free);\n\ndone:\n    /* If we got any kind of CRL use it and return success */\n    if (crl != NULL) {\n        ctx->current_issuer = issuer;\n"
+            }
+          ],
+          "path": "crypto/x509/x509_vfy.c"
+        }
+      ],
+      "sha256": "6bdbb111a7ce640e42c558aaf912fe19b3770aa9afc7c8c5a0d36d20dcb2d5e9",
+      "url": "https://github.com/openssl/openssl/commit/468c287cf451a834b370b69ab321b8ffdfac23aa.patch"
     }
   ],
   "schema": "keep-openssl-patches-v1",
