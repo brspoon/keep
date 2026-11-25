@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.30.8 — 2026-11-25
+
+- Update Expat to 2.11.0 with XML parser security fixes.
+- Apply OpenSSL security backports, including a DTLS fix.
+- Apply Python security fixes for cookie handling, IMAP STARTTLS, certificate hostname checks, and archive commands.
+
 ## 2.30.7 — 2026-11-13
 
 - Prevent deletion of kept titles when their title or year differs between services.
