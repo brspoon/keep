@@ -666,7 +666,7 @@ class BenignFunctionalChecksTests(unittest.TestCase):
 
     def test_normal_and_malformed_xml_are_checked_with_the_real_parser(self):
         with patch.object(pyexpat, 'EXPAT_VERSION', 'expat_2.11.0'), \
-             patch.object(pyexpat, 'version_info', (2, 10, 0)):
+             patch.object(pyexpat, 'version_info', (2, 11, 0)):
             self.assertEqual(checks.exercise_expat(), '2.11.0')
         with patch.object(pyexpat, 'EXPAT_VERSION', 'expat_2.8.5'):
             with self.assertRaisesRegex(ValueError, 'pyexpat version'):

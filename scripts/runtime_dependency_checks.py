@@ -308,8 +308,9 @@ def verify_loaded_library(canonical, prefix, maps_text, expected_sha256=None):
 def exercise_expat():
     import pyexpat
 
+    expected_version = tuple(int(part) for part in EXPAT_VERSION.split('.'))
     require(pyexpat.EXPAT_VERSION == 'expat_' + EXPAT_VERSION
-            and pyexpat.version_info == (2, 10, 0), 'Unexpected ordinary pyexpat version')
+            and pyexpat.version_info == expected_version, 'Unexpected ordinary pyexpat version')
     events = []
     parser = pyexpat.ParserCreate()
     parser.StartElementHandler = lambda name, attrs: events.append(('start', name, attrs))
