@@ -371,9 +371,9 @@ class CurrentImageReviewTests(unittest.TestCase):
                                         ('severity', 'type', 'package', 'version', 'status'))
                           for finding, rule in self.policy['exceptions'].items()}, expected)
         for finding, rule in self.policy['exceptions'].items():
-            reviewed_on = '2026-11-17'
+            reviewed_on = '2026-11-25'
             self.assertEqual(rule['review']['reviewed_on'], reviewed_on)
-            self.assertEqual(rule['review']['deadline'], '2026-11-25')
+            self.assertEqual(rule['review']['deadline'], '2026-12-02')
             self.assertTrue(rule['evidence'].strip())
             self.assertTrue(rule['review']['approval'].strip())
             self.assertTrue(rule['review']['remove_when'].strip())
@@ -390,16 +390,16 @@ class CurrentImageReviewTests(unittest.TestCase):
                 self.assertFalse(result['accepted_fixed'])
                 self.assertEqual([entry['reason'] for entry in result['blocked']],
                                  ['exception_expired', 'exception_expired'])
-            for day, expired in ((datetime.date(2026, 11, 17), False),
-                                 (datetime.date(2026, 11, 25), False),
-                                 (datetime.date(2026, 11, 26), True)):
+            for day, expired in ((datetime.date(2026, 11, 25), False),
+                                 (datetime.date(2026, 12, 2), False),
+                                 (datetime.date(2026, 12, 3), True)):
                 with self.subTest(arch=arch, day=day):
                     result = self.result(arch, day)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                                      [] if expired else list(CURRENT_FINDINGS))
                     self.assertEqual(len(result['blocked']), len(CURRENT_FINDINGS) if expired else 0)
                     for entry in result['accepted_fixed'] + result['blocked']:
-                        self.assertEqual(entry['deadline'], '2026-11-25')
+                        self.assertEqual(entry['deadline'], '2026-12-02')
                     for entry in result['blocked']:
                         self.assertEqual(entry['reason'], 'exception_expired')
 
@@ -413,7 +413,7 @@ class CurrentImageReviewTests(unittest.TestCase):
             })
             for arch in DIRECT:
                 with self.subTest(arch=arch, finding=finding):
-                    result = self.result(arch, datetime.date(2026, 11, 17))
+                    result = self.result(arch, datetime.date(2026, 11, 25))
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                                      list(CURRENT_FINDINGS))
                     self.assertEqual(result['blocked'], [{
@@ -424,7 +424,7 @@ class CurrentImageReviewTests(unittest.TestCase):
     def test_http_scope_does_not_accept_a_different_severity(self):
         self.report['matches'][1]['vulnerability']['severity'] = 'Medium'
         for arch in DIRECT:
-            result = self.result(arch, datetime.date(2026, 11, 17))
+            result = self.result(arch, datetime.date(2026, 11, 25))
             self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
                              ['CVE-2025-15367', 'CVE-2026-116566', 'CVE-2026-119170'])
             self.assertEqual(result['blocked'][0]['reason'], 'exception_mismatch')
@@ -444,7 +444,7 @@ class CurrentImageReviewTests(unittest.TestCase):
             self.report['matches'][0][section][field] = value
             for arch in DIRECT:
                 with self.subTest(arch=arch, section=section, field=field):
-                    result = self.result(arch, datetime.date(2026, 11, 17))
+                    result = self.result(arch, datetime.date(2026, 11, 25))
                     self.assertEqual(len(result['blocked']), 1)
                     self.assertEqual(result['blocked'][0]['reason'], reason)
                     self.assertEqual([entry['id'] for entry in result['accepted_fixed']],
@@ -454,7 +454,7 @@ class CurrentImageReviewTests(unittest.TestCase):
         self.report['matches'] = []
         for arch in DIRECT:
             with self.subTest(arch=arch):
-                result = self.result(arch, datetime.date(2026, 11, 17))
+                result = self.result(arch, datetime.date(2026, 11, 25))
                 self.assertFalse(result['blocked'])
                 self.assertFalse(result['scout_blocked'])
 
@@ -614,9 +614,9 @@ class CandidateReviewTests(unittest.TestCase):
                    json.loads((ROOT / 'docs/image-exceptions.json').read_text()))
         policy_bytes = policy_path.read_bytes()
         for arch in DIRECT:
-            for day, status in ((datetime.date(2026, 11, 17), 0),
-                                (datetime.date(2026, 11, 25), 0),
-                                (datetime.date(2026, 11, 26), 1)):
+            for day, status in ((datetime.date(2026, 11, 25), 0),
+                                (datetime.date(2026, 12, 2), 0),
+                                (datetime.date(2026, 12, 3), 1)):
                 with self.subTest(arch=arch, day=day), chdir(self.root), \
                      patch.object(review_image, 'current_day', return_value=day), \
                      redirect_stdout(io.StringIO()):

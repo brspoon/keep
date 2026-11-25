@@ -96,7 +96,7 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
         policy = json.loads((ROOT / 'docs/image-exceptions.json').read_text())
         python_findings = ('CVE-2025-15367', 'CVE-2026-103995', 'CVE-2026-116566')
         self.assertEqual(set(policy['exceptions']), set(python_findings) | {'CVE-2026-119170'})
-        self.assertEqual(policy['exceptions']['CVE-2026-119170']['review']['reviewed_on'], '2026-11-17')
+        self.assertEqual(policy['exceptions']['CVE-2026-119170']['review']['reviewed_on'], '2026-11-25')
         self.assertEqual(set(policy['grype_component_reviews']), {'CVE-2026-119586'})
         from scout_exception_policy import OPENSSL_FINDINGS
         self.assertEqual(set(policy['scout_exceptions']), {FINDING_ID} | OPENSSL_FINDINGS)
@@ -105,19 +105,19 @@ class ScoutExceptionPolicyTests(unittest.TestCase):
                  *policy['scout_exceptions'].values(),
                  *policy['scout_component_reviews'].values()]
         self.assertEqual({policy['exceptions'][finding]['review']['reviewed_on'] for finding in python_findings},
-                         {'2026-11-17'})
+                         {'2026-11-25'})
         self.assertEqual(policy['scout_exceptions'][FINDING_ID]['review']['reviewed_on'],
-                         '2026-11-17')
+                         '2026-11-25')
         self.assertEqual(policy['scout_exceptions'][FINDING_ID]['severity'], 'HIGH')
-        self.assertTrue(all(rule['review']['deadline'] == '2026-11-25' for rule in rules))
+        self.assertTrue(all(rule['review']['deadline'] == '2026-12-02' for rule in rules))
         matches = [{'vulnerability': {'id': finding, 'severity': {'CVE-2025-15367': 'Medium', 'CVE-2026-103995': 'Low', 'CVE-2026-116566': 'Medium'}[finding]},
                     'artifact': {'name': 'python-3.14', 'type': 'apk', 'version': '3.14.10-r1'}}
                    for finding in python_findings]
         for arch in DIRECT:
             original = scout_report(arch)
-            for day, expired in ((datetime.date(2026, 11, 10), False),
-                                 (datetime.date(2026, 11, 25), False),
-                                 (datetime.date(2026, 11, 26), True)):
+            for day, expired in ((datetime.date(2026, 11, 25), False),
+                                 (datetime.date(2026, 12, 2), False),
+                                 (datetime.date(2026, 12, 3), True)):
                 result = self.assess(copy.deepcopy(original), arch=arch, day=day,
                                      policy=policy, matches=matches)
                 with self.subTest(arch=arch, day=day):
