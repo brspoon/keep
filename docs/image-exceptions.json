@@ -5,7 +5,7 @@
     "Dockerfile": "6ce00ba0cd15c5a66bdfb2426f55228ca6bc79764dd6ca3f8228ca283a9ae592",
     "scripts/inspect_candidate.py": "8c1dcc1a7d7895cc1c5e1ab297ee78c28c1ed9ec7fd76bd64083ce646d52073f",
     "requirements.txt": "601cdb57645d6a96ab6f6a7e6acf12485b66f00c3a22d506377d48867239da91",
-    "scripts/python_security_patches.json": "9d70dfaae5b1922948abcd23a22d83b4e85c2196669b569b5be7dffda1d9ccf3",
+    "scripts/python_security_patches.json": "4c280bc05c1a1df777ffa3156b7a2333d6cfe25bed77d0fae69fdeacb3f19ff2",
     "scripts/patch_python_runtime.py": "7e04ab28f407cd4e78b21b31b357c9d93b39fafe1aabd988145673ff34034ac1",
     "scripts/python_security_checks.py": "6238d76408139eb7af727b77368374ccb05d3cec98759d9c6072e09828465df4",
     "scripts/alpine_expat_sources.py": "51ea653c77d3c47c1edc06af74d020c48ca0d15cc92e5c66edda676ddec21980",
@@ -585,9 +585,9 @@
         ]
       },
       "python_files": {
-        "gzip.py": "a355d64d513b495e37d2429aebba4ff2b3ae55da13f6f43715cb0d7f6d757422",
-        "tarfile.py": "fc653e241b8e0450a0c4ee40145f2747a3591973fa35fedecd612a5183818733",
-        "zipfile/__init__.py": "fb5756319a4ae70ce5bb65d417768d696ca3989e49434ebc6b34c73fa817ec4e"
+        "gzip.py": "24470475ad25e6daf1c3590e0429a677a971eb8a48bd98ed87d233beb7ff9cef",
+        "tarfile.py": "c475c3fa509ae8ceb39564ad2e849185d51e4ea71a5926850587103e59376d00",
+        "zipfile/__init__.py": "1550c27c851c982994aa54527bc258360484e6f78fd3bbd91b0a16f8a6fe348c"
       },
       "review": {
         "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",

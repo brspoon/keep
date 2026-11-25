@@ -258,33 +258,33 @@
   {
     "path": "gzip.py",
     "source_kind": "keep-local",
-    "source_id": "keep-python-archive-cli-safe-path-v1",
+    "source_id": "keep-python-archive-cli-safe-path-v2",
     "hunks": [
       {
         "before": "\ndef main():\n    from argparse import ArgumentParser\n    parser = ArgumentParser(description=\n        \"A simple command line interface for the gzip module: act like gzip, \"\n        \"but do not delete the input file.\",\n",
-        "after": "\ndef main():\n    from argparse import ArgumentParser\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    path0 = sys._path0\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n    parser = ArgumentParser(description=\n        \"A simple command line interface for the gzip module: act like gzip, \"\n        \"but do not delete the input file.\",\n"
+        "after": "\ndef main():\n    from argparse import ArgumentParser\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    if hasattr(sys, '_path0'):\n        path0 = sys._path0\n    else:\n        # CPython 3.14.10 prepends cwd for -m without exposing sys._path0.\n        path0 = None\n        if not sys.flags.safe_path and sys.path and sys.path[0] == os.getcwd():\n            path0 = sys.path[0]\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n    parser = ArgumentParser(description=\n        \"A simple command line interface for the gzip module: act like gzip, \"\n        \"but do not delete the input file.\",\n"
       }
     ]
   },
   {
     "path": "tarfile.py",
     "source_kind": "keep-local",
-    "source_id": "keep-python-archive-cli-safe-path-v1",
+    "source_id": "keep-python-archive-cli-safe-path-v2",
     "hunks": [
       {
         "before": "\ndef main():\n    import argparse\n\n    description = 'A simple command-line interface for tarfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n",
-        "after": "\ndef main():\n    import argparse\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    path0 = sys._path0\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n\n    description = 'A simple command-line interface for tarfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n"
+        "after": "\ndef main():\n    import argparse\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    if hasattr(sys, '_path0'):\n        path0 = sys._path0\n    else:\n        # CPython 3.14.10 prepends cwd for -m without exposing sys._path0.\n        path0 = None\n        if not sys.flags.safe_path and sys.path and sys.path[0] == os.getcwd():\n            path0 = sys.path[0]\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n\n    description = 'A simple command-line interface for tarfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n"
       }
     ]
   },
   {
     "path": "zipfile/__init__.py",
     "source_kind": "keep-local",
-    "source_id": "keep-python-archive-cli-safe-path-v1",
+    "source_id": "keep-python-archive-cli-safe-path-v2",
     "hunks": [
       {
         "before": "\ndef main(args=None):\n    import argparse\n\n    description = 'A simple command-line interface for zipfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n",
-        "after": "\ndef main(args=None):\n    import argparse\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    path0 = sys._path0\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n\n    description = 'A simple command-line interface for zipfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n"
+        "after": "\ndef main(args=None):\n    import argparse\n\n    # Match CPython gh-161719 without calling the frozen runpy helper.\n    if hasattr(sys, '_path0'):\n        path0 = sys._path0\n    else:\n        # CPython 3.14.10 prepends cwd for -m without exposing sys._path0.\n        path0 = None\n        if not sys.flags.safe_path and sys.path and sys.path[0] == os.getcwd():\n            path0 = sys.path[0]\n    if path0 is not None and path0 != sys._stdlib_dir:\n        sys.path[:] = [path for path in sys.path if path != path0]\n\n    description = 'A simple command-line interface for zipfile module.'\n    parser = argparse.ArgumentParser(description=description, color=True)\n"
       }
     ]
   }
