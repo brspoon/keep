@@ -18,17 +18,17 @@ import urllib.request
 import zlib
 
 
-VERSION = '2.10.0-r0'
-BUILD_COMMIT = 'e18a81f6461517119d85f2650a4f3e5e01861d28'
+VERSION = '2.11.0-r0'
+BUILD_COMMIT = '17a850105cb64f89503b8f0735b3330a65830387'
 APORTS_URL = f'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/archive.tar.gz?sha={BUILD_COMMIT}'
 APORTS_PREFIX = f'aports-{BUILD_COMMIT}-{BUILD_COMMIT}'
-APORTS_SHA256 = 'bad26ef1fe33691152dbb1c7e1bfbf7155083fc51fcc50faa2f32f5d416636d4'
+APORTS_SHA256 = '606e5898f565b42946be25d96339e42b3293e6b2ef886a3c40d99f90587fb075'
 APKBUILD_URL = f'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref={BUILD_COMMIT}'
-APKBUILD_SHA256 = '8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed'
-SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz'
-SOURCE_SHA256 = 'c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f'
-SOURCE_SHA512 = 'bd61f361d823f67586dad246fa4d4abbe3d22f5a0f9a28401e7a2fc96753d5bae33fbe4068fae72f016998d0da9d8c92edc4abd2fe8a8e4aafc775a8ab547c44'
-SIGNATURE_SHA256 = '1944af90d9e7abe645ec7b27847038ca7ddb6b1d2a25ac82c1565d50c2ee08af'
+APKBUILD_SHA256 = '639f1221c09ac2f3598cd8b4497c78be21a9e20ce671b298becf8531473ddf57'
+SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_11_0/expat-2.11.0.tar.xz'
+SOURCE_SHA256 = '61e7614b602201c28a189dafee78f5bceaee192bbde46a930752ff09cf5542fa'
+SOURCE_SHA512 = '9a820eba2d2fc966d891e60e38c832a1477e16aa2f35c2f0e9cec36b10a70cccbf6b94dd2750b74925b74210543c57acb22b344ce522b7d03bfdadeeacbcca03'
+SIGNATURE_SHA256 = '544259c7f1d6772f61c9b56eac0e5935e9f86b4cfbb53e2690ab9988cce781f1'
 COPYING_SHA256 = '31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87'
 ARCHES = {'amd64': 'x86_64', 'arm64': 'aarch64'}
 KEYS = {
@@ -38,23 +38,23 @@ KEYS = {
               'sha256': 'd11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d'},
 }
 BINARY_SHA256 = {
-    'amd64': {'expat': '7a42363e4618ed9440de78df652aca22e9788cbed2e87e1233bb2433f4ad675f',
-              'libexpat': 'ad565cb50371c22a746fa6cf9435d814fd6d1439220dc4dc80318088d9ea03db'},
-    'arm64': {'expat': '7cdb36ea041ab1a7b218d3ce23b82fb7759cded6a1e0f845a216dfe827fe45f8',
-              'libexpat': '2c493582b0a3464f65a47647b5c24c89416d26be8bd82336cb588b88edfb95ce'},
+    'amd64': {'expat': '8045490040d769bc1e89debd7524d3051ad10c7320a5d9d2d58a5bdbe666214d',
+              'libexpat': '1d397c489b4790fd35ff5d697882d5dfb3b91dc8d28b214812db36f7505760f6'},
+    'arm64': {'expat': '3f6bd360ad92bb1900a51c9455946b4dffed85defb23238918189c1514b05ca2',
+              'libexpat': 'f2f93bbbb48ed88a697c96856e3928f63aea75638b2a68ba2fffdb5c03ca9fd5'},
 }
 LIBRARY_SHA256 = {
-    'amd64': '81b28279f2bb5cd61af664e75a18cbf3c016c2643c71691c1485d244bf272222',
-    'arm64': 'a001712eb4601c5b40608d84b33ced8cb8cf67da5dc7fd814742b2ba84709add',
+    'amd64': 'bb7f2d4fb34a539e72e92de0dac9c4a58f2d8767e5b0b158208cc7cbdd6a2b82',
+    'arm64': 'e2ae906a0287caeacf90f69835369ac050de22d343ed836ae139ff0cb9b54453',
 }
 PKGINFO_SHA256 = {
-    'amd64': {'expat': '00af1f0059af004182ead170cd7270d50b496a39faced3597a983de54bdf9ee6',
-              'libexpat': '5cc2bc344c47ed99458ca2015ba4b206fce51692670bde9222ae221acac48e49'},
-    'arm64': {'expat': 'eb3114810b21edda76d4a2b2b90f32ae3c2e1ee91755d87d4d56d54309fa8cc1',
-              'libexpat': '050d06aac05d15a957351aba639b2b10b8a4d6b729a0c21a8a4e2911327cf1a2'},
+    'amd64': {'expat': 'f16b7a85af09fbc461bfcc336b1b34c09d41a901529565c60f1d6e407d56b3f2',
+              'libexpat': 'e16c7c9b51a9d592476adebc00486955ad9a706fa5d08b681201c95db114a093'},
+    'arm64': {'expat': 'cd3862770a361110701363ed6db5a8f1c358962c9c9ff7d5f18d35fe7201eb49',
+              'libexpat': 'e78bcad40b5d580c9c34a68f163a56fefe9ce0ed8262260f32ba20e07db9db0f'},
 }
 ROOT = Path(__file__).resolve().parents[1]
-LIBRARY_PATH = 'usr/lib/libexpat.so.1.13.1'
+LIBRARY_PATH = 'usr/lib/libexpat.so.1.14.0'
 DOWNLOAD_LIMIT = 128 * 1024 * 1024
 APK_DECODE_LIMIT = 16 * 1024 * 1024
 
@@ -83,7 +83,7 @@ def reviewed_spec(root=None):
                    'archive_prefix': APORTS_PREFIX},
         'source': {'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'sha512': SOURCE_SHA512,
                    'signature_url': SOURCE_URL + '.asc', 'signature_sha256': SIGNATURE_SHA256,
-                   'license_path': 'expat-2.10.0/COPYING', 'license_sha256': COPYING_SHA256},
+                   'license_path': 'expat-2.11.0/COPYING', 'license_sha256': COPYING_SHA256},
         'signing_keys': {arch: {**key, 'url': 'https://alpinelinux.org/keys/' + key['name']}
                          for arch, key in KEYS.items()},
         'packages': [
@@ -198,7 +198,7 @@ def package_identity(metadata, name, architecture, payload_hash):
     if any(fields.get(key) != [value] for key, value in expected.items()):
         raise ValueError('Expat APK package identity, license or payload hash mismatch')
     dependencies = {'so:libc.musl-' + ARCHES[architecture] + '.so.1'}
-    provides = {'so:libexpat.so.1=1.13.1'}
+    provides = {'so:libexpat.so.1=1.14.0'}
     if name == 'expat':
         dependencies.add('so:libexpat.so.1')
         provides = {'cmd:xmlwf=' + VERSION}
@@ -230,7 +230,7 @@ def verify_apk(body, name, architecture, key):
     if name == 'libexpat':
         library = payload.get(LIBRARY_PATH, {})
         alias = payload.get('usr/lib/libexpat.so.1', {}).get('member')
-        if library.get('body') is None or alias is None or not alias.issym() or alias.linkname != 'libexpat.so.1.13.1':
+        if library.get('body') is None or alias is None or not alias.issym() or alias.linkname != 'libexpat.so.1.14.0':
             raise ValueError('Expat APK canonical library or SONAME alias mismatch')
         checked(library['body'], 'sha256', LIBRARY_SHA256[architecture], 'Expat runtime library')
     return metadata, {**identity, 'apk_sha256': hashlib.sha256(body).hexdigest(),
@@ -240,14 +240,14 @@ def verify_apk(body, name, architecture, key):
 
 def recipe_identity(body):
     text = body.decode('utf-8')
-    for key, value in {'pkgname': 'expat', 'pkgver': '2.10.0', 'pkgrel': '0', 'license': '"MIT"'}.items():
+    for key, value in {'pkgname': 'expat', 'pkgver': '2.11.0', 'pkgrel': '0', 'license': '"MIT"'}.items():
         if re.findall(r'^' + key + r'=([^\n]+)$', text, re.M) != [value]:
             raise ValueError('Expat APKBUILD identity mismatch')
     declaration = 'source="https://github.com/libexpat/libexpat/releases/download/$_tagver/expat-$pkgver.tar.xz"'
     if text.splitlines().count(declaration) != 1:
         raise ValueError('Expat APKBUILD source declaration mismatch')
     blocks = re.findall(r'^sha512sums="\n([^"\n]+)\n"$', text, re.M)
-    if blocks != [SOURCE_SHA512 + '  expat-2.10.0.tar.xz']:
+    if blocks != [SOURCE_SHA512 + '  expat-2.11.0.tar.xz']:
         raise ValueError('Expat APKBUILD source checksum mismatch')
 
 
@@ -273,7 +273,7 @@ def security_manifest(package_spec, architecture):
         raise ValueError('Unsupported Expat architecture')
     return {
         'schema': 'keep-expat-security-v1', 'architecture': architecture,
-        'version': '2.10.0', 'package_version': VERSION, 'build_commit': BUILD_COMMIT,
+        'version': '2.11.0', 'package_version': VERSION, 'build_commit': BUILD_COMMIT,
         'source_manifest_sha256': hashlib.sha256(lock).hexdigest(),
         'library': {'path': '/' + LIBRARY_PATH, 'soname': 'libexpat.so.1',
                     'sha256': LIBRARY_SHA256[architecture]},
@@ -342,11 +342,11 @@ def collect_sources(package_spec, architecture, runtime_inventory, output_root, 
     retain(root, records, 'context/main/expat/APKBUILD', recipe, APKBUILD_URL, 'matching-apk-build-script', recipe_path)
     source = checked(fetch(SOURCE_URL), 'sha256', SOURCE_SHA256, 'Expat source')
     checked(source, 'sha512', SOURCE_SHA512, 'Expat recipe source')
-    retain(root, records, 'expat-2.10.0.tar.xz', source, SOURCE_URL, 'upstream-source')
+    retain(root, records, 'expat-2.11.0.tar.xz', source, SOURCE_URL, 'upstream-source')
     signature = checked(fetch(SOURCE_URL + '.asc'), 'sha256', SIGNATURE_SHA256, 'Expat upstream signature')
-    retain(root, records, 'expat-2.10.0.tar.xz.asc', signature, SOURCE_URL + '.asc', 'upstream-detached-signature')
-    copying = checked(read_member(source, 'expat-2.10.0/COPYING'), 'sha256', COPYING_SHA256, 'Expat full notice')
-    retain(root, records, 'expat-2.10.0-COPYING', copying, SOURCE_URL, 'upstream-notice', 'expat-2.10.0/COPYING')
+    retain(root, records, 'expat-2.11.0.tar.xz.asc', signature, SOURCE_URL + '.asc', 'upstream-detached-signature')
+    copying = checked(read_member(source, 'expat-2.11.0/COPYING'), 'sha256', COPYING_SHA256, 'Expat full notice')
+    retain(root, records, 'expat-2.11.0-COPYING', copying, SOURCE_URL, 'upstream-notice', 'expat-2.11.0/COPYING')
     runtime = {'os_packages': sorted(rows, key=lambda row: row['name'])}
     retain(root, records, 'runtime-expat-identity.json', (json.dumps(runtime, indent=2) + '\n').encode(),
            'verified-candidate-runtime:/lib/apk/db/installed', 'runtime-package-build-identity')

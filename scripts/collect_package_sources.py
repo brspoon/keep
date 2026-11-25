@@ -784,7 +784,7 @@ def verify_expat_replacement(runtime_inventory, architecture, *, root=ROOT):
         raise ValueError('Require the actual candidate Expat replacement inventory')
     spec = reviewed_spec(root)
     manifest = verify_build_manifest(replacement.get('manifest'), architecture, root)
-    expected_library = {'path': '/usr/lib/libexpat.so.1.13.1',
+    expected_library = {'path': '/usr/lib/libexpat.so.1.14.0',
                         'sha256': manifest['library']['sha256']}
     if (replacement['build_lock'] != spec
             or replacement['build_lock_sha256'] != hashlib.sha256(json_bytes(spec)).hexdigest()

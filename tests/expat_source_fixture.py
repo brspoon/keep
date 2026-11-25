@@ -31,7 +31,7 @@ def qualified_inventory(architecture='amd64'):
                    'build_lock_sha256': hashlib.sha256(build.json_bytes(spec)).hexdigest(),
                    'manifest': manifest,
                    'manifest_sha256': hashlib.sha256(build.json_bytes(manifest)).hexdigest(),
-                   'library': {'path': '/usr/lib/libexpat.so.1.13.1',
+                   'library': {'path': '/usr/lib/libexpat.so.1.14.0',
                                'sha256': spec['expected_library_sha256'][architecture]}}
     inventory = {'os_packages': [{
         'name': name, 'version': vendor.VERSION, 'origin': 'expat', 'license': 'MIT',
@@ -49,7 +49,7 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
               vendor.SOURCE_URL + '.asc': b'checked detached signature',
               'https://example.test/vendor.apk': b'checked signed vendor APK',
               'https://example.test/key': b'checked vendor signing key'}
-    inputs[build.SOURCE_URL] = b'checked official 2.10.0 release archive'
+    inputs[build.SOURCE_URL] = b'checked official 2.11.0 release archive'
     fortify_downloads = [
         ('packages/amd64/fortify-headers.apk', 'https://example.test/amd64/fortify.apk', 'signed-alpine-binary-evidence'),
         ('packages/arm64/fortify-headers.apk', 'https://example.test/arm64/fortify.apk', 'signed-alpine-binary-evidence'),
@@ -100,7 +100,7 @@ def checked_source_fixture(architecture='amd64', *, collection_module=collection
         output = Path(output)
         output.mkdir(parents=True)
         rows = [
-            ('expat-2.10.0.tar.xz', vendor.SOURCE_URL, 'upstream-source'),
+            ('expat-2.11.0.tar.xz', vendor.SOURCE_URL, 'upstream-source'),
             ('context/main/expat/APKBUILD', vendor.APKBUILD_URL, 'matching-apk-build-script'),
             ('aports.tar.gz', vendor.APORTS_URL, 'complete-alpine-build-recipes'),
             ('source.asc', vendor.SOURCE_URL + '.asc', 'upstream-detached-signature'),

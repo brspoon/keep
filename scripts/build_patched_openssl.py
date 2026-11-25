@@ -31,12 +31,20 @@ SOURCE_DIRECTORY = 'openssl-3.5.9'
 SOURCE_URL = 'https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz'
 SOURCE_SHA256 = '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'
 BUILD_IMAGE = profile.BUILD_IMAGE
-IDENTITY = 'keep-openssl-3.5.9-november-backports-v1'
+IDENTITY = 'keep-openssl-3.5.9-november-backports-v3'
 COMMITS = ('159e1de0c448d7b9f09ad768c8e141def4aa1eb4',
            'a0051cfe699bf5a047bc1c4faef65f80f7987366',
            '1a73dc590cbad62d6f0329ea4779eadaa8d8fd75',
            'f6244675833e097c2429a40d1b206d95385bd42f',
-           '257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116')
+           '257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116',
+           '9491b0d9cc7950af1f3dc89499bd5433b9cd4f43',
+           'c8f6d04f8e6d40b1bf83334e4a2ec9daf5943a3d',
+           'f3acb0a3328046741479482c51cec815839e1b05',
+           '1ad851363d5b8588b0d40edcc045fd633e93f0c2',
+           '734c6cd7444bdbf589bfec917e47598c1b21ddd3',
+           '468c287cf451a834b370b69ab321b8ffdfac23aa',
+           '2d1e77189821165ace305acd93380b46b5e5d1dd',
+           'c4a1649912be238d09ecd3cecad175276973bb09')
 FILES = ('usr/lib/libcrypto.so.3', 'usr/lib/libssl.so.3', 'usr/bin/openssl',
          'usr/lib/engines-3/afalg.so', 'usr/lib/engines-3/capi.so',
          'usr/lib/engines-3/loader_attic.so', 'usr/lib/engines-3/padlock.so',

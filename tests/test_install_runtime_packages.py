@@ -29,7 +29,7 @@ class InstallRuntimePackageTests(unittest.TestCase):
         definitions = (
             ('musl', ('musl',), '1.2.6-r3', 'MUSL_SECURITY.json'),
             ('certificates', ('ca-certificates-bundle',), '20261020-r0', 'CA_CERTIFICATES_SECURITY.json'),
-            ('expat', ('expat', 'libexpat'), '2.10.0-r0', 'EXPAT_SECURITY.json'),
+            ('expat', ('expat', 'libexpat'), '2.11.0-r0', 'EXPAT_SECURITY.json'),
             ('zlib', ('zlib',), '1.4-r0', 'ZLIB_SECURITY.json'),
             ('sqlite', ('sqlite-libs',), '3.54.1-r0', 'SQLITE_SECURITY.json'),
             ('python', ('pyc-3.14', 'python-3.14', 'python-3.14-pyc',
@@ -478,7 +478,7 @@ class ExpatReplacementInstallationTests(unittest.TestCase):
         self.root = Path(self.temporary.name).resolve()
         self.output = self.root / 'expat-patched'
         self.output.mkdir()
-        self.library = self.root / 'libexpat.so.1.13.1'
+        self.library = self.root / 'libexpat.so.1.14.0'
         self.vendor_library = self.root / 'libexpat.so.1.13.0'
         self.vendor_library.write_bytes(b'original signed library')
         self.alias = self.root / 'libexpat.so.1'

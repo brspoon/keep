@@ -2,19 +2,19 @@
   "local_patches": [],
   "patched_files": {
     "lib/entities.h": "ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92",
-    "lib/internal.h": "2a2821fc7a2982978a8630e26cf3b8158ab21a2c2f2d06354f8c0c6547dded44",
+    "lib/internal.h": "959b292f428b4ba899a620ae9c214e5a731396982aa445a997705bd8a420a6c8",
     "lib/xcs.c": "ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8",
-    "lib/xmlparse.c": "9443794afe78dfab5cccf27e803b30359a55dbf9eaadbd54297522b72356833c",
-    "tests/acc_tests.c": "b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b",
-    "tests/alloc_tests.c": "0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9",
-    "tests/misc_tests.c": "a2e4bd074fbd83a87ab298e79a13599e5a4afe65f542d6026a314b98a4ddfd9b"
+    "lib/xmlparse.c": "9fb20afd85f627248e637f150f5f1031bdaaed2ec3b96fd1c99d56a02fda74d9",
+    "tests/acc_tests.c": "15452296497c3a241852eea8c03657d8a15a2c78447743951764528658669817",
+    "tests/alloc_tests.c": "5772f1a59c60c16ed53982ebbf169a06b6081ca13fd6b87137c75f0eb73261fa",
+    "tests/misc_tests.c": "46f513837611c15cd97b8998abdc1c7b90f1faea0a8533f384b23c0109cf8ee7"
   },
   "patches": [],
   "schema": "keep-expat-patches-v1",
   "upstream_release": {
-    "commit": "a70841d9ffa64ddde29ab824ed6305035ebe4c47",
-    "tag": "R_2_10_0",
-    "url": "https://github.com/libexpat/libexpat/releases/tag/R_2_10_0"
+    "commit": "bbdb35e85b68284cb20ad8876c56e9b80175babb",
+    "tag": "R_2_11_0",
+    "url": "https://github.com/libexpat/libexpat/releases/tag/R_2_11_0"
   },
-  "upstream_version": "2.10.0"
+  "upstream_version": "2.11.0"
 }

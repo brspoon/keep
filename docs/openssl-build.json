@@ -1,14 +1,22 @@
 {
   "build_image": "dhi.io/python:3.14-alpine3.24-dev@sha256:b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d",
-  "build_script_sha256": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
+  "build_script_sha256": "db1203526fada064aff5afe01c29e20abab9a886dcf4ea27a6a5e0134b1d083c",
   "commits": [
     "159e1de0c448d7b9f09ad768c8e141def4aa1eb4",
     "a0051cfe699bf5a047bc1c4faef65f80f7987366",
     "1a73dc590cbad62d6f0329ea4779eadaa8d8fd75",
     "f6244675833e097c2429a40d1b206d95385bd42f",
-    "257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116"
+    "257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116",
+    "9491b0d9cc7950af1f3dc89499bd5433b9cd4f43",
+    "c8f6d04f8e6d40b1bf83334e4a2ec9daf5943a3d",
+    "f3acb0a3328046741479482c51cec815839e1b05",
+    "1ad851363d5b8588b0d40edcc045fd633e93f0c2",
+    "734c6cd7444bdbf589bfec917e47598c1b21ddd3",
+    "468c287cf451a834b370b69ab321b8ffdfac23aa",
+    "2d1e77189821165ace305acd93380b46b5e5d1dd",
+    "c4a1649912be238d09ecd3cecad175276973bb09"
   ],
-  "compiler_profile_sha256": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
+  "compiler_profile_sha256": "e2e447d0692ad253132e242220ac83689a571036909b43abb2af44159d1e798f",
   "configure_options": [
     "--prefix=/usr",
     "--libdir=lib",
@@ -65,7 +73,7 @@
     "usr/lib/engines-3/padlock.so",
     "usr/lib/ossl-modules/legacy.so"
   ],
-  "identity": "keep-openssl-3.5.9-november-backports-v1",
+  "identity": "keep-openssl-3.5.9-november-backports-v3",
   "native": {
     "amd64": {
       "abi": {
@@ -87,8 +95,8 @@
         "usr/lib/engines-3/capi.so": "21b01c3c5f53f80536c7bd72d62016a57131e0526eeecd77ebb935ab84cfaf15",
         "usr/lib/engines-3/loader_attic.so": "c2f64d30b5143faf5bfc374ee7ec99396809f923bc84002a358b8582788be741",
         "usr/lib/engines-3/padlock.so": "061ac4520b6035a2e76b975d2fe6dd3cae0b862ee4c43486ab9f272b5584f114",
-        "usr/lib/libcrypto.so.3": "041b5bf9f00497eebce1101b3f178f24102d06d72c8feae8f4de861b6560b25b",
-        "usr/lib/libssl.so.3": "863092f89a22ce729f85867d29117f04970cb3a84bfdd356449d29a51e93c2e2",
+        "usr/lib/libcrypto.so.3": "5fe42daca95749c1925de615abbc2d86f2b135942c2146c25ea28f651ad28be4",
+        "usr/lib/libssl.so.3": "54478d8726ce3577ef1d42b73877caebf36714bb6486f3e76f411671a6df3eff",
         "usr/lib/ossl-modules/legacy.so": "9ee631cdc2e31b37175203e9427881d200f95e2b4e6ca6c564e957ad46444da7"
       },
       "vendor_files": {
@@ -122,8 +130,8 @@
         "usr/lib/engines-3/capi.so": "36a045b795d5427759570f0e361fcfd12b3088ee3a9e7d639d531827852f8571",
         "usr/lib/engines-3/loader_attic.so": "b51fe98f7716f8332b8edb3bc9ef71be45b67efc7a0081f5863f58b4b968e3c7",
         "usr/lib/engines-3/padlock.so": "c007ba8e8451aeccb0d19262532e97ca6ddc7e12db32d721318d7ccd9be9b520",
-        "usr/lib/libcrypto.so.3": "0858b778638160985c94fb3f5ba89a0e423d3e6828494adf3cbfc57f96b560d4",
-        "usr/lib/libssl.so.3": "ad6bf7b5fa6cf83fca55640b735d7363d7a34b1087835091af77a13408db17be",
+        "usr/lib/libcrypto.so.3": "29f6e0ab43b546cda9a9b01f8483ce5cd7c6275421eb396419c10d81334a8930",
+        "usr/lib/libssl.so.3": "a35b6c15fe51fadc57c4b3ad827de1f17fefcc4e4a442c4dd4d30e9300fcabd6",
         "usr/lib/ossl-modules/legacy.so": "fb7ebbb8e9654f1132ad7999605f86b246b2c1e6630871a11c57c5b6676bc988"
       },
       "vendor_files": {
@@ -138,7 +146,7 @@
       }
     }
   },
-  "patch_sha256": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
+  "patch_sha256": "9479088830ca56dc34a949554fed8b39503524bc3579b7af7084fc304f05b76c",
   "perl_helper_sha256": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
   "perl_lock_sha256": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
   "schema": "keep-openssl-build-v1",

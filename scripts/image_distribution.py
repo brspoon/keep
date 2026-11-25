@@ -8,11 +8,15 @@ not proof that arbitrary secrets cannot exist.
 import argparse
 import hashlib
 import importlib.metadata
+import importlib.util
 import io
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import subprocess
+import sys
+import sysconfig
 import tarfile
 
 
@@ -443,7 +447,7 @@ def notice(path):
             'text': body.decode('utf-8', errors='replace')}
 
 
-def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpat.so.1.13.1')):
+def expat_replacement_inventory(app=Path('/app'), library=Path('/usr/lib/libexpat.so.1.14.0')):
     """Capture actual bytes; acquisition separately replays the reviewed build."""
     paths = [app / 'EXPAT_BUILD.json', app / 'EXPAT_PATCHED_SECURITY.json']
     if not any(path.exists() or path.is_symlink() for path in paths):
@@ -578,6 +582,31 @@ def sqlite_cli_runtime_inventory(root=Path('/'), installed=None):
                        'require the separately bound all-image-layers evidence for ELF marker coverage.'}
 
 
+def python_backport_inventory():
+    stdlib = Path(sysconfig.get_path('stdlib'))
+    modules = {
+        'gzip': 'gzip.py', 'tarfile': 'tarfile.py', 'zipfile': 'zipfile/__init__.py',
+        'http.cookiejar': 'http/cookiejar.py', 'http.cookies': 'http/cookies.py',
+        'imaplib': 'imaplib.py', 'ssl': 'ssl.py',
+    }
+    files = {}
+    for module, name in modules.items():
+        path = stdlib / name
+        spec = importlib.util.find_spec(module)
+        if spec is None or spec.origin != str(path) or not path.is_file() or path.is_symlink():
+            raise ValueError('Python backport module does not resolve to its installed source')
+        bytecode = [path.with_suffix('.pyc'),
+                    *path.parent.glob('__pycache__/' + path.stem + '.*.pyc')]
+        if not any(cached.exists() or cached.is_symlink() for cached in bytecode):
+            files[name] = digest(path.read_bytes())
+    archive_cli = {}
+    for module in ('gzip', 'tarfile', 'zipfile'):
+        result = subprocess.run([sys.executable, '-B', '-m', module, '--help'],
+                                cwd='/app', capture_output=True, timeout=15)
+        archive_cli[module] = result.returncode == 0 and b'usage:' in result.stdout.lower()
+    return {'files': files, 'archive_cli': archive_cli}
+
+
 def runtime_inventory(*, http_framing=False):
     """Read actual installed metadata, without importing the application."""
     distributions = []
@@ -621,6 +650,7 @@ def runtime_inventory(*, http_framing=False):
         from http_framing_checks import verify_sources
         lock = json.loads(Path(__file__).with_name('http_framing_sources.json').read_text())
         result['http_framing'] = verify_sources(lock)
+        result['python_backports'] = python_backport_inventory()
     replacement = expat_replacement_inventory()
     if replacement is not None:
         result['expat_replacement'] = replacement
@@ -656,7 +686,7 @@ def main():
         parser.error(str(exc))
     try:
         result = runtime_inventory(http_framing=args.http_framing) if args.runtime else inspect_archive(args.archive, patterns)
-    except (OSError, ValueError, KeyError, tarfile.TarError):
+    except (OSError, ValueError, KeyError, tarfile.TarError, subprocess.TimeoutExpired):
         parser.error('Image review failed; inspect the input and configuration')
     print(json.dumps(redacted(result, patterns), indent=2))
     if not result.get('success', True):

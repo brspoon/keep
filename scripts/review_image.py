@@ -94,9 +94,80 @@ def exception_deadlines(policy):
             raise ValueError(f'{finding}: review deadline must use YYYY-MM-DD')
         deadlines[finding] = deadline
     component_deadlines = grype_component_deadlines(policy)
-    if set(deadlines) & set(component_deadlines):
+    backports = grype_backport_deadlines(policy)
+    if (set(deadlines) & set(component_deadlines)
+            or set(backports) & (set(deadlines) | set(component_deadlines))):
         raise ValueError('A Grype finding has conflicting review classifications')
     return deadlines
+
+
+def grype_backport_deadlines(policy):
+    rules = policy.get('grype_backport_reviews', {})
+    if not isinstance(rules, dict):
+        raise ValueError('Invalid Grype backport reviews')
+    deadlines = {}
+    for finding, rule in rules.items():
+        if not re.fullmatch(r'CVE-[0-9]{4}-[0-9]+', finding):
+            raise ValueError('Invalid Grype backport ID')
+        component = rule['component']
+        scopes = rule['matches_by_arch']
+        if component not in {'openssl', 'python'} or set(scopes) != set(DIRECT):
+            raise ValueError('Invalid Grype backport component or architecture')
+        for rows in scopes.values():
+            names = {row['package'] for row in rows}
+            allowed = {'openssl', 'libcrypto3', 'libssl3'} if component == 'openssl' else {'python-3.14'}
+            if names != allowed or len(names) != len(rows):
+                raise ValueError('Invalid Grype backport package set')
+        files = rule.get('python_files', {})
+        if bool(files) != (component == 'python') or any(
+                not re.fullmatch('[a-f0-9]{64}', value) for value in files.values()):
+            raise ValueError('Missing exact Python backport hashes')
+        review = rule['review']
+        start = datetime.date.fromisoformat(review['reviewed_on'])
+        end = datetime.date.fromisoformat(review['deadline'])
+        if end < start or not review['approval'].strip() or not review['remove_when'].strip():
+            raise ValueError('Invalid Grype backport review dates or approval')
+        deadlines[finding] = end
+    return deadlines
+
+
+def grype_backport_identity(match, arch):
+    vulnerability, package = match['vulnerability'], match['artifact']
+    native = {'amd64': 'x86_64', 'arm64': 'aarch64'}[arch]
+    metadata = package.get('metadata')
+    locations = package.get('locations')
+    if (package.get('metadataType') != 'ApkMetadata' or not isinstance(metadata, dict)
+            or metadata.get('Arch') != native or not isinstance(locations, list)
+            or len(locations) != 1 or not isinstance(locations[0], dict)
+            or locations[0].get('path') != '/lib/apk/db/installed'
+            or locations[0].get('accessPath') != '/lib/apk/db/installed'
+            or locations[0].get('annotations') != {'evidence': 'primary'}):
+        return None
+    details = json.dumps(match.get('matchDetails'), sort_keys=True, separators=(',', ':')).encode()
+    return {'severity': vulnerability.get('severity'), 'namespace': vulnerability.get('namespace'),
+            'package': package.get('name'), 'type': package.get('type'),
+            'version': package.get('version'), 'purl': package.get('purl'),
+            'match_details_sha256': hashlib.sha256(details).hexdigest()}
+
+
+def grype_backport_proof(rule, finding, inventory, arch, root):
+    if not isinstance(inventory, dict):
+        return False
+    if rule['component'] == 'openssl':
+        from collect_package_sources import verify_openssl_replacement
+        replacement = verify_openssl_replacement(inventory, arch, root=root)
+        lock = json.loads((root / 'scripts/openssl_security_patches.json').read_bytes())
+        commits = [row['commit'] for row in lock['patches'] if row['cve'] == finding]
+        return bool(commits) and all(commit in replacement['build_lock']['commits'] for commit in commits)
+    proof = inventory.get('python_backports')
+    if not isinstance(proof, dict) or not isinstance(proof.get('files'), dict):
+        return False
+    files = rule['python_files']
+    if any(proof['files'].get(name) != sha for name, sha in files.items()):
+        return False
+    if finding == 'CVE-2026-115791':
+        return proof.get('archive_cli') == {'gzip': True, 'tarfile': True, 'zipfile': True}
+    return True
 
 
 def grype_component_deadlines(policy):
@@ -233,6 +304,10 @@ def deadline_warnings(policy, today=None, warning_days=14):
                for section in ('exceptions', 'grype_component_reviews',
                                'scout_exceptions', 'scout_component_reviews')
                for finding, rule in policy.get(section, {}).items()]
+    reviews.extend(
+        (finding, match, datetime.date.fromisoformat(rule['review']['deadline']))
+        for finding, rule in policy.get('grype_backport_reviews', {}).items()
+        for match in rule['matches_by_arch']['amd64'])
     for finding, rule, deadline in sorted(reviews, key=lambda item: item[0]):
         remaining = (deadline - today).days
         if remaining <= warning_days:
@@ -265,7 +340,8 @@ def assess(report, scout, evidence, policy, arch, today=None, *, inventory=None,
                        for invocation in run.get('invocations', []))):
             raise ValueError('Incomplete Scout report')
     accepted, grype_not_affected, blocked = [], [], []
-    seen_grype_components = set()
+    seen_grype_components, seen_backports = set(), set()
+    backport_deadlines = grype_backport_deadlines(policy)
     for match in report['matches']:
         if not isinstance(match, dict):
             raise ValueError('Incomplete Grype finding')
@@ -279,6 +355,33 @@ def assess(report, scout, evidence, policy, arch, today=None, *, inventory=None,
         finding = vulnerability['id']
         rule = policy['exceptions'].get(finding)
         component_rule = policy.get('grype_component_reviews', {}).get(finding)
+        backport = policy.get('grype_backport_reviews', {}).get(finding)
+        if backport is not None:
+            entry = {'id': finding, 'package': package['name'], 'version': package['version'],
+                     'deadline': backport_deadlines[finding].isoformat()}
+            identity = (finding, package['name'])
+            if identity in seen_backports:
+                entry['reason'] = 'duplicate_backport_match'
+            elif grype_backport_identity(match, arch) not in backport['matches_by_arch'][arch]:
+                entry['reason'] = 'backport_review_mismatch'
+            elif policy.get('require_zero_findings', False):
+                entry['reason'] = 'finding_not_permitted'
+            elif today < datetime.date.fromisoformat(backport['review']['reviewed_on']):
+                entry['reason'] = 'backport_review_not_started'
+            elif today > backport_deadlines[finding]:
+                entry['reason'] = 'exception_expired'
+            elif image_config is None:
+                entry['reason'] = 'missing_backport_image_binding'
+            else:
+                try:
+                    valid = grype_backport_proof(backport, finding, inventory, arch, root)
+                except (ValueError, TypeError, KeyError, OSError, ImportError):
+                    valid = False
+                if not valid:
+                    entry['reason'] = 'invalid_backport_runtime_proof'
+            seen_backports.add(identity)
+            (blocked if 'reason' in entry else accepted).append(entry)
+            continue
         if component_rule is not None and rule is not None:
             raise ValueError('A Grype finding has conflicting review classifications')
         if component_rule is not None:
