@@ -18,7 +18,7 @@ class OpenSSLReviewTests(unittest.TestCase):
         self.inventory = {}
         self.config = 'a' * 64
         self.layers = {'config_sha256': self.config}
-        self.today = datetime.date(2026, 11, 17)
+        self.today = datetime.date(2026, 11, 25)
         for arch in ('amd64', 'arm64'):
             manifest = build.expected_manifest(arch)
             self.inventory[arch] = {'openssl_replacement': {
@@ -91,7 +91,7 @@ class OpenSSLReviewTests(unittest.TestCase):
         finding = self.finding('CVE-2026-107496')
         self.assertEqual(self.decision(finding, image_config_sha256='b' * 64),
                          'missing_openssl_image_binding')
-        self.today = datetime.date(2026, 11, 26)
+        self.today = datetime.date(2026, 12, 3)
         self.assertEqual(self.decision(finding), 'exception_expired')
 
 

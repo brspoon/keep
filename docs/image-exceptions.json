@@ -1,6 +1,6 @@
 {
   "base": "sha256:b945ad65f9dcea58d20d119a7a7d650517cb9d27ad26031ac5a6d3ceeaa972f7",
-  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 10, 2026 review of the immutable Keep 2.30.5 evidence and current upstream status found all five exact scopes below still needed: the three listed Python findings, the Alpine 3.24 musl 1.2.6-r3 Scout finding, and the exact SQLite command-line-shell component review. With explicit user approval, these exact scopes continue through November 18, 2026 UTC inclusive. The prior SQLite CVE-2026-119376 library scope and Scout 3.53.4-r0 SQLite shell scope are retired; if they recur they block. CVE-2026-12345 and CVE-2026-87910 remain retired. Candidate scans in 42406395894 found only these exact findings on both architectures; the scanner-policy gate failed pending this review and downstream source-archive gates did not run. The reviewed signed SQLite package contains only the library payload, and runtime plus all-layer evidence showed no shell, with documented detector limitations. Complete source archives and every functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard, hardened SQLite library and all existing protections. Raw reports and truthful counts remain visible. No other package, version, severity, finding, PURL, matcher identity or threshold is accepted. No automatic future renewal is permitted. The November 12 hashlib review additionally permits only CVE-2026-119170 at High for the exact Python 3.14.10-r1 vendor implementation with mandatory signed-module and native property-boundary proof. No runtime overlay or FIPS certification is claimed; the existing five scopes and their deadlines are unchanged. The five November 10 OpenSSL findings are conditionally classified only for the exact independently built upstream backports with mandatory native and corresponding-source proof; unchanged APK metadata and truthful hosted counts remain visible. The November 17, 2026 review continues these eleven exact scopes with explicit approval through November 25, 2026 UTC inclusive. All existing identity restrictions, evidence requirements and retirement conditions remain mandatory. No automatic renewal.",
+  "approval": "Zero Docker Hub and Scout findings remain the default requirement. The November 10, 2026 review of the immutable Keep 2.30.5 evidence and current upstream status found all five exact scopes below still needed: the three listed Python findings, the Alpine 3.24 musl 1.2.6-r3 Scout finding, and the exact SQLite command-line-shell component review. With explicit user approval, these exact scopes continue through November 18, 2026 UTC inclusive. The prior SQLite CVE-2026-119376 library scope and Scout 3.53.4-r0 SQLite shell scope are retired; if they recur they block. CVE-2026-12345 and CVE-2026-87910 remain retired. Candidate scans in 42406395894 found only these exact findings on both architectures; the scanner-policy gate failed pending this review and downstream source-archive gates did not run. The reviewed signed SQLite package contains only the library payload, and runtime plus all-layer evidence showed no shell, with documented detector limitations. Complete source archives and every functional/security/native/provenance/license gate remain mandatory. Changed candidates still require exact-commit main validation, original-byte promotion revalidation and completed unfiltered Docker Hub analysis for both exact native digests. Keep the socket correction, HTTP framing patches, cleanup descriptor guard, hardened SQLite library and all existing protections. Raw reports and truthful counts remain visible. No other package, version, severity, finding, PURL, matcher identity or threshold is accepted. No automatic future renewal is permitted. The November 12 hashlib review additionally permits only CVE-2026-119170 at High for the exact Python 3.14.10-r1 vendor implementation with mandatory signed-module and native property-boundary proof. No runtime overlay or FIPS certification is claimed; the existing five scopes and their deadlines are unchanged. The five November 10 OpenSSL findings are conditionally classified only for the exact independently built upstream backports with mandatory native and corresponding-source proof; unchanged APK metadata and truthful hosted counts remain visible. The November 25, 2026 UTC review of both native candidate reports from run 44224937836 continues these eleven exact scopes with explicit approval through December 2, 2026 UTC inclusive. All existing identity restrictions, evidence requirements and retirement conditions remain mandatory. No automatic renewal.",
   "reviewed_sources": {
     "Dockerfile": "6ce00ba0cd15c5a66bdfb2426f55228ca6bc79764dd6ca3f8228ca283a9ae592",
     "scripts/inspect_candidate.py": "8c1dcc1a7d7895cc1c5e1ab297ee78c28c1ed9ec7fd76bd64083ce646d52073f",
@@ -78,10 +78,10 @@
       "status": "fixed",
       "evidence": "Both exact signed DHI Python 3.14.10-r1 APKs retain identical poplib.py SHA256 a6ffff188814b56d95b043c31d9e0dfee51ac6d6e92afe74ab070cb6136b076f, containing the reviewed control-character rejection from upstream b234a2b67539f787e191d2ef19a7cbdce32874e7. The loaded POP3 controls pass on both native architectures. The generic Python CPE match does not account for this vendor correction. Both native qualification jobs in https://github.com/brspoon/keep/actions/runs/41329357665 at 33bf107 passed the application/install/recovery checks, all ten runtime security groups without skips, four dependency groups, signed provenance, complete source acquisition and matching-source/notice preparation. Original complete Grype reports contain exactly these two Python matches with no ignored matches; Scout contains only the unchanged exact musl false positive. Complete rebuilt source archives and fresh exact-commit validation remain required; preparation is not publication or deployment.",
       "review": {
-        "approval": "The November 10, 2026 user-approved review continues only CVE-2025-15367 at Medium severity for APK python-3.14 version 3.14.10-r1 through November 25, 2026 UTC inclusive. Accept only with all existing native/runtime/source/archive/license and hosted-analysis gates passing. Other identities, versions and severities block. No automatic future renewal.",
-        "deadline": "2026-11-25",
+        "approval": "The November 10, 2026 user-approved review continues only CVE-2025-15367 at Medium severity for APK python-3.14 version 3.14.10-r1 through December 2, 2026 UTC inclusive. Accept only with all existing native/runtime/source/archive/license and hosted-analysis gates passing. Other identities, versions and severities block. No automatic future renewal.",
+        "deadline": "2026-12-02",
         "remove_when": "Remove after a verified replacement or matcher correction eliminates this finding from complete unsuppressed native scans, with the reviewed POP3 controls and every existing provenance/source/license/runtime/native and hosted-analysis gate passing.",
-        "reviewed_on": "2026-11-17"
+        "reviewed_on": "2026-11-25"
       }
     },
     "CVE-2026-103995": {
@@ -92,10 +92,10 @@
       "status": "fixed",
       "evidence": "Both loaded native runtimes contain http.client SHA256 36abe47de47b604ca657de10f46793a7637cec725a3804828c9d3506960e3a96 and independent urllib3.response SHA256 f13e6031fbbdba0bc5d25c7ff0376104fc6f0946b1202efffc55ed04d69ffe9e. They carry upstream CPython 2eb2af805c156ca52b316bb4ced5e0ab3971d0ae and 9f52b443c002cccfb54bda0706a9276b6b4a109d, urllib3 5feb993421a48a508bc70c78e745337cc6415265 and separately attributed keep-http-framing-bounds-v1. Native probes reject malformed Content-Length and chunk-size grammar while preserving allowed whitespace, decimal conversion limits, ordinary bodies and connection handling. Generic package-version matching does not account for these exact source corrections. Both native qualification jobs in https://github.com/brspoon/keep/actions/runs/41329357665 at 33bf107 passed the application/install/recovery checks, all ten runtime security groups without skips, four dependency groups, signed provenance, complete source acquisition and matching-source/notice preparation. Original complete Grype reports contain exactly these two Python matches with no ignored matches; Scout contains only the unchanged exact musl false positive. Complete rebuilt source archives and fresh exact-commit validation remain required; preparation is not publication or deployment.",
       "review": {
-        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-103995 at Low severity for APK python-3.14 version 3.14.10-r1 through November 25, 2026 UTC inclusive. Accept only with all existing native/runtime/source/archive/license and hosted-analysis gates passing. Other identities, versions and severities block. No automatic future renewal.",
-        "deadline": "2026-11-25",
+        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-103995 at Low severity for APK python-3.14 version 3.14.10-r1 through December 2, 2026 UTC inclusive. Accept only with all existing native/runtime/source/archive/license and hosted-analysis gates passing. Other identities, versions and severities block. No automatic future renewal.",
+        "deadline": "2026-12-02",
         "remove_when": "Remove after a verified replacement or matcher correction eliminates this finding from complete unsuppressed native scans while preserving both HTTP parser corrections, whitespace/decimal-limit behavior and every existing provenance/source/license/runtime/native and hosted-analysis gate.",
-        "reviewed_on": "2026-11-17"
+        "reviewed_on": "2026-11-25"
       }
     },
     "CVE-2026-116566": {
@@ -106,10 +106,10 @@
       "status": "fixed",
       "evidence": "The exact DHI Python 3.14.10-r1 package is accompanied by Keep's rebuilt _socket extension carrying upstream embedded-NUL correction 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 with the vendor ABI, flags and pyconfig. Both native architecture probes reject embedded NUL bytes for host and port through raw and public getaddrinfo paths while preserving numeric/ordinary resolver and socketpair behavior. The original Grype reports in candidate run 42406395894 contain this exact Medium package-level CPE match on each architecture, with ignoredMatches empty. Full source-archive, matching source/license and exact-main gates remain mandatory; this review does not claim application exploitability or replace the native and hosted release gates.",
       "review": {
-        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-116566 at Medium severity for APK python-3.14 version 3.14.10-r1 through November 25, 2026 UTC inclusive. Require the exact local socket correction, resolver probes and every existing provenance/source/license/runtime/native and hosted-analysis gate. Other identities, versions or severities block. No automatic future renewal.",
-        "deadline": "2026-11-25",
+        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-116566 at Medium severity for APK python-3.14 version 3.14.10-r1 through December 2, 2026 UTC inclusive. Require the exact local socket correction, resolver probes and every existing provenance/source/license/runtime/native and hosted-analysis gate. Other identities, versions or severities block. No automatic future renewal.",
+        "deadline": "2026-12-02",
         "remove_when": "Remove after a verified vendor package or matcher correction eliminates this exact finding from complete unsuppressed native scans while preserving the socket correction and all other Python guards and release gates.",
-        "reviewed_on": "2026-11-17"
+        "reviewed_on": "2026-11-25"
       }
     },
     "CVE-2026-119170": {
@@ -120,9 +120,9 @@
       "status": "fixed",
       "evidence": "The immutable signed vendor _hashlib extension already enforces the intended OpenSSL property boundary. Native diagnostics in run 43310515856 verified all 12 named/generic/alias/public and cache-order cases on amd64 and arm64 with explicit default-provider loading, fips=yes, and direct EVP_MD_fetch positive (-fips and fips=no) and negative (default FIPS properties) controls. Security hashing is rejected and explicit nonsecurity hashing remains available. Exact vendor extension SHA256 values are 01d7d5bc85f7451db614cc9d58075e8d8ad2cbdb4b4d6ea948c967b42d8c50de (amd64) and 442f4c487f751effd548c6344c41038796702e34973bf1e0fd8fb1b96a2d887d (arm64). Package acquisition must verify each extension inside the original checksum-locked RSA-signed APK; final ordinary imports, mapped library hashes, the complete native property probes and SHA256/MD5/HMAC/PBKDF2 compatibility controls remain mandatory. No custom overlay, FIPS certification, ignored match or severity change is claimed. The generic Python version CPE cannot distinguish these checked vendor bytes. Full source/provenance/license and exact-main qualification remain required.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "Permit only this exact High Grype finding for the verified vendor Python 3.14.10-r1 implementation through November 25 UTC inclusive, with the newly mandatory signed-APK, mapped-module and native FIPS-property evidence on both architectures. This does not approve a vulnerable runtime or relax other findings.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "Permit only this exact High Grype finding for the verified vendor Python 3.14.10-r1 implementation through December 2 UTC inclusive, with the newly mandatory signed-APK, mapped-module and native FIPS-property evidence on both architectures. This does not approve a vulnerable runtime or relax other findings.",
         "remove_when": "Remove when complete unsuppressed scans stop matching this exact package, or a fully qualified vendor replacement removes the need. Changed extension bytes, missing probes, changed severity/package/version, or the review deadline block release."
       }
     }
@@ -146,9 +146,9 @@
       },
       "evidence": "Alpine stable v3.24 secdb identifies 1.2.6-r3 as fixed; edge separately uses r6. Immutable aports commit 8f79d39391b46d6dbf1800fb68b8212a21d5ee2e and patch SHA256 0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b carry upstream fix 7813e9119eb5fe681b6750b8a033a0490bca0941. Exact signed APKs, loaded default-libc hashes, benign regex and compatibility probes, complete matching-source archives and notices passed on native amd64 and arm64 in qualification 39728273258 at 3437692f4473856e875187cd05a55d129e915219. That run remained failed solely at Scout acceptance and cannot qualify publication. Original Scout 1.27.0 reports incorrectly apply the edge r6 threshold to stable r3. The correction report and original evidence are public at https://github.com/docker/scout-cli/issues/248. Every changed candidate must pass fresh complete qualification and exact-main validation; this scoped policy does not accept missing evidence. Fresh October 23 review reverified the four exact signed Alpine musl/musl-utils APKs, unchanged stable r3 and edge r6 official feeds, immutable recipe and complete patch equivalence to upstream. Qualification https://github.com/brspoon/keep/actions/runs/40017413915 at 996b45565161ad9d71dfcade9956ebfaeff2711d passed both native architectures, including default loaded-libc hashes 095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5 (amd64) and 53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793 (arm64), all bounded musl controls, complete unsuppressed scans and source/license notice preparation. Scout still reports only this exact musl scope; Grype contains only the two unchanged approved Python scopes. Final rebuilt source-archive and installed-notice verification, exact-main validation and original-byte promotion revalidation remain mandatory. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-107891 at HIGH severity for Alpine 3.24 APK musl 1.2.6-r3 with its unchanged exact PURL, erroneous affected range <1.2.6-r6 and fixed threshold 1.2.6-r6, through November 25, 2026 UTC inclusive. The original candidate reports in 42406395894 contain only this exact stable-r3 musl finding on each architecture; preserve the original severity and unfiltered hosted counts. Alpine stable r3 remains fixed; edge uses a separate r6 threshold. Other revisions, distributions, findings, packages and thresholds are not approved. No automatic future renewal.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-107891 at HIGH severity for Alpine 3.24 APK musl 1.2.6-r3 with its unchanged exact PURL, erroneous affected range <1.2.6-r6 and fixed threshold 1.2.6-r6, through December 2, 2026 UTC inclusive. The original candidate reports in 42406395894 contain only this exact stable-r3 musl finding on each architecture; preserve the original severity and unfiltered hosted counts. Alpine stable r3 remains fixed; edge uses a separate r6 threshold. Other revisions, distributions, findings, packages and thresholds are not approved. No automatic future renewal.",
         "remove_when": "Remove after a released or deployed Scout advisory/matcher correction eliminates this exact false match in complete unsuppressed native scans and actual completed Docker Hub analysis for both exact native digests, with all provenance/source/license/runtime gates passing. A verified dependency replacement may also retire it only after the same full qualification. An announcement, issue closure, relabeling or suppression does not qualify removal."
       }
     },
@@ -178,9 +178,9 @@
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 25 UTC review explicitly approves this exact HIGH Scout severity through December 2 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
@@ -210,9 +210,9 @@
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact MEDIUM Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 25 UTC review explicitly approves this exact MEDIUM Scout severity through December 2 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
@@ -242,9 +242,9 @@
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 25 UTC review explicitly approves this exact HIGH Scout severity through December 2 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
@@ -274,9 +274,9 @@
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 25 UTC review explicitly approves this exact HIGH Scout severity through December 2 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     },
@@ -306,9 +306,9 @@
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 17 review explicitly approves this exact HIGH Scout severity through November 25 UTC; all existing identity and native replacement proof requirements remain mandatory.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "Only this exact finding identity may pass when the fully qualified source-bound native replacement proof succeeds. Missing proof, incomplete native pins, changed payloads or expired review block release. The November 25 UTC review explicitly approves this exact HIGH Scout severity through December 2 UTC; all existing identity and native replacement proof requirements remain mandatory.",
         "remove_when": "Retire after a verified vendor replacement or corrected scanner metadata eliminates the match, with complete native, source, notice and hosted-image qualification. No automatic renewal."
       }
     }
@@ -343,9 +343,9 @@
         "scripts/sqlite_security_patches.json": "0309b5f618067978d0ef0c648d1e97ee83ea55ea4c543b42135927403cabd8a3"
       },
       "review": {
-        "reviewed_on": "2026-11-17",
-        "deadline": "2026-11-25",
-        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-119586 at High severity for the exact APK sqlite-libs 3.54.1-r0 Grype NVD CPE match shown here, and only when the exact scanned image configuration is independently bound to complete runtime and all-layer proof that the vulnerable SQLite command-line shell is absent. Keep the raw finding visible; do not mark the library fixed or suppress the report. Through November 25, 2026 UTC inclusive. No other package, architecture identity, CPE, matcher, constraint or finding is approved; no automatic future renewal.",
+        "reviewed_on": "2026-11-25",
+        "deadline": "2026-12-02",
+        "approval": "The November 10, 2026 user-approved review continues only CVE-2026-119586 at High severity for the exact APK sqlite-libs 3.54.1-r0 Grype NVD CPE match shown here, and only when the exact scanned image configuration is independently bound to complete runtime and all-layer proof that the vulnerable SQLite command-line shell is absent. Keep the raw finding visible; do not mark the library fixed or suppress the report. Through December 2, 2026 UTC inclusive. No other package, architecture identity, CPE, matcher, constraint or finding is approved; no automatic future renewal.",
         "remove_when": "Retire this component review when the exact finding disappears from complete unsuppressed scans after a verified upstream/package/matcher correction, or if the image shell status is no longer proven absent. Require all source, provenance, native and hosted-analysis gates."
       }
     }
