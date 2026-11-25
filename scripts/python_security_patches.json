@@ -216,5 +216,43 @@
         "after": "        if expires is Absent:\n            expires = None\n            discard = True\n\n        cookie = Cookie(version,\n                        name, value,\n                        port, port_specified,\n                        domain, domain_specified, domain_initial_dot,\n                        path, path_specified,\n                        secure,\n                        expires,\n                        discard,\n                        comment,\n                        comment_url,\n                        rest)\n\n        if expires is not None and expires <= self._now:\n            # RFC 6265 section 5.3 ignores the cookie entirely if its Domain\n            # attribute does not match the request host (step 6) before an\n            # existing cookie is removed (steps 11-12)\n            if self._policy.set_ok(cookie, request):\n                try:\n                    self.clear(domain, path, name)\n                except KeyError:\n                    pass\n                _debug(\"Expiring cookie, domain='%s', path='%s', name='%s'\",\n                       domain, path, name)\n            return None\n\n        return cookie\n\n    def _cookies_from_attrs_set(self, attrs_set, request):\n        cookie_tuples = self._normalized_cookie_tuples(attrs_set)\n"
       }
     ]
+  },
+  {
+    "path": "imaplib.py",
+    "commit": "9b2119c1ec5b07da2b43640d002752b32d9f1592",
+    "hunks": [
+      {
+        "before": "            ssl_context = ssl._create_stdlib_context()\n        typ, dat = self._simple_command(name)\n        if typ == 'OK':\n            self.sock = ssl_context.wrap_socket(self.sock,\n                                                server_hostname=self.host)\n            self._file = self.sock.makefile('rb')\n",
+        "after": "            ssl_context = ssl._create_stdlib_context()\n        typ, dat = self._simple_command(name)\n        if typ == 'OK':\n            if any(self._readbuf):\n                raise self.abort('unexpected data after STARTTLS response')\n            # Discard received state before TLS was established\n            # since data could have been injected by a MITM.\n            self._readbuf = []\n            self.untagged_responses = {}\n            self.sock = ssl_context.wrap_socket(self.sock,\n                                                server_hostname=self.host)\n            self._file = self.sock.makefile('rb')\n"
+      }
+    ]
+  },
+  {
+    "path": "http/cookies.py",
+    "commit": "a690c61fa59aa7b37f40f59ec1bfcd0016f13142",
+    "hunks": [
+      {
+        "before": "    def coded_value(self):\n        return self._coded_value\n\n    def __setitem__(self, K, V):\n        K = K.lower()\n        if not K in self._reserved:\n            raise CookieError(\"Invalid attribute %r\" % (K,))\n        if _has_control_character(K, V):\n            raise CookieError(f\"Control characters are not allowed in cookies {K!r} {V!r}\")\n        dict.__setitem__(self, K, V)\n\n    def setdefault(self, key, val=None):\n        key = key.lower()\n        if key not in self._reserved:\n            raise CookieError(\"Invalid attribute %r\" % (key,))\n        if _has_control_character(key, val):\n            raise CookieError(\"Control characters are not allowed in cookies %r %r\" % (key, val,))\n        return dict.setdefault(self, key, val)\n\n    def __eq__(self, morsel):\n",
+        "after": "    def coded_value(self):\n        return self._coded_value\n\n    def _check_attribute(self, key, val):\n        \"\"\"Normalize and validate an attribute name and value\n\n        Raise `CookieError` if the key is not a recognized attribute name or\n        value contains illegal characters. Otherwise return the canonicalized\n        key.\n        \"\"\"\n        key = key.lower()\n        val_str = str(val)\n        if key not in self._reserved:\n            raise CookieError(f\"Invalid attribute {key!r}\")\n        if _has_control_character(key, val_str):\n            raise CookieError(f\"Control characters are not allowed in cookies {key!r} {val!r}\")\n        # Comment is quoted like a cookie value so semicolons can be escaped.\n        # No other attribute expects `;` in the value, so refuse it.\n        if key != 'comment' and ';' in val_str:\n            raise CookieError(f\"Reserved character ';' is not allowed in cookie attribute value {key!r} {val!r}\")\n        return key\n\n    def __setitem__(self, K, V):\n        K = self._check_attribute(K, V)\n        dict.__setitem__(self, K, V)\n\n    def setdefault(self, key, val=None):\n        key = self._check_attribute(key, val)\n        return dict.setdefault(self, key, val)\n\n    def __eq__(self, morsel):\n"
+      },
+      {
+        "before": "    def update(self, values):\n        data = {}\n        for key, val in dict(values).items():\n            key = key.lower()\n            if key not in self._reserved:\n                raise CookieError(\"Invalid attribute %r\" % (key,))\n            if _has_control_character(key, val):\n                raise CookieError(\"Control characters are not allowed in \"\n                                  f\"cookies {key!r} {val!r}\")\n            data[key] = val\n        dict.update(self, data)\n\n",
+        "after": "    def update(self, values):\n        data = {}\n        for key, val in dict(values).items():\n            key = self._check_attribute(key, val)\n            data[key] = val\n        dict.update(self, data)\n\n"
+      }
+    ]
+  },
+  {
+    "path": "ssl.py",
+    "commit": "c02f192de40a27387937a5acc08d97de0905b472",
+    "hunks": [
+      {
+        "before": "                           ca_certs=None, timeout=_GLOBAL_DEFAULT_TIMEOUT):\n    \"\"\"Retrieve the certificate from the server at the specified address,\n    and return it as a PEM-encoded string.\n    If 'ca_certs' is specified, validate the server cert against it.\n    If 'ssl_version' is specified, use it in the connection attempt.\n    If 'timeout' is specified, use it in the connection attempt.\n    \"\"\"\n",
+        "after": "                           ca_certs=None, timeout=_GLOBAL_DEFAULT_TIMEOUT):\n    \"\"\"Retrieve the certificate from the server at the specified address,\n    and return it as a PEM-encoded string.\n    If 'ca_certs' is specified, validate the server cert against it and\n    check that it matches the hostname.\n    If 'ssl_version' is specified, use it in the connection attempt.\n    If 'timeout' is specified, use it in the connection attempt.\n    \"\"\"\n"
+      },
+      {
+        "before": "        cert_reqs = CERT_NONE\n    context = _create_stdlib_context(ssl_version,\n                                     cert_reqs=cert_reqs,\n                                     cafile=ca_certs)\n    with create_connection(addr, timeout=timeout) as sock:\n        with context.wrap_socket(sock, server_hostname=host) as sslsock:\n",
+        "after": "        cert_reqs = CERT_NONE\n    context = _create_stdlib_context(ssl_version,\n                                     cert_reqs=cert_reqs,\n                                     check_hostname=ca_certs is not None,\n                                     cafile=ca_certs)\n    with create_connection(addr, timeout=timeout) as sock:\n        with context.wrap_socket(sock, server_hostname=host) as sslsock:\n"
+      }
+    ]
   }
 ]
