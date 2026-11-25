@@ -206,5 +206,15 @@
         "after": "        if length and not self.chunked and _is_legal_content_length(length):\n            try:\n                self.length = int(length)\n            except ValueError:\n                # Preserve unknown-length handling at the decimal conversion limit.\n                self.length = None\n"
       }
     ]
+  },
+  {
+    "path": "http/cookiejar.py",
+    "commit": "ac1d49f4fbb33941475c5aa3cb663ab39d64cb73",
+    "hunks": [
+      {
+        "before": "        if expires is Absent:\n            expires = None\n            discard = True\n        elif expires <= self._now:\n            # Expiry date in past is request to delete cookie.  This can't be\n            # in DefaultCookiePolicy, because can't delete cookies there.\n            try:\n                self.clear(domain, path, name)\n            except KeyError:\n                pass\n            _debug(\"Expiring cookie, domain='%s', path='%s', name='%s'\",\n                   domain, path, name)\n            return None\n\n        return Cookie(version,\n                      name, value,\n                      port, port_specified,\n                      domain, domain_specified, domain_initial_dot,\n                      path, path_specified,\n                      secure,\n                      expires,\n                      discard,\n                      comment,\n                      comment_url,\n                      rest)\n\n    def _cookies_from_attrs_set(self, attrs_set, request):\n        cookie_tuples = self._normalized_cookie_tuples(attrs_set)\n",
+        "after": "        if expires is Absent:\n            expires = None\n            discard = True\n\n        cookie = Cookie(version,\n                        name, value,\n                        port, port_specified,\n                        domain, domain_specified, domain_initial_dot,\n                        path, path_specified,\n                        secure,\n                        expires,\n                        discard,\n                        comment,\n                        comment_url,\n                        rest)\n\n        if expires is not None and expires <= self._now:\n            # RFC 6265 section 5.3 ignores the cookie entirely if its Domain\n            # attribute does not match the request host (step 6) before an\n            # existing cookie is removed (steps 11-12)\n            if self._policy.set_ok(cookie, request):\n                try:\n                    self.clear(domain, path, name)\n                except KeyError:\n                    pass\n                _debug(\"Expiring cookie, domain='%s', path='%s', name='%s'\",\n                       domain, path, name)\n            return None\n\n        return cookie\n\n    def _cookies_from_attrs_set(self, attrs_set, request):\n        cookie_tuples = self._normalized_cookie_tuples(attrs_set)\n"
+      }
+    ]
   }
 ]
