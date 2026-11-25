@@ -33,8 +33,8 @@ else:
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = Path('/opt/keep-expat-build')
-SOURCE_DIRECTORY = 'expat-2.10.0'
-LIBRARY = 'libexpat.so.1.13.1'
+SOURCE_DIRECTORY = 'expat-2.11.0'
+LIBRARY = 'libexpat.so.1.14.0'
 PATCH_PATH = 'scripts/expat_security_patches.json'
 BUILD_SCRIPT = 'scripts/build_patched_expat.py'
 FORTIFY_HELPER = 'scripts/fortify_header_sources.py'
@@ -43,26 +43,26 @@ CPP_HELPER = 'scripts/dhi_cpp_packages.py'
 CPP_HELPER_SHA256 = '3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb'
 BUILD_TOOLS_HELPER = 'scripts/expat_build_tools.py'
 BUILD_TOOLS_HELPER_SHA256 = '648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa'
-BUILD_IDENTITY = 'keep-expat-2.10.0-release-v1'
-UPSTREAM_VERSION = '2.10.0'
-UPSTREAM_RELEASE = {'tag': 'R_2_10_0', 'commit': 'a70841d9ffa64ddde29ab824ed6305035ebe4c47', 'url': 'https://github.com/libexpat/libexpat/releases/tag/R_2_10_0'}
+BUILD_IDENTITY = 'keep-expat-2.11.0-release-v1'
+UPSTREAM_VERSION = '2.11.0'
+UPSTREAM_RELEASE = {'tag': 'R_2_11_0', 'commit': 'bbdb35e85b68284cb20ad8876c56e9b80175babb', 'url': 'https://github.com/libexpat/libexpat/releases/tag/R_2_11_0'}
 BUILD_IMAGE = ('dhi.io/python:3.14-alpine3.24-dev@sha256:'
                'b718c87cdd7bb7dc88d6bbe347f81123b9cf6f2dac6eec6d4828c2cd8262582d')
-SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz'
-SOURCE_SHA256 = 'c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f'
-SOURCE_SHA512 = 'bd61f361d823f67586dad246fa4d4abbe3d22f5a0f9a28401e7a2fc96753d5bae33fbe4068fae72f016998d0da9d8c92edc4abd2fe8a8e4aafc775a8ab547c44'
+SOURCE_URL = 'https://github.com/libexpat/libexpat/releases/download/R_2_11_0/expat-2.11.0.tar.xz'
+SOURCE_SHA256 = '61e7614b602201c28a189dafee78f5bceaee192bbde46a930752ff09cf5542fa'
+SOURCE_SHA512 = '9a820eba2d2fc966d891e60e38c832a1477e16aa2f35c2f0e9cec36b10a70cccbf6b94dd2750b74925b74210543c57acb22b344ce522b7d03bfdadeeacbcca03'
 COPYING_SHA256 = '31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87'
-PATCH_SHA256 = 'bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae'
-RECIPE_URL = 'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=e18a81f6461517119d85f2650a4f3e5e01861d28'
-RECIPE_SHA256 = '8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed'
+PATCH_SHA256 = 'c416dd1b862bfdd5c9f4ed24df340e4c0965602519d3647cbe9883cc67c8aaa0'
+RECIPE_URL = 'https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=17a850105cb64f89503b8f0735b3330a65830387'
+RECIPE_SHA256 = '639f1221c09ac2f3598cd8b4497c78be21a9e20ce671b298becf8531473ddf57'
 COMMITS = ()
 LOCAL_PATCHES = ()
-ORIGINAL_FILES = {'lib/xmlparse.c': '9443794afe78dfab5cccf27e803b30359a55dbf9eaadbd54297522b72356833c', 'lib/xcs.c': 'ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8', 'lib/internal.h': '2a2821fc7a2982978a8630e26cf3b8158ab21a2c2f2d06354f8c0c6547dded44', 'lib/entities.h': 'ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92', 'tests/acc_tests.c': 'b14268ec3f20b830742b66ee0144dd9264f70de5371de651ab34346f24a80c1b', 'tests/alloc_tests.c': '0ae93e47a57c670beec81b899108a2691f0a46af74a389762c41aff53ddfa8b9', 'tests/misc_tests.c': 'a2e4bd074fbd83a87ab298e79a13599e5a4afe65f542d6026a314b98a4ddfd9b'}
+ORIGINAL_FILES = {'lib/xmlparse.c': '9fb20afd85f627248e637f150f5f1031bdaaed2ec3b96fd1c99d56a02fda74d9', 'lib/xcs.c': 'ab9228cf9662af965bd2222cae6797c6379ab0408501965294c00ca828f6bcb8', 'lib/internal.h': '959b292f428b4ba899a620ae9c214e5a731396982aa445a997705bd8a420a6c8', 'lib/entities.h': 'ed3546fec0e33f14a99c95753357becfaec7c577965dc442d1cefd437acc5e92', 'tests/acc_tests.c': '15452296497c3a241852eea8c03657d8a15a2c78447743951764528658669817', 'tests/alloc_tests.c': '5772f1a59c60c16ed53982ebbf169a06b6081ca13fd6b87137c75f0eb73261fa', 'tests/misc_tests.c': '46f513837611c15cd97b8998abdc1c7b90f1faea0a8533f384b23c0109cf8ee7'}
 PATCHED_FILES = dict(ORIGINAL_FILES)
 
 TARGETS = {'amd64': 'x86_64-alpine-linux-musl', 'arm64': 'aarch64-alpine-linux-musl'}
-# Commit timestamp of the reviewed R_2_10_0 release.
-SOURCE_DATE_EPOCH = '1793609693'
+# Commit timestamp of the reviewed R_2_11_0 release.
+SOURCE_DATE_EPOCH = '1795444433'
 CONFIGURE_OPTIONS = ('--prefix=/usr', '--mandir=/usr/share/man', '--enable-static')
 ENVIRONMENT = {
     'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
@@ -137,7 +137,7 @@ def immutable_spec():
     return {
         'schema': 'keep-expat-build-v1', 'identity': BUILD_IDENTITY,
         'upstream_release': dict(UPSTREAM_RELEASE),
-        'upstream_version': UPSTREAM_VERSION, 'vendor_package_version': '2.10.0-r0',
+        'upstream_version': UPSTREAM_VERSION, 'vendor_package_version': '2.11.0-r0',
         'source': {'url': SOURCE_URL, 'sha256': SOURCE_SHA256, 'sha512': SOURCE_SHA512,
                    'directory': SOURCE_DIRECTORY, 'copying_sha256': COPYING_SHA256},
         'vendor_recipe': {'url': RECIPE_URL, 'sha256': RECIPE_SHA256},
@@ -228,7 +228,7 @@ def _manifest(spec, arch, library_hash, compiler_hash, *, qualified):
         'schema': 'keep-expat-patched-security-v1', 'architecture': arch,
         'qualified': qualified, 'purpose': 'reviewed-build' if qualified else 'preparation-only',
         'identity': BUILD_IDENTITY, 'upstream_version': UPSTREAM_VERSION,
-        'vendor_package_version': '2.10.0-r0',
+        'vendor_package_version': '2.11.0-r0',
         'vendor_apk_signature_applies_to_replacement': False,
         'build_lock_sha256': digest(json_bytes(spec)),
         'build_script_sha256': spec['build_script_sha256'],
