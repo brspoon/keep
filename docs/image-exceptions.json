@@ -12,7 +12,7 @@
     "scripts/runtime_dependency_checks.py": "5c432d3520caf7cd762fb70ef89ed29bf279066791c44ae9be3b9f4eaf00724e",
     "docs/os-package-sources.json": "bb89de5cfc5217696526ce04b2bed4381e9ac912d2a57248d8cd1c9cd36dad21",
     ".dockerignore": "68164043764ee06cd043e295306a1b7937c1890ccfab5c88662cc93900b65ba9",
-    "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
+    "scripts/review_image.py": "5dfb9df721d4666557a90f95be96c0327e45921edf60cfb93677fa63dd67540f",
     "scripts/alpine_zlib_sources.py": "e3b4d5efc7a31dd04bd316458f2ece1a0a72b0f6b7ec7a1d6185a2f058c7456d",
     "scripts/dhi_python_packages.py": "87fff6e3b52a07d5937e29c1d283cf808591bf17721a4148a50d43b3c97f3877",
     "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
@@ -41,7 +41,7 @@
     "scripts/expat_security_patches.json": "c416dd1b862bfdd5c9f4ed24df340e4c0965602519d3647cbe9883cc67c8aaa0",
     "scripts/expat_security_checks.py": "293e15b76deb820aacc27a33f7d3f9c08f3f2669882a90b6c6e2a65aa30b786d",
     "docs/expat-build.json": "147773a6b9e4a278176d82db183b297d732a7dbc1916604d2f0576d11321bdae",
-    "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+    "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
     ".github/workflows/runtime-base-review.yml": "85593d8dc93d1835dc725f23a214195c7623160da75845a5ef97e788e72e3c46",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
     "scripts/dhi_cpp_packages.py": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb",
@@ -169,7 +169,7 @@
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "db1203526fada064aff5afe01c29e20abab9a886dcf4ea27a6a5e0134b1d083c",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
-        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+        "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
@@ -201,7 +201,7 @@
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "db1203526fada064aff5afe01c29e20abab9a886dcf4ea27a6a5e0134b1d083c",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
-        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+        "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
@@ -233,7 +233,7 @@
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "db1203526fada064aff5afe01c29e20abab9a886dcf4ea27a6a5e0134b1d083c",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
-        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+        "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
@@ -265,7 +265,7 @@
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "db1203526fada064aff5afe01c29e20abab9a886dcf4ea27a6a5e0134b1d083c",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
-        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+        "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
@@ -297,7 +297,7 @@
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "db1203526fada064aff5afe01c29e20abab9a886dcf4ea27a6a5e0134b1d083c",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
-        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+        "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
@@ -314,6 +314,1018 @@
     }
   },
   "scout_component_reviews": {},
+  "grype_backport_reviews": {
+    "CVE-2026-107493": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "f39c14c89de8e8c091d62ab3d4db85da007932f5cbdfbf66504826117a2481ae",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f39c14c89de8e8c091d62ab3d4db85da007932f5cbdfbf66504826117a2481ae",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f39c14c89de8e8c091d62ab3d4db85da007932f5cbdfbf66504826117a2481ae",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "f39c14c89de8e8c091d62ab3d4db85da007932f5cbdfbf66504826117a2481ae",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f39c14c89de8e8c091d62ab3d4db85da007932f5cbdfbf66504826117a2481ae",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f39c14c89de8e8c091d62ab3d4db85da007932f5cbdfbf66504826117a2481ae",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-107494": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "d910fd05bf298b2175bc36486c291c1b54ffabc9dbda705106d81ef660bcd978",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "d910fd05bf298b2175bc36486c291c1b54ffabc9dbda705106d81ef660bcd978",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "d910fd05bf298b2175bc36486c291c1b54ffabc9dbda705106d81ef660bcd978",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "d910fd05bf298b2175bc36486c291c1b54ffabc9dbda705106d81ef660bcd978",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "d910fd05bf298b2175bc36486c291c1b54ffabc9dbda705106d81ef660bcd978",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "d910fd05bf298b2175bc36486c291c1b54ffabc9dbda705106d81ef660bcd978",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-107496": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "fcbea696541401f6d189448104b18a321d97f4e0fe08be2c289a22ad655efc2e",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "fcbea696541401f6d189448104b18a321d97f4e0fe08be2c289a22ad655efc2e",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "1ad1c0926ef0b48a26f9ea5709f4d6a4961159efe0349070e8ced3fc297dc753",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "fcbea696541401f6d189448104b18a321d97f4e0fe08be2c289a22ad655efc2e",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "fcbea696541401f6d189448104b18a321d97f4e0fe08be2c289a22ad655efc2e",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "1ad1c0926ef0b48a26f9ea5709f4d6a4961159efe0349070e8ced3fc297dc753",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-115559": {
+      "component": "python",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "7fc5ac4452b5eba26348fb740400b2efcf0b311706b4d53ac1769482e156a696",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=x86_64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "7fc5ac4452b5eba26348fb740400b2efcf0b311706b4d53ac1769482e156a696",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=aarch64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ]
+      },
+      "python_files": {
+        "imaplib.py": "5c184c1a863f0d8a856f54b8628e66cf0c3945c6183a0f553d1a70dc2bdec58b"
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-115791": {
+      "component": "python",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "01ed3b1fcb5a319878cfb0f60808ad04dbbb630b981b5efed7f77027423e7259",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=x86_64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "01ed3b1fcb5a319878cfb0f60808ad04dbbb630b981b5efed7f77027423e7259",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=aarch64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ]
+      },
+      "python_files": {
+        "gzip.py": "a355d64d513b495e37d2429aebba4ff2b3ae55da13f6f43715cb0d7f6d757422",
+        "tarfile.py": "fc653e241b8e0450a0c4ee40145f2747a3591973fa35fedecd612a5183818733",
+        "zipfile/__init__.py": "fb5756319a4ae70ce5bb65d417768d696ca3989e49434ebc6b34c73fa817ec4e"
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-121482": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "17bb149f33e8dcf5d02d6171dc42bf6cbf5f39fe088d0e7a9cac65fe3eee5c3b",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "17bb149f33e8dcf5d02d6171dc42bf6cbf5f39fe088d0e7a9cac65fe3eee5c3b",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "17bb149f33e8dcf5d02d6171dc42bf6cbf5f39fe088d0e7a9cac65fe3eee5c3b",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "17bb149f33e8dcf5d02d6171dc42bf6cbf5f39fe088d0e7a9cac65fe3eee5c3b",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "17bb149f33e8dcf5d02d6171dc42bf6cbf5f39fe088d0e7a9cac65fe3eee5c3b",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "17bb149f33e8dcf5d02d6171dc42bf6cbf5f39fe088d0e7a9cac65fe3eee5c3b",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-124249": {
+      "component": "python",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "1ef5b71807e73b1574f8192bff0c59014714ee9cbb9363730c8397b520d3d9d8",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=x86_64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "1ef5b71807e73b1574f8192bff0c59014714ee9cbb9363730c8397b520d3d9d8",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=aarch64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ]
+      },
+      "python_files": {
+        "http/cookiejar.py": "2b82ea24d49f29f750228e29e8f7f1658305da3c50c4cc77b0a3398255be93de"
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-124709": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "a77fb5543f5297a3a7add467e96bddf7c9482c4c24d2ab6cd950f345997074b2",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "a77fb5543f5297a3a7add467e96bddf7c9482c4c24d2ab6cd950f345997074b2",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "a77fb5543f5297a3a7add467e96bddf7c9482c4c24d2ab6cd950f345997074b2",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "a77fb5543f5297a3a7add467e96bddf7c9482c4c24d2ab6cd950f345997074b2",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "a77fb5543f5297a3a7add467e96bddf7c9482c4c24d2ab6cd950f345997074b2",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "a77fb5543f5297a3a7add467e96bddf7c9482c4c24d2ab6cd950f345997074b2",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-16052": {
+      "component": "python",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "e29d8ee59523b459a4f8345c471e371c2a9464c4991a51fd3283d82a4ae3cb3c",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=x86_64&distro=alpine-3.24",
+            "severity": "Low",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "e29d8ee59523b459a4f8345c471e371c2a9464c4991a51fd3283d82a4ae3cb3c",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=aarch64&distro=alpine-3.24",
+            "severity": "Low",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ]
+      },
+      "python_files": {
+        "http/cookies.py": "002e797f1a07e7ff0f811364815c63ea227acf33ccb7f77f8d0f146b3edc62ad"
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-19552": {
+      "component": "python",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "0cdbaa7ac6b8adc7db926b82c199eacd0c834028491a485a9442950b84a1acec",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=x86_64&distro=alpine-3.24",
+            "severity": "Negligible",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "0cdbaa7ac6b8adc7db926b82c199eacd0c834028491a485a9442950b84a1acec",
+            "namespace": "nvd:cpe",
+            "package": "python-3.14",
+            "purl": "pkg:apk/alpine/python-3.14@3.14.10-r1?arch=aarch64&distro=alpine-3.24",
+            "severity": "Negligible",
+            "type": "apk",
+            "version": "3.14.10-r1"
+          }
+        ]
+      },
+      "python_files": {
+        "ssl.py": "2b3ca918832caf77076ba0b16c3954515f43166cf55ef13530d0a294d3ec8826"
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-35190": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "e87c22fef07208ee4a3087b6ddb76331206f26649ad282ef6a98f54ee13d2d88",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "e87c22fef07208ee4a3087b6ddb76331206f26649ad282ef6a98f54ee13d2d88",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "e87c22fef07208ee4a3087b6ddb76331206f26649ad282ef6a98f54ee13d2d88",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "e87c22fef07208ee4a3087b6ddb76331206f26649ad282ef6a98f54ee13d2d88",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "e87c22fef07208ee4a3087b6ddb76331206f26649ad282ef6a98f54ee13d2d88",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "e87c22fef07208ee4a3087b6ddb76331206f26649ad282ef6a98f54ee13d2d88",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-84786": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "2508d6926f06add3b79e717d4b8161af47224a6654a76c9f123155951d8c2287",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "2508d6926f06add3b79e717d4b8161af47224a6654a76c9f123155951d8c2287",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "2508d6926f06add3b79e717d4b8161af47224a6654a76c9f123155951d8c2287",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "2508d6926f06add3b79e717d4b8161af47224a6654a76c9f123155951d8c2287",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "2508d6926f06add3b79e717d4b8161af47224a6654a76c9f123155951d8c2287",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "2508d6926f06add3b79e717d4b8161af47224a6654a76c9f123155951d8c2287",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-88822": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "f0c701ca90d2b6e6a322f5338806b96e02207f1a7190d4eb460845607f8b0cb7",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f0c701ca90d2b6e6a322f5338806b96e02207f1a7190d4eb460845607f8b0cb7",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "b3e04763f06a14b97c98225d4f9cab3ee827dc70750218da5709635095b6c0cd",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "f0c701ca90d2b6e6a322f5338806b96e02207f1a7190d4eb460845607f8b0cb7",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f0c701ca90d2b6e6a322f5338806b96e02207f1a7190d4eb460845607f8b0cb7",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "b3e04763f06a14b97c98225d4f9cab3ee827dc70750218da5709635095b6c0cd",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-88823": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "125ae7011f9d70a342e198011476de62b9a24ff3eb5f5d613fc39e00355da292",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "125ae7011f9d70a342e198011476de62b9a24ff3eb5f5d613fc39e00355da292",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "962536c136056decaa9f9e1007973197b0d6b04826973295bf04e4eeb8cb938b",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "125ae7011f9d70a342e198011476de62b9a24ff3eb5f5d613fc39e00355da292",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "125ae7011f9d70a342e198011476de62b9a24ff3eb5f5d613fc39e00355da292",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "962536c136056decaa9f9e1007973197b0d6b04826973295bf04e4eeb8cb938b",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-95690": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "de20c6ded5740c95b49ef3809f2a1f418603f7c2592a8e166e3277f657e81869",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "de20c6ded5740c95b49ef3809f2a1f418603f7c2592a8e166e3277f657e81869",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "de20c6ded5740c95b49ef3809f2a1f418603f7c2592a8e166e3277f657e81869",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "de20c6ded5740c95b49ef3809f2a1f418603f7c2592a8e166e3277f657e81869",
+            "namespace": "nvd:cpe",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "de20c6ded5740c95b49ef3809f2a1f418603f7c2592a8e166e3277f657e81869",
+            "namespace": "nvd:cpe",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "de20c6ded5740c95b49ef3809f2a1f418603f7c2592a8e166e3277f657e81869",
+            "namespace": "nvd:cpe",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "Medium",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-95691": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "819df139866c615ce740654885bfc523f4bc0a322625b4a33a3cb15c0cd4230b",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "819df139866c615ce740654885bfc523f4bc0a322625b4a33a3cb15c0cd4230b",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "74af44d6061d71b9f9e989050d16ab400ab08e55adfed4a1fe4441dc75e75158",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "819df139866c615ce740654885bfc523f4bc0a322625b4a33a3cb15c0cd4230b",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "819df139866c615ce740654885bfc523f4bc0a322625b4a33a3cb15c0cd4230b",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "74af44d6061d71b9f9e989050d16ab400ab08e55adfed4a1fe4441dc75e75158",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    },
+    "CVE-2026-95692": {
+      "component": "openssl",
+      "matches_by_arch": {
+        "amd64": [
+          {
+            "match_details_sha256": "1d1f059994da564a0e8949cf94557671320764e8115999947182ceb6d7b58d6a",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "1d1f059994da564a0e8949cf94557671320764e8115999947182ceb6d7b58d6a",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=x86_64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f2c46d1e4c76c38186a21fa4bc12496d381b5c6ce6760bd723afed467ac2fda7",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=x86_64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ],
+        "arm64": [
+          {
+            "match_details_sha256": "1d1f059994da564a0e8949cf94557671320764e8115999947182ceb6d7b58d6a",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libcrypto3",
+            "purl": "pkg:apk/alpine/libcrypto3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "1d1f059994da564a0e8949cf94557671320764e8115999947182ceb6d7b58d6a",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "libssl3",
+            "purl": "pkg:apk/alpine/libssl3@3.5.9-r0?arch=aarch64&distro=alpine-3.24&upstream=openssl",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          },
+          {
+            "match_details_sha256": "f2c46d1e4c76c38186a21fa4bc12496d381b5c6ce6760bd723afed467ac2fda7",
+            "namespace": "alpine:distro:alpine:3.24",
+            "package": "openssl",
+            "purl": "pkg:apk/alpine/openssl@3.5.9-r0?arch=aarch64&distro=alpine-3.24",
+            "severity": "High",
+            "type": "apk",
+            "version": "3.5.9-r0"
+          }
+        ]
+      },
+      "review": {
+        "approval": "Maintainer approved exact run 111 Grype scopes on 2026-11-25, conditional on native runtime proof.",
+        "deadline": "2026-12-02",
+        "remove_when": "The unsuppressed scan clears this exact reviewed package match.",
+        "reviewed_on": "2026-11-25"
+      }
+    }
+  },
   "grype_component_reviews": {
     "CVE-2026-119586": {
       "status": "not_affected",
@@ -337,8 +1349,8 @@
         "docs/sqlite-build.json": "94fb54b6d7015d3ba652e2e1de205161e04d20f7091fa4b0292e5a593e9ccd92",
         "scripts/build_patched_sqlite.py": "b939a1b8df71e664e6f0fba766f6dd7b50a22fcc5a6a3a1fd8e818ecabbeab2d",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
-        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
-        "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
+        "scripts/image_distribution.py": "868196ece45ae13ccbc0175cc4c1bcf04389ae5b3d7e92521104d88a644eaeed",
+        "scripts/review_image.py": "5dfb9df721d4666557a90f95be96c0327e45921edf60cfb93677fa63dd67540f",
         "scripts/sqlite_security_checks.py": "beb0a8c5bcd873b5139e45144fe16adcb19d9d607c63a03e08c05572fb125085",
         "scripts/sqlite_security_patches.json": "0309b5f618067978d0ef0c648d1e97ee83ea55ea4c543b42135927403cabd8a3"
       },
