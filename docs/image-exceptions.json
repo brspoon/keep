@@ -62,7 +62,7 @@
     "docs/sqlite-build.json": "94fb54b6d7015d3ba652e2e1de205161e04d20f7091fa4b0292e5a593e9ccd92",
     "scripts/alpine_sqlite_sources.py": "d8ce1831d2dd38ab3ec8cd5e8a3b7d628eb9e048d2d783168470d31c0609821b",
     "scripts/hashlib_security_checks.py": "f1792656ccca3aeb84825dc454f64a8dfe97feed7cac91d96af55d4f9b284c25",
-    "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
+    "docs/openssl-build.json": "a32ffd569c8f95a632efcad8ae8fd9dcb8ed0371dcbb6381a8d8db81fb7d613d",
     "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
     "scripts/openssl_security_patches.json": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
     "docs/openssl-build-tools.json": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
@@ -165,7 +165,7 @@
       "fixed_version": "3.5.9-r1",
       "source_bindings": {
         "docs/openssl-build-tools.json": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
-        "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
+        "docs/openssl-build.json": "a32ffd569c8f95a632efcad8ae8fd9dcb8ed0371dcbb6381a8d8db81fb7d613d",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
@@ -197,7 +197,7 @@
       "fixed_version": "3.5.9-r1",
       "source_bindings": {
         "docs/openssl-build-tools.json": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
-        "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
+        "docs/openssl-build.json": "a32ffd569c8f95a632efcad8ae8fd9dcb8ed0371dcbb6381a8d8db81fb7d613d",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
@@ -229,7 +229,7 @@
       "fixed_version": "3.5.9-r1",
       "source_bindings": {
         "docs/openssl-build-tools.json": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
-        "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
+        "docs/openssl-build.json": "a32ffd569c8f95a632efcad8ae8fd9dcb8ed0371dcbb6381a8d8db81fb7d613d",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
@@ -261,7 +261,7 @@
       "fixed_version": "3.5.9-r1",
       "source_bindings": {
         "docs/openssl-build-tools.json": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
-        "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
+        "docs/openssl-build.json": "a32ffd569c8f95a632efcad8ae8fd9dcb8ed0371dcbb6381a8d8db81fb7d613d",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
@@ -293,7 +293,7 @@
       "fixed_version": "3.5.9-r1",
       "source_bindings": {
         "docs/openssl-build-tools.json": "ab1c9835a194ff22f161d9498268fa34e1b12e731cad548cd12941cf74b32cc8",
-        "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
+        "docs/openssl-build.json": "a32ffd569c8f95a632efcad8ae8fd9dcb8ed0371dcbb6381a8d8db81fb7d613d",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
         "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",

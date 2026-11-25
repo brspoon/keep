@@ -8,7 +8,7 @@
     "f6244675833e097c2429a40d1b206d95385bd42f",
     "257a3427aa0ef8d9dd2ef5b3e2d1c021a221b116"
   ],
-  "compiler_profile_sha256": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
+  "compiler_profile_sha256": "e2e447d0692ad253132e242220ac83689a571036909b43abb2af44159d1e798f",
   "configure_options": [
     "--prefix=/usr",
     "--libdir=lib",
