@@ -33,16 +33,16 @@ else:
     import sqlite_security_checks as sqlite_security
 
 
-EXPAT_VERSION = '2.10.0'
-EXPAT_VENDOR_VERSION = '2.10.0'
-EXPAT_PACKAGE_VERSION = '2.10.0-r0'
-EXPAT_BUILD_COMMIT = 'e18a81f6461517119d85f2650a4f3e5e01861d28'
-EXPAT_LIBRARY = Path('/usr/lib/libexpat.so.1.13.1')
-EXPAT_VENDOR_LIBRARY = Path('/usr/lib/libexpat.so.1.13.1')
+EXPAT_VERSION = '2.11.0'
+EXPAT_VENDOR_VERSION = '2.11.0'
+EXPAT_PACKAGE_VERSION = '2.11.0-r0'
+EXPAT_BUILD_COMMIT = '17a850105cb64f89503b8f0735b3330a65830387'
+EXPAT_LIBRARY = Path('/usr/lib/libexpat.so.1.14.0')
+EXPAT_VENDOR_LIBRARY = Path('/usr/lib/libexpat.so.1.14.0')
 EXPAT_ALIAS = Path('/usr/lib/libexpat.so.1')
 EXPAT_LIBRARY_SHA256 = {
-    'amd64': '81b28279f2bb5cd61af664e75a18cbf3c016c2643c71691c1485d244bf272222',
-    'arm64': 'a001712eb4601c5b40608d84b33ced8cb8cf67da5dc7fd814742b2ba84709add',
+    'amd64': 'bb7f2d4fb34a539e72e92de0dac9c4a58f2d8767e5b0b158208cc7cbdd6a2b82',
+    'arm64': 'e2ae906a0287caeacf90f69835369ac050de22d343ed836ae139ff0cb9b54453',
 }
 OPENSSL_VERSION = '3.5.9'
 SSL_LIBRARY = Path('/usr/lib/libssl.so.3')
@@ -715,7 +715,7 @@ def check_expat(arch, manifest_path=MANIFEST_PATH, maps_path=MAPS_PATH):
     manifest, install_hash = read_expat_manifest(manifest_path, arch)
     replacement, replacement_hash = read_expat_replacement(arch)
     require(EXPAT_ALIAS.is_symlink() and EXPAT_ALIAS.resolve(strict=True) == EXPAT_LIBRARY,
-            'Expat SONAME alias does not resolve to the reviewed 2.10.0 library')
+            'Expat SONAME alias does not resolve to the reviewed 2.11.0 library')
     library = verify_loaded_library(EXPAT_LIBRARY, 'libexpat.so', Path(maps_path).read_text(),
                                     replacement['library']['sha256'])
     probes = expat_security.exercise_expat_security()

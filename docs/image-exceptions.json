@@ -8,16 +8,16 @@
     "scripts/python_security_patches.json": "2252108f17e74cb4a92a5de3a6829fc09f04244a06913bd26ec188bf126d3ccc",
     "scripts/patch_python_runtime.py": "7e04ab28f407cd4e78b21b31b357c9d93b39fafe1aabd988145673ff34034ac1",
     "scripts/python_security_checks.py": "6238d76408139eb7af727b77368374ccb05d3cec98759d9c6072e09828465df4",
-    "scripts/alpine_expat_sources.py": "7327688551567acf58b3ce5b0ea042320dc64dc8e3f4a3a3c07039634db3c7b0",
-    "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64",
-    "docs/os-package-sources.json": "7854ff92cc65e9e18449f97d96d1a70ff4cdf7eba374372e1beb460849f97ab7",
+    "scripts/alpine_expat_sources.py": "51ea653c77d3c47c1edc06af74d020c48ca0d15cc92e5c66edda676ddec21980",
+    "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350",
+    "docs/os-package-sources.json": "bb89de5cfc5217696526ce04b2bed4381e9ac912d2a57248d8cd1c9cd36dad21",
     ".dockerignore": "68164043764ee06cd043e295306a1b7937c1890ccfab5c88662cc93900b65ba9",
     "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
     "scripts/alpine_zlib_sources.py": "e3b4d5efc7a31dd04bd316458f2ece1a0a72b0f6b7ec7a1d6185a2f058c7456d",
     "scripts/dhi_python_packages.py": "87fff6e3b52a07d5937e29c1d283cf808591bf17721a4148a50d43b3c97f3877",
     "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
     "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
-    "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
+    "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
     "scripts/package_source_notices.py": "1ce1894419ee67a0742dc0659cd93fb8acda26f78ddb766c58fede2a3cab3807",
     "docs/base-python-sources.json": "b8abcdccd4ba86f509cd1dee0d170b7473e0c9b2dc3b173bcd76546cd12439ad",
     "scripts/publish_release.py": "dee91c93a08d8dba96d61ea2fa22e37f195cea3685a0c5bc78e8f339ecfe10ae",
@@ -37,12 +37,12 @@
     "docs/aports-source-lock.json": "9988fc62bc077f07b80f57b6718abe8cb1bc4b29dc0c4a110bef8cb54d1f652d",
     "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
     "scripts/scout_exception_policy.py": "4ef616b0b0fce855c9b33bf77189ce8f18b9ae3035175a4b3a779abc9833868d",
-    "scripts/build_patched_expat.py": "45d66a636c61a346168e03d33d2f20a3efa2b9e354dddae47dda60bacb4e8726",
-    "scripts/expat_security_patches.json": "bc07a506d3174176bcb162f85b5457fa77dbbb2e2af0c6494ee75575bf1fb3ae",
+    "scripts/build_patched_expat.py": "e2e447d0692ad253132e242220ac83689a571036909b43abb2af44159d1e798f",
+    "scripts/expat_security_patches.json": "c416dd1b862bfdd5c9f4ed24df340e4c0965602519d3647cbe9883cc67c8aaa0",
     "scripts/expat_security_checks.py": "293e15b76deb820aacc27a33f7d3f9c08f3f2669882a90b6c6e2a65aa30b786d",
-    "docs/expat-build.json": "96ddf778a3bb1ae837bca4e9c7692be899c6c8fb73fe89f87d10edf891323cc7",
-    "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
-    ".github/workflows/runtime-base-review.yml": "61d2f4a219c0b73da87c001175091db68c63ec15ea92b9cb020d04aeb041ac44",
+    "docs/expat-build.json": "147773a6b9e4a278176d82db183b297d732a7dbc1916604d2f0576d11321bdae",
+    "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
+    ".github/workflows/runtime-base-review.yml": "85593d8dc93d1835dc725f23a214195c7623160da75845a5ef97e788e72e3c46",
     "scripts/fortify_header_sources.py": "931dee2acb84af6bb7f18f5eb0bd8e46c931c954d6e96e3e1a27ae8cb44b66e0",
     "scripts/dhi_cpp_packages.py": "3563bab213c2e8d24ccf362d51e58ff1275ec09cce383c10148185b9b87c7cfb",
     "scripts/expat_build_tools.py": "648f9c4be04ffa54e13d3dc0d382f8c6f019b76619ac14163486581b7370b9fa",
@@ -142,7 +142,7 @@
       "status": "fixed_false_positive",
       "source_bindings": {
         "scripts/alpine_musl_sources.py": "e3a501923494451f49ccb5284644ad46d96eb8b33ebd0c1a45f4ce777e1e55b2",
-        "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64"
+        "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350"
       },
       "evidence": "Alpine stable v3.24 secdb identifies 1.2.6-r3 as fixed; edge separately uses r6. Immutable aports commit 8f79d39391b46d6dbf1800fb68b8212a21d5ee2e and patch SHA256 0cf0090ab433e8f9ed08ae03a0c93aff557c1d3e347260f62a61a10281f5333b carry upstream fix 7813e9119eb5fe681b6750b8a033a0490bca0941. Exact signed APKs, loaded default-libc hashes, benign regex and compatibility probes, complete matching-source archives and notices passed on native amd64 and arm64 in qualification 39728273258 at 3437692f4473856e875187cd05a55d129e915219. That run remained failed solely at Scout acceptance and cannot qualify publication. Original Scout 1.27.0 reports incorrectly apply the edge r6 threshold to stable r3. The correction report and original evidence are public at https://github.com/docker/scout-cli/issues/248. Every changed candidate must pass fresh complete qualification and exact-main validation; this scoped policy does not accept missing evidence. Fresh October 23 review reverified the four exact signed Alpine musl/musl-utils APKs, unchanged stable r3 and edge r6 official feeds, immutable recipe and complete patch equivalence to upstream. Qualification https://github.com/brspoon/keep/actions/runs/40017413915 at 996b45565161ad9d71dfcade9956ebfaeff2711d passed both native architectures, including default loaded-libc hashes 095b047c631447e4fa50401fa7ffce01f678587040d65ba18c574981dc630de5 (amd64) and 53282acc2be8a08a9fdcf880334bf35bbfd0a13862b7f3616be3919fcda11793 (arm64), all bounded musl controls, complete unsuppressed scans and source/license notice preparation. Scout still reports only this exact musl scope; Grype contains only the two unchanged approved Python scopes. Final rebuilt source-archive and installed-notice verification, exact-main validation and original-byte promotion revalidation remain mandatory. Fresh October 28 joint review: complete qualification https://github.com/brspoon/keep/actions/runs/40725395019 attempt 1 at 37b0b63b034e4685bf45a1a2636ed0b72246a3bf passed both native architectures, all ten runtime groups without skips, application/install/recovery, signed provenance, source acquisition, full archive member verification and matching-source/license gates. Hash-verified original reports contain precisely two approved Grype Python findings and one exact Scout musl finding, without ignored matches or suppressions. Existing guards and exact scopes remain required; source inspection and version announcements do not qualify replacements.",
       "review": {
@@ -168,13 +168,13 @@
         "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
-        "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
-        "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
+        "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
+        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
         "scripts/openssl_security_patches.json": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
-        "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64"
+        "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350"
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
@@ -200,13 +200,13 @@
         "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
-        "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
-        "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
+        "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
+        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
         "scripts/openssl_security_patches.json": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
-        "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64"
+        "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350"
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
@@ -232,13 +232,13 @@
         "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
-        "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
-        "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
+        "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
+        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
         "scripts/openssl_security_patches.json": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
-        "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64"
+        "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350"
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
@@ -264,13 +264,13 @@
         "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
-        "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
-        "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
+        "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
+        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
         "scripts/openssl_security_patches.json": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
-        "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64"
+        "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350"
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
@@ -296,13 +296,13 @@
         "docs/openssl-build.json": "c0bf2b2a5e7c36b3ffa8f4da37f2121e4cbded6d2de4f8302567787591e8b940",
         "scripts/build_distribution_bundle.py": "78f6dcc292034d012f84ec7e9966eae4fe827bbc56e14fe409cec7c8e0bef884",
         "scripts/build_patched_openssl.py": "eba4d6dff810c12943ec5d990e3f5bb0dce48eb02a62ad650a54634992ff3a40",
-        "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
-        "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
+        "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
+        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
         "scripts/install_runtime_packages.py": "81136d6529b866b25c66142055f64f97510ed881551aca5d4e1af5659c29b83e",
         "scripts/openssl_build_tools.py": "cb9af504166f17799475d79e71ca89d449a78d87682d3fcd78faa463db26de26",
         "scripts/openssl_overlay_sources.py": "74bfb8269df1b14742e8e2c0cca658acfad6b6fcc687a59a99b7f897dc4ea4f1",
         "scripts/openssl_security_patches.json": "a4d0ee64f91d4bde6d2009d956b42d6721e97feac2591fa8a0b38c894faeb770",
-        "scripts/runtime_dependency_checks.py": "2da722bd34ecaf5465d1537e6873c4e7c05cabe9d574bb3322e85bb11a8d7e64"
+        "scripts/runtime_dependency_checks.py": "eb231e17855599c5173141e436260e3e03911d7e94f17ba7f1a8a93c88a24350"
       },
       "evidence": "The vendor APK metadata remains unchanged. Acceptance requires the independently source-bound OpenSSL replacement, all reviewed native payload hashes, mapped libssl and libcrypto identities, the full upstream test suite, complete corresponding sources and notices, and original exact-image evidence. The five upstream fixes are replayed with original patch and before/after source hashes. No vendor signature or FIPS certification is claimed for the replacement. Raw Scout and hosted findings and severity counts remain unchanged.",
       "review": {
@@ -333,11 +333,11 @@
       },
       "evidence": "The original Grype result is an NVD CPE match for sqlite 3.54.1-r0, reported against Alpine sqlite-libs APK metadata at /lib/apk/db/installed. The advisory concerns command injection in the SQLite command-line shell's .recover output, not the shared library. The signed sqlite-libs 3.54.1-r0 payload contains only libsqlite3.so.0 and libsqlite3.so.3.54.1. Exact-config runtime and all-layer inventories inspect all image layers, APK metadata, executable paths and shell markers; the candidate run found no shell on either architecture (amd64: 29 layers, 4,403 files, 201 ELF files; arm64: 29 layers, 4,402 files, 201 ELF files). The detector documents limitations for arbitrary renamed, rebuilt, packed, compressed or encoded shell code; this review is limited to the exact package, finding identity, image configuration and supplied proof. Fresh full native and hosted gates remain required.",
       "source_bindings": {
-        "docs/os-package-sources.json": "7854ff92cc65e9e18449f97d96d1a70ff4cdf7eba374372e1beb460849f97ab7",
+        "docs/os-package-sources.json": "bb89de5cfc5217696526ce04b2bed4381e9ac912d2a57248d8cd1c9cd36dad21",
         "docs/sqlite-build.json": "94fb54b6d7015d3ba652e2e1de205161e04d20f7091fa4b0292e5a593e9ccd92",
         "scripts/build_patched_sqlite.py": "b939a1b8df71e664e6f0fba766f6dd7b50a22fcc5a6a3a1fd8e818ecabbeab2d",
-        "scripts/collect_package_sources.py": "25a88732b9068947fcdc1071d3240aaab61293e31a19b5aad07fee8fd474fa9f",
-        "scripts/image_distribution.py": "8f14ce70e7ef4ff8bad9ab53507683a5ddd307ac9f8bcbdb29402ed10c61bf04",
+        "scripts/collect_package_sources.py": "c5942477b899f11ad502bb0d1976e6f92d0bdf979e8cc8132a3095e751d65616",
+        "scripts/image_distribution.py": "858bafba9067820af1b4e7f62da362139c95111d205d62c6cbb90ad8a2bee24d",
         "scripts/review_image.py": "a2d198ccc6ac17f046287eb6bec3b57f585508defb9271ba0dfb24703ec48012",
         "scripts/sqlite_security_checks.py": "beb0a8c5bcd873b5139e45144fe16adcb19d9d607c63a03e08c05572fb125085",
         "scripts/sqlite_security_patches.json": "0309b5f618067978d0ef0c648d1e97ee83ea55ea4c543b42135927403cabd8a3"

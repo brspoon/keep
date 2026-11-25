@@ -174,24 +174,24 @@
     },
     {
       "origin": "expat",
-      "version": "2.10.0-r0",
+      "version": "2.11.0-r0",
       "source_method": "alpine-signed-expat-v1",
       "recipe": {
         "path": "main/expat/APKBUILD",
-        "revision": "e18a81f6461517119d85f2650a4f3e5e01861d28",
-        "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=e18a81f6461517119d85f2650a4f3e5e01861d28",
-        "sha256": "8f6b72616d400bf56d24b6577a7843901e2a4d4da29339693e19f76e928646ed",
-        "archive_url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/archive.tar.gz?sha=e18a81f6461517119d85f2650a4f3e5e01861d28",
-        "archive_sha256": "bad26ef1fe33691152dbb1c7e1bfbf7155083fc51fcc50faa2f32f5d416636d4",
-        "archive_prefix": "aports-e18a81f6461517119d85f2650a4f3e5e01861d28-e18a81f6461517119d85f2650a4f3e5e01861d28"
+        "revision": "17a850105cb64f89503b8f0735b3330a65830387",
+        "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fexpat%2FAPKBUILD/raw?ref=17a850105cb64f89503b8f0735b3330a65830387",
+        "sha256": "639f1221c09ac2f3598cd8b4497c78be21a9e20ce671b298becf8531473ddf57",
+        "archive_url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/archive.tar.gz?sha=17a850105cb64f89503b8f0735b3330a65830387",
+        "archive_sha256": "606e5898f565b42946be25d96339e42b3293e6b2ef886a3c40d99f90587fb075",
+        "archive_prefix": "aports-17a850105cb64f89503b8f0735b3330a65830387-17a850105cb64f89503b8f0735b3330a65830387"
       },
       "source": {
-        "url": "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz",
-        "sha256": "c624ba2998fc65df1163a49641ff3f9ab73138b11641d92c86bee0fb01b1bc7f",
-        "sha512": "bd61f361d823f67586dad246fa4d4abbe3d22f5a0f9a28401e7a2fc96753d5bae33fbe4068fae72f016998d0da9d8c92edc4abd2fe8a8e4aafc775a8ab547c44",
-        "signature_url": "https://github.com/libexpat/libexpat/releases/download/R_2_10_0/expat-2.10.0.tar.xz.asc",
-        "signature_sha256": "1944af90d9e7abe645ec7b27847038ca7ddb6b1d2a25ac82c1565d50c2ee08af",
-        "license_path": "expat-2.10.0/COPYING",
+        "url": "https://github.com/libexpat/libexpat/releases/download/R_2_11_0/expat-2.11.0.tar.xz",
+        "sha256": "61e7614b602201c28a189dafee78f5bceaee192bbde46a930752ff09cf5542fa",
+        "sha512": "9a820eba2d2fc966d891e60e38c832a1477e16aa2f35c2f0e9cec36b10a70cccbf6b94dd2750b74925b74210543c57acb22b344ce522b7d03bfdadeeacbcca03",
+        "signature_url": "https://github.com/libexpat/libexpat/releases/download/R_2_11_0/expat-2.11.0.tar.xz.asc",
+        "signature_sha256": "544259c7f1d6772f61c9b56eac0e5935e9f86b4cfbb53e2690ab9988cce781f1",
+        "license_path": "expat-2.11.0/COPYING",
         "license_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87"
       },
       "signing_keys": {
@@ -209,33 +209,33 @@
       "packages": [
         {
           "name": "expat",
-          "version": "2.10.0-r0",
+          "version": "2.11.0-r0",
           "license": "MIT",
-          "build_commit": "e18a81f6461517119d85f2650a4f3e5e01861d28",
+          "build_commit": "17a850105cb64f89503b8f0735b3330a65830387",
           "binaries": {
             "amd64": {
-              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/expat-2.10.0-r0.apk",
-              "sha256": "7a42363e4618ed9440de78df652aca22e9788cbed2e87e1233bb2433f4ad675f"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/expat-2.11.0-r0.apk",
+              "sha256": "8045490040d769bc1e89debd7524d3051ad10c7320a5d9d2d58a5bdbe666214d"
             },
             "arm64": {
-              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/expat-2.10.0-r0.apk",
-              "sha256": "7cdb36ea041ab1a7b218d3ce23b82fb7759cded6a1e0f845a216dfe827fe45f8"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/expat-2.11.0-r0.apk",
+              "sha256": "3f6bd360ad92bb1900a51c9455946b4dffed85defb23238918189c1514b05ca2"
             }
           }
         },
         {
           "name": "libexpat",
-          "version": "2.10.0-r0",
+          "version": "2.11.0-r0",
           "license": "MIT",
-          "build_commit": "e18a81f6461517119d85f2650a4f3e5e01861d28",
+          "build_commit": "17a850105cb64f89503b8f0735b3330a65830387",
           "binaries": {
             "amd64": {
-              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/libexpat-2.10.0-r0.apk",
-              "sha256": "ad565cb50371c22a746fa6cf9435d814fd6d1439220dc4dc80318088d9ea03db"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/libexpat-2.11.0-r0.apk",
+              "sha256": "1d397c489b4790fd35ff5d697882d5dfb3b91dc8d28b214812db36f7505760f6"
             },
             "arm64": {
-              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/libexpat-2.10.0-r0.apk",
-              "sha256": "2c493582b0a3464f65a47647b5c24c89416d26be8bd82336cb588b88edfb95ce"
+              "url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/libexpat-2.11.0-r0.apk",
+              "sha256": "f2f93bbbb48ed88a697c96856e3928f63aea75638b2a68ba2fffdb5c03ca9fd5"
             }
           }
         }

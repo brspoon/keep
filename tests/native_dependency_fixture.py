@@ -32,12 +32,12 @@ def dependency_report(arch, *, root=ROOT):
     return {
         'schema': 9, 'arch': arch, 'success': True, 'tests': 5,
         'failures': 0, 'errors': [],
-        'versions': {'expat': '2.10.0', 'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3',
+        'versions': {'expat': '2.11.0', 'openssl': '3.5.9', 'python': '3.14.10', 'musl': '1.2.6-r3',
                      'sqlite': '3.54.1'},
         'loaded_libraries': {
             name: {'path': path, 'sha256': digest, 'device': '0:1', 'inode': inode}
             for name, path, digest, inode in (
-                ('expat', '/usr/lib/libexpat.so.1.13.1', replacement['library']['sha256'], 101),
+                ('expat', '/usr/lib/libexpat.so.1.14.0', replacement['library']['sha256'], 101),
                 ('ssl', '/usr/lib/libssl.so.3', openssl_manifest['native']['files']['usr/lib/libssl.so.3'], 102),
                 ('crypto', '/usr/lib/libcrypto.so.3', openssl_manifest['native']['files']['usr/lib/libcrypto.so.3'], 103),
                 ('python', python['library']['path'], python['library']['sha256'], 104),
